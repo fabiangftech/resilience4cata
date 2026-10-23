@@ -1,0 +1,23 @@
+package dev.resilience4cata.annotation;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/** Interrupts a call, or completes its future exceptionally, when it takes too long. Applies per attempt. */
+@Documented
+@Retention(RetentionPolicy.CLASS)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface Timeout {
+
+    /** Maximum duration of one attempt, for example {@code "2s"}. Empty means from configuration. */
+    String value() default "";
+
+    /** Named configuration to start from. Empty means {@code default}. */
+    String config() default "";
+
+    /** Tri-state switch: {@code ""}, {@code "true"} or {@code "false"}. */
+    String enabled() default "";
+}

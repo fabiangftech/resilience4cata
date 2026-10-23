@@ -137,6 +137,8 @@ graph TD
 
 Rules, enforced with ArchUnit:
 
+- Interfaces that annotations refer to (`Fallback<T>`, `Classifier<T>`) live in `core`, not in `annotations`, so `annotations` can stay `compileOnly`. The annotation attributes are typed `Class<?>`, and the processor checks at compile time that the class implements the right interface.
+
 - `core` and `annotations` have no dependencies, except JSpecify (`api`, annotations only) in `core`.
 - `processor` is never a runtime dependency; it only appears on `annotationProcessor`.
 - Generated code uses only `core`'s exported API.
@@ -146,12 +148,12 @@ Rules, enforced with ArchUnit:
 
 What a user declares:
 
-```kotlin
+```groovy
 dependencies {
-    implementation(platform("dev.resilience4cata:resilience4cata-bom:0.1.0"))
-    implementation("dev.resilience4cata:resilience4cata-core")
-    compileOnly("dev.resilience4cata:resilience4cata-annotations")   // CLASS retention: not needed at runtime
-    annotationProcessor("dev.resilience4cata:resilience4cata-processor")
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.1.0')
+    implementation 'dev.resilience4cata:resilience4cata-core'
+    compileOnly 'dev.resilience4cata:resilience4cata-annotations'   // CLASS retention: not needed at runtime
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
 }
 ```
 
@@ -159,7 +161,7 @@ dependencies {
 
 From [05 §2–§4](research/05-project-architecture.md):
 
-- Gradle 9 with Kotlin DSL, an included build named `conventions` with precompiled convention plugins, and `gradle/libs.versions.toml`.
+- **No Kotlin anywhere.** Gradle 9 with the Groovy DSL, kept minimal and declarative (`settings.gradle`, one short `build.gradle` per module). All build logic lives in convention plugins **written in Java**, in the `conventions` included build. Versions are in `gradle/libs.versions.toml`.
 - Java toolchain 21 with `--release 21`; CI matrix on JDK 21 and 25. Configuration cache and build cache on from day one.
 - `module-info.java` in every published module; internal packages are not exported.
 - Testing: JUnit, AssertJ, jcstress, ArchUnit, and compile-testing for the processor. jqwik is in maintenance mode, so check its compatibility before adopting it.

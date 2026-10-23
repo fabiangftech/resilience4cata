@@ -137,6 +137,8 @@ graph TD
 
 Reglas, verificadas con ArchUnit:
 
+- Las interfaces a las que se refieren las anotaciones (`Fallback<T>`, `Classifier<T>`) viven en `core`, no en `annotations`, así `annotations` puede seguir siendo `compileOnly`. Los atributos de las anotaciones son de tipo `Class<?>`, y el procesador valida al compilar que la clase implemente la interfaz correcta.
+
 - `core` y `annotations` no tienen dependencias, salvo JSpecify (`api`, solo anotaciones) en `core`.
 - `processor` nunca es dependencia de runtime; solo aparece en `annotationProcessor`.
 - El código generado solo usa la API exportada de `core`.
@@ -146,12 +148,12 @@ Reglas, verificadas con ArchUnit:
 
 Lo que declara un usuario:
 
-```kotlin
+```groovy
 dependencies {
-    implementation(platform("dev.resilience4cata:resilience4cata-bom:0.1.0"))
-    implementation("dev.resilience4cata:resilience4cata-core")
-    compileOnly("dev.resilience4cata:resilience4cata-annotations")   // retención CLASS: no hace falta en runtime
-    annotationProcessor("dev.resilience4cata:resilience4cata-processor")
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.1.0')
+    implementation 'dev.resilience4cata:resilience4cata-core'
+    compileOnly 'dev.resilience4cata:resilience4cata-annotations'   // retención CLASS: no hace falta en runtime
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
 }
 ```
 
@@ -159,7 +161,7 @@ dependencies {
 
 Según [05 §2–§4](research/05-project-architecture.md):
 
-- Gradle 9 con Kotlin DSL, un included build llamado `conventions` con convention plugins precompilados y `gradle/libs.versions.toml`.
+- **Nada de Kotlin.** Gradle 9 con el DSL de Groovy, mínimo y declarativo (`settings.gradle` y un `build.gradle` corto por módulo). Toda la lógica del build vive en convention plugins **escritos en Java**, en el included build `conventions`. Las versiones están en `gradle/libs.versions.toml`.
 - Toolchain de Java 21 con `--release 21`; CI en JDK 21 y 25. Configuration cache y build cache activos desde el primer día.
 - `module-info.java` en cada módulo publicado; los paquetes internos no se exportan.
 - Tests: JUnit, AssertJ, jcstress, ArchUnit y compile-testing para el procesador. jqwik está en modo mantenimiento, así que hay que verificar su compatibilidad antes de adoptarlo.

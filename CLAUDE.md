@@ -4,14 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-resilience4cata is an annotation-driven resilience library for plain Java 21+ (no Spring/CDI/AspectJ), designed to have lower overhead than Resilience4j. The project is in **phase 1: research and design**. There is no Java code or Gradle build yet; the repo only contains documentation under `docs/`.
+resilience4cata is an annotation-driven resilience library for plain Java 21+ (no Spring/CDI/AspectJ), designed to have lower overhead than Resilience4j. The project is in **phase 2: first code**. The Gradle skeleton exists with two modules: `annotations` (all MVP annotations) and `core` (only the public interfaces `Fallback`, `FallbackContext`, `Classifier` so far).
 
 Start with `docs/en/README.md` (decisions and open questions), then `docs/en/features.md` and `docs/en/architecture.md`. The detailed research behind them is in `docs/en/research/01–05`.
 
 ## Decisions to respect
 
 - **Java 21 baseline** (`--release 21`), tested on 21 and 25. Do not use APIs that are preview or newer than 21 (e.g. `StructuredTaskScope`, the Class-File API) in published modules.
-- **Gradle with Kotlin DSL**, convention plugins in an included build named `conventions`, version catalog in `gradle/libs.versions.toml`.
+- **No Kotlin anywhere**, including the build. Gradle uses the Groovy DSL, kept minimal and declarative (`settings.gradle`, short `build.gradle` per module). All build logic goes in convention plugins written in Java under `conventions/src/main/java` (plugin `r4c.java-library`: Java 21 toolchain, `--release 21`, `-Xlint:all -Werror`, JUnit Platform, `resilience4cata-<module>` jar names). Versions live in `gradle/libs.versions.toml`.
+- Interfaces referenced by annotations (`Fallback<T>`, `Classifier<T>`) live in `core`; annotation attributes are `Class<?>` and the processor checks the type. This keeps `annotations` `compileOnly`.
 - **Coordinates**: groupId `dev.resilience4cata` (the project owns `resilience4cata.dev`); root Java package and JPMS module prefix `dev.resilience4cata`.
 - **`annotations` is a separate module from `core`.** Durations in annotations and config are strings (`"250ms"`, `"2s"`, `"PT2S"`), validated by the processor.
 - **Modules have single-word names**: `annotations`, `core`, `processor`, `config`, `micrometer`, `testkit`, `bom`, plus unpublished `benchmark`, `stress`, `examples`. Never name a module `test` (clashes with Gradle's `test` task). Published artifactIds get the `resilience4cata-` prefix.
@@ -21,6 +22,17 @@ Start with `docs/en/README.md` (decisions and open questions), then `docs/en/fea
 - **Hot paths**: no allocation on success paths, no locks and no `synchronized` (pinning on JDK 21), one clock-read pair per call, preallocated stackless rejection exceptions, events allocated only when someone listens. Configuration is resolved once at instance creation, never per call, and is immutable afterwards: there is no hot reload or `reconfigure()` API, by decision.
 - **Self-invocation is intercepted** in the generated-subclass style (`this.other()` goes through the override). It cannot be intercepted in the interface-wrapper style; that limit is documented, not worked around.
 - Default policy order, outermost first: `Fallback → Retry|Hedge → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method`.
+
+## Commands
+
+```bash
+./gradlew build                                   # compile, test, javadoc for every module
+./gradlew :core:test                              # tests of one module
+./gradlew :core:test --tests 'dev.resilience4cata.SomeTest'          # one test class
+./gradlew :core:test --tests 'dev.resilience4cata.SomeTest.method'   # one test method
+```
+
+The build runs on any JDK ≥ 17 and compiles with a Java 21 toolchain (auto-detected locally). Configuration cache is on: build logic must stay configuration-cache compatible.
 
 ## Documentation rules
 

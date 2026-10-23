@@ -17,7 +17,7 @@ resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit 
 | Tema | Decisión | Detalle |
 |---|---|---|
 | Versión de Java | Java 21+, probado en 21 y 25 | [arquitectura](architecture.md#build-y-herramientas) |
-| Build | Gradle con Kotlin DSL, convention plugins, version catalog | [arquitectura](architecture.md#build-y-herramientas) |
+| Build | Gradle con un DSL de Groovy mínimo; convention plugins escritos en Java; version catalog. Nada de Kotlin en el proyecto | [arquitectura](architecture.md#build-y-herramientas) |
 | Mecanismo de anotaciones | **Procesador de anotaciones en compilación (APT)** que genera código Java. Sin proxies, generación de bytecode ni agentes en `core` | [arquitectura](architecture.md#mecanismo-de-anotaciones) |
 | Frameworks | Solo Java puro por ahora | — |
 | Módulos | Nombres de una palabra: `annotations`, `core`, `processor`, `config`, `micrometer`, `testkit`, `bom`, más los internos `benchmark`, `stress`, `examples` | [arquitectura](architecture.md#módulos) |

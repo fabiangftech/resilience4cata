@@ -1,0 +1,9 @@
+plugins {
+    id 'r4c.java-library'
+}
+
+description = 'Resilience policies, registry and the runtime used by generated code.'
+
+dependencies {
+    api libs.jspecify
+}
