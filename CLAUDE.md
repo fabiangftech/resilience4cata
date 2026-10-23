@@ -11,12 +11,15 @@ Start with `docs/en/README.md` (decisions and open questions), then `docs/en/fea
 ## Decisions to respect
 
 - **Java 21 baseline** (`--release 21`), tested on 21 and 25. Do not use APIs that are preview or newer than 21 (e.g. `StructuredTaskScope`, the Class-File API) in published modules.
-- **Gradle with Kotlin DSL**, convention plugins in an included build, version catalog in `gradle/libs.versions.toml`.
+- **Gradle with Kotlin DSL**, convention plugins in an included build named `conventions`, version catalog in `gradle/libs.versions.toml`.
+- **Coordinates**: groupId `dev.resilience4cata` (the project owns `resilience4cata.dev`); root Java package and JPMS module prefix `dev.resilience4cata`.
+- **`annotations` is a separate module from `core`.** Durations in annotations and config are strings (`"250ms"`, `"2s"`, `"PT2S"`), validated by the processor.
 - **Modules have single-word names**: `annotations`, `core`, `processor`, `config`, `micrometer`, `testkit`, `bom`, plus unpublished `benchmark`, `stress`, `examples`. Never name a module `test` (clashes with Gradle's `test` task). Published artifactIds get the `resilience4cata-` prefix.
-- **Annotations are handled by a compile-time annotation processor (`processor`) that generates plain Java source.** No runtime proxies, bytecode generation, AspectJ or agents in `core`.
-- **`core` and `annotations` have zero external dependencies** (JDK only; JSpecify is the one open exception). `processor` is only ever an `annotationProcessor` dependency. Generated code may only use `core`'s exported generated-code API.
+- **Annotations are handled by a compile-time annotation processor (`processor`) that generates plain Java source.** No runtime proxies, bytecode generation, AspectJ or agents in `core`. The processor is **mandatory**: if a generated class is missing, `Resilient.of` must fail fast with a message showing the `annotationProcessor` dependency to add; there is no reflection fallback. Annotations use `CLASS` retention, so `annotations` is a `compileOnly` dependency for users.
+- **`core` and `annotations` have zero external dependencies** (JDK only, except JSpecify as an `api` dependency of `core`). `processor` is only ever an `annotationProcessor` dependency. Generated code may only use `core`'s exported generated-code API.
 - **Generated code must be straight-line and per method**, calling the allocation-free permit protocol in `core` (acquire / onSuccess / onFailure). Do not route generated code through a shared lambda executor: our JMH run showed it doubles the overhead once several services share it (see `docs/en/research/02-annotation-mechanisms.md` §3).
-- **Hot paths**: no allocation on success paths, no locks and no `synchronized` (pinning on JDK 21), one clock-read pair per call, preallocated stackless rejection exceptions, events allocated only when someone listens. Configuration is resolved once at instance creation, never per call.
+- **Hot paths**: no allocation on success paths, no locks and no `synchronized` (pinning on JDK 21), one clock-read pair per call, preallocated stackless rejection exceptions, events allocated only when someone listens. Configuration is resolved once at instance creation, never per call, and is immutable afterwards: there is no hot reload or `reconfigure()` API, by decision.
+- **Self-invocation is intercepted** in the generated-subclass style (`this.other()` goes through the override). It cannot be intercepted in the interface-wrapper style; that limit is documented, not worked around.
 - Default policy order, outermost first: `Fallback → Retry|Hedge → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method`.
 
 ## Documentation rules

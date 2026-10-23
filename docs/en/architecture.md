@@ -16,7 +16,8 @@ graph LR
 1. The user annotates interfaces or non-final classes.
 2. At compile time, `processor` validates the annotations (fallback signatures, durations, conflicting bundles) and **generates plain Java source**: a delegating wrapper for interfaces, a subclass for non-final classes.
 3. At startup, the user builds a `ResilienceRegistry` (programmatically and/or from external config) and gets the instance with `Resilient.of(PaymentClient.class, impl, registry)`, or with the generated `PaymentClientResilience.wrap(impl, registry)` factory.
-4. Configuration is resolved **once**, when the instance is created, into `final` fields of the generated class. Calls never look anything up.
+4. The processor is **mandatory**. If the generated class is missing (the processor was not configured), `Resilient.of` fails at startup with a message that shows the `annotationProcessor` line to add. There is no reflection or proxy fallback.
+5. Configuration is resolved **once**, when the instance is created, into `final` fields of the generated class. Calls never look anything up.
 
 ## Annotation mechanism
 
@@ -43,7 +44,7 @@ Rejected or postponed:
 - **Runtime ByteBuddy:** about 200 ms for the first instance, a 9 MB dependency, and extra native-image setup.
 - **AspectJ and Java agents:** JVM flags, the JEP 451 dynamic-attach warning, and the weaver lags behind each JDK.
 - **Class-File API:** final only since JDK 24, not usable with a Java 21 baseline.
-- **`Proxy`:** at most an optional `dynamic` module, interfaces only (open question).
+- **`Proxy` fallback:** rejected for now. The processor is mandatory and annotations use `CLASS` retention. If a `dynamic` module is ever added, moving to `RUNTIME` retention is a compatible change.
 
 ### Shape of the generated code
 
@@ -76,6 +77,17 @@ public Receipt charge(Order order) {
 
 Generated code embeds the processor version, and `core` checks it at class initialisation, so a `processor`/`core` version mismatch fails fast.
 
+### Self-invocation
+
+Decision: calls from one method to another inside the same object **are intercepted** whenever the mechanism allows it.
+
+| Style | `this.other()` inside the user's code | Why |
+|---|---|---|
+| Subclass (annotated non-final class, `Resilient.create(InventoryService.class, registry)`) | **Intercepted** | The generated subclass overrides `other()`, so the virtual call goes through it |
+| Wrapper (annotated interface, `Resilient.of(PaymentClient.class, impl, registry)`) | Not intercepted | The user's implementation calls itself directly; the wrapper never sees it |
+
+The difference is documented in the user guide. Users who need self-invocation in the wrapper style annotate the implementation class instead. A method that calls itself recursively goes through its policies on every call, which is also documented.
+
 ## Policy internals
 
 Summary of [03](research/03-performance-internals.md); every item is a hypothesis to validate with JMH and jcstress.
@@ -93,7 +105,7 @@ Not available with a Java 21 baseline: `StructuredTaskScope` (still preview befo
 
 ## Modules
 
-Single-word directories. Published artifacts carry a prefix: `resilience4cata-core`, and so on ([05 §1](research/05-project-architecture.md)).
+Single-word directories. Published under the groupId `dev.resilience4cata` (the project owns `resilience4cata.dev`); artifactIds carry a prefix: `resilience4cata-core`, and so on. Root Java package and JPMS module prefix: `dev.resilience4cata` ([05 §1](research/05-project-architecture.md)).
 
 | Module | Published | Responsibility | Depends on |
 |---|---|---|---|
@@ -125,7 +137,7 @@ graph TD
 
 Rules, enforced with ArchUnit:
 
-- `core` and `annotations` have no dependencies. The only candidate exception is JSpecify (open question).
+- `core` and `annotations` have no dependencies, except JSpecify (`api`, annotations only) in `core`.
 - `processor` is never a runtime dependency; it only appears on `annotationProcessor`.
 - Generated code uses only `core`'s exported API.
 - Integrations depend on `core`, never on each other.
@@ -136,10 +148,10 @@ What a user declares:
 
 ```kotlin
 dependencies {
-    implementation(platform("io.github.<ns>:resilience4cata-bom:0.1.0"))
-    implementation("io.github.<ns>:resilience4cata-core")
-    implementation("io.github.<ns>:resilience4cata-annotations")
-    annotationProcessor("io.github.<ns>:resilience4cata-processor")
+    implementation(platform("dev.resilience4cata:resilience4cata-bom:0.1.0"))
+    implementation("dev.resilience4cata:resilience4cata-core")
+    compileOnly("dev.resilience4cata:resilience4cata-annotations")   // CLASS retention: not needed at runtime
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor")
 }
 ```
 
@@ -147,12 +159,12 @@ dependencies {
 
 From [05 §2–§4](research/05-project-architecture.md):
 
-- Gradle 9 with Kotlin DSL, a `build-logic` included build with precompiled convention plugins (its name is still open), and `gradle/libs.versions.toml`.
+- Gradle 9 with Kotlin DSL, an included build named `conventions` with precompiled convention plugins, and `gradle/libs.versions.toml`.
 - Java toolchain 21 with `--release 21`; CI matrix on JDK 21 and 25. Configuration cache and build cache on from day one.
 - `module-info.java` in every published module; internal packages are not exported.
 - Testing: JUnit, AssertJ, jcstress, ArchUnit, and compile-testing for the processor. jqwik is in maintenance mode, so check its compatibility before adopting it.
 - Static analysis: Error Prone + NullAway (JSpecify mode), Spotless, JaCoCo.
-- Publishing: vanniktech maven-publish plugin to the Maven Central Portal (OSSRH closed in June 2025), with GPG signing in CI.
+- Publishing: vanniktech maven-publish plugin to the Maven Central Portal (OSSRH closed in June 2025), with GPG signing in CI. The `dev.resilience4cata` namespace is verified on the Central Portal through a DNS TXT record on `resilience4cata.dev`.
 - Versioning: SemVer, `0.x` while incubating; japicmp in CI, failing the build from `1.0`.
 
 ## Documentation

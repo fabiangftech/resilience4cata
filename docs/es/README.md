@@ -25,20 +25,19 @@ resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit 
 | Políticas del MVP | `@CircuitBreaker`, `@Retry`, `@Timeout`, `@Bulkhead`, `@RateLimiter`, `@Fallback` | [features](features.md) |
 | Contrato de rendimiento | 0 B/op en el camino exitoso, sin locks en el camino caliente, verificado con JMH en CI | [features](features.md#contrato-de-rendimiento) |
 | Documentación | Markdown en `docs/en` y `docs/es`, servido con Docsify. El inglés es la fuente de verdad | [arquitectura](architecture.md#documentación) |
+| Módulo `annotations` | Separado de `core` | [arquitectura](architecture.md#módulos) |
+| Duraciones | Strings (`"250ms"`, `"2s"`, `"PT2S"`), validados por el procesador | [features](features.md#anotaciones) |
+| Build de convenciones de Gradle | Included build llamado `conventions` (respeta la regla de una palabra) | [arquitectura](architecture.md#build-y-herramientas) |
+| Procesador | **Obligatorio.** Sin fallback con proxies en runtime. Si falta la clase generada, `Resilient.of` falla al arrancar con un mensaje que explica cómo agregar el procesador. El código que no se puede anotar usa la API programática de `core` | [arquitectura](architecture.md#mecanismo-de-anotaciones) |
+| Retención de las anotaciones | `CLASS`: las anotaciones no se cargan en runtime, así `annotations` puede ser una dependencia `compileOnly`. Pasar a `RUNTIME` más adelante es un cambio compatible si algún día se agrega un fallback con proxies | [arquitectura](architecture.md#mecanismo-de-anotaciones) |
+| Auto-invocación | **Se intercepta** en el estilo subclase: `this.otro()` pasa por el método generado, así que se aplican sus políticas. No es posible en el estilo wrapper de interfaz, porque las llamadas dentro de la implementación del usuario nunca llegan al wrapper; queda documentado, y quien lo necesite anota una clase no final | [arquitectura](architecture.md#auto-invocación) |
+| Anotaciones de nulabilidad | JSpecify como dependencia real (`api`) de `core`: la única excepción a "cero dependencias". Es un jar de solo anotaciones de pocos KB, y da información de null al IDE, a Kotlin y a NullAway | [arquitectura](architecture.md#módulos) |
+| Recarga en caliente | **Ninguna.** La configuración es inmutable una vez construido el registry; para cambiarla hay que reiniciar la aplicación. Así todos los valores de configuración quedan en campos `final` en el camino caliente | [features](features.md#múltiples-configuraciones) |
+| Coordenadas | Dominio `resilience4cata.dev`: groupId de Maven `dev.resilience4cata`, paquete raíz `dev.resilience4cata` | [arquitectura](architecture.md#módulos) |
 
 ## Preguntas abiertas
 
-Hay que decidirlas antes o durante la fase 2 (el primer código):
-
-1. **¿Módulo `annotations` separado, o dentro de `core`?** Se recomienda separado, lo que permite `compileOnly` si la retención es `CLASS`.
-2. **Retención de las anotaciones: `CLASS` o `RUNTIME`?** `RUNTIME` solo hace falta si existe un fallback en runtime (proxies) o introspección en runtime.
-3. **¿El procesador de anotaciones es obligatorio?** Si existe un módulo opcional `dynamic` con fallback a `Proxy`, todas las validaciones de compilación también deben correr al arrancar.
-4. **¿Duraciones como strings (`"2s"`) o `long` + `TimeUnit`?** Se recomiendan strings, validados por el procesador.
-5. **Nombre del build de convenciones de Gradle:** `build-logic` (el nombre habitual) o `conventions` (respeta la regla de una palabra).
-6. **Namespace en Maven Central y paquete raíz** (`io.github.<usuario>` o un dominio propio).
-7. **Auto-invocación** en las subclases generadas: ¿interceptarla (como Micronaut) o no (como Spring)?
-8. **JSpecify:** ¿dependencia real de `core` (recomendado) o `compileOnly`?
-9. **Recarga en caliente:** fuera del MVP; ¿en v1 solo una API explícita `reconfigure()`?
+Ninguna para la fase 1. Las preguntas nuevas que surjan al escribir el primer código se agregan aquí.
 
 ## Documentos de investigación
 

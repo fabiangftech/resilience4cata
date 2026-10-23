@@ -25,7 +25,6 @@
 | Micrometer and OpenTelemetry bridges | v1 | Separate modules |
 | YAML config | v1 | Separate module, so `core` stays dependency-free |
 | Configurable execution order (`@Order`) | v1 | |
-| `reconfigure()` API | v1 | Explicit, limited to parameters that are safe to change live |
 | JUnit 5 extension | v1 | |
 | `@Cached`, reactive types, Kotlin coroutines, fault injection, deadline propagation, framework integrations | later | |
 
@@ -42,7 +41,7 @@ Design rules ([04 §4](research/04-api-and-configuration.md)):
 - **`config` and `name` are different things.** `config` picks a named template. `name` picks the stateful instance (breaker window, permits); by default there is one instance per method. Two methods that share a `name` share the instance, and they must resolve to the same configuration.
 - **Every attribute has an "unset" value** (`-1`, `""`, `{}`), so an annotation only overrides what it writes. Real defaults live in the configuration layer.
 - **Typed where Java allows**: exception classes, enums, fallback classes.
-- **Durations are strings** (`"250ms"`, `"2s"`, `"PT2S"`), checked at compile time. This is still an open question.
+- **Durations are strings** (`"250ms"`, `"2s"`, `"PT2S"`), checked at compile time.
 - Annotations go on methods or types. A method-level annotation overrides a type-level one attribute by attribute.
 - Unsupported placements (final or private methods, depending on the generated style) are **compile errors**, never silently ignored.
 
@@ -50,7 +49,7 @@ Design rules ([04 §4](research/04-api-and-configuration.md)):
 
 ```java
 @ResiliencePolicy
-@Retention(RUNTIME) @Target({METHOD, TYPE})
+@Retention(CLASS) @Target({METHOD, TYPE})
 @Retry(config = "external")
 @CircuitBreaker(config = "external")
 @Timeout("2s")
@@ -104,6 +103,7 @@ Resolution order, lowest to highest precedence ([04 §6](research/04-api-and-con
 - External config (8) overrides annotations, as in MicroProfile Fault Tolerance: operators can retune without recompiling. `locked` prevents this for a given instance.
 - Everything is validated and resolved **once**, when the instance is created, into immutable records. The hot path never looks up configuration.
 - Unknown keys fail with a "did you mean …?" message.
+- **No hot reload.** Configuration is immutable once the registry is built; changing it means restarting the application.
 
 ```properties
 defaults.retry.maxAttempts=3

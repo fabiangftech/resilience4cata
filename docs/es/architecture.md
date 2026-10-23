@@ -16,7 +16,8 @@ graph LR
 1. El usuario anota interfaces o clases no final.
 2. Al compilar, `processor` valida las anotaciones (firmas de fallback, duraciones, paquetes en conflicto) y **genera código Java**: un wrapper que delega para las interfaces, una subclase para las clases no final.
 3. Al arrancar, el usuario construye un `ResilienceRegistry` (por código y/o desde configuración externa) y obtiene la instancia con `Resilient.of(PaymentClient.class, impl, registry)`, o con la factory generada `PaymentClientResilience.wrap(impl, registry)`.
-4. La configuración se resuelve **una sola vez**, al crear la instancia, en campos `final` de la clase generada. Las llamadas nunca buscan nada.
+4. El procesador es **obligatorio**. Si falta la clase generada (no se configuró el procesador), `Resilient.of` falla al arrancar con un mensaje que muestra la línea `annotationProcessor` que hay que agregar. No hay fallback con reflexión ni proxies.
+5. La configuración se resuelve **una sola vez**, al crear la instancia, en campos `final` de la clase generada. Las llamadas nunca buscan nada.
 
 ## Mecanismo de anotaciones
 
@@ -43,7 +44,7 @@ Descartados o pospuestos:
 - **ByteBuddy en runtime:** unos 200 ms para la primera instancia, una dependencia de 9 MB y configuración extra para native-image.
 - **AspectJ y Java agents:** flags de la JVM, la advertencia de JEP 451 al adjuntar agentes, y el weaver queda atrás con cada JDK.
 - **Class-File API:** final recién en JDK 24, no se puede usar con Java 21 como base.
-- **`Proxy`:** como mucho un módulo opcional `dynamic`, solo para interfaces (pregunta abierta).
+- **Fallback con `Proxy`:** descartado por ahora. El procesador es obligatorio y las anotaciones usan retención `CLASS`. Si algún día se agrega un módulo `dynamic`, pasar a retención `RUNTIME` es un cambio compatible.
 
 ### Forma del código generado
 
@@ -76,6 +77,17 @@ public Receipt charge(Order order) {
 
 El código generado incluye la versión del procesador, y `core` la verifica al inicializar la clase, así una diferencia de versión entre `processor` y `core` falla de inmediato.
 
+### Auto-invocación
+
+Decisión: las llamadas de un método a otro dentro del mismo objeto **se interceptan** siempre que el mecanismo lo permita.
+
+| Estilo | `this.otro()` dentro del código del usuario | Por qué |
+|---|---|---|
+| Subclase (clase no final anotada, `Resilient.create(InventoryService.class, registry)`) | **Se intercepta** | La subclase generada sobrescribe `otro()`, así que la llamada virtual pasa por ella |
+| Wrapper (interfaz anotada, `Resilient.of(PaymentClient.class, impl, registry)`) | No se intercepta | La implementación del usuario se llama a sí misma directamente; el wrapper nunca lo ve |
+
+La diferencia queda documentada en la guía de usuario. Quien necesite auto-invocación con el estilo wrapper anota la clase de implementación. Un método que se llama a sí mismo de forma recursiva pasa por sus políticas en cada llamada, y eso también queda documentado.
+
 ## Funcionamiento interno de las políticas
 
 Resumen de [03](research/03-performance-internals.md); cada punto es una hipótesis a validar con JMH y jcstress.
@@ -93,7 +105,7 @@ No disponible con Java 21 como base: `StructuredTaskScope` (sigue en preview ant
 
 ## Módulos
 
-Carpetas de una sola palabra. Los artefactos publicados llevan prefijo: `resilience4cata-core`, etc. ([05 §1](research/05-project-architecture.md)).
+Carpetas de una sola palabra. Se publican con el groupId `dev.resilience4cata` (el proyecto tiene el dominio `resilience4cata.dev`); los artifactIds llevan prefijo: `resilience4cata-core`, etc. Paquete raíz de Java y prefijo de módulos JPMS: `dev.resilience4cata` ([05 §1](research/05-project-architecture.md)).
 
 | Módulo | Publicado | Responsabilidad | Depende de |
 |---|---|---|---|
@@ -125,7 +137,7 @@ graph TD
 
 Reglas, verificadas con ArchUnit:
 
-- `core` y `annotations` no tienen dependencias. La única excepción candidata es JSpecify (pregunta abierta).
+- `core` y `annotations` no tienen dependencias, salvo JSpecify (`api`, solo anotaciones) en `core`.
 - `processor` nunca es dependencia de runtime; solo aparece en `annotationProcessor`.
 - El código generado solo usa la API exportada de `core`.
 - Las integraciones dependen de `core`, nunca entre ellas.
@@ -136,10 +148,10 @@ Lo que declara un usuario:
 
 ```kotlin
 dependencies {
-    implementation(platform("io.github.<ns>:resilience4cata-bom:0.1.0"))
-    implementation("io.github.<ns>:resilience4cata-core")
-    implementation("io.github.<ns>:resilience4cata-annotations")
-    annotationProcessor("io.github.<ns>:resilience4cata-processor")
+    implementation(platform("dev.resilience4cata:resilience4cata-bom:0.1.0"))
+    implementation("dev.resilience4cata:resilience4cata-core")
+    compileOnly("dev.resilience4cata:resilience4cata-annotations")   // retención CLASS: no hace falta en runtime
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor")
 }
 ```
 
@@ -147,12 +159,12 @@ dependencies {
 
 Según [05 §2–§4](research/05-project-architecture.md):
 
-- Gradle 9 con Kotlin DSL, un included build `build-logic` con convention plugins precompilados (su nombre sigue abierto) y `gradle/libs.versions.toml`.
+- Gradle 9 con Kotlin DSL, un included build llamado `conventions` con convention plugins precompilados y `gradle/libs.versions.toml`.
 - Toolchain de Java 21 con `--release 21`; CI en JDK 21 y 25. Configuration cache y build cache activos desde el primer día.
 - `module-info.java` en cada módulo publicado; los paquetes internos no se exportan.
 - Tests: JUnit, AssertJ, jcstress, ArchUnit y compile-testing para el procesador. jqwik está en modo mantenimiento, así que hay que verificar su compatibilidad antes de adoptarlo.
 - Análisis estático: Error Prone + NullAway (modo JSpecify), Spotless, JaCoCo.
-- Publicación: plugin vanniktech maven-publish al Maven Central Portal (OSSRH cerró en junio de 2025), con firma GPG en CI.
+- Publicación: plugin vanniktech maven-publish al Maven Central Portal (OSSRH cerró en junio de 2025), con firma GPG en CI. El namespace `dev.resilience4cata` se verifica en el Central Portal con un registro DNS TXT en `resilience4cata.dev`.
 - Versionado: SemVer, `0.x` mientras se incuba; japicmp en CI, que hace fallar el build desde `1.0`.
 
 ## Documentación

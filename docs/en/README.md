@@ -25,20 +25,19 @@ resilience4cata is a resilience library for **plain Java 21+**: circuit breaker,
 | MVP policies | `@CircuitBreaker`, `@Retry`, `@Timeout`, `@Bulkhead`, `@RateLimiter`, `@Fallback` | [features](features.md) |
 | Performance contract | 0 B/op on success paths, no locks on hot paths, enforced by JMH in CI | [features](features.md#performance-contract) |
 | Docs | Plain Markdown in `docs/en` and `docs/es`, served by Docsify. English is the source of truth | [architecture](architecture.md#documentation) |
+| `annotations` module | Separate from `core` | [architecture](architecture.md#modules) |
+| Durations | Strings (`"250ms"`, `"2s"`, `"PT2S"`), validated by the processor | [features](features.md#annotations) |
+| Gradle conventions build | Included build named `conventions` (keeps the single-word rule) | [architecture](architecture.md#build-and-tooling) |
+| Processor | **Mandatory.** No runtime proxy fallback. If the generated class is missing, `Resilient.of` fails at startup with a message saying how to add the processor. Code that cannot be annotated uses the programmatic API in `core` | [architecture](architecture.md#annotation-mechanism) |
+| Annotation retention | `CLASS`: annotations are not loaded at runtime, so `annotations` can be a `compileOnly` dependency. Moving to `RUNTIME` later is a compatible change if a proxy fallback is ever added | [architecture](architecture.md#annotation-mechanism) |
+| Self-invocation | **Intercepted** in the subclass style: `this.other()` goes through the generated override, so its policies apply. Not possible in the interface-wrapper style, where calls inside the user's implementation never reach the wrapper; this is documented, and users who need it annotate a non-final class instead | [architecture](architecture.md#self-invocation) |
+| Nullness annotations | JSpecify as a real (`api`) dependency of `core`: the only exception to "zero dependencies". It is an annotations-only jar of a few KB, and it gives IDEs, Kotlin and NullAway nullness information | [architecture](architecture.md#modules) |
+| Hot reload | **None.** Configuration is immutable once the registry is built; changing it means restarting the application. This keeps every config value in `final` fields on the hot path | [features](features.md#multiple-configurations) |
+| Coordinates | Domain `resilience4cata.dev`: Maven groupId `dev.resilience4cata`, root package `dev.resilience4cata` | [architecture](architecture.md#modules) |
 
 ## Open questions
 
-These need a decision before or during phase 2 (the first code):
-
-1. **Separate `annotations` module, or merged into `core`?** The recommendation is separate, which allows `compileOnly` if retention is `CLASS`.
-2. **Annotation retention: `CLASS` or `RUNTIME`?** `RUNTIME` is only needed if a runtime fallback (proxies) or runtime introspection exists.
-3. **Is the annotation processor mandatory?** If an optional `dynamic` module with a `Proxy` fallback exists, every compile-time check must also run at startup.
-4. **Durations as strings (`"2s"`) or `long` + `TimeUnit`?** The recommendation is strings, validated by the processor.
-5. **Name of the Gradle conventions build:** `build-logic` (the usual name) or `conventions` (keeps the single-word rule).
-6. **Maven Central namespace and root package** (`io.github.<user>` or your own domain).
-7. **Self-invocation** in generated subclasses: intercept it (like Micronaut) or not (like Spring)?
-8. **JSpecify:** a real dependency of `core` (recommended), or `compileOnly`?
-9. **Hot reload:** out of the MVP; in v1, an explicit `reconfigure()` API only?
+None for phase 1. New questions that come up while writing the first code are added here.
 
 ## Research documents
 

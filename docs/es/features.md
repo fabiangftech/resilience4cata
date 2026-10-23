@@ -25,7 +25,6 @@
 | Puentes a Micrometer y OpenTelemetry | v1 | Módulos separados |
 | Configuración YAML | v1 | Módulo separado, para que `core` siga sin dependencias |
 | Orden de ejecución configurable (`@Order`) | v1 | |
-| API `reconfigure()` | v1 | Explícita, limitada a parámetros que se pueden cambiar en caliente sin riesgo |
 | Extensión de JUnit 5 | v1 | |
 | `@Cached`, tipos reactivos, corrutinas de Kotlin, inyección de fallos, propagación de deadlines, integración con frameworks | después | |
 
@@ -42,7 +41,7 @@ Reglas de diseño ([04 §4](research/04-api-and-configuration.md)):
 - **`config` y `name` son cosas distintas.** `config` elige una plantilla con nombre. `name` elige la instancia con estado (ventana del breaker, permisos); por defecto hay una instancia por método. Dos métodos con el mismo `name` comparten la instancia y deben resolver a la misma configuración.
 - **Cada atributo tiene un valor "sin definir"** (`-1`, `""`, `{}`), así una anotación solo sobrescribe lo que escribe. Los valores por defecto reales viven en la capa de configuración.
 - **Tipado donde Java lo permite**: clases de excepción, enums, clases de fallback.
-- **Las duraciones son strings** (`"250ms"`, `"2s"`, `"PT2S"`), validados al compilar. Sigue siendo una pregunta abierta.
+- **Las duraciones son strings** (`"250ms"`, `"2s"`, `"PT2S"`), validados al compilar.
 - Las anotaciones van en métodos o tipos. Una anotación de método sobrescribe la de tipo atributo por atributo.
 - Las ubicaciones no soportadas (métodos final o privados, según el estilo generado) son **errores de compilación**, nunca se ignoran en silencio.
 
@@ -50,7 +49,7 @@ Reglas de diseño ([04 §4](research/04-api-and-configuration.md)):
 
 ```java
 @ResiliencePolicy
-@Retention(RUNTIME) @Target({METHOD, TYPE})
+@Retention(CLASS) @Target({METHOD, TYPE})
 @Retry(config = "external")
 @CircuitBreaker(config = "external")
 @Timeout("2s")
@@ -104,6 +103,7 @@ Orden de resolución, de menor a mayor prioridad ([04 §6](research/04-api-and-c
 - La configuración externa (8) sobrescribe las anotaciones, como en MicroProfile Fault Tolerance: operaciones puede ajustar valores sin recompilar. `locked` lo impide para una instancia.
 - Todo se valida y se resuelve **una sola vez**, al crear la instancia, en records inmutables. El camino caliente nunca busca configuración.
 - Las claves desconocidas fallan con un mensaje "¿quisiste decir …?".
+- **Sin recarga en caliente.** La configuración es inmutable una vez construido el registry; para cambiarla hay que reiniciar la aplicación.
 
 ```properties
 defaults.retry.maxAttempts=3
