@@ -8,5 +8,9 @@ gradlePlugin {
             id = 'r4c.java-library'
             implementationClass = 'dev.resilience4cata.build.JavaLibraryConventionPlugin'
         }
+        jmh {
+            id = 'r4c.jmh'
+            implementationClass = 'dev.resilience4cata.build.JmhConventionPlugin'
+        }
     }
 }

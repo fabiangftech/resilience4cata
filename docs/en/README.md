@@ -30,6 +30,7 @@ resilience4cata is a resilience library for **plain Java 21+**: circuit breaker,
 | Gradle conventions build | Included build named `conventions` (keeps the single-word rule) | [architecture](architecture.md#build-and-tooling) |
 | Processor | **Mandatory.** No runtime proxy fallback. If the generated class is missing, `Resilient.of` fails at startup with a message saying how to add the processor. Code that cannot be annotated uses the programmatic API in `core` | [architecture](architecture.md#annotation-mechanism) |
 | Annotation retention | `CLASS`: annotations are not loaded at runtime, so `annotations` can be a `compileOnly` dependency. Moving to `RUNTIME` later is a compatible change if a proxy fallback is ever added | [architecture](architecture.md#annotation-mechanism) |
+| Interface vs implementation annotations | With `Resilient.of(interface, impl, registry)` only the interface's annotations count: the implementation is unknown at compile time, so annotating it is a compile error. When the subclass style (`Resilient.create(Impl.class, registry)`) is added, the implementation's annotations **win**, attribute by attribute: interface < class < class method | [architecture](architecture.md#interface-vs-implementation-annotations) |
 | Self-invocation | **Intercepted** in the subclass style: `this.other()` goes through the generated override, so its policies apply. Not possible in the interface-wrapper style, where calls inside the user's implementation never reach the wrapper; this is documented, and users who need it annotate a non-final class instead | [architecture](architecture.md#self-invocation) |
 | Nullness annotations | JSpecify as a real (`api`) dependency of `core`: the only exception to "zero dependencies". It is an annotations-only jar of a few KB, and it gives IDEs, Kotlin and NullAway nullness information | [architecture](architecture.md#modules) |
 | Hot reload | **None.** Configuration is immutable once the registry is built; changing it means restarting the application. This keeps every config value in `final` fields on the hot path | [features](features.md#multiple-configurations) |
@@ -44,7 +45,7 @@ resilience4cata is a resilience library for **plain Java 21+**: circuit breaker,
 | Async (`CompletionStage`) return types, `classifier`, annotated classes | Rejected by the processor with an explicit "not supported yet" error |
 | External configuration (`config` module), profiles, `extends` | Not started |
 | Gradle incremental-processing registration | Not done: projects that use the processor recompile fully |
-| JMH benchmarks, jcstress | Not started |
+| JMH benchmarks | Retry vs Resilience4j measured, single thread ([benchmarks](benchmarks.md)). jcstress not started |
 
 ## Open questions
 

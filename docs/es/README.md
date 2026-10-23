@@ -30,6 +30,7 @@ resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit 
 | Build de convenciones de Gradle | Included build llamado `conventions` (respeta la regla de una palabra) | [arquitectura](architecture.md#build-y-herramientas) |
 | Procesador | **Obligatorio.** Sin fallback con proxies en runtime. Si falta la clase generada, `Resilient.of` falla al arrancar con un mensaje que explica cómo agregar el procesador. El código que no se puede anotar usa la API programática de `core` | [arquitectura](architecture.md#mecanismo-de-anotaciones) |
 | Retención de las anotaciones | `CLASS`: las anotaciones no se cargan en runtime, así `annotations` puede ser una dependencia `compileOnly`. Pasar a `RUNTIME` más adelante es un cambio compatible si algún día se agrega un fallback con proxies | [arquitectura](architecture.md#mecanismo-de-anotaciones) |
+| Anotaciones en la interfaz vs la implementación | Con `Resilient.of(interfaz, impl, registry)` solo cuentan las anotaciones de la interfaz: la implementación no se conoce al compilar, así que anotarla es un error de compilación. Cuando se agregue el estilo subclase (`Resilient.create(Impl.class, registry)`), las anotaciones de la implementación **ganan**, atributo por atributo: interfaz < clase < método de la clase | [arquitectura](architecture.md#anotaciones-en-la-interfaz-vs-la-implementación) |
 | Auto-invocación | **Se intercepta** en el estilo subclase: `this.otro()` pasa por el método generado, así que se aplican sus políticas. No es posible en el estilo wrapper de interfaz, porque las llamadas dentro de la implementación del usuario nunca llegan al wrapper; queda documentado, y quien lo necesite anota una clase no final | [arquitectura](architecture.md#auto-invocación) |
 | Anotaciones de nulabilidad | JSpecify como dependencia real (`api`) de `core`: la única excepción a "cero dependencias". Es un jar de solo anotaciones de pocos KB, y da información de null al IDE, a Kotlin y a NullAway | [arquitectura](architecture.md#módulos) |
 | Recarga en caliente | **Ninguna.** La configuración es inmutable una vez construido el registry; para cambiarla hay que reiniciar la aplicación. Así todos los valores de configuración quedan en campos `final` en el camino caliente | [features](features.md#múltiples-configuraciones) |
@@ -44,7 +45,7 @@ resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit 
 | Retornos async (`CompletionStage`), `classifier`, clases anotadas | El procesador los rechaza con un error explícito de "todavía no soportado" |
 | Configuración externa (módulo `config`), perfiles, `extends` | Sin empezar |
 | Registro como procesador incremental de Gradle | Pendiente: los proyectos que usan el procesador recompilan todo |
-| Benchmarks JMH, jcstress | Sin empezar |
+| Benchmarks JMH | Retry vs Resilience4j medido, un solo thread ([benchmarks](benchmarks.md)). jcstress sin empezar |
 
 ## Preguntas abiertas
 

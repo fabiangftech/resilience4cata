@@ -77,6 +77,15 @@ public Receipt charge(Order order) {
 
 Generated code embeds the processor version, and `core` checks it at class initialisation, so a `processor`/`core` version mismatch fails fast.
 
+### Interface vs implementation annotations
+
+| Style | Annotations that count | Precedence, lowest first |
+|---|---|---|
+| Wrapper: `Resilient.of(PaymentClient.class, impl, registry)` | Interface only. The implementation is not known at compile time; annotating it is a compile error | declaring interface < wrapped interface < interface method |
+| Subclass (planned): `Resilient.create(HttpPaymentClient.class, registry)` | Interface and implementation | interface < interface method < class < class method |
+
+In the subclass style the implementation **wins**, attribute by attribute: a class method that sets only `maxAttempts` keeps the `delay` declared on the interface.
+
 ### Self-invocation
 
 Decision: calls from one method to another inside the same object **are intercepted** whenever the mechanism allows it.

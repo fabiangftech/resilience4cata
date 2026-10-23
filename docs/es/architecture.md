@@ -77,6 +77,15 @@ public Receipt charge(Order order) {
 
 El código generado incluye la versión del procesador, y `core` la verifica al inicializar la clase, así una diferencia de versión entre `processor` y `core` falla de inmediato.
 
+### Anotaciones en la interfaz vs la implementación
+
+| Estilo | Anotaciones que cuentan | Prioridad, de menor a mayor |
+|---|---|---|
+| Wrapper: `Resilient.of(PaymentClient.class, impl, registry)` | Solo las de la interfaz. La implementación no se conoce al compilar; anotarla es un error de compilación | interfaz que declara < interfaz envuelta < método de la interfaz |
+| Subclase (planeado): `Resilient.create(HttpPaymentClient.class, registry)` | Las de la interfaz y las de la implementación | interfaz < método de la interfaz < clase < método de la clase |
+
+En el estilo subclase **gana la implementación**, atributo por atributo: un método de la clase que solo define `maxAttempts` conserva el `delay` declarado en la interfaz.
+
 ### Auto-invocación
 
 Decisión: las llamadas de un método a otro dentro del mismo objeto **se interceptan** siempre que el mecanismo lo permita.

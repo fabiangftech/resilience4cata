@@ -1,0 +1,12 @@
+plugins {
+    id 'r4c.jmh'
+}
+
+description = 'JMH benchmarks against Resilience4j. Not published.'
+
+dependencies {
+    implementation project(':core')
+    compileOnly project(':annotations')
+    annotationProcessor project(':processor')
+    implementation libs.resilience4j.retry
+}

@@ -1,6 +1,7 @@
 - [Overview](/en/)
 - [Features](/en/features.md)
 - [Architecture](/en/architecture.md)
+- [Benchmarks](/en/benchmarks.md)
 - Research
   - [01 Landscape](/en/research/01-landscape.md)
   - [02 Annotation mechanisms](/en/research/02-annotation-mechanisms.md)

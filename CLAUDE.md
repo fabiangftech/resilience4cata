@@ -29,6 +29,7 @@ Start with `docs/en/README.md` (decisions and open questions), then `docs/en/fea
 - **`core` and `annotations` have zero external dependencies** (JDK only, except JSpecify as an `api` dependency of `core`). `processor` is only ever an `annotationProcessor` dependency. Generated code may only use `core`'s exported generated-code API.
 - **Generated code must be straight-line and per method**, calling the allocation-free permit protocol in `core` (acquire / onSuccess / onFailure). Do not route generated code through a shared lambda executor: our JMH run showed it doubles the overhead once several services share it (see `docs/en/research/02-annotation-mechanisms.md` §3).
 - **Hot paths**: no allocation on success paths, no locks and no `synchronized` (pinning on JDK 21), one clock-read pair per call, preallocated stackless rejection exceptions, events allocated only when someone listens. Configuration is resolved once at instance creation, never per call, and is immutable afterwards: there is no hot reload or `reconfigure()` API, by decision.
+- **Interface vs implementation annotations**: with `Resilient.of(interface, impl, registry)` only interface annotations count (annotating the implementation is a compile error). In the future subclass style, implementation annotations win attribute by attribute: interface < interface method < class < class method.
 - **Self-invocation is intercepted** in the generated-subclass style (`this.other()` goes through the override). It cannot be intercepted in the interface-wrapper style; that limit is documented, not worked around.
 - Default policy order, outermost first: `Fallback → Retry|Hedge → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method`.
 
@@ -40,7 +41,11 @@ Start with `docs/en/README.md` (decisions and open questions), then `docs/en/fea
 ./gradlew :core:test --tests 'dev.resilience4cata.SomeTest'          # one test class
 ./gradlew :core:test --tests 'dev.resilience4cata.SomeTest.method'   # one test method
 ./gradlew :examples:test                          # end-to-end tests against real generated code
+./gradlew :benchmark:jmh -Pjmh="RetryBenchmark -prof gc"   # JMH; options after -Pjmh, results in benchmark/build/jmh/results.json
+./gradlew :benchmark:jmh -PjmhJdk=25              # benchmarks on another JDK
 ```
+
+Benchmarks (`benchmark` module, plugin `r4c.jmh` in `conventions`) use plain JMH (annotation processor + `org.openjdk.jmh.Main`), no third-party Gradle plugin. Every comparison with Resilience4j must use equivalent configuration and document any adjustment made for fairness in the benchmark's Javadoc (for example `resilience4jRetryOnceNoSleep`, which removes Resilience4j's unconditional `Thread.sleep(0)`).
 
 Where tests go:
 - `core`: unit tests of policies and config. `RetryPolicy` has a package-private constructor that takes a fake clock and sleeper.
