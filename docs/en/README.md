@@ -45,7 +45,7 @@ resilience4cata is a resilience library for **plain Java 21+**: circuit breaker,
 | Async (`CompletionStage`) return types, `classifier`, annotated classes | Rejected by the processor with an explicit "not supported yet" error |
 | External configuration (`config` module), profiles, `extends` | Not started |
 | Gradle incremental-processing registration | Not done: projects that use the processor recompile fully |
-| JMH benchmarks | Retry vs Resilience4j measured, single thread ([benchmarks](benchmarks.md)). jcstress not started |
+| JMH benchmarks | Retry vs Resilience4j measured with one and with four services, single thread ([benchmarks](benchmarks.md)). jcstress not started |
 
 ## Open questions
 
