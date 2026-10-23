@@ -1,0 +1,11 @@
+plugins {
+    id 'r4c.java-library'
+}
+
+description = 'Runnable examples. Not published: their tests check the generated code end to end.'
+
+dependencies {
+    testImplementation project(':core')
+    testCompileOnly project(':annotations')
+    testAnnotationProcessor project(':processor')
+}

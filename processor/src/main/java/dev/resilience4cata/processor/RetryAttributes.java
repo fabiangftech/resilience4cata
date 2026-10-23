@@ -1,0 +1,139 @@
+package dev.resilience4cata.processor;
+
+import dev.resilience4cata.annotation.ResiliencePolicy;
+import dev.resilience4cata.annotation.Retry;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import javax.annotation.processing.Messager;
+import javax.lang.model.element.AnnotationMirror;
+import javax.lang.model.element.AnnotationValue;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import javax.tools.Diagnostic;
+
+/**
+ * Collects the {@code @Retry} attributes that are explicitly set on an element, directly or through
+ * composed annotations marked with {@code @ResiliencePolicy}. Attributes left at their "unset"
+ * value are ignored, so they never override anything.
+ */
+final class RetryAttributes {
+
+    static final String RETRY = Retry.class.getCanonicalName();
+    static final String POLICY = ResiliencePolicy.class.getCanonicalName();
+
+    private final Messager messager;
+    private final Set<String> reported = new HashSet<>();
+
+    RetryAttributes(Messager messager) {
+        this.messager = messager;
+    }
+
+    /**
+     * Returns the explicitly set attributes, or empty if the element has no {@code @Retry} at all.
+     * A direct {@code @Retry} wins over composed annotations. Two composed annotations that set the
+     * same attribute to different values are reported as an error.
+     */
+    Optional<Map<String, AnnotationValue>> on(Element element) {
+        return collect(element, element, new ArrayDeque<>());
+    }
+
+    private Optional<Map<String, AnnotationValue>> collect(Element element, Element reportOn, Deque<String> path) {
+        Map<String, AnnotationValue> composed = new LinkedHashMap<>();
+        Map<String, String> composedSource = new LinkedHashMap<>();
+        Map<String, AnnotationValue> direct = null;
+        boolean present = false;
+        for (AnnotationMirror mirror : element.getAnnotationMirrors()) {
+            TypeElement type = (TypeElement) mirror.getAnnotationType().asElement();
+            String name = type.getQualifiedName().toString();
+            if (name.equals(RETRY)) {
+                direct = explicitValues(mirror);
+                present = true;
+            } else if (hasAnnotation(type, POLICY)) {
+                if (path.contains(name)) {
+                    continue;
+                }
+                path.push(name);
+                Optional<Map<String, AnnotationValue>> bundle = collect(type, reportOn, path);
+                path.pop();
+                if (bundle.isEmpty()) {
+                    continue;
+                }
+                present = true;
+                for (Map.Entry<String, AnnotationValue> entry : bundle.get().entrySet()) {
+                    AnnotationValue previous = composed.putIfAbsent(entry.getKey(), entry.getValue());
+                    if (previous != null && !previous.toString().equals(entry.getValue().toString())) {
+                        String message = "@Retry." + entry.getKey()
+                                + " is set to " + previous + " by @" + composedSource.get(entry.getKey())
+                                + " and to " + entry.getValue() + " by @" + type.getSimpleName()
+                                + ". Set it directly on the element to resolve the conflict.";
+                        if (reported.add(reportOn + "|" + message)) {
+                            messager.printMessage(Diagnostic.Kind.ERROR, message, reportOn);
+                        }
+                    }
+                    composedSource.putIfAbsent(entry.getKey(), type.getSimpleName().toString());
+                }
+            }
+        }
+        if (!present) {
+            return Optional.empty();
+        }
+        Map<String, AnnotationValue> result = new LinkedHashMap<>(composed);
+        if (direct != null) {
+            result.putAll(direct);
+        }
+        return Optional.of(result);
+    }
+
+    static boolean hasAnnotation(Element element, String annotation) {
+        for (AnnotationMirror mirror : element.getAnnotationMirrors()) {
+            if (((TypeElement) mirror.getAnnotationType().asElement()).getQualifiedName().contentEquals(annotation)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Map<String, AnnotationValue> explicitValues(AnnotationMirror mirror) {
+        Map<String, AnnotationValue> values = new LinkedHashMap<>();
+        for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : mirror.getElementValues().entrySet()) {
+            if (!isUnset(entry.getValue())) {
+                values.put(entry.getKey().getSimpleName().toString(), entry.getValue());
+            }
+        }
+        return values;
+    }
+
+    /** True for the sentinel values that mean "not set": -1, "", {}, void.class and INHERIT. */
+    private static boolean isUnset(AnnotationValue value) {
+        Object v = value.getValue();
+        if (v instanceof Integer i) {
+            return i == -1;
+        }
+        if (v instanceof Double d) {
+            return d == -1;
+        }
+        if (v instanceof String s) {
+            return s.isEmpty();
+        }
+        if (v instanceof List<?> list) {
+            return list.isEmpty();
+        }
+        if (v instanceof VariableElement constant) {
+            return constant.getSimpleName().contentEquals("INHERIT");
+        }
+        if (v instanceof TypeMirror type) {
+            return type.getKind() == TypeKind.VOID;
+        }
+        return false;
+    }
+}

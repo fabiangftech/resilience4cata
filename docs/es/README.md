@@ -1,6 +1,6 @@
 # resilience4cata
 
-> **Estado: fase 1 (investigación y diseño).** Todavía no hay código. Esta página resume las decisiones que salieron de la investigación y lista las preguntas que siguen abiertas.
+> **Estado: fase 2 (primer código).** `@Retry` funciona de punta a punta; ver [estado de la implementación](#estado-de-la-implementación). Esta página también resume las decisiones de diseño de la fase 1.
 >
 > English version: [en/README.md](../en/README.md)
 
@@ -34,6 +34,17 @@ resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit 
 | Anotaciones de nulabilidad | JSpecify como dependencia real (`api`) de `core`: la única excepción a "cero dependencias". Es un jar de solo anotaciones de pocos KB, y da información de null al IDE, a Kotlin y a NullAway | [arquitectura](architecture.md#módulos) |
 | Recarga en caliente | **Ninguna.** La configuración es inmutable una vez construido el registry; para cambiarla hay que reiniciar la aplicación. Así todos los valores de configuración quedan en campos `final` en el camino caliente | [features](features.md#múltiples-configuraciones) |
 | Coordenadas | Dominio `resilience4cata.dev`: groupId de Maven `dev.resilience4cata`, paquete raíz `dev.resilience4cata` | [arquitectura](architecture.md#módulos) |
+
+## Estado de la implementación
+
+| Pieza | Estado |
+|---|---|
+| `@Retry` | **Terminado de punta a punta**: anotación, validación y generación en el procesador, runtime `RetryPolicy`, registry con valores por defecto y configuraciones con nombre, anotaciones compuestas, combinación entre interfaz y método |
+| `@CircuitBreaker`, `@Timeout`, `@Bulkhead`, `@RateLimiter`, `@Fallback` | Solo las anotaciones |
+| Retornos async (`CompletionStage`), `classifier`, clases anotadas | El procesador los rechaza con un error explícito de "todavía no soportado" |
+| Configuración externa (módulo `config`), perfiles, `extends` | Sin empezar |
+| Registro como procesador incremental de Gradle | Pendiente: los proyectos que usan el procesador recompilan todo |
+| Benchmarks JMH, jcstress | Sin empezar |
 
 ## Preguntas abiertas
 

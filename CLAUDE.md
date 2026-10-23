@@ -4,7 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-resilience4cata is an annotation-driven resilience library for plain Java 21+ (no Spring/CDI/AspectJ), designed to have lower overhead than Resilience4j. The project is in **phase 2: first code**. The Gradle skeleton exists with two modules: `annotations` (all MVP annotations) and `core` (only the public interfaces `Fallback`, `FallbackContext`, `Classifier` so far).
+resilience4cata is an annotation-driven resilience library for plain Java 21+ (no Spring/CDI/AspectJ), designed to have lower overhead than Resilience4j. The project is in **phase 2: first code**. Implemented so far: `@Retry` end to end. The other annotations exist in `annotations` but have no runtime or processor support yet.
+
+## How the pieces fit
+
+- `processor` (`ResilienceProcessor`) scans every root element (`getSupportedAnnotationTypes` is `*`, because composed annotations are user-defined). For each interface that uses `@Retry`, directly, at type level or through a `@ResiliencePolicy` bundle, it writes a top-level class named `<binary name>$Resilient` (for example `Repository$Cache$Resilient`) in the same package. The class implements the interface, delegates every method, and holds one `final` `RetryPolicy` field per protected method.
+- Attribute merging is in `RetryAttributes`: only explicitly set, non-sentinel values count. Precedence is declaring interface < wrapped interface < method; a direct annotation beats bundles; two bundles disagreeing is a compile error. Durations are parsed at compile time (`Durations`) and emitted as `Duration.ofNanos(...)`.
+- Types in generated signatures are printed by `TypePrinter`, never `TypeMirror.toString()`, so type-use annotations such as `@Nullable` do not produce invalid source.
+- At runtime, `Resilient.of(type, impl, registry)` loads `<type>$Resilient` once by name and calls its `(type, ResilienceRegistry)` constructor. The constructor calls `registry.retryPolicy(instanceId, name, config, overrides)`, which resolves defaults → named config → annotation overrides into an immutable `RetryConfig` and shares instances by `name`.
+- The generated retry loop calls `RetryPolicy.start()`, `onFailure(attempts, e, start)` and `pause(delay)` (package `dev.resilience4cata.generated`, exported only for generated code). Nothing is allocated on the success path.
+- Not supported yet, and rejected by the processor with an explicit error: async return types (`CompletionStage`), `classifier`, annotations on classes. The processor is not registered as incremental for Gradle yet.
 
 Start with `docs/en/README.md` (decisions and open questions), then `docs/en/features.md` and `docs/en/architecture.md`. The detailed research behind them is in `docs/en/research/01–05`.
 
@@ -30,7 +39,13 @@ Start with `docs/en/README.md` (decisions and open questions), then `docs/en/fea
 ./gradlew :core:test                              # tests of one module
 ./gradlew :core:test --tests 'dev.resilience4cata.SomeTest'          # one test class
 ./gradlew :core:test --tests 'dev.resilience4cata.SomeTest.method'   # one test method
+./gradlew :examples:test                          # end-to-end tests against real generated code
 ```
+
+Where tests go:
+- `core`: unit tests of policies and config. `RetryPolicy` has a package-private constructor that takes a fake clock and sleeper.
+- `processor`: compile Java sources in-memory with the processor via the `Compilation` helper (plain `javax.tools`, no compile-testing library) and assert on errors or generated source. Compilation uses `-Xlint:all -Werror`, so generated code must be warning-free.
+- `examples`: annotated interfaces under `src/test/java` are processed by `testAnnotationProcessor project(':processor')`; tests call `Resilient.of(...)` on them. Generated sources land in `examples/build/generated/sources/annotationProcessor/java/test`.
 
 The build runs on any JDK ≥ 17 and compiles with a Java 21 toolchain (auto-detected locally). Configuration cache is on: build logic must stay configuration-cache compatible.
 

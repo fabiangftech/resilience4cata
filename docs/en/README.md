@@ -1,6 +1,6 @@
 # resilience4cata
 
-> **Status: phase 1 (research and design).** There is no code yet. This page summarises the decisions that came out of the research and lists the questions that are still open.
+> **Status: phase 2 (first code).** `@Retry` works end to end; see [implementation status](#implementation-status). This page also summarises the design decisions from phase 1.
 >
 > Versión en español: [es/README.md](../es/README.md)
 
@@ -34,6 +34,17 @@ resilience4cata is a resilience library for **plain Java 21+**: circuit breaker,
 | Nullness annotations | JSpecify as a real (`api`) dependency of `core`: the only exception to "zero dependencies". It is an annotations-only jar of a few KB, and it gives IDEs, Kotlin and NullAway nullness information | [architecture](architecture.md#modules) |
 | Hot reload | **None.** Configuration is immutable once the registry is built; changing it means restarting the application. This keeps every config value in `final` fields on the hot path | [features](features.md#multiple-configurations) |
 | Coordinates | Domain `resilience4cata.dev`: Maven groupId `dev.resilience4cata`, root package `dev.resilience4cata` | [architecture](architecture.md#modules) |
+
+## Implementation status
+
+| Piece | Status |
+|---|---|
+| `@Retry` | **Done end to end**: annotation, processor validation and generation, `RetryPolicy` runtime, registry with defaults and named configs, composed annotations, type-level and method-level merging |
+| `@CircuitBreaker`, `@Timeout`, `@Bulkhead`, `@RateLimiter`, `@Fallback` | Annotations only |
+| Async (`CompletionStage`) return types, `classifier`, annotated classes | Rejected by the processor with an explicit "not supported yet" error |
+| External configuration (`config` module), profiles, `extends` | Not started |
+| Gradle incremental-processing registration | Not done: projects that use the processor recompile fully |
+| JMH benchmarks, jcstress | Not started |
 
 ## Open questions
 

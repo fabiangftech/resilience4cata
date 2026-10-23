@@ -7,4 +7,5 @@ module dev.resilience4cata.core {
     requires transitive org.jspecify;
 
     exports dev.resilience4cata;
+    exports dev.resilience4cata.generated;
 }

@@ -1,0 +1,10 @@
+plugins {
+    id 'r4c.java-library'
+}
+
+description = 'Annotation processor: validates resilience annotations and generates the wrapper classes.'
+
+dependencies {
+    implementation project(':annotations')
+    testImplementation project(':core')
+}
