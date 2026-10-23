@@ -1,0 +1,9 @@
+- [Resumen](/es/)
+- [Features](/es/features.md)
+- [Arquitectura](/es/architecture.md)
+- Investigación
+  - [01 Panorama](/es/research/01-landscape.md)
+  - [02 Mecanismos de anotaciones](/es/research/02-annotation-mechanisms.md)
+  - [03 Rendimiento interno](/es/research/03-performance-internals.md)
+  - [04 API y configuración](/es/research/04-api-and-configuration.md)
+  - [05 Arquitectura del proyecto](/es/research/05-project-architecture.md)
