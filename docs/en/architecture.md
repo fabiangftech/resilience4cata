@@ -146,7 +146,7 @@ graph TD
 
 Rules, enforced with ArchUnit:
 
-- Interfaces that annotations refer to (`Fallback<T>`, `Classifier<T>`) live in `core`, not in `annotations`, so `annotations` can stay `compileOnly`. The annotation attributes are typed `Class<?>`, and the processor checks at compile time that the class implements the right interface.
+- Interfaces that annotations refer to (`FallbackHandler<T>`, `Classifier<T>`) live in `core`, not in `annotations`, so `annotations` can stay `compileOnly`. The annotation attributes are typed `Class<?>`, and the processor checks at compile time that the class implements the right interface.
 
 - `core` and `annotations` have no dependencies, except JSpecify (`api`, annotations only) in `core`.
 - `processor` is never a runtime dependency; it only appears on `annotationProcessor`.

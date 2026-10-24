@@ -16,7 +16,7 @@ import java.lang.annotation.Target;
 public @interface Fallback {
 
     /**
-     * Handler class. Must implement {@code dev.resilience4cata.Fallback<T>}, where {@code T} matches
+     * Handler class. Must implement {@code dev.resilience4cata.FallbackHandler<T>}, where {@code T} matches
      * the method's return type; the annotation processor checks it. {@code void.class} means unset.
      */
     Class<?> value() default void.class;

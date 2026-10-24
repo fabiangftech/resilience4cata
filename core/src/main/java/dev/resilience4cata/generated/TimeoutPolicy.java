@@ -5,6 +5,9 @@ import dev.resilience4cata.TimeoutConfig;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ScheduledFuture;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -189,5 +192,40 @@ public final class TimeoutPolicy {
         long state() {
             return (long) STATE.getVolatile(this) & STATE_BITS;
         }
+    }
+
+    /**
+     * Runs an asynchronous call with a deadline. If its stage has not completed after the timeout, the
+     * returned future fails with {@link CallTimeoutException} and the call's stage is cancelled when it
+     * is a {@link java.util.concurrent.Future}. The timer is the library's single async timer thread,
+     * and the timeout is completed on a new virtual thread, never on the timer.
+     *
+     * @param call the next layer
+     * @param <T> the result type
+     * @return a future that completes with the call's outcome, or fails with {@link CallTimeoutException}
+     */
+    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
+        CompletionStage<T> stage = AsyncSupport.call(call);
+        CompletableFuture<T> result = new CompletableFuture<>();
+        if (!enabled) {
+            AsyncSupport.relay(stage, result);
+            return result;
+        }
+        ScheduledFuture<?> timer = AsyncSupport.later(timeoutNanos, () -> {
+            if (result.completeExceptionally(new CallTimeoutException(id, config.timeout(), null))) {
+                AsyncSupport.cancel(stage);
+            }
+        });
+        stage.whenComplete((value, failure) -> {
+            if (timer != null) {
+                timer.cancel(false);
+            }
+            if (failure == null) {
+                result.complete(value);
+            } else {
+                result.completeExceptionally(AsyncSupport.unwrap(failure));
+            }
+        });
+        return result;
     }
 }

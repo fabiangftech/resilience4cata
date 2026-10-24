@@ -125,20 +125,6 @@ class ResilienceProcessorTest {
     }
 
     @Test
-    void rejectsAsyncMethodsForNow() {
-        Compilation result = compile("demo.Client", """
-                package demo;
-                import dev.resilience4cata.annotation.Retry;
-                public interface Client {
-                    @Retry
-                    java.util.concurrent.CompletableFuture<String> call();
-                }
-                """);
-
-        assertThat(result.errors()).singleElement().asString().contains("CompletionStage are not supported yet");
-    }
-
-    @Test
     void rejectsClassifiersForNow() {
         Compilation result = compile("demo.Client", """
                 package demo;
@@ -411,6 +397,263 @@ class ResilienceProcessorTest {
                 .anySatisfy(e -> assertThat(e).contains("@RateLimiter.permits must be at least 1"))
                 .anySatisfy(e -> assertThat(e).contains("@RateLimiter.period must be positive"))
                 .anySatisfy(e -> assertThat(e).contains("@RateLimiter.period = \"often\" is not a valid duration"));
+    }
+
+    @Test
+    void callsATypedHandlerAndRethrowsItsDeclaredExceptions() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.FallbackContext;
+                import dev.resilience4cata.annotation.Fallback;
+                import dev.resilience4cata.annotation.Timeout;
+                public interface Client {
+                    @Fallback(value = Cached.class, skipOn = IllegalArgumentException.class) @Timeout("1s")
+                    String find(String id, int version) throws java.io.IOException;
+                    @Fallback(Count.class)
+                    int count();
+                    @Fallback(Count.class)
+                    void touch();
+
+                    final class Cached implements dev.resilience4cata.FallbackHandler<String> {
+                        @Override
+                        public String apply(FallbackContext context) {
+                            return "cached " + context.argument(0, String.class);
+                        }
+                    }
+
+                    final class Count implements dev.resilience4cata.FallbackHandler<Integer> {
+                        @Override
+                        public Integer apply(FallbackContext context) {
+                            return 0;
+                        }
+                    }
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Client$Resilient"))
+                .contains("private final demo.Client.Cached fallbackHandler0;")
+                .contains("this.fallbackHandler0 = new demo.Client.Cached();")
+                .contains("java.util.List.of(java.lang.Throwable.class), java.util.List.of(java.lang.IllegalArgumentException.class)")
+                .contains("return this.r4c$timeout0(p0, p1);")
+                .contains("this.fallback0.context(r4c$e, 1, new java.lang.Object[] {p0, p1});")
+                .contains("if (r4c$x instanceof java.io.IOException r4c$d0) {")
+                .contains("return this.fallbackHandler1.apply(r4c$context);")
+                .contains("this.fallbackHandler2.apply(r4c$context);");
+    }
+
+    @Test
+    void picksTheMostSpecificSiblingMethodFirst() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Fallback;
+                public interface Client {
+                    @Fallback(method = "recover")
+                    String find(String id) throws java.io.IOException;
+
+                    default String recover(String id, java.io.IOException e) { return "io"; }
+                    default String recover(String id, java.io.FileNotFoundException e) { return "missing"; }
+                    static String recover(String id, IllegalStateException e) { return "state"; }
+                    String recover(String id);
+                    default String recover(int other) { return "unrelated"; }
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        String generated = result.generatedSource("demo.Client$Resilient");
+        int missing = generated.indexOf("instanceof java.io.FileNotFoundException");
+        int io = generated.indexOf("instanceof java.io.IOException");
+        assertThat(missing).isPositive().isLessThan(io);
+        assertThat(generated)
+                .contains("return demo.Client.recover(p0, r4c$f")
+                .contains("return this.delegate.recover(p0);");
+    }
+
+    @Test
+    void fusesTheFallbackIntoTheRetryLoopToCountAttempts() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Fallback;
+                import dev.resilience4cata.annotation.Retry;
+                public interface Client {
+                    @Retry(maxAttempts = 3) @Fallback(Empty.class)
+                    String find(String id);
+                    @Retry(maxAttempts = 3) @Fallback(method = "recover")
+                    String other(String id);
+                    default String recover(String id, Throwable e) { return "fallback"; }
+
+                    final class Empty implements dev.resilience4cata.FallbackHandler<String> {
+                        @Override
+                        public String apply(dev.resilience4cata.FallbackContext context) {
+                            return "";
+                        }
+                    }
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Client$Resilient"))
+                .contains("this.fallback0.context(r4c$e, r4c$attempts, new java.lang.Object[] {p0});")
+                .contains("return this.delegate.recover(p0, r4c$e);")
+                .doesNotContain("r4c$fallback0(");
+    }
+
+    @Test
+    void rejectsInvalidFallbacks() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.FallbackContext;
+                import dev.resilience4cata.annotation.Fallback;
+                public interface Client {
+                    @Fallback
+                    String none();
+                    @Fallback(value = Text.class, method = "x")
+                    String both();
+                    @Fallback(Text.class)
+                    int wrongType();
+                    @Fallback(NoConstructor.class)
+                    String noConstructor();
+                    @Fallback(method = "recover")
+                    String find(String id);
+                    @Fallback(Text.class)
+                    <T> T generic();
+
+                    private String recover(String id) { return ""; }
+                    default Object recover(String id, RuntimeException e) { return ""; }
+                    default String recover(String id, Exception e) throws Exception { return ""; }
+
+                    final class Text implements dev.resilience4cata.FallbackHandler<String> {
+                        @Override
+                        public String apply(FallbackContext context) {
+                            return "";
+                        }
+                    }
+
+                    final class NoConstructor implements dev.resilience4cata.FallbackHandler<String> {
+                        private NoConstructor() {
+                        }
+
+                        @Override
+                        public String apply(FallbackContext context) {
+                            return "";
+                        }
+                    }
+                }
+                """);
+
+        assertThat(result.errors()).hasSize(6)
+                .anySatisfy(e -> assertThat(e).contains("@Fallback needs exactly one of"))
+                .anySatisfy(e -> assertThat(e).contains("implements FallbackHandler<java.lang.String>, but wrongType returns int."
+                        + " Implement FallbackHandler<java.lang.Integer>"))
+                .anySatisfy(e -> assertThat(e).contains("needs a public no-argument constructor"))
+                .anySatisfy(e -> assertThat(e).contains("no usable method recover")
+                        .contains("recover(java.lang.String) is private")
+                        .contains("returns java.lang.Object, which is not assignable to java.lang.String")
+                        .contains("throws java.lang.Exception, which find does not declare"))
+                .anySatisfy(e -> assertThat(e).contains("generic methods is not supported yet"));
+    }
+
+    @Test
+    void rejectsAHandlerTheGeneratedClassCannotCreate() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Fallback;
+                public interface Client {
+                    @Fallback(Abstract.class)
+                    String call();
+                    @Fallback(Holder.Inner.class)
+                    String inner();
+
+                    abstract class Abstract implements dev.resilience4cata.FallbackHandler<String> {
+                    }
+                }
+
+                class Holder {
+                    class Inner implements dev.resilience4cata.FallbackHandler<String> {
+                        @Override
+                        public String apply(dev.resilience4cata.FallbackContext context) {
+                            return "";
+                        }
+                    }
+                }
+                """);
+
+        assertThat(result.errors()).hasSize(2)
+                .anySatisfy(e -> assertThat(e).contains("the handler must not be abstract"))
+                .anySatisfy(e -> assertThat(e).contains("a nested handler class must be static"));
+    }
+
+    @Test
+    void generatesOneExpressionForAsyncMethods() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.CircuitBreaker;
+                import dev.resilience4cata.annotation.Fallback;
+                import dev.resilience4cata.annotation.Retry;
+                import dev.resilience4cata.annotation.Timeout;
+                import java.util.concurrent.CompletableFuture;
+                import java.util.concurrent.CompletionStage;
+                public interface Client {
+                    @Retry @CircuitBreaker @Timeout("1s")
+                    CompletableFuture<String> find(String id) throws java.io.IOException;
+                    @Fallback(method = "recover") @Timeout("1s")
+                    CompletionStage<java.util.List<String>> list(int page);
+                    default java.util.List<String> recover(int page) { return java.util.List.of(); }
+                    CompletableFuture<String> plain(String id);
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Client$Resilient"))
+                .contains("return this.retry0.executeAsync(() -> this.circuitBreaker0.executeAsync(()"
+                        + " -> this.timeout0.executeAsync(() -> this.delegate.find(p0))));")
+                .contains("return this.fallback1.executeAsync(() -> this.timeout1.executeAsync(() -> this.delegate.list(p0)),"
+                        + " (r4c$e, r4c$attempts) -> this.r4c$recover1(r4c$e, r4c$attempts, p0));")
+                .contains("private java.util.concurrent.CompletionStage<java.util.List<java.lang.String>> r4c$recover1("
+                        + "java.lang.Throwable r4c$e, int r4c$attempts, int p0) throws java.lang.Throwable {")
+                .contains("return java.util.concurrent.CompletableFuture.completedFuture(this.delegate.recover(p0));")
+                .contains("return this.delegate.plain(p0);");
+    }
+
+    @Test
+    void rejectsUnsupportedAsyncReturnTypes() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Fallback;
+                import dev.resilience4cata.annotation.Retry;
+                import java.util.concurrent.CompletableFuture;
+                import java.util.concurrent.CompletionStage;
+                public interface Client {
+                    @Retry
+                    CompletionStage<? extends Number> wildcard();
+                    @Retry
+                    Custom custom();
+                    @Fallback(method = "recover")
+                    CompletableFuture<String> wrongFallback(String id);
+                    default Integer recover(String id) { return 0; }
+                    @Fallback(Text.class)
+                    CompletableFuture<Integer> wrongHandler();
+
+                    abstract class Custom extends CompletableFuture<String> {
+                    }
+
+                    final class Text implements dev.resilience4cata.FallbackHandler<String> {
+                        @Override
+                        public String apply(dev.resilience4cata.FallbackContext context) {
+                            return "";
+                        }
+                    }
+                }
+                """);
+
+        assertThat(result.errors()).hasSize(4)
+                .anySatisfy(e -> assertThat(e).contains("must return CompletionStage<T> or CompletableFuture<T>")
+                        .contains("returns java.util.concurrent.CompletionStage<? extends java.lang.Number>"))
+                .anySatisfy(e -> assertThat(e).contains("returns demo.Client.Custom"))
+                .anySatisfy(e -> assertThat(e).contains("recover(java.lang.String) returns java.lang.Integer, which is neither"
+                        + " java.lang.String nor a CompletionStage of it"))
+                .anySatisfy(e -> assertThat(e).contains("Implement FallbackHandler<java.lang.Integer> or"
+                        + " FallbackHandler<java.util.concurrent.CompletionStage<java.lang.Integer>>"));
     }
 
     private static String bundle(String name, String attributes) {

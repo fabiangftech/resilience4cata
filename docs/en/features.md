@@ -59,7 +59,7 @@ public @interface ExternalCall {}
 public interface PaymentClient {
 
     @ExternalCall
-    @Fallback(PaymentFallback.class)          // typed handler: Fallback<Receipt>
+    @Fallback(PaymentFallback.class)          // typed handler: FallbackHandler<Receipt>
     Receipt charge(Order order);
 
     @ExternalCall

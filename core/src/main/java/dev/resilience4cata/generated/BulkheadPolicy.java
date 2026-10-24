@@ -5,6 +5,8 @@ import dev.resilience4cata.BulkheadFullException;
 import dev.resilience4cata.BulkheadHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import org.jspecify.annotations.Nullable;
@@ -160,5 +162,30 @@ public final class BulkheadPolicy implements BulkheadHandle {
         int get() {
             return (int) VALUE.getVolatile(this);
         }
+    }
+
+    /**
+     * Runs an asynchronous call in the bulkhead: the slot is held until the call's stage completes, so
+     * the limit applies to calls in flight. A full bulkhead is a failed future. With {@code maxWait > 0},
+     * the wait for a slot blocks the calling thread, as in Resilience4j.
+     *
+     * @param call the next layer
+     * @param <T> the result type
+     * @return a future that completes with the call's outcome
+     */
+    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
+        if (!tryEnter()) {
+            return CompletableFuture.failedFuture(rejection());
+        }
+        CompletableFuture<T> result = new CompletableFuture<>();
+        AsyncSupport.call(call).whenComplete((value, failure) -> {
+            exit();
+            if (failure == null) {
+                result.complete(value);
+            } else {
+                result.completeExceptionally(AsyncSupport.unwrap(failure));
+            }
+        });
+        return result;
     }
 }

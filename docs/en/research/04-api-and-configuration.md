@@ -37,7 +37,7 @@
   (properties/YAML → environment → system properties) → programmatic overrides.
   Everything is resolved **once**, when the instance is created, into immutable records. The hot path never consults
   configuration.
-- **Type-safe fallbacks**: the main form is `@Fallback(UserFallback.class)` with a generic `Fallback<T>` interface. A
+- **Type-safe fallbacks**: the main form is `@Fallback(UserFallback.class)` with a generic `FallbackHandler<T>` interface. A
   method-name form exists for convenience, and the annotation processor checks it at compile time.
 - **One classifier for exceptions and results**: `recordOn`/`ignoreOn` class lists, plus an optional
   `Classifier<T>` that sees both the result and the throwable.
@@ -189,7 +189,7 @@ public @interface RateLimiter {
 }
 
 public @interface Fallback {
-    Class<? extends io.resilience4cata.Fallback<?>> value() default Inherit.class; // typed handler
+    Class<? extends io.resilience4cata.FallbackHandler<?>> value() default Inherit.class; // typed handler
     String method() default "";                    // alternative: sibling method, compile-time checked
     Class<? extends Throwable>[] applyOn() default {Throwable.class};
     Class<? extends Throwable>[] skipOn() default {};
@@ -469,11 +469,11 @@ comes from its host (`IOptionsMonitor`), not from the core library.
 ### 7.1 Typed fallback handler (primary form)
 
 ```java
-public interface Fallback<T> {
+public interface FallbackHandler<T> {
     T apply(FallbackContext ctx) throws Throwable;   // ctx: failure, attempt count, args, method, instance id
 }
 
-public final class UserFallback implements Fallback<User> {
+public final class UserFallback implements FallbackHandler<User> {
     @Override public User apply(FallbackContext ctx) {
         return ctx.failure() instanceof CallNotPermittedException
             ? User.anonymous()

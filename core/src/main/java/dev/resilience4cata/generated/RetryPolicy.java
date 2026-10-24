@@ -2,9 +2,13 @@ package dev.resilience4cata.generated;
 
 import dev.resilience4cata.RetryConfig;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Retry decisions for generated code. Allocation-free on the success path: generated code keeps the
@@ -167,6 +171,78 @@ public final class RetryPolicy {
                 }
             }
             return false;
+        }
+    }
+
+    /**
+     * Runs an asynchronous call with retries. A failed attempt is retried after the backoff delay
+     * without blocking any thread: the next attempt starts on a new virtual thread.
+     *
+     * @param call one attempt: the next layer
+     * @param <T> the result type
+     * @return a future that completes with the first successful attempt, or the last failure
+     */
+    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
+        return executeAsync(call, null, null);
+    }
+
+    /**
+     * Same as {@link #executeAsync(AsyncCall)}, and when the retries give up, runs the fallback with the
+     * number of attempts made.
+     *
+     * @param call one attempt: the next layer
+     * @param fallback decides which failures get the fallback; {@code null} for none
+     * @param recovery the generated fallback; {@code null} for none
+     * @param <T> the result type
+     * @return a future that completes with the first successful attempt, the fallback's result, or the last failure
+     */
+    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call,
+            @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery) {
+        CompletableFuture<T> result = new CompletableFuture<>();
+        new AsyncAttempts<>(this, call, fallback, recovery, result, start()).run();
+        return result;
+    }
+
+    /** The state of one asynchronous call across its attempts. Each attempt completes before the next starts. */
+    private static final class AsyncAttempts<T> implements Runnable, BiConsumer<T, Throwable> {
+        private final RetryPolicy policy;
+        private final AsyncCall<T> call;
+        private final @Nullable FallbackPolicy fallback;
+        private final @Nullable Recovery<T> recovery;
+        private final CompletableFuture<T> result;
+        private final long start;
+        private int attempts; // written by one attempt's callback before the next attempt is started
+
+        AsyncAttempts(RetryPolicy policy, AsyncCall<T> call, @Nullable FallbackPolicy fallback,
+                @Nullable Recovery<T> recovery, CompletableFuture<T> result, long start) {
+            this.policy = policy;
+            this.call = call;
+            this.fallback = fallback;
+            this.recovery = recovery;
+            this.result = result;
+            this.start = start;
+        }
+
+        @Override
+        public void run() {
+            AsyncSupport.call(call).whenComplete(this);
+        }
+
+        @Override
+        public void accept(T value, Throwable failure) {
+            if (failure == null) {
+                result.complete(value);
+                return;
+            }
+            Throwable cause = AsyncSupport.unwrap(failure);
+            long delay = policy.onFailure(++attempts, cause, start);
+            if (delay >= 0) {
+                AsyncSupport.later(delay, this);
+            } else if (fallback != null && recovery != null) {
+                fallback.recoverOrFail(cause, attempts, recovery, result);
+            } else {
+                result.completeExceptionally(cause);
+            }
         }
     }
 }

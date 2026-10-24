@@ -5,6 +5,8 @@ import dev.resilience4cata.RateLimiterConfig;
 import dev.resilience4cata.RateLimiterHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.LongSupplier;
@@ -188,6 +190,56 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
 
         void set(long value) {
             VALUE.setVolatile(this, value);
+        }
+    }
+
+    /**
+     * Runs an asynchronous call when a permit is available. With {@code maxWait > 0}, a call whose
+     * permit comes within {@code maxWait} reserves it and starts when it is due, without blocking any
+     * thread. A rejection is a failed future.
+     *
+     * @param call the next layer
+     * @param <T> the result type
+     * @return a future that completes with the call's outcome
+     */
+    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
+        long wait = reserve();
+        if (wait < 0) {
+            return CompletableFuture.failedFuture(rejection);
+        }
+        CompletableFuture<T> result = new CompletableFuture<>();
+        if (wait == 0) {
+            AsyncSupport.relay(AsyncSupport.call(call), result);
+        } else {
+            AsyncSupport.later(wait, () -> AsyncSupport.relay(AsyncSupport.call(call), result));
+        }
+        return result;
+    }
+
+    /**
+     * Takes or reserves a permit without waiting for it.
+     *
+     * @return {@code 0} if the permit is available now, the nanoseconds until the reserved permit is due
+     *     (at most {@code maxWait}), or {@code -1} if the call must be rejected (nothing is reserved then)
+     */
+    long reserve() {
+        if (!enabled) {
+            return 0;
+        }
+        long now = ticker.getAsLong();
+        PaddedTat cell = tat;
+        long current = cell.getOpaque();
+        while (true) {
+            long next = (current - now > 0 ? current : now) + interval;
+            long wait = next - now - tolerance;
+            if (wait > maxWaitNanos) {
+                return -1;
+            }
+            if (cell.weakCompareAndSet(current, next)) {
+                return Math.max(wait, 0);
+            }
+            LockSupport.parkNanos(1);
+            current = cell.getOpaque();
         }
     }
 }

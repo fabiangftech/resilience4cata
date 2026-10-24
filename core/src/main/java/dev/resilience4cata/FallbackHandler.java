@@ -11,7 +11,7 @@ package dev.resilience4cata;
  * @param <T> the result type of the protected method
  */
 @FunctionalInterface
-public interface Fallback<T> {
+public interface FallbackHandler<T> {
 
     /**
      * Returns the alternative result, or throws to propagate a failure.

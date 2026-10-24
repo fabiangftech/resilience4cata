@@ -7,6 +7,8 @@ import dev.resilience4cata.CircuitBreakerState;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongSupplier;
 
@@ -472,5 +474,33 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
             }
             return Outcome.SUCCESS;
         }
+    }
+
+    /**
+     * Runs an asynchronous call through the breaker: the call is recorded when its stage completes, and
+     * a rejection is a failed future. Used by generated code for methods that return a stage.
+     *
+     * @param call the next layer
+     * @param <T> the result type
+     * @return a future that completes with the call's outcome
+     */
+    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
+        long token = acquire();
+        if (token < 0) {
+            return CompletableFuture.failedFuture(rejection());
+        }
+        long started = startTimer();
+        CompletableFuture<T> result = new CompletableFuture<>();
+        AsyncSupport.call(call).whenComplete((value, failure) -> {
+            if (failure == null) {
+                onSuccess(token, started);
+                result.complete(value);
+            } else {
+                Throwable cause = AsyncSupport.unwrap(failure);
+                onFailure(token, started, cause);
+                result.completeExceptionally(cause);
+            }
+        });
+        return result;
     }
 }

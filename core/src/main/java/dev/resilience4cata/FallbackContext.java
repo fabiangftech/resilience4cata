@@ -1,6 +1,6 @@
 package dev.resilience4cata;
 
-/** Information about the failed call, passed to a {@link Fallback}. */
+/** Information about the failed call, passed to a {@link FallbackHandler}. */
 public interface FallbackContext {
 
     /** The failure that triggered the fallback, including rejections by a policy. */

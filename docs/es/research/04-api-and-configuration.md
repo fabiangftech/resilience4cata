@@ -43,7 +43,7 @@
   Todo se resuelve **una sola vez**, al crear la instancia, en records inmutables. El camino caliente nunca consulta
   la configuración.
 - **Fallbacks con tipos seguros**: la forma principal es `@Fallback(UserFallback.class)` con una interfaz genérica
-  `Fallback<T>`. Existe una forma por nombre de método por comodidad, y el procesador de anotaciones la verifica en
+  `FallbackHandler<T>`. Existe una forma por nombre de método por comodidad, y el procesador de anotaciones la verifica en
   compilación.
 - **Un solo clasificador para excepciones y resultados**: listas de clases `recordOn`/`ignoreOn`, más un
   `Classifier<T>` opcional que ve tanto el resultado como la excepción.
@@ -198,7 +198,7 @@ public @interface RateLimiter {
 }
 
 public @interface Fallback {
-    Class<? extends io.resilience4cata.Fallback<?>> value() default Inherit.class; // typed handler
+    Class<? extends io.resilience4cata.FallbackHandler<?>> value() default Inherit.class; // typed handler
     String method() default "";                    // alternative: sibling method, compile-time checked
     Class<? extends Throwable>[] applyOn() default {Throwable.class};
     Class<? extends Throwable>[] skipOn() default {};
@@ -491,11 +491,11 @@ comportamiento equivalente también lo aporta el host (`IOptionsMonitor`), no la
 ### 7.1 Handler de fallback tipado (forma principal)
 
 ```java
-public interface Fallback<T> {
+public interface FallbackHandler<T> {
     T apply(FallbackContext ctx) throws Throwable;   // ctx: failure, attempt count, args, method, instance id
 }
 
-public final class UserFallback implements Fallback<User> {
+public final class UserFallback implements FallbackHandler<User> {
     @Override public User apply(FallbackContext ctx) {
         return ctx.failure() instanceof CallNotPermittedException
             ? User.anonymous()
