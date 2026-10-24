@@ -43,11 +43,13 @@ resilience4cata is a resilience library for **plain Java 21+**: circuit breaker,
 | `@Retry` | **Done end to end**: annotation, processor validation and generation, `RetryPolicy` runtime, registry with defaults and named configs, composed annotations, type-level and method-level merging |
 | `@CircuitBreaker` | **Done end to end**: count- and time-based windows, lock-free state machine, half-open probes with `maxWaitInHalfOpen`, slow calls, `recordOn`/`ignoreOn`, shared instances by `name`, nested inside `@Retry`, and `forceOpen`/`disable`/`reset` through `registry.circuitBreaker(id)` |
 | `@Timeout` | **Done end to end** for synchronous methods: the call stays on the caller's thread and one shared watchdog thread interrupts it when it runs late (resolution: `timeout / 16`, 1–50 ms, never early); the interrupt is always cleared afterwards. Applied per attempt, inside the circuit breaker |
-| `@Bulkhead`, `@RateLimiter`, `@Fallback` | Annotations only |
+| `@Bulkhead` | **Done end to end**: semaphore-style limit with `maxConcurrent`; with `maxWait = "0"` a lock-free counter whose rejections only read, otherwise a non-fair `Semaphore` that parks virtual threads without pinning; shared instances by `name`; innermost layer, so a slot is held only while the method runs and the wait for one counts toward `@Timeout` |
+| `@RateLimiter` | **Done end to end**: `permits` per `period` with GCRA (generic cell rate algorithm) on one `long`: a burst of up to `permits` after a quiet period, then one permit every `period / permits`; no background thread, and a rejection only reads. With `maxWait`, a call reserves the next permit and sleeps until it is due; an interrupted wait gives the permit back. Shared instances by `name`, inspection through `registry.rateLimiter(id)`. Layer inside the circuit breaker, so calls rejected by the breaker use no permit |
+| `@Fallback` | Annotation only |
 | Async (`CompletionStage`) return types, `classifier`, annotated classes | Rejected by the processor with an explicit "not supported yet" error |
 | External configuration (`config` module), profiles, `extends` | Not started |
 | Gradle incremental-processing registration | Not done: projects that use the processor recompile fully |
-| JMH benchmarks | Retry (one and four services), circuit breaker (count and time windows) and timeout (1 and 4 threads) vs Resilience4j ([benchmarks](benchmarks.md)) |
+| JMH benchmarks | Retry (one and four services), circuit breaker (count and time windows) , timeout, bulkhead and rate limiter (1 and 4 threads) vs Resilience4j ([benchmarks](benchmarks.md)) |
 | jcstress (`stress` module) | Not started. Races in the circuit breaker are covered by deterministic unit tests that replay the interleavings, checked by mutation |
 
 ## Open questions

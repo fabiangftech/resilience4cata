@@ -110,3 +110,41 @@ Llamadas que terminan a tiempo (trabajo trivial, timeout de 1 s). resilience4cat
 - Unos **14,5 ns de overhead por llamada**, unas 600 veces menos que pasar la llamada a otro thread. Sin leer el reloj y sin escrituras compartidas por llamada: cada thread escribe solo en su propio scope reutilizable.
 - Es más de lo que cuestan las otras políticas (retry 0,4 ns, circuit breaker 0,9 ns). Candidatos probables, todavía sin investigar: la búsqueda en el `ThreadLocal` de los scopes del thread y el compare-and-set al terminar la llamada.
 - El precio de no leer el reloj es la precisión: el watchdog revisa cada `timeout / 16` del timeout más corto en uso (entre 1 y 50 ms) e interrumpe una llamada entre su timeout y unos dos ticks después, nunca antes.
+
+## Bulkhead, 1 y 4 threads (2026-10-23)
+
+`./gradlew :benchmark:jmh -Pjmh="BulkheadBenchmark -t 4 -prof gc"` — código: `benchmark/src/main/java/dev/resilience4cata/benchmark/BulkheadBenchmark.java`.
+
+Todos los threads comparten un bulkhead. *Libre*: un límite de 1000 que nunca se alcanza, sin espera. *Modo con espera*: el mismo límite con `maxWait = 100ms`, así resilience4cata usa su modo `Semaphore`. *Lleno*: un límite de 1 ocupado por el setup, así se rechazan todas las llamadas. Resilience4j: `SemaphoreBulkhead`, mismos límites, stack traces desactivados en su excepción de rechazo.
+
+| Escenario | Threads | resilience4cata | Resilience4j 2.4.0 |
+|---|---:|---:|---:|
+| Libre | 1 | **9,3 ± 0,2 ns**, 0 B | 22,9 ± 0,1 ns, 0 B |
+| Libre | 4 | **324 ± 15 ns**, 0 B | 445 ± 4 ns, 0 B |
+| Modo con espera, libre | 1 | 23,2 ± 0,3 ns, 0 B | 23,4 ± 1,2 ns, 0 B |
+| Modo con espera, libre | 4 | 447 ± 6 ns, 0 B | 451 ± 12 ns, 0 B |
+| Lleno (se rechaza todo) | 1 | **2,4 ± 0,6 ns**, 0 B | 143 ± 11 ns, 464 B |
+| Lleno (se rechaza todo) | 4 | **3,3 ± 0,4 ns**, 0 B | 267 ± 41 ns, 464 B |
+
+- **Los rechazos son entre 60 y 80 veces más baratos**: un bulkhead lleno solo lee su contador (sin escribir, así que sin contención) y lanza una excepción preasignada. Con sobrecarga, que es cuando un bulkhead importa, eso evita que el camino de rechazo se vuelva un cuello de botella.
+- **Con espacio libre: 9,3 ns contra 22,9 ns con un thread.** La primera versión medía 23,2 ns, igual que Resilience4j: usaba atómicos con barrera completa (volatile). Tomar un slot solo necesita semántica *acquire* y liberarlo *release*, igual que un lock; en ARM eso convierte `casal`/`ldaddal` en instrucciones más baratas y lo bajó a 9,3 ns (de 421 a 324 ns con cuatro threads).
+- **Con cuatro threads, ambas librerías pagan la contención** (300–450 ns): un límite global exacto necesita un contador compartido que se escribe dos veces por llamada. Repartir el límite en franjas podría reducirla, a cambio de un límite que solo se respeta por franja; no está hecho.
+- El modo con espera usa el `Semaphore` del JDK, como Resilience4j, así que cuesta lo mismo.
+- El mismo cambio a un orden más débil podría aplicarse al compare-and-set de fin de llamada del timeout y a las actualizaciones de la ventana del circuit breaker; todavía no se midió.
+
+## Rate limiter, 1 y 4 threads (2026-10-24)
+
+`./gradlew :benchmark:jmh -Pjmh="RateLimiterBenchmark -t 4 -prof gc"` — fuente: `benchmark/src/main/java/dev/resilience4cata/benchmark/RateLimiterBenchmark.java`.
+
+Todos los threads comparten un limiter, y ninguna de las dos librerías espera un permiso. *Free*: mil millones de permisos por segundo, que nunca se alcanzan, así que pasan todas las llamadas. *Exhausted*: un permiso por hora, que toma el setup, así que todas las llamadas se rechazan. Resilience4j: su `AtomicRateLimiter` por defecto, con los mismos límites y sin stack trace en su excepción de rechazo. Las dos librerías leen `System.nanoTime()` una vez por llamada.
+
+| Escenario | Threads | resilience4cata | Resilience4j 2.4.0 |
+|---|---:|---:|---:|
+| Free | 1 | **25,3 ± 0,4 ns**, 0 B | 57,5 ± 5,2 ns, 40 B |
+| Free | 4 | **131 ± 1 ns**, 0 B | 206 ± 7 ns, 40 B |
+| Exhausted (todo rechazado) | 1 | **22,9 ± 0,1 ns**, 0 B | 243 ± 12 ns, 560 B |
+| Exhausted (todo rechazado) | 4 | **164 ± 1 ns**, 0 B | 1763 ± 60 ns, 524 B |
+
+- **Casi todo el costo de resilience4cata es el reloj.** `System.nanoTime()` cuesta 21 ns con un thread y 163 ns con cuatro en esta máquina (ver la sección de la ventana por tiempo); el limiter agrega unos 2–4 ns con un thread. Un rechazo solo lee, así que con cuatro threads un limiter agotado cuesta exactamente lo que cuesta el reloj con contención. En Linux, donde `nanoTime` no tiene estado compartido, estos números deberían ser mucho menores; todavía no está medido.
+- **Los rechazos son 10 veces más baratos y no asignan memoria**; Resilience4j crea un `State` nuevo por intento y ~520 B por llamada rechazada.
+- **Contención: la primera versión perdía con cuatro threads, 658 ns contra 214 ns.** Cada llamada admitida escribe el único `tat` compartido, y quien perdía el compare-and-set reintentaba de inmediato, así que la línea de caché rebotaba entre núcleos. Cambiar la operación atómica (fuerte, débil, acquire) no cambió nada; esperar activamente con `onSpinWait` (una vez o con retroceso exponencial) y `Thread.yield()` casi no ayudó (565–665 ns y 414 ns). Estacionar el thread 1 ns después de perder el compare-and-set, como hace Resilience4j, lo bajó a **131 ns** (351 ns contra 523 ns de Resilience4j con ocho threads). El costo pasa a la llamada que perdió la carrera: en Linux, el estacionamiento más corto de un thread de plataforma dura unos 50 µs por el *timer slack*. Solo ocurre cuando las llamadas admitidas llegan más rápido de lo que la línea de caché puede moverse entre núcleos, muy por encima de cualquier tasa con la que normalmente se configura un limiter.

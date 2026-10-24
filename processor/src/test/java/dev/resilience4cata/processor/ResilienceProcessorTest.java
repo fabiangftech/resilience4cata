@@ -327,6 +327,92 @@ class ResilienceProcessorTest {
                 .anySatisfy(e -> assertThat(e).contains("@Timeout(\"soon\") is not a valid duration"));
     }
 
+    @Test
+    void putsTheBulkheadInnermost() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Bulkhead;
+                import dev.resilience4cata.annotation.Timeout;
+                public interface Client {
+                    @Timeout("2s") @Bulkhead(maxConcurrent = 10, maxWait = "100ms")
+                    String call();
+                    @Bulkhead(name = "pool")
+                    void fire();
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Client$Resilient"))
+                .contains("r4c$result = this.r4c$bulkhead0();")
+                .contains("private java.lang.String r4c$bulkhead0() {")
+                .contains("return this.delegate.call();")
+                .contains("r4c$b.maxConcurrent(10);")
+                .contains("r4c$b.maxWait(java.time.Duration.ofNanos(100000000L));")
+                .contains("\"pool\"");
+    }
+
+    @Test
+    void rejectsInvalidBulkheadValues() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Bulkhead;
+                public interface Client {
+                    @Bulkhead(maxConcurrent = 0, maxWait = "forever")
+                    String call();
+                }
+                """);
+
+        assertThat(result.errors()).hasSize(2)
+                .anySatisfy(e -> assertThat(e).contains("@Bulkhead.maxConcurrent must be at least 1"))
+                .anySatisfy(e -> assertThat(e).contains("@Bulkhead.maxWait = \"forever\" is not a valid duration"));
+    }
+
+    @Test
+    void putsTheRateLimiterBetweenTheBreakerAndTheTimeout() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.CircuitBreaker;
+                import dev.resilience4cata.annotation.RateLimiter;
+                import dev.resilience4cata.annotation.Timeout;
+                public interface Client {
+                    @Timeout("2s") @RateLimiter(permits = 10, period = "1s", maxWait = "50ms") @CircuitBreaker
+                    String call();
+                    @RateLimiter(name = "api")
+                    void fire();
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Client$Resilient"))
+                .contains("final java.lang.String r4c$result = this.r4c$rateLimiter0();")
+                .contains("private java.lang.String r4c$rateLimiter0() {")
+                .contains("return this.r4c$timeout0();")
+                .contains("r4c$b.permits(10);")
+                .contains("r4c$b.period(java.time.Duration.ofNanos(1000000000L));")
+                .contains("r4c$b.maxWait(java.time.Duration.ofNanos(50000000L));")
+                .contains("this.delegate.fire();")
+                .contains("\"api\"");
+    }
+
+    @Test
+    void rejectsInvalidRateLimiterValues() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.RateLimiter;
+                public interface Client {
+                    @RateLimiter(permits = 0, period = "0")
+                    String call();
+                    @RateLimiter(period = "often")
+                    String other();
+                }
+                """);
+
+        assertThat(result.errors()).hasSize(3)
+                .anySatisfy(e -> assertThat(e).contains("@RateLimiter.permits must be at least 1"))
+                .anySatisfy(e -> assertThat(e).contains("@RateLimiter.period must be positive"))
+                .anySatisfy(e -> assertThat(e).contains("@RateLimiter.period = \"often\" is not a valid duration"));
+    }
+
     private static String bundle(String name, String attributes) {
         return """
                 package demo;

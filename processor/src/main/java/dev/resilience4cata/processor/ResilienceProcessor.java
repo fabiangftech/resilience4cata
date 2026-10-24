@@ -1,6 +1,8 @@
 package dev.resilience4cata.processor;
 
+import dev.resilience4cata.annotation.Bulkhead;
 import dev.resilience4cata.annotation.CircuitBreaker;
+import dev.resilience4cata.annotation.RateLimiter;
 import dev.resilience4cata.annotation.Retry;
 import dev.resilience4cata.annotation.Timeout;
 import java.io.IOException;
@@ -44,9 +46,11 @@ import javax.tools.JavaFileObject;
  * {@code <Interface>$Resilient} that implements the interface, delegates every method, and applies
  * the declared policies. {@code Resilient.of(...)} in the core module finds it by that name.
  *
- * <p>Policies are nested in the default order, outermost first: Retry, CircuitBreaker, Timeout. Each
- * attempt is recorded by the breaker, an open breaker stops the retries, and the timeout applies to
- * each attempt. The public method holds the outermost layer; every inner layer is a private method
+ * <p>Policies are nested in the default order, outermost first: Retry, CircuitBreaker, RateLimiter,
+ * Timeout, Bulkhead. Each attempt is recorded by the breaker, an open breaker stops the retries, calls
+ * rejected by the breaker use no rate-limiter permit, the timeout
+ * applies to each attempt (including the wait for a bulkhead slot), and a bulkhead slot is held only
+ * while the method runs. The public method holds the outermost layer; every inner layer is a private method
  * of the generated class, which the JIT inlines like any statically bound call.
  */
 public final class ResilienceProcessor extends AbstractProcessor {
@@ -60,8 +64,12 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 "dev.resilience4cata.RetryConfig"),
         CIRCUIT_BREAKER(CircuitBreaker.class, "circuitBreaker", "dev.resilience4cata.generated.CircuitBreakerPolicy",
                 "circuitBreakerPolicy", "dev.resilience4cata.CircuitBreakerConfig"),
+        RATE_LIMITER(RateLimiter.class, "rateLimiter", "dev.resilience4cata.generated.RateLimiterPolicy",
+                "rateLimiterPolicy", "dev.resilience4cata.RateLimiterConfig"),
         TIMEOUT(Timeout.class, "timeout", "dev.resilience4cata.generated.TimeoutPolicy", "timeoutPolicy",
-                "dev.resilience4cata.TimeoutConfig");
+                "dev.resilience4cata.TimeoutConfig"),
+        BULKHEAD(Bulkhead.class, "bulkhead", "dev.resilience4cata.generated.BulkheadPolicy", "bulkheadPolicy",
+                "dev.resilience4cata.BulkheadConfig");
 
         final Class<?> annotation;
         final String field;
@@ -299,7 +307,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 case "classifier" -> valid = invalid(method, label + " is not supported yet.");
                 case "retryOn", "abortOn", "recordOn", "ignoreOn" ->
                         overrides.add(attribute + "(java.util.List.of(" + classList(value) + "))");
-                case "maxAttempts", "windowSize", "minimumCalls", "halfOpenCalls" -> {
+                case "maxAttempts", "windowSize", "minimumCalls", "halfOpenCalls", "maxConcurrent", "permits" -> {
                     int number = (Integer) value;
                     if (number < 1) {
                         valid = invalid(method, label + " must be at least 1, was " + number);
@@ -307,10 +315,23 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         overrides.add(attribute + "(" + number + ")");
                     }
                 }
-                case "delay", "maxDelay", "maxDuration", "slowCallDuration", "waitInOpen", "maxWaitInHalfOpen" -> {
+                case "delay", "maxDelay", "maxDuration", "slowCallDuration", "waitInOpen", "maxWaitInHalfOpen", "maxWait" -> {
                     try {
                         long nanos = Durations.parseNanos((String) value);
                         overrides.add(attribute + "(java.time.Duration.ofNanos(" + nanos + "L))");
+                    } catch (IllegalArgumentException e) {
+                        valid = invalid(method, label + " = \"" + value + "\" is not a valid duration: "
+                                + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
+                    }
+                }
+                case "period" -> {
+                    try {
+                        long nanos = Durations.parseNanos((String) value);
+                        if (nanos == 0) {
+                            valid = invalid(method, label + " must be positive, was \"" + value + "\"");
+                        } else {
+                            overrides.add("period(java.time.Duration.ofNanos(" + nanos + "L))");
+                        }
                     } catch (IllegalArgumentException e) {
                         valid = invalid(method, label + " = \"" + value + "\" is not a valid duration: "
                                 + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
@@ -457,7 +478,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return switch (kind) {
             case RETRY -> retry(index, call, isVoid);
             case CIRCUIT_BREAKER -> circuitBreaker(index, call, isVoid, returnType);
+            case RATE_LIMITER -> rateLimiter(index, call, isVoid);
             case TIMEOUT -> timeout(index, call, isVoid, returnType);
+            case BULKHEAD -> bulkhead(index, call, isVoid);
         };
     }
 
@@ -505,6 +528,35 @@ public final class ResilienceProcessor extends AbstractProcessor {
         lines.add("} catch (java.lang.Throwable r4c$e) {");
         lines.add("    r4c$cb.onFailure(r4c$token, r4c$started, r4c$e);");
         lines.add("    throw r4c$e;");
+        lines.add("}");
+        return lines;
+    }
+
+    private static List<String> rateLimiter(int index, String call, boolean isVoid) {
+        List<String> lines = new ArrayList<>();
+        lines.add("final " + Kind.RATE_LIMITER.policyType + " r4c$rateLimiter = this." + Kind.RATE_LIMITER.field + index + ";");
+        lines.add("if (!r4c$rateLimiter.tryAcquire()) {");
+        lines.add("    throw r4c$rateLimiter.rejection();");
+        lines.add("}");
+        if (isVoid) {
+            lines.add(call + ";");
+            lines.add("return;");
+        } else {
+            lines.add("return " + call + ";");
+        }
+        return lines;
+    }
+
+    private static List<String> bulkhead(int index, String call, boolean isVoid) {
+        List<String> lines = new ArrayList<>();
+        lines.add("final " + Kind.BULKHEAD.policyType + " r4c$bulkhead = this." + Kind.BULKHEAD.field + index + ";");
+        lines.add("if (!r4c$bulkhead.tryEnter()) {");
+        lines.add("    throw r4c$bulkhead.rejection();");
+        lines.add("}");
+        lines.add("try {");
+        lines.add("    " + (isVoid ? "" : "return ") + call + ";");
+        lines.add("} finally {");
+        lines.add("    r4c$bulkhead.exit();");
         lines.add("}");
         return lines;
     }

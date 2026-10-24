@@ -43,11 +43,13 @@ resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit 
 | `@Retry` | **Terminado de punta a punta**: anotación, validación y generación en el procesador, runtime `RetryPolicy`, registry con valores por defecto y configuraciones con nombre, anotaciones compuestas, combinación entre interfaz y método |
 | `@CircuitBreaker` | **Terminado de punta a punta**: ventanas por cantidad y por tiempo, máquina de estados sin locks, sondeos en half-open con `maxWaitInHalfOpen`, llamadas lentas, `recordOn`/`ignoreOn`, instancias compartidas por `name`, anidado dentro de `@Retry`, y `forceOpen`/`disable`/`reset` desde `registry.circuitBreaker(id)` |
 | `@Timeout` | **Terminado de punta a punta** para métodos síncronos: la llamada sigue en el thread del llamador y un único watchdog compartido la interrumpe cuando se atrasa (resolución: `timeout / 16`, entre 1 y 50 ms, nunca antes de tiempo); la interrupción siempre se limpia después. Se aplica por intento, adentro del circuit breaker |
-| `@Bulkhead`, `@RateLimiter`, `@Fallback` | Solo las anotaciones |
+| `@Bulkhead` | **Terminado de punta a punta**: límite tipo semáforo con `maxConcurrent`; con `maxWait = "0"` un contador sin locks cuyos rechazos solo leen, si no un `Semaphore` no justo que estaciona virtual threads sin fijarlos; instancias compartidas por `name`; capa más interna, así un slot se ocupa solo mientras corre el método y la espera de uno cuenta para `@Timeout` |
+| `@RateLimiter` | **Terminado de punta a punta**: `permits` por `period` con GCRA (generic cell rate algorithm) sobre un solo `long`: una ráfaga de hasta `permits` después de un rato sin llamadas, y luego un permiso cada `period / permits`; sin thread de fondo, y un rechazo solo lee. Con `maxWait`, la llamada reserva el próximo permiso y duerme hasta que toca; si la espera se interrumpe, el permiso se devuelve. Instancias compartidas por `name`, inspección con `registry.rateLimiter(id)`. Capa dentro del circuit breaker, así las llamadas que rechaza el breaker no gastan permisos |
+| `@Fallback` | Solo la anotación |
 | Retornos async (`CompletionStage`), `classifier`, clases anotadas | El procesador los rechaza con un error explícito de "todavía no soportado" |
 | Configuración externa (módulo `config`), perfiles, `extends` | Sin empezar |
 | Registro como procesador incremental de Gradle | Pendiente: los proyectos que usan el procesador recompilan todo |
-| Benchmarks JMH | Retry (uno y cuatro servicios), circuit breaker (ventanas por cantidad y por tiempo) y timeout (1 y 4 threads) vs Resilience4j ([benchmarks](benchmarks.md)) |
+| Benchmarks JMH | Retry (uno y cuatro servicios), circuit breaker (ventanas por cantidad y por tiempo) , timeout, bulkhead y rate limiter (1 y 4 threads) vs Resilience4j ([benchmarks](benchmarks.md)) |
 | jcstress (módulo `stress`) | Sin empezar. Las carreras del circuit breaker están cubiertas con tests unitarios deterministas que reproducen las intercalaciones, verificados por mutación |
 
 ## Preguntas abiertas
