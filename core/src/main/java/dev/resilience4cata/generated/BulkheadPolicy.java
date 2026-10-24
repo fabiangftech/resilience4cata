@@ -83,6 +83,12 @@ public final class BulkheadPolicy implements BulkheadHandle {
         return waiting != null ? maxConcurrent - waiting.availablePermits() : inUse.get();
     }
 
+    @Override
+    public int waitingCalls() {
+        Semaphore waiting = semaphore;
+        return waiting != null ? queuedCalls() + waiting.getQueueLength() : 0;
+    }
+
     /** Returns the preallocated exception to throw when {@link #tryEnter()} returns {@code false}. */
     public BulkheadFullException rejection() {
         return rejection;

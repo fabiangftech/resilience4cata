@@ -11,4 +11,12 @@ public interface BulkheadHandle {
 
     /** Number of calls running inside the bulkhead right now. */
     int concurrentCalls();
+
+    /**
+     * Number of calls waiting for a slot right now: asynchronous calls queued for a released slot
+     * plus synchronous threads blocked on the bulkhead. Always 0 when {@code maxWait} is 0, since
+     * a full bulkhead then rejects at once. The count is a snapshot meant for monitoring; it may be
+     * stale by the time it is read.
+     */
+    int waitingCalls();
 }

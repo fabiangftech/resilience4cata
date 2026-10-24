@@ -69,6 +69,7 @@ class BulkheadAsyncWaitTest {
         assertThat(firstResult).isNotDone();
         assertThat(secondResult).isNotDone();
         assertThat(bulkhead.queuedCalls()).isEqualTo(2);
+        assertThat(bulkhead.waitingCalls()).isEqualTo(2);
 
         bulkhead.exit(); // a synchronous call frees its slot
         assertThat(first.awaitCalled()).isTrue();
@@ -77,6 +78,7 @@ class BulkheadAsyncWaitTest {
         assertThat(second.staysUncalled()).isTrue();
         assertThat(bulkhead.concurrentCalls()).isEqualTo(1);
         assertThat(bulkhead.queuedCalls()).isEqualTo(1);
+        assertThat(bulkhead.waitingCalls()).isEqualTo(1);
 
         first.stage.complete("one"); // an asynchronous call frees its slot
         assertThat(firstResult.get(5, TimeUnit.SECONDS)).isEqualTo("one");
@@ -86,6 +88,7 @@ class BulkheadAsyncWaitTest {
         assertThat(secondResult.get(5, TimeUnit.SECONDS)).isEqualTo("two");
         assertEventuallyIdle(bulkhead);
         assertThat(bulkhead.queuedCalls()).isZero();
+        assertThat(bulkhead.waitingCalls()).isZero();
     }
 
     @Test

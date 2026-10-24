@@ -35,6 +35,31 @@ class BulkheadPolicyTest {
         bulkhead.exit();
         assertThat(bulkhead.concurrentCalls()).isEqualTo(1);
         assertThat(bulkhead.tryEnter()).isTrue();
+        assertThat(bulkhead.waitingCalls()).as("nothing waits without maxWait").isZero();
+    }
+
+    @Test
+    void countsSynchronousCallersBlockedOnAFullBulkhead() throws Exception {
+        BulkheadPolicy bulkhead = bulkhead(1, Duration.ofHours(1));
+        assertThat(bulkhead.tryEnter()).isTrue();
+        assertThat(bulkhead.waitingCalls()).isZero();
+
+        Thread blocked = Thread.ofPlatform().start(() -> {
+            if (bulkhead.tryEnter()) {
+                bulkhead.exit();
+            }
+        });
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (bulkhead.waitingCalls() == 0 && System.nanoTime() < deadline) {
+            Thread.onSpinWait();
+        }
+        assertThat(bulkhead.waitingCalls()).isEqualTo(1);
+
+        bulkhead.exit();
+        blocked.join(TimeUnit.SECONDS.toMillis(5));
+        assertThat(blocked.isAlive()).isFalse();
+        assertThat(bulkhead.waitingCalls()).isZero();
+        assertThat(bulkhead.concurrentCalls()).isZero();
     }
 
     @Test
