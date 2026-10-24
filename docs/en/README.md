@@ -41,12 +41,13 @@ resilience4cata is a resilience library for **plain Java 21+**: circuit breaker,
 | Piece | Status |
 |---|---|
 | `@Retry` | **Done end to end**: annotation, processor validation and generation, `RetryPolicy` runtime, registry with defaults and named configs, composed annotations, type-level and method-level merging |
-| `@CircuitBreaker` | **Done end to end** with a count-based window: lock-free state machine, half-open probes, slow calls, `recordOn`/`ignoreOn`, shared instances by `name`, nested inside `@Retry`. Pending: time-based window, `forceOpen`/`disable`, maximum wait in half-open |
+| `@CircuitBreaker` | **Done end to end**: count- and time-based windows, lock-free state machine, half-open probes with `maxWaitInHalfOpen`, slow calls, `recordOn`/`ignoreOn`, shared instances by `name`, nested inside `@Retry`, and `forceOpen`/`disable`/`reset` through `registry.circuitBreaker(id)` |
 | `@Timeout`, `@Bulkhead`, `@RateLimiter`, `@Fallback` | Annotations only |
-| Async (`CompletionStage`) return types, `classifier`, annotated classes, `windowType = TIME` | Rejected by the processor with an explicit "not supported yet" error |
+| Async (`CompletionStage`) return types, `classifier`, annotated classes | Rejected by the processor with an explicit "not supported yet" error |
 | External configuration (`config` module), profiles, `extends` | Not started |
 | Gradle incremental-processing registration | Not done: projects that use the processor recompile fully |
-| JMH benchmarks | Retry (one and four services) and circuit breaker (1 and 4 threads) vs Resilience4j ([benchmarks](benchmarks.md)). jcstress not started |
+| JMH benchmarks | Retry (one and four services) and circuit breaker (count and time windows, 1 and 4 threads) vs Resilience4j ([benchmarks](benchmarks.md)) |
+| jcstress (`stress` module) | Not started. Races in the circuit breaker are covered by deterministic unit tests that replay the interleavings, checked by mutation |
 
 ## Open questions
 

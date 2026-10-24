@@ -2,7 +2,9 @@ package dev.resilience4cata;
 
 import dev.resilience4cata.generated.CircuitBreakerPolicy;
 import dev.resilience4cata.generated.RetryPolicy;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeSet;
@@ -143,6 +145,32 @@ public final class ResilienceRegistry {
                     + "\nGive the call sites different names, or make their configuration identical.");
         }
         return policy;
+    }
+
+    /**
+     * Returns a circuit breaker, to inspect or control it. Breakers are created when an annotated
+     * interface is wrapped with {@code Resilient.of(...)}, so this only finds them afterwards.
+     *
+     * @param id the breaker's {@code name}, or its derived id {@code <interface>#<method>(<parameter types>)}
+     * @return the breaker
+     * @throws IllegalArgumentException if no breaker has that id
+     */
+    public CircuitBreakerHandle circuitBreaker(String id) {
+        CircuitBreakerHandle handle = circuitBreakers.get(id);
+        if (handle == null) {
+            throw new IllegalArgumentException("No circuit breaker '" + id + "'. Known: "
+                    + new TreeSet<>(circuitBreakers.keySet())
+                    + ". Breakers exist once their interface has been wrapped with Resilient.of(...).");
+        }
+        return handle;
+    }
+
+    /** Returns every circuit breaker created so far, sorted by id. */
+    public List<CircuitBreakerHandle> circuitBreakers() {
+        return circuitBreakers.values().stream()
+                .sorted(Comparator.comparing(CircuitBreakerHandle::id))
+                .map(CircuitBreakerHandle.class::cast)
+                .toList();
     }
 
     /** Builder for {@link ResilienceRegistry}. */

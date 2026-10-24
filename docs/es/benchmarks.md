@@ -78,3 +78,20 @@ Misma máquina y configuración de JMH que arriba. Ambas librerías: ventana por
 - **El caso mixto con cuatro threads sigue siendo el cuello de botella** (unos 200 ns): cada llamada avanza un cursor compartido para que la ventana guarde exactamente las últimas 100 llamadas. Relajar esa semántica (por ejemplo con ventanas por franjas) podría eliminarlo; es una decisión de diseño, no está hecha.
 - La estrategia `LOCK_FREE` de Resilience4j es más lenta que su opción por defecto en todos estos escenarios y asigna entre 200 y 800 B por llamada.
 - Una notebook (Apple M1: 4 núcleos de rendimiento + 4 de eficiencia), JDK 21. Pendiente: JDK 25, x86-64, 8 o más threads.
+
+## Circuit breaker, ventana por tiempo (2026-10-23)
+
+Misma clase de benchmark (métodos `*Time*`): ventana de 10 segundos, evaluada después de 100 llamadas, umbral de 50%; Resilience4j `TIME_BASED` con su estrategia por defecto `SYNCHRONIZED`.
+
+| Escenario | Threads | resilience4cata | Resilience4j 2.4.0 |
+|---|---:|---:|---:|
+| Todas funcionan | 1 | **46,6 ± 0,3 ns**, 0 B | 111,4 ± 0,5 ns, 0 B |
+| Falla una de cada diez | 1 | **69 ± 19 ns**, 0 B | 135,3 ± 0,8 ns, 0 B |
+| Todas funcionan | 4 | **164 ± 28 ns**, 0 B | 703 ± 52 ns, 41 B |
+| Falla una de cada diez | 4 | **191 ± 11 ns**, 0 B | 744 ± 53 ns, 41 B |
+
+**El reloj domina.** Una ventana por tiempo tiene que leer el reloj en cada llamada, y en esta máquina `System.nanoTime()` cuesta por sí solo **21 ns con un thread y 163 ns con cuatro** (medido aparte). En macOS, HotSpot mantiene `nanoTime` monótono entre threads con un compare-and-set sobre un valor global, así que las llamadas concurrentes compiten por él; en Linux es una llamada vDSO sin estado compartido. Sin el reloj, la ventana por tiempo de resilience4cata cuesta unos 25 ns con un thread y unos pocos nanosegundos con cuatro. Todos los contadores están repartidos (`LongAdder`) para que los éxitos no compitan; la única asignación es un bucket por segundo.
+
+Dos consecuencias:
+- La ventana por cantidad, que no lee el reloj salvo que se configure `slowCallDuration`, es mucho más barata cuando sirven las dos. Es la opción por defecto.
+- Un reloj aproximado en caché (actualizado por un thread de fondo cada milisegundo) eliminaría la mayor parte de este costo. No está hecho: implica un thread daemon por JVM y resolución de milisegundos.

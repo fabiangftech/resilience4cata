@@ -266,7 +266,7 @@ class ResilienceProcessorTest {
     }
 
     @Test
-    void rejectsTimeWindowsForNow() {
+    void supportsTimeWindows() {
         Compilation result = compile("demo.Client", """
                 package demo;
                 import dev.resilience4cata.annotation.CircuitBreaker;
@@ -277,7 +277,9 @@ class ResilienceProcessorTest {
                 }
                 """);
 
-        assertThat(result.errors()).singleElement().asString().contains("TIME is not supported yet");
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Client$Resilient"))
+                .contains("r4c$b.windowType(dev.resilience4cata.CircuitBreakerConfig.WindowType.TIME);");
     }
 
     private static String bundle(String name, String attributes) {

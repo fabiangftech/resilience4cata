@@ -199,11 +199,171 @@ class CircuitBreakerPolicyTest {
     }
 
     @Test
-    void disabledNeverOpens() {
+    void disabledInTheConfigurationNeverOpens() {
         CircuitBreakerPolicy cb = breaker(window(2).enabled(false));
         for (int i = 0; i < 10; i++) {
             fail(cb);
         }
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.DISABLED);
+        cb.reset();
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.DISABLED);
+    }
+
+    @Test
+    void forceOpenRejectsEvenAHealthyBreakerUntilReset() {
+        CircuitBreakerPolicy cb = breaker(window(4));
+        for (int i = 0; i < 10; i++) {
+            succeed(cb); // quiet
+        }
+        cb.forceOpen();
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.FORCED_OPEN);
+        now.addAndGet(Duration.ofDays(1).toNanos());
+        assertThat(cb.acquire()).isEqualTo(CircuitBreakerPolicy.REJECTED);
+
+        cb.reset();
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.CLOSED);
+        fail(cb);
+        fail(cb);
+        fail(cb);
+        assertThat(cb.state()).as("the window starts empty after reset").isEqualTo(CircuitBreakerState.CLOSED);
+    }
+
+    @Test
+    void disableLetsEverythingThroughUntilReset() {
+        CircuitBreakerPolicy cb = breaker(window(2));
+        cb.disable();
+        for (int i = 0; i < 10; i++) {
+            fail(cb);
+        }
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.DISABLED);
+        cb.reset();
+        fail(cb);
+        fail(cb);
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.OPEN);
+    }
+
+    @Test
+    void outcomesOfCallsStartedBeforeForceOpenOrResetAreDropped() {
+        CircuitBreakerPolicy cb = breaker(window(2));
+        long before = cb.acquire();
+        cb.forceOpen();
+        cb.reset();
+        cb.onFailure(before, 0, new IOException());
+        fail(cb);
+        assertThat(cb.state()).as("only one failure counts").isEqualTo(CircuitBreakerState.CLOSED);
+    }
+
+    @Test
+    void reopensWhenProbesTakeLongerThanMaxWaitInHalfOpen() {
+        CircuitBreakerPolicy cb = breaker(window(2).halfOpenCalls(1).maxWaitInHalfOpen(Duration.ofSeconds(5)));
+        fail(cb);
+        fail(cb);
+        now.addAndGet(Duration.ofSeconds(10).toNanos());
+        long probe = cb.acquire(); // half-open; the probe never completes
+        assertThat(probe).isNotNegative();
+        assertThat(cb.acquire()).isEqualTo(CircuitBreakerPolicy.REJECTED);
+
+        now.addAndGet(Duration.ofSeconds(5).toNanos());
+        assertThat(cb.acquire()).isEqualTo(CircuitBreakerPolicy.REJECTED);
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.OPEN);
+        cb.onSuccess(probe, 0); // too late: dropped
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.OPEN);
+
+        now.addAndGet(Duration.ofSeconds(10).toNanos());
+        assertThat(cb.acquire()).isNotNegative(); // probing again
+    }
+
+    private static CircuitBreakerConfig.Builder timeWindow(int seconds, int minimumCalls) {
+        return CircuitBreakerConfig.builder().windowType(CircuitBreakerConfig.WindowType.TIME)
+                .windowSize(seconds).minimumCalls(minimumCalls).failureRateThreshold(50)
+                .waitInOpen(Duration.ofSeconds(60));
+    }
+
+    @Test
+    void timeWindowOpensOnTheFailureRateOfTheLastSeconds() {
+        CircuitBreakerPolicy cb = breaker(timeWindow(10, 4));
+        succeed(cb);
+        succeed(cb);
+        fail(cb);
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.CLOSED);
+        now.addAndGet(Duration.ofSeconds(3).toNanos());
+        fail(cb); // 2 of 4 within 10 s
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.OPEN);
+    }
+
+    @Test
+    void timeWindowForgetsCallsOlderThanTheWindow() {
+        CircuitBreakerPolicy cb = breaker(timeWindow(10, 4));
+        fail(cb);
+        fail(cb);
+        fail(cb);
+        now.addAndGet(Duration.ofSeconds(11).toNanos()); // those failures are now outside the window
+        succeed(cb);
+        succeed(cb);
+        succeed(cb);
+        fail(cb); // 1 of 4
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.CLOSED);
+    }
+
+    @Test
+    void timeWindowCountsEverySuccess() {
+        CircuitBreakerPolicy cb = breaker(timeWindow(10, 4));
+        for (int i = 0; i < 100; i++) {
+            succeed(cb);
+        }
+        for (int i = 0; i < 40; i++) {
+            fail(cb); // 40 of 140: under 50%
+        }
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.CLOSED);
+    }
+
+    @Test
+    void timeWindowNoticesMinimumCallsReachedBySuccessesWithinOneSecond() {
+        CircuitBreakerPolicy cb = breaker(timeWindow(10, 4).failureRateThreshold(25));
+        fail(cb);
+        succeed(cb);
+        succeed(cb);
+        succeed(cb); // 1 of 4 = 25%, reached by a success: not evaluated yet
+        now.addAndGet(Duration.ofSeconds(1).toNanos());
+        succeed(cb); // first call of a new second: evaluated (1 of 5 = 20%)
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.CLOSED);
+        fail(cb);    // 2 of 6
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.OPEN);
+    }
+
+    @Test
+    void aSuccessThatPublishesQuietAfterForceOpenDoesNotReopenTheBreaker() {
+        // Replays the race deterministically: a success reads the closed phase, then forceOpen runs
+        // completely, then the success publishes the quiet state.
+        CircuitBreakerPolicy cb = breaker(window(4));
+        for (int i = 0; i < 4; i++) {
+            succeed(cb); // the window holds only fast successes
+        }
+        long token = cb.acquire();
+        Object closed = cb.phaseForTest();
+
+        cb.forceOpen(); // clears the quiet state
+        cb.publishQuietForTest(closed, token);
+
+        assertThat(cb.acquire()).isEqualTo(CircuitBreakerPolicy.REJECTED);
+    }
+
+    @Test
+    void aSuccessThatPublishesQuietAfterAFailureIsUndone() {
+        CircuitBreakerPolicy cb = breaker(window(4).failureRateThreshold(100));
+        for (int i = 0; i < 4; i++) {
+            succeed(cb);
+        }
+        fail(cb);
+        long token = cb.acquire();
+        Object closed = cb.phaseForTest();
+
+        cb.publishQuietForTest(closed, token); // the window holds a failure: must not stay quiet
+        succeed(cb);  // must be recorded: the window becomes S F F F after the next failures...
+        fail(cb);
+        fail(cb);
+        fail(cb);
+        // ...75%, under the 100% threshold. Had the success been skipped, it would be F F F F.
         assertThat(cb.state()).isEqualTo(CircuitBreakerState.CLOSED);
     }
 

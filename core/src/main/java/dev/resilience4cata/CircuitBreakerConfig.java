@@ -8,15 +8,17 @@ import java.util.Objects;
  * Immutable circuit breaker configuration. Built with {@link #builder()} or {@link #toBuilder()}.
  *
  * @param enabled whether the breaker records calls and can open
- * @param windowType how the sliding window is measured; only {@link WindowType#COUNT} is supported for now
- * @param windowSize number of calls in the sliding window
- * @param minimumCalls calls needed before the rates are evaluated; capped at {@code windowSize}
+ * @param windowType how the sliding window is measured
+ * @param windowSize number of calls ({@link WindowType#COUNT}) or seconds ({@link WindowType#TIME}) in the window
+ * @param minimumCalls calls needed before the rates are evaluated; capped at {@code windowSize} for a count window
  * @param failureRateThreshold failure rate, in percent, that opens the breaker
  * @param slowCallRateThreshold slow-call rate, in percent, that opens the breaker
  * @param slowCallDuration duration above which a call is slow; {@link Duration#ZERO} turns slow-call
  *     detection off, so calls are not timed at all
  * @param waitInOpen how long the breaker stays open before allowing probe calls
  * @param halfOpenCalls number of probe calls in the half-open state
+ * @param maxWaitInHalfOpen how long the breaker may stay half-open before opening again if its probes
+ *     have not completed; {@link Duration#ZERO} means no limit
  * @param recordOn exceptions recorded as failures; other exceptions count as successes
  * @param ignoreOn exceptions that count neither as success nor as failure; they win over {@code recordOn}
  */
@@ -30,22 +32,27 @@ public record CircuitBreakerConfig(
         Duration slowCallDuration,
         Duration waitInOpen,
         int halfOpenCalls,
+        Duration maxWaitInHalfOpen,
         List<Class<? extends Throwable>> recordOn,
         List<Class<? extends Throwable>> ignoreOn) {
 
     /**
      * Built-in defaults, the same as Resilience4j's except that slow-call detection is off: a window
-     * of 100 calls, evaluated after 100 calls, opening at 50% failures, 60 s open, 10 probes.
+     * of 100 calls, evaluated after 100 calls, opening at 50% failures, 60 s open, 10 probes, no limit on
+     * the time spent half-open.
      */
     public static final CircuitBreakerConfig DEFAULTS = new CircuitBreakerConfig(
             true, WindowType.COUNT, 100, 100, 50f, 100f, Duration.ZERO, Duration.ofSeconds(60), 10,
-            List.of(Exception.class), List.of());
+            Duration.ZERO, List.of(Exception.class), List.of());
 
     /** How the sliding window is measured. */
     public enum WindowType {
         /** The last {@code windowSize} calls. */
         COUNT,
-        /** The calls of the last {@code windowSize} seconds. Not supported yet. */
+        /**
+         * The calls of the last {@code windowSize} seconds, in one-second buckets. Every call reads the
+         * clock, and successes alone trigger an evaluation at most once per second.
+         */
         TIME
     }
 
@@ -54,11 +61,9 @@ public record CircuitBreakerConfig(
         Objects.requireNonNull(windowType, "windowType");
         Objects.requireNonNull(slowCallDuration, "slowCallDuration");
         Objects.requireNonNull(waitInOpen, "waitInOpen");
+        Objects.requireNonNull(maxWaitInHalfOpen, "maxWaitInHalfOpen");
         recordOn = List.copyOf(recordOn);
         ignoreOn = List.copyOf(ignoreOn);
-        if (windowType == WindowType.TIME) {
-            throw new IllegalArgumentException("Time-based windows are not supported yet; use WindowType.COUNT");
-        }
         if (windowSize < 1) {
             throw new IllegalArgumentException("windowSize must be at least 1, was " + windowSize);
         }
@@ -75,6 +80,9 @@ public record CircuitBreakerConfig(
         }
         if (halfOpenCalls < 1) {
             throw new IllegalArgumentException("halfOpenCalls must be at least 1, was " + halfOpenCalls);
+        }
+        if (maxWaitInHalfOpen.isNegative()) {
+            throw new IllegalArgumentException("maxWaitInHalfOpen must not be negative, was " + maxWaitInHalfOpen);
         }
     }
 
@@ -105,6 +113,7 @@ public record CircuitBreakerConfig(
         private Duration slowCallDuration;
         private Duration waitInOpen;
         private int halfOpenCalls;
+        private Duration maxWaitInHalfOpen;
         private List<Class<? extends Throwable>> recordOn;
         private List<Class<? extends Throwable>> ignoreOn;
 
@@ -118,6 +127,7 @@ public record CircuitBreakerConfig(
             slowCallDuration = from.slowCallDuration;
             waitInOpen = from.waitInOpen;
             halfOpenCalls = from.halfOpenCalls;
+            maxWaitInHalfOpen = from.maxWaitInHalfOpen;
             recordOn = from.recordOn;
             ignoreOn = from.ignoreOn;
         }
@@ -176,6 +186,12 @@ public record CircuitBreakerConfig(
             return this;
         }
 
+        /** @param maxWaitInHalfOpen maximum time half-open; zero means no limit @return this builder */
+        public Builder maxWaitInHalfOpen(Duration maxWaitInHalfOpen) {
+            this.maxWaitInHalfOpen = Objects.requireNonNull(maxWaitInHalfOpen, "maxWaitInHalfOpen");
+            return this;
+        }
+
         /** @param recordOn exceptions recorded as failures @return this builder */
         public Builder recordOn(List<Class<? extends Throwable>> recordOn) {
             this.recordOn = List.copyOf(recordOn);
@@ -196,7 +212,7 @@ public record CircuitBreakerConfig(
          */
         public CircuitBreakerConfig build() {
             return new CircuitBreakerConfig(enabled, windowType, windowSize, minimumCalls, failureRateThreshold,
-                    slowCallRateThreshold, slowCallDuration, waitInOpen, halfOpenCalls, recordOn, ignoreOn);
+                    slowCallRateThreshold, slowCallDuration, waitInOpen, halfOpenCalls, maxWaitInHalfOpen, recordOn, ignoreOn);
         }
     }
 }

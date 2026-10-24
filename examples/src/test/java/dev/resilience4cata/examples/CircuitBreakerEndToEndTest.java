@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.resilience4cata.CallNotPermittedException;
+import dev.resilience4cata.CircuitBreakerHandle;
+import dev.resilience4cata.CircuitBreakerState;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,6 +48,11 @@ class CircuitBreakerEndToEndTest {
             return call();
         }
 
+        @Override
+        public int recent() {
+            return call();
+        }
+
         private int call() {
             calls.incrementAndGet();
             if (failing.get()) {
@@ -83,6 +90,45 @@ class CircuitBreakerEndToEndTest {
         pricing.refresh();
         pricing.refresh();
         assertThat(calls).hasValue(4);
+    }
+
+    @Test
+    void operatorsCanForceOpenDisableAndResetABreaker() {
+        failing.set(false);
+        CircuitBreakerHandle breaker = registry.circuitBreaker(
+                "dev.resilience4cata.examples.PricingClient#price(java.lang.String)");
+        assertThat(breaker.state()).isEqualTo(CircuitBreakerState.CLOSED);
+
+        breaker.forceOpen();
+        assertThatThrownBy(() -> pricing.price("sku")).isInstanceOf(CallNotPermittedException.class);
+
+        breaker.disable();
+        failing.set(true);
+        for (int i = 0; i < 10; i++) {
+            assertThatIllegalStateException().isThrownBy(() -> pricing.price("sku"));
+        }
+        assertThat(breaker.state()).isEqualTo(CircuitBreakerState.DISABLED);
+
+        breaker.reset();
+        failing.set(false);
+        assertThat(pricing.price("sku")).isEqualTo(10);
+        assertThat(registry.circuitBreakers()).extracting(CircuitBreakerHandle::id).contains("shared", breaker.id());
+    }
+
+    @Test
+    void unknownBreakerIdsListTheKnownOnes() {
+        assertThatThrownBy(() -> registry.circuitBreaker("nope"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("No circuit breaker 'nope'")
+                .hasMessageContaining("shared");
+    }
+
+    @Test
+    void timeWindowsWork() {
+        for (int i = 0; i < 3; i++) {
+            assertThatIllegalStateException().isThrownBy(pricing::recent);
+        }
+        assertThatThrownBy(pricing::recent).isInstanceOf(CallNotPermittedException.class);
     }
 
     @Test

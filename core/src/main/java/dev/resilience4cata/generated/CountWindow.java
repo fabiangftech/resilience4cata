@@ -22,16 +22,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * is only maintained when the caller needs it (half-open probes), since it would be one more write
  * per call.
  */
-final class CountWindow {
+final class CountWindow implements SlidingWindow {
 
-    static final int FILLED = 1;
-    static final int FAILURE = 2;
-    static final int SLOW = 4;
-
-    /** {@link #record} result bit: the rates may have risen and must be evaluated. */
-    static final int EVALUATE = 1;
-    /** {@link #record} result bit: a success changed the counters, so the window may now hold only fast successes. */
-    static final int MAYBE_QUIET = 2;
+    private static final int FILLED = 1;
 
     private static final VarHandle CALLS;
     private static final VarHandle FAILURES;
@@ -74,13 +67,8 @@ final class CountWindow {
         this.slots = new AtomicIntegerArray(size);
     }
 
-    /**
-     * Records one outcome.
-     *
-     * @param outcome {@link #FAILURE} and/or {@link #SLOW} bits, or 0 for a fast success
-     * @return {@link #EVALUATE} and/or {@link #MAYBE_QUIET} bits, or 0
-     */
-    int record(int outcome) {
+    @Override
+    public int record(int outcome, long now) {
         int index = (int) (cursor.getAndIncrement() % size);
         int value = outcome | FILLED;
         if (slots.getOpaque(index) == value) {
@@ -112,8 +100,17 @@ final class CountWindow {
         return (newSlot ? EVALUATE : 0) | (changed ? MAYBE_QUIET : 0);
     }
 
-    /** True if every slot holds a fast success. Volatile reads: used to publish and check the quiet state. */
-    boolean onlyFastSuccesses() {
+    @Override
+    public boolean exceeds(int minimumCalls, float failureRateThreshold, float slowCallRateThreshold,
+            boolean timed, long now) {
+        int recorded = calls();
+        return recorded >= minimumCalls
+                && (failures() * 100f >= failureRateThreshold * recorded
+                        || (timed && slowCalls() * 100f >= slowCallRateThreshold * recorded));
+    }
+
+    @Override
+    public boolean onlyFastSuccesses() {
         return (int) FAILURES.getVolatile(this) == 0 && (int) SLOW_CALLS.getVolatile(this) == 0
                 && (int) CALLS.getVolatile(this) == size;
     }

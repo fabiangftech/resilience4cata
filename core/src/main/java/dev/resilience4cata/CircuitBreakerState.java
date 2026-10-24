@@ -7,5 +7,12 @@ public enum CircuitBreakerState {
     /** Calls are rejected until the wait in the open state is over. */
     OPEN,
     /** A limited number of probe calls go through to decide whether to close or open again. */
-    HALF_OPEN
+    HALF_OPEN,
+    /** Set by {@link CircuitBreakerHandle#forceOpen()}: every call is rejected until {@link CircuitBreakerHandle#reset()}. */
+    FORCED_OPEN,
+    /**
+     * Set by {@link CircuitBreakerHandle#disable()}, or by {@code enabled = false} in the configuration:
+     * every call goes through and nothing is recorded.
+     */
+    DISABLED
 }

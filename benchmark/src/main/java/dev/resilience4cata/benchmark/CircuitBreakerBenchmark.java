@@ -35,6 +35,9 @@ import org.openjdk.jmh.annotations.Warmup;
  *       stays closed while its window records failures.</li>
  * </ul>
  *
+ * <p>{@code *Time*} benchmarks use a time-based window of 10 seconds instead (Resilience4j:
+ * {@code TIME_BASED}, its default {@code SYNCHRONIZED} strategy), with the same thresholds.
+ *
  * <p>Difference in defaults: Resilience4j always times calls for slow-call detection; resilience4cata
  * only does when {@code slowCallDuration} is set, so it reads no clock here.
  */
@@ -52,6 +55,8 @@ public class CircuitBreakerBenchmark {
     private Supplier<String> lockFreeSuccess;
     private Function<Boolean, String> synchronizedMixed;
     private Function<Boolean, String> lockFreeMixed;
+    private Supplier<String> timeSuccess;
+    private Function<Boolean, String> timeMixed;
 
     /** Per-thread call counter, used to fail one call in ten. */
     @State(Scope.Thread)
@@ -71,6 +76,8 @@ public class CircuitBreakerBenchmark {
         ResilienceRegistry registry = ResilienceRegistry.builder()
                 .circuitBreaker("bench", cb -> cb.windowSize(100).minimumCalls(100).failureRateThreshold(50)
                         .waitInOpen(Duration.ofSeconds(60)))
+                .circuitBreaker("bench-time", cb -> cb.windowType(dev.resilience4cata.CircuitBreakerConfig.WindowType.TIME)
+                        .windowSize(10).minimumCalls(100).failureRateThreshold(50).waitInOpen(Duration.ofSeconds(60)))
                 .build();
         resilience4cata = Resilient.of(GuardedService.class, new GuardedService.Impl(), registry);
 
@@ -79,6 +86,16 @@ public class CircuitBreakerBenchmark {
         lockFreeSuccess = CircuitBreaker.decorateSupplier(breaker("lockfree-success", SlidingWindowSynchronizationStrategy.LOCK_FREE), impl::call);
         synchronizedMixed = CircuitBreaker.decorateFunction(breaker("sync-mixed", SlidingWindowSynchronizationStrategy.SYNCHRONIZED), impl::maybeFail);
         lockFreeMixed = CircuitBreaker.decorateFunction(breaker("lockfree-mixed", SlidingWindowSynchronizationStrategy.LOCK_FREE), impl::maybeFail);
+        timeSuccess = CircuitBreaker.decorateSupplier(timeBreaker("time-success"), impl::call);
+        timeMixed = CircuitBreaker.decorateFunction(timeBreaker("time-mixed"), impl::maybeFail);
+    }
+
+    private static CircuitBreaker timeBreaker(String name) {
+        return CircuitBreaker.of(name, CircuitBreakerConfig.custom()
+                .slidingWindow(10, 100, SlidingWindowType.TIME_BASED, SlidingWindowSynchronizationStrategy.SYNCHRONIZED)
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofSeconds(60))
+                .build());
     }
 
     private static CircuitBreaker breaker(String name, SlidingWindowSynchronizationStrategy strategy) {
@@ -140,6 +157,34 @@ public class CircuitBreakerBenchmark {
     public String resilience4jLockFreeMixed(Calls calls) {
         try {
             return lockFreeMixed.apply(calls.nextFails());
+        } catch (RuntimeException e) {
+            return "failed";
+        }
+    }
+
+    @Benchmark
+    public String resilience4cataTimeSuccess() {
+        return resilience4cata.callTime();
+    }
+
+    @Benchmark
+    public String resilience4jTimeSuccess() {
+        return timeSuccess.get();
+    }
+
+    @Benchmark
+    public String resilience4cataTimeMixed(Calls calls) {
+        try {
+            return resilience4cata.maybeFailTime(calls.nextFails());
+        } catch (RuntimeException e) {
+            return "failed";
+        }
+    }
+
+    @Benchmark
+    public String resilience4jTimeMixed(Calls calls) {
+        try {
+            return timeMixed.apply(calls.nextFails());
         } catch (RuntimeException e) {
             return "failed";
         }

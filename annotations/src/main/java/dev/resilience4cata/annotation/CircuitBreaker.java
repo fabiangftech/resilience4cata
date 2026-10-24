@@ -42,6 +42,9 @@ public @interface CircuitBreaker {
     /** Number of probe calls allowed in the half-open state. */
     int halfOpenCalls() default -1;
 
+    /** How long the breaker may stay half-open before opening again, for example {@code "10s"}. {@code "0"} means no limit. */
+    String maxWaitInHalfOpen() default "";
+
     /** Exceptions recorded as failures. Empty means inherit. */
     Class<? extends Throwable>[] recordOn() default {};
 

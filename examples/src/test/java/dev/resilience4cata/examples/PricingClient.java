@@ -3,6 +3,7 @@ package dev.resilience4cata.examples;
 import dev.resilience4cata.annotation.CircuitBreaker;
 import dev.resilience4cata.annotation.Jitter;
 import dev.resilience4cata.annotation.Retry;
+import dev.resilience4cata.annotation.WindowType;
 
 /** Circuit breakers alone and combined with a retry. */
 public interface PricingClient {
@@ -22,4 +23,7 @@ public interface PricingClient {
 
     @CircuitBreaker(name = "shared", config = "pricing")
     int second();
+
+    @CircuitBreaker(windowType = WindowType.TIME, windowSize = 60, minimumCalls = 3, failureRateThreshold = 50, waitInOpen = "1h")
+    int recent();
 }

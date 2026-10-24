@@ -289,7 +289,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         overrides.add(attribute + "(" + number + ")");
                     }
                 }
-                case "delay", "maxDelay", "maxDuration", "slowCallDuration", "waitInOpen" -> {
+                case "delay", "maxDelay", "maxDuration", "slowCallDuration", "waitInOpen", "maxWaitInHalfOpen" -> {
                     try {
                         long nanos = Durations.parseNanos((String) value);
                         overrides.add(attribute + "(java.time.Duration.ofNanos(" + nanos + "L))");
@@ -316,13 +316,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 }
                 case "backoff" -> overrides.add("backoff(" + kind.configType + ".Backoff." + constant(value) + ")");
                 case "jitter" -> overrides.add("jitter(" + kind.configType + ".Jitter." + constant(value) + ")");
-                case "windowType" -> {
-                    if (constant(value).equals("TIME")) {
-                        valid = invalid(method, label + " = TIME is not supported yet. Use COUNT.");
-                    } else {
-                        overrides.add("windowType(" + kind.configType + ".WindowType." + constant(value) + ")");
-                    }
-                }
+                case "windowType" -> overrides.add("windowType(" + kind.configType + ".WindowType." + constant(value) + ")");
                 default -> valid = invalid(method, "Unknown attribute " + label
                         + ". The processor and the annotations jar have different versions.");
             }
