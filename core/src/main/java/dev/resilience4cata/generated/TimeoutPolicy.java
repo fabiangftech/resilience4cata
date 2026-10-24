@@ -7,7 +7,8 @@ import java.lang.invoke.VarHandle;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Future;
+import java.util.function.BiConsumer;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -58,6 +59,7 @@ public final class TimeoutPolicy {
     private final boolean enabled;
     private final long timeoutNanos;
     private final Watchdog watchdog;
+    private final TimeoutTimer.@Nullable Lane lane;
 
     /**
      * Creates a timeout policy that uses the shared watchdog.
@@ -70,6 +72,10 @@ public final class TimeoutPolicy {
     }
 
     TimeoutPolicy(String id, TimeoutConfig config, @Nullable Watchdog watchdog) {
+        this(id, config, watchdog, config.enabled() ? TimeoutTimer.shared() : null);
+    }
+
+    TimeoutPolicy(String id, TimeoutConfig config, @Nullable Watchdog watchdog, @Nullable TimeoutTimer timer) {
         this.id = id;
         this.config = config;
         this.enabled = config.enabled();
@@ -78,6 +84,7 @@ public final class TimeoutPolicy {
         if (watchdog != null) {
             watchdog.requireTimeout(timeoutNanos);
         }
+        this.lane = timer == null ? null : timer.lane(timeoutNanos); // no thread starts until the first async call
     }
 
     /** Returns the configuration this policy was created from. */
@@ -97,11 +104,11 @@ public final class TimeoutPolicy {
         Watchdog dog = watchdog;
         Scope scope = dog.scopes().push();
         scope.start = dog.now();
-        scope.slack = dog.tick();
-        scope.timeoutNanos = timeoutNanos;
+        // The start can be up to one tick old, so allow one more tick: never early.
+        scope.limit = timeoutNanos + dog.tick();
         long running = (++scope.calls << 2) | RUNNING;
         scope.running = running;
-        STATE.setRelease(scope, running); // publishes start, slack and timeout to the watchdog
+        STATE.setRelease(scope, running); // publishes start and limit to the watchdog
         return scope;
     }
 
@@ -133,37 +140,61 @@ public final class TimeoutPolicy {
     private void end(Scope scope, @Nullable Throwable failure) {
         long running = scope.running;
         long call = running & ~STATE_BITS;
-        if (STATE.compareAndSet(scope, running, call | IDLE)) {
-            watchdog.scopes().pop();
+        // Acquire is enough for RUNNING -> IDLE; the release half of a full-fence CAS is not needed.
+        // - Who wins is decided by atomicity alone: the watchdog interrupts only after its own CAS from
+        //   this exact stamp (call number + RUNNING) succeeded, and both CASes act on one location, so
+        //   exactly one succeeds. A watchdog that read an earlier call's stamp fails because the call
+        //   number differs (ABA).
+        // - Nothing before the CAS needs ordering: the watchdog reads only start and limit, which this
+        //   call wrote before enter's setRelease.
+        // - What comes after it does: the next call writes start and limit with plain stores. Without
+        //   acquire (a release-only CAS), those stores could become visible before IDLE, so a watchdog
+        //   still holding RUNNING of this call could read the next call's limit (shorter if that call
+        //   uses a shorter timeout) with this call's start, and its CAS could still win: an early
+        //   interrupt. With acquire, those stores are ordered after our CAS, and the watchdog reads
+        //   limit before its own CAS, a volatile CAS and so a release. If the watchdog's CAS came first,
+        //   our acquire CAS read the value it wrote and synchronizes with it, so the watchdog's read of
+        //   limit happened before our later store and cannot have seen it. Hence a watchdog that saw
+        //   the next call's values has its CAS after ours, and it fails.
+        // - On failure (the watchdog won), the witness is read with acquire, and the wait loop below
+        //   reads the stamp again with getAcquire, at least once: once it reads TIMED_OUT, written by
+        //   the watchdog with setRelease after thread.interrupt(), the interrupt is visible and
+        //   Thread.interrupted() clears it.
+        long witness = (long) STATE.compareAndExchangeAcquire(scope, running, call | IDLE);
+        if (witness == running) {
+            scope.owner.pop();
             return;
         }
         // The watchdog got there first: wait until its interrupt has been sent, then clear it.
-        while (((long) STATE.getVolatile(scope) & STATE_BITS) == INTERRUPTING) {
+        while (((long) STATE.getAcquire(scope) & STATE_BITS) == INTERRUPTING) {
             Thread.onSpinWait();
         }
         Thread.interrupted();
         STATE.setRelease(scope, call | IDLE);
-        watchdog.scopes().pop();
+        scope.owner.pop();
         throw new CallTimeoutException(id, Duration.ofNanos(timeoutNanos), failure);
     }
 
     /** One timed call in progress on one thread. Reused by that thread for later calls. */
     public static final class Scope {
         private final Thread thread;
+        /** The stack this scope belongs to: popping through it saves a second ThreadLocal lookup per call. */
+        final Watchdog.ThreadScopes owner;
         /** Call number in the high bits, state in the two low bits. */
         @SuppressWarnings("unused") // accessed through STATE
         private volatile long stamp = IDLE;
         // Written by the owner thread before the stamp is set to RUNNING (a release), read by the
         // watchdog after it reads RUNNING (an acquire).
         long start;
-        long slack;
-        long timeoutNanos;
+        /** Timeout plus one tick of slack for the coarse start. */
+        long limit;
         // Only touched by the owner thread.
         private long calls;
         private long running;
 
-        Scope(Thread thread) {
-            this.thread = thread;
+        Scope(Watchdog.ThreadScopes owner) {
+            this.owner = owner;
+            this.thread = owner.thread;
         }
 
         /** Called by the watchdog: interrupts the thread if the call has run past its timeout. */
@@ -173,12 +204,13 @@ public final class TimeoutPolicy {
 
         /** Test seam: decides as a watchdog that read the stamp {@code seen} earlier would. */
         void expireIfOverdue(long now, long seen) {
-            if ((seen & STATE_BITS) == RUNNING && now - start >= timeoutNanos + slack) {
+            if ((seen & STATE_BITS) == RUNNING && now - start >= limit) {
                 long call = seen & ~STATE_BITS;
                 // Fails if this call ended, or another call started, since the stamp was read.
                 if (STATE.compareAndSet(this, seen, call | INTERRUPTING)) {
                     thread.interrupt();
-                    STATE.setVolatile(this, call | TIMED_OUT);
+                    // Release: the caller reads TIMED_OUT with an acquire, then sees the interrupt.
+                    STATE.setRelease(this, call | TIMED_OUT);
                 }
             }
         }
@@ -197,8 +229,10 @@ public final class TimeoutPolicy {
     /**
      * Runs an asynchronous call with a deadline. If its stage has not completed after the timeout, the
      * returned future fails with {@link CallTimeoutException} and the call's stage is cancelled when it
-     * is a {@link java.util.concurrent.Future}. The timer is the library's single async timer thread,
-     * and the timeout is completed on a new virtual thread, never on the timer.
+     * is a {@link java.util.concurrent.Future}. The deadline is kept by the library's lock-free
+     * timer: never early, at most about two ticks late (a tick is a sixteenth of the
+     * shortest async timeout, between 1 ms and 50 ms). The timeout is completed on a new virtual thread,
+     * never on the timer thread. A stage that is already complete when the call returns needs no timer.
      *
      * @param call the next layer
      * @param <T> the result type
@@ -206,26 +240,59 @@ public final class TimeoutPolicy {
      */
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
         CompletionStage<T> stage = AsyncSupport.call(call);
-        CompletableFuture<T> result = new CompletableFuture<>();
-        if (!enabled) {
+        TimeoutTimer.Lane deadlines = lane;
+        if (deadlines == null) {
+            CompletableFuture<T> result = new CompletableFuture<>();
             AsyncSupport.relay(stage, result);
             return result;
         }
-        ScheduledFuture<?> timer = AsyncSupport.later(timeoutNanos, () -> {
-            if (result.completeExceptionally(new CallTimeoutException(id, config.timeout(), null))) {
+        // Exact class only: subclasses (such as minimal stages) may not support state().
+        if (stage.getClass() == CompletableFuture.class) {
+            CompletableFuture<T> future = (CompletableFuture<T>) stage;
+            Future.State state = future.state();
+            if (state == Future.State.SUCCESS) {
+                return CompletableFuture.completedFuture(future.resultNow());
+            }
+            if (state == Future.State.FAILED) {
+                return CompletableFuture.failedFuture(AsyncSupport.unwrap(future.exceptionNow()));
+            }
+        }
+        CompletableFuture<T> result = new CompletableFuture<>();
+        Expiry<T> expiry = new Expiry<>(this, stage, result);
+        deadlines.timer.schedule(expiry, deadlines);
+        stage.whenComplete(expiry);
+        return result;
+    }
+
+    /** The deadline of one async call; also the callback that cancels it when the stage completes. */
+    private static final class Expiry<T> extends TimerEntry implements BiConsumer<T, Throwable> {
+        private final TimeoutPolicy policy;
+        private final CompletionStage<T> stage;
+        private final CompletableFuture<T> result;
+
+        Expiry(TimeoutPolicy policy, CompletionStage<T> stage, CompletableFuture<T> result) {
+            this.policy = policy;
+            this.stage = stage;
+            this.result = result;
+        }
+
+        /** The deadline passed; runs on a new virtual thread. */
+        @Override
+        public void run() {
+            if (result.completeExceptionally(new CallTimeoutException(policy.id, policy.config.timeout(), null))) {
                 AsyncSupport.cancel(stage);
             }
-        });
-        stage.whenComplete((value, failure) -> {
-            if (timer != null) {
-                timer.cancel(false);
-            }
+        }
+
+        /** The stage completed. */
+        @Override
+        public void accept(T value, Throwable failure) {
+            cancel();
             if (failure == null) {
                 result.complete(value);
             } else {
                 result.completeExceptionally(AsyncSupport.unwrap(failure));
             }
-        });
-        return result;
+        }
     }
 }

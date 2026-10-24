@@ -18,7 +18,16 @@ import java.util.concurrent.locks.LockSupport;
  *
  * <p>The tick is {@code timeout / 16} of the shortest timeout in use, between 1 ms and 50 ms. Because
  * a call's start time can be up to one tick old, a call is interrupted only when the coarse clock is
- * past {@code start + timeout + tick}: never early, at most about two ticks late.
+ * past {@code start + timeout + tick}: never early, at most about two ticks late (plus any delay in
+ * the watchdog's own wake-ups). The watchdog wakes every three quarters of a tick.
+ *
+ * <p>The coarse clock advances by the real time elapsed between two ticks, but by at most one tick
+ * per tick ({@link #advance}). Without that cap, a watchdog that wakes up late (an overloaded machine,
+ * a long GC pause) would have left one coarse value current for longer than a tick, so calls started
+ * during that time would look older than they are and could be interrupted early. With it, two
+ * consecutive coarse values are never more than a tick apart, so {@code start + tick} is never before
+ * the real start; a late wake-up only makes the coarse clock fall behind, which delays timeouts by that
+ * much and never brings them forward.
  */
 final class Watchdog {
 
@@ -39,6 +48,9 @@ final class Watchdog {
     private final AtomicLong tick = new AtomicLong(MAX_TICK);
     @SuppressWarnings("unused") // accessed through NOW
     private volatile long now;
+    // Owned by the watchdog thread: the last real clock reading, and the coarse clock built from it.
+    private long lastReal;
+    private long coarse;
 
     /** The shared watchdog, started on first use. */
     static Watchdog shared() {
@@ -49,7 +61,8 @@ final class Watchdog {
         static final Watchdog INSTANCE = start();
 
         private static Watchdog start() {
-            Watchdog watchdog = new Watchdog(System.nanoTime());
+            Watchdog watchdog = new Watchdog(0);
+            watchdog.lastReal = System.nanoTime();
             Thread.ofPlatform().daemon().name("resilience4cata-timeout").start(watchdog::run);
             return watchdog;
         }
@@ -58,6 +71,7 @@ final class Watchdog {
     /** Creates a watchdog that only moves when {@link #tick(long)} is called; used directly by tests. */
     Watchdog(long now) {
         this.now = now;
+        this.coarse = now;
     }
 
     /** Makes the tick short enough for a timeout of this length. */
@@ -90,12 +104,26 @@ final class Watchdog {
     private void run() {
         while (true) {
             try {
-                tick(System.nanoTime());
+                tick(advance(System.nanoTime()));
             } catch (Throwable e) {
                 // Keep timing out calls whatever happens; nothing here should throw.
             }
-            LockSupport.parkNanos(tick.get());
+            // Sleep for three quarters of a tick: an ordinary wake-up delay then stays within the tick,
+            // so the cap in advance() does not make the coarse clock fall behind on a healthy machine.
+            LockSupport.parkNanos(tick.get() / 4 * 3);
         }
+    }
+
+    /**
+     * The coarse time to publish when the real clock reads {@code realNanos}: the previous coarse time
+     * plus the real time elapsed, capped at one tick (see the class comment). Called by the watchdog
+     * thread only.
+     */
+    long advance(long realNanos) {
+        long elapsed = realNanos - lastReal;
+        lastReal = realNanos;
+        coarse += Math.max(0, Math.min(elapsed, tick.get()));
+        return coarse;
     }
 
     /** Publishes {@code nanoTime} as the coarse clock and interrupts calls that ran out of time. */
@@ -143,7 +171,7 @@ final class Watchdog {
             }
             TimeoutPolicy.Scope scope = current[depth];
             if (scope == null) {
-                scope = new TimeoutPolicy.Scope(thread);
+                scope = new TimeoutPolicy.Scope(this);
                 current[depth] = scope;
                 stack = current; // publish the new scope to the watchdog
             }

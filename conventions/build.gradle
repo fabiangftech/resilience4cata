@@ -12,5 +12,9 @@ gradlePlugin {
             id = 'r4c.jmh'
             implementationClass = 'dev.resilience4cata.build.JmhConventionPlugin'
         }
+        jcstress {
+            id = 'r4c.jcstress'
+            implementationClass = 'dev.resilience4cata.build.JcstressConventionPlugin'
+        }
     }
 }

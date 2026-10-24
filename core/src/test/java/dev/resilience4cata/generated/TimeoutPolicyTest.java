@@ -126,6 +126,25 @@ class TimeoutPolicyTest {
     }
 
     @Test
+    void aLateWakeUpNeverMakesACallLookOlderThanOneTick() {
+        // The watchdog thread overslept: 300 ms passed since its last tick, while the tick is 10 ms. A
+        // call that started just before the late tick read the coarse clock published 300 ms earlier.
+        // If the coarse clock jumped by the full 300 ms, that call would look 300 ms old and be
+        // interrupted before its 160 ms timeout. Capped at one tick per tick, it cannot.
+        Watchdog dog = new Watchdog(0);
+        TimeoutPolicy timeout = new TimeoutPolicy("test", TimeoutConfig.builder().timeout(Duration.ofMillis(160)).build(), dog);
+        long tick = dog.tick();
+        assertThat(tick).isEqualTo(10 * MS);
+        dog.tick(dog.advance(0));
+        TimeoutPolicy.Scope scope = timeout.enter(); // really starts at about 300 ms
+        dog.tick(dog.advance(300 * MS));
+
+        assertThat(Thread.currentThread().isInterrupted()).as("not early").isFalse();
+        assertThat(dog.advance(305 * MS)).as("normal ticks advance by the real time").isEqualTo(tick + 5 * MS);
+        timeout.succeeded(scope);
+    }
+
+    @Test
     void disabledTimeoutsDoNothing() {
         TimeoutPolicy timeout = new TimeoutPolicy("test", TimeoutConfig.builder().enabled(false).build(), null);
         assertThat(timeout.enter()).isNull();
@@ -177,12 +196,22 @@ class TimeoutPolicyTest {
     }
 
     @Test
-    void fastCallsWithTheSharedWatchdogAreNeverInterrupted() {
+    void fastCallsWithTheSharedWatchdogAreNeverInterruptedEarly() {
+        // A call can really take longer than 20 ms here (the thread descheduled on a loaded machine, a
+        // GC pause), and must then time out; what must never happen is a timeout before 20 ms.
         TimeoutPolicy timeout = new TimeoutPolicy("shared-fast", TimeoutConfig.builder().timeout(Duration.ofMillis(20)).build());
+        int timedOut = 0;
         for (int i = 0; i < 200_000; i++) {
+            long start = System.nanoTime();
             TimeoutPolicy.Scope scope = timeout.enter();
-            timeout.succeeded(scope);
+            try {
+                timeout.succeeded(scope);
+            } catch (CallTimeoutException e) {
+                assertThat(System.nanoTime() - start).as("never early").isGreaterThanOrEqualTo(20 * MS);
+                timedOut++;
+            }
             assertThat(Thread.interrupted()).isFalse();
         }
+        assertThat(timedOut).as("only stalls time out").isLessThan(100);
     }
 }

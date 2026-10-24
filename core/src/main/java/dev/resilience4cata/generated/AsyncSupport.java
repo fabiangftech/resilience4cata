@@ -12,8 +12,11 @@ import java.util.concurrent.TimeUnit;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Shared pieces of the asynchronous policies: one timer thread for the whole library, and the rules
- * for turning what a delegate does into a stage.
+ * Shared pieces of the asynchronous policies: one timer thread for delays ({@link #later}, used by
+ * retries, the rate limiter and the bulkhead), and the rules for turning what a delegate does into a
+ * stage. Async timeouts, which are nearly always cancelled, use the lock-free {@link TimeoutTimer}
+ * instead; {@code later} stays on a {@code ScheduledThreadPoolExecutor} because delays must be precise,
+ * not rounded up to a tick.
  *
  * <p>The timer thread only schedules: every task it fires runs on a new virtual thread, so that user
  * callbacks attached to a completed future never run on (and never block) the timer.
@@ -85,9 +88,12 @@ final class AsyncSupport {
         }, delayNanos, TimeUnit.NANOSECONDS);
     }
 
-    /** Number of timer tasks waiting to fire; for tests. */
+    /**
+     * Number of timer tasks waiting to fire: delayed tasks from {@link #later} plus async timeouts held
+     * by {@link TimeoutTimer#shared()} (which drops cancelled ones within a tick); for tests.
+     */
     static int queuedTimers() {
-        return Timer.INSTANCE.getQueue().size();
+        return Timer.INSTANCE.getQueue().size() + TimeoutTimer.shared().pending();
     }
 
     /** Asks the producer of a stage that nobody waits for any more to stop, if it can be asked. */

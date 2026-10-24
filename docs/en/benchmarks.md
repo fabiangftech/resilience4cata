@@ -167,3 +167,30 @@ Success path only: the delegate returns an already completed `CompletableFuture`
 - **Allocation is about the same as Resilience4j's**: each layer returns a new future (48 B). Async cannot be allocation-free; the sync path is unaffected by this work.
 - **The timeout dominates both libraries.** Each call schedules a task on a `ScheduledThreadPoolExecutor` and cancels it when the stage completes: a lock and a heap insert and removal. resilience4cata removes cancelled tasks at once (`setRemoveOnCancelPolicy`). Resilience4j's numbers vary widely between forks (1.8–5.3 µs); not investigated. A timer that does not lock, like the sync watchdog, should bring resilience4cata's 213 ns down; not done yet.
 - The rate limiter row includes one `System.nanoTime()` (≈21 ns, see above); the breaker reads no clock unless `slowCallDuration` is set.
+
+## Timer rewrite and async bulkhead wait (2026-10-24)
+
+Same machine and settings. Run after the parallel work on the async timer (`TimeoutTimer`), the sync timeout protocol and the async bulkhead wait was integrated, one benchmark at a time on an idle machine.
+
+**Async timeout.** `*TimeoutPending` returns a future that is still pending, which the benchmark completes right after the call, so the timer's schedule and cancel are measured; `baselinePending` is the same without any library (14.5 ns, 24 B). Resilience4j gets a remove-on-cancel scheduler there. `*Timeout` returns an already completed future: resilience4cata recognises it and skips the timer (it cannot time out).
+
+| Scenario | Threads | resilience4cata | Resilience4j 2.4.0 |
+|---|---:|---:|---:|
+| Pending stage | 1 | **127 ± 10 ns**, 192 B | 257 ± 11 ns, 234 B |
+| Pending stage | 4 | **510 ± 35 ns**, 192 B | 928 ± 60 ns, 234 B |
+| Completed stage | 1 | **7.1 ± 0.2 ns**, 24 B (was 213 ns) | 3795 ± 3163 ns, 181 B |
+| Completed stage | 4 | **11.2 ± 0.6 ns**, 24 B | 3173 ± 1003 ns, 180 B |
+
+- The lock-free timer halves the cost of a timed async call against Resilience4j's scheduler, even when Resilience4j is given remove-on-cancel. With four threads both pay for shared state: resilience4cata's per-thread-id inbox stripes and the result future's completion.
+- Behaviour change: async timeouts are now tick-based like sync ones (never early, at most about two ticks late, tick = shortest async timeout / 16 within 1–50 ms), where the `ScheduledThreadPoolExecutor` was sub-millisecond precise.
+
+**Sync timeout** (`TimeoutBenchmark`), after removing one ThreadLocal lookup per call and using an acquire CAS at the end of the call:
+
+| Threads | Before | After | Resilience4j 2.4.0 |
+|---:|---:|---:|---:|
+| 1 | 15.6 ns | **13.1 ± 0.1 ns** | 9039 ± 439 ns |
+| 4 | 20.2 ns | **15.9 ± 0.7 ns** | 18423 ± 771 ns |
+
+The overhead over the baseline drops from about 14.5 to 12 ns on one thread. A release-only CAS would be cheaper still but allows an early interrupt (see the comment in `TimeoutPolicy.end`), so it is not used.
+
+**Bulkhead, sync path after the async wait queue** (`BulkheadBenchmark`): `exit()` with `maxWait > 0` now does one more volatile read, to see whether async callers are queued. No measurable cost: *Waiting* 23.1 ± 0.05 ns (was 23.2) on one thread and 442 ± 3 ns (was 447) on four; *Free* 9.2 ns and *Full* 2.2 ns, unchanged.

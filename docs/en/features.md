@@ -114,6 +114,23 @@ configs.batch.timeout.value=30s
 profiles.test.configs.external.retry.maxAttempts=1
 ```
 
+### Loading external configuration (`config` module)
+
+```java
+ResilienceRegistry registry = ResilienceConfig.load()   // classpath resilience4cata.properties (if present), env, system properties
+        .applyTo(ResilienceRegistry.builder())
+        .build();
+```
+
+- Keys: `defaults.<policy>.<attribute>`, `configs.<name>.<policy>.<attribute>`, `configs.<name>.extends`, `profiles.<profile>.…`, `profiles.active`. Policies: `retry`, `circuitBreaker`, `rateLimiter`, `timeout`, `bulkhead`; attributes are the annotation's (the timeout is `timeout.value`). camelCase and kebab-case are both accepted; an optional `resilience4cata.` or `r4c.` prefix is allowed and is required for system properties.
+- Config and profile names: lowercase letters and digits separated by single hyphens (`slow-external`).
+- Environment variables: `R4C_` + the key in uppercase with every non-alphanumeric character as `_`: `R4C_CONFIGS_EXTERNAL_RETRY_MAXATTEMPTS=5`, `R4C_CONFIGS_SLOW_EXTERNAL_TIMEOUT_VALUE=10s`, `R4C_PROFILES_ACTIVE=test`. A variable must map to exactly one key.
+- Sources, lowest to highest: classpath resources < files < environment < system properties. Profile keys win over non-profile keys whatever their source.
+- Values: durations as in annotations (`250ms`, `2s`, `PT2S`), case-insensitive enums, exception classes by fully qualified name (comma-separated).
+- Every problem is reported at once by `build()`, with the key, its source (file and line, environment variable, system property) and the closest valid key, e.g. `[R4C-CFG-001] unknown key 'configs.external.circuit-breaker.wait-in-opne' (file /app/resilience4cata.properties, line 7). Did you mean 'configs.external.circuit-breaker.wait-in-open'?`
+- `ResilienceConfig.describe()` lists every effective value and where it comes from.
+- A named config must be configured in one place: registering it both programmatically and externally fails. Per-instance overrides (`instances.<id>.*`) are not supported yet.
+
 ## Performance contract
 
 Targets to verify with JMH from the first release ([01 §4.1](research/01-landscape.md), [03 §10](research/03-performance-internals.md)):

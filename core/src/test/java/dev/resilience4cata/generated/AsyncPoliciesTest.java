@@ -94,11 +94,21 @@ class AsyncPoliciesTest {
         int queued = AsyncSupport.queuedTimers();
         CompletableFuture<String> pending = new CompletableFuture<>();
         CompletableFuture<String> result = timeout.executeAsync(() -> pending);
-        assertThat(AsyncSupport.queuedTimers()).isEqualTo(queued + 1);
+        awaitQueuedTimers(queued + 1);
+        Thread.sleep(100); // let the timer thread schedule it, so that the cancel has to unlink it
 
         pending.complete("done");
         assertThat(result.get(1, TimeUnit.SECONDS)).isEqualTo("done");
-        assertThat(AsyncSupport.queuedTimers()).as("removed on cancel").isEqualTo(queued);
+        awaitQueuedTimers(queued); // removed within a tick of the cancel, not after the hour
+    }
+
+    /** The shared timer thread works in ticks, so the count settles within a few milliseconds. */
+    private static void awaitQueuedTimers(int expected) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (AsyncSupport.queuedTimers() != expected && System.nanoTime() < deadline) {
+            Thread.sleep(1);
+        }
+        assertThat(AsyncSupport.queuedTimers()).isEqualTo(expected);
     }
 
     @Test

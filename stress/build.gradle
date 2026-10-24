@@ -1,0 +1,9 @@
+plugins {
+    id 'r4c.jcstress'
+}
+
+description = 'jcstress tests of the lock-free policies. Not published.'
+
+dependencies {
+    implementation project(':core')
+}

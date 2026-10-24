@@ -13,9 +13,11 @@ import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.timelimiter.TimeLimiter;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -40,6 +42,14 @@ import org.openjdk.jmh.annotations.Warmup;
  * limiter need a {@code ScheduledExecutorService}, given one daemon thread here; resilience4cata uses
  * its own single timer thread. {@code *Stack} nests retry, circuit breaker, timeout and bulkhead in
  * the same order in both libraries.
+ *
+ * <p>An already completed stage cannot time out, so resilience4cata's timeout skips its timer for it,
+ * and {@code *Timeout} measures that shortcut. {@code *TimeoutPending} measures the timer itself: the
+ * delegate returns a future that is still pending, which the benchmark completes right after the call,
+ * so each call schedules a deadline and cancels it. {@code baselinePending} is the same without a
+ * timeout. For these, Resilience4j gets its own one-thread scheduler with
+ * {@code setRemoveOnCancelPolicy(true)} (as resilience4cata's old timer had): with the JDK default,
+ * every cancelled one-second timeout would stay queued for a second, millions of them per second.
  */
 @State(Scope.Benchmark)
 @BenchmarkMode(Mode.AverageTime)
@@ -58,6 +68,8 @@ public class AsyncBenchmark {
     private Supplier<CompletionStage<String>> bulkhead;
     private Supplier<CompletionStage<String>> rateLimiter;
     private Supplier<CompletionStage<String>> stack;
+    private ScheduledThreadPoolExecutor pendingScheduler;
+    private TimeLimiter pendingTimeLimiter;
 
     /** Builds both libraries with equivalent configuration. */
     @Setup
@@ -84,12 +96,31 @@ public class AsyncBenchmark {
         inner = TimeLimiter.of(timeLimiterConfig).decorateCompletionStage(scheduler, inner);
         inner = CircuitBreaker.decorateCompletionStage(CircuitBreaker.of("stack", breakerConfig), inner);
         stack = Retry.decorateCompletionStage(Retry.of("stack", retryConfig), scheduler, inner);
+
+        pendingScheduler = new ScheduledThreadPoolExecutor(1, Thread.ofPlatform().daemon().factory());
+        pendingScheduler.setRemoveOnCancelPolicy(true);
+        pendingTimeLimiter = TimeLimiter.of(timeLimiterConfig);
+    }
+
+    /** Per benchmark thread: the pending future that Resilience4j's decorated supplier returns next. */
+    @State(Scope.Thread)
+    public static class Pending {
+        CompletableFuture<String> next;
+        Supplier<CompletionStage<String>> resilience4jTimeout;
+
+        /** Decorates a supplier that returns this thread's next future. */
+        @Setup
+        public void setup(AsyncBenchmark benchmark) {
+            resilience4jTimeout = benchmark.pendingTimeLimiter.decorateCompletionStage(
+                    benchmark.pendingScheduler, () -> next);
+        }
     }
 
     /** Stops Resilience4j's scheduler. */
     @TearDown
     public void tearDown() {
         scheduler.shutdownNow();
+        pendingScheduler.shutdownNow();
     }
 
     @Benchmark
@@ -125,6 +156,31 @@ public class AsyncBenchmark {
     @Benchmark
     public CompletionStage<String> resilience4jTimeout() {
         return timeout.get();
+    }
+
+    @Benchmark
+    public CompletionStage<String> baselinePending() {
+        CompletableFuture<String> stage = new CompletableFuture<>();
+        CompletionStage<String> result = direct.timeoutPending(stage);
+        stage.complete("ok");
+        return result;
+    }
+
+    @Benchmark
+    public CompletionStage<String> resilience4cataTimeoutPending() {
+        CompletableFuture<String> stage = new CompletableFuture<>();
+        CompletionStage<String> result = resilience4cata.timeoutPending(stage);
+        stage.complete("ok");
+        return result;
+    }
+
+    @Benchmark
+    public CompletionStage<String> resilience4jTimeoutPending(Pending pending) {
+        CompletableFuture<String> stage = new CompletableFuture<>();
+        pending.next = stage;
+        CompletionStage<String> result = pending.resilience4jTimeout.get();
+        stage.complete("ok");
+        return result;
     }
 
     @Benchmark

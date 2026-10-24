@@ -5,6 +5,7 @@ import dev.resilience4cata.BulkheadFullException;
 import dev.resilience4cata.BulkheadHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Semaphore;
@@ -29,6 +30,13 @@ import org.jspecify.annotations.Nullable;
  * share a cache line with the configuration fields that every call reads. With waiting, a non-fair
  * {@link Semaphore} is used instead: same cost when a slot is free, and it parks virtual threads
  * without pinning them.
+ *
+ * <p>Asynchronous calls ({@link #executeAsync}) never block while waiting: they queue in
+ * {@link BulkheadWaiters} and receive a released slot directly, oldest first. Synchronous and
+ * asynchronous callers share the same slots. When both kinds wait, released slots alternate between
+ * the oldest asynchronous waiter and the synchronous callers blocked on the semaphore; a new
+ * synchronous caller can still take a free permit ahead of everyone (the semaphore is non-fair), while
+ * a new asynchronous caller queues behind the asynchronous callers already waiting.
  */
 public final class BulkheadPolicy implements BulkheadHandle {
 
@@ -39,6 +47,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
     private final long maxWaitNanos;
     private final PaddedCounter inUse = new PaddedCounter();
     private final @Nullable Semaphore semaphore;
+    private final @Nullable BulkheadWaiters waiters;
     private final BulkheadFullException rejection;
 
     /**
@@ -54,6 +63,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
         this.maxConcurrent = config.maxConcurrent();
         this.maxWaitNanos = config.maxWait().toNanos();
         this.semaphore = maxWaitNanos > 0 ? new Semaphore(maxConcurrent, false) : null;
+        this.waiters = maxWaitNanos > 0 ? new BulkheadWaiters() : null;
         this.rejection = new BulkheadFullException(id);
     }
 
@@ -104,7 +114,16 @@ public final class BulkheadPolicy implements BulkheadHandle {
         }
     }
 
-    /** Frees the slot taken by a successful {@link #tryEnter()}. */
+    /**
+     * Frees the slot taken by a successful {@link #tryEnter()}.
+     *
+     * <p>With {@code maxWait > 0}, the permit is released first and the number of asynchronous waiters
+     * read afterwards; an enqueuing waiter does the opposite (counts itself, then tries to take a
+     * permit). Both are volatile accesses, so at least one side sees the other and a slot is never
+     * left free while a waiter stays queued. The read of the counter adds no fence: the semaphore's
+     * release already ends with a volatile read. When nobody waits asynchronously, that read is the
+     * only extra work.
+     */
     public void exit() {
         if (!enabled) {
             return;
@@ -114,7 +133,61 @@ public final class BulkheadPolicy implements BulkheadHandle {
             inUse.decrement();
         } else {
             waiting.release();
+            BulkheadWaiters queued = waiters;
+            if (queued != null && queued.count() > 0) {
+                handOff(waiting, queued);
+            }
         }
+    }
+
+    /**
+     * A slot was released while asynchronous callers wait. When synchronous callers are blocked on the
+     * semaphore as well, every other release is left to them; otherwise the slot goes to the oldest
+     * asynchronous waiter.
+     */
+    private void handOff(Semaphore waiting, BulkheadWaiters queued) {
+        if (waiting.hasQueuedThreads() && queued.yieldToSync()) {
+            return;
+        }
+        drain(waiting, queued);
+    }
+
+    /**
+     * Gives free permits to the oldest asynchronous waiters. A permit is taken from the semaphore before
+     * a waiter is claimed, so if someone else (a blocked synchronous caller, a new caller, another
+     * drain) takes it first, nothing is handed off and the waiters stay queued: whoever holds the slot
+     * will run this again when it releases it. A permit taken while no waiter can be claimed is given
+     * back; the queue is then checked again, since a waiter may have been queued in between and failed
+     * to take the permit while it was held here.
+     */
+    private void drain(Semaphore waiting, BulkheadWaiters queued) {
+        while (queued.count() > 0) {
+            if (!waiting.tryAcquire()) {
+                return;
+            }
+            BulkheadWaiters.Waiter<?> waiter = queued.claimOldest();
+            if (waiter != null) {
+                grant(waiter);
+                continue;
+            }
+            waiting.release();
+            if (queued.isEmpty()) {
+                return;
+            }
+            Thread.onSpinWait();
+        }
+    }
+
+    /** Runs a waiter's call, which now holds a slot, on a new virtual thread: never on the releasing thread. */
+    private <T> void grant(BulkheadWaiters.Waiter<T> waiter) {
+        waiter.cancelTimer();
+        Thread.ofVirtual().name("resilience4cata-bulkhead").start(() -> run(waiter.call, waiter.result));
+    }
+
+    /** Number of asynchronous callers waiting for a slot; for tests. */
+    int queuedCalls() {
+        BulkheadWaiters queued = waiters;
+        return queued != null ? queued.count() : 0;
     }
 
     /** Padding before the counter, so that it does not share a cache line with what precedes it in memory. */
@@ -166,18 +239,59 @@ public final class BulkheadPolicy implements BulkheadHandle {
 
     /**
      * Runs an asynchronous call in the bulkhead: the slot is held until the call's stage completes, so
-     * the limit applies to calls in flight. A full bulkhead is a failed future. With {@code maxWait > 0},
-     * the wait for a slot blocks the calling thread, as in Resilience4j.
+     * the limit applies to calls in flight. A full bulkhead is a failed future.
+     *
+     * <p>With {@code maxWait > 0}, the wait never blocks: a call that finds the bulkhead full (or other
+     * asynchronous callers already waiting, so that they are served in order) is queued and its future
+     * returned at once. When a slot is released, by an asynchronous or a synchronous call, it is handed
+     * directly to the oldest waiter, whose call then starts on a new virtual thread. A waiter that is
+     * not served within {@code maxWait} fails with {@link #rejection()} and can no longer receive a slot.
      *
      * @param call the next layer
      * @param <T> the result type
      * @return a future that completes with the call's outcome
      */
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
-        if (!tryEnter()) {
-            return CompletableFuture.failedFuture(rejection());
+        BulkheadWaiters queued = waiters;
+        Semaphore waiting = semaphore;
+        if (!enabled || queued == null || waiting == null) {
+            if (!tryEnter()) {
+                return CompletableFuture.failedFuture(rejection());
+            }
+            CompletableFuture<T> result = new CompletableFuture<>();
+            run(call, result);
+            return result;
         }
-        CompletableFuture<T> result = new CompletableFuture<>();
+        if (queued.count() == 0 && waiting.tryAcquire()) {
+            CompletableFuture<T> result = new CompletableFuture<>();
+            run(call, result);
+            return result;
+        }
+        BulkheadWaiters.Waiter<T> waiter = new BulkheadWaiters.Waiter<>(call, queued, this);
+        queued.add(waiter);
+        waiter.setTimer(AsyncSupport.later(maxWaitNanos, waiter));
+        drain(waiting, queued);
+        return waiter.result;
+    }
+
+    /**
+     * Test seam: the first step of a queued {@link #executeAsync}, without its timer and without the
+     * drain that follows, so that tests can replay interleavings. Requires {@code maxWait > 0}.
+     */
+    <T> BulkheadWaiters.Waiter<T> enqueueForTest(AsyncCall<T> call) {
+        BulkheadWaiters queued = Objects.requireNonNull(waiters);
+        BulkheadWaiters.Waiter<T> waiter = new BulkheadWaiters.Waiter<>(call, queued, this);
+        queued.add(waiter);
+        return waiter;
+    }
+
+    /** Test seam: the drain that ends a queued {@link #executeAsync}. */
+    void drainForTest() {
+        drain(Objects.requireNonNull(semaphore), Objects.requireNonNull(waiters));
+    }
+
+    /** Calls the next layer holding a slot, and frees the slot when its stage completes. */
+    private <T> void run(AsyncCall<T> call, CompletableFuture<T> result) {
         AsyncSupport.call(call).whenComplete((value, failure) -> {
             exit();
             if (failure == null) {
@@ -186,6 +300,5 @@ public final class BulkheadPolicy implements BulkheadHandle {
                 result.completeExceptionally(AsyncSupport.unwrap(failure));
             }
         });
-        return result;
     }
 }

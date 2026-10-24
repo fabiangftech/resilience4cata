@@ -1,0 +1,9 @@
+plugins {
+    id 'r4c.java-library'
+}
+
+description = 'External configuration (properties, environment, system properties) for the registry.'
+
+dependencies {
+    api project(':core')
+}

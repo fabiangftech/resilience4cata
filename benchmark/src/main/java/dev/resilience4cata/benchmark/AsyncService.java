@@ -7,7 +7,10 @@ import dev.resilience4cata.annotation.Retry;
 import dev.resilience4cata.annotation.Timeout;
 import java.util.concurrent.CompletableFuture;
 
-/** Asynchronous service, one method per policy plus a stack of four, for {@link AsyncBenchmark}. */
+/**
+ * Asynchronous service, one method per policy plus a stack of four, for {@link AsyncBenchmark}. Every
+ * method but {@link #timeoutPending} returns an already completed future.
+ */
 public interface AsyncService {
 
     @CircuitBreaker
@@ -18,6 +21,10 @@ public interface AsyncService {
 
     @Timeout("1s")
     CompletableFuture<String> timeout();
+
+    /** Returns {@code stage}, which the caller completes afterwards: the timeout cannot skip its timer. */
+    @Timeout("1s")
+    CompletableFuture<String> timeoutPending(CompletableFuture<String> stage);
 
     @Bulkhead(maxConcurrent = 1000)
     CompletableFuture<String> bulkhead();
@@ -48,6 +55,11 @@ public interface AsyncService {
         @Override
         public CompletableFuture<String> timeout() {
             return done;
+        }
+
+        @Override
+        public CompletableFuture<String> timeoutPending(CompletableFuture<String> stage) {
+            return stage;
         }
 
         @Override

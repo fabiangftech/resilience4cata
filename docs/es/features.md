@@ -114,6 +114,23 @@ configs.batch.timeout.value=30s
 profiles.test.configs.external.retry.maxAttempts=1
 ```
 
+### Cargar configuración externa (módulo `config`)
+
+```java
+ResilienceRegistry registry = ResilienceConfig.load()   // resilience4cata.properties del classpath (si existe), entorno, propiedades del sistema
+        .applyTo(ResilienceRegistry.builder())
+        .build();
+```
+
+- Claves: `defaults.<policy>.<attribute>`, `configs.<name>.<policy>.<attribute>`, `configs.<name>.extends`, `profiles.<profile>.…`, `profiles.active`. Políticas: `retry`, `circuitBreaker`, `rateLimiter`, `timeout`, `bulkhead`; los atributos son los de la anotación (el timeout es `timeout.value`). Se aceptan camelCase y kebab-case; se permite un prefijo opcional `resilience4cata.` o `r4c.`, obligatorio en las propiedades del sistema.
+- Nombres de configuraciones y perfiles: minúsculas y dígitos separados por guiones simples (`slow-external`).
+- Variables de entorno: `R4C_` + la clave en mayúsculas con cada carácter no alfanumérico como `_`: `R4C_CONFIGS_EXTERNAL_RETRY_MAXATTEMPTS=5`, `R4C_CONFIGS_SLOW_EXTERNAL_TIMEOUT_VALUE=10s`, `R4C_PROFILES_ACTIVE=test`. Cada variable tiene que corresponder a una sola clave.
+- Fuentes, de menor a mayor prioridad: recursos del classpath < archivos < entorno < propiedades del sistema. Las claves de un perfil le ganan a las que no son de perfil, venga de donde venga.
+- Valores: duraciones como en las anotaciones (`250ms`, `2s`, `PT2S`), enums sin distinguir mayúsculas, clases de excepción por nombre completo (separadas por comas).
+- `build()` informa todos los problemas a la vez, con la clave, su fuente (archivo y línea, variable de entorno, propiedad del sistema) y la clave válida más parecida, por ejemplo `[R4C-CFG-001] unknown key 'configs.external.circuit-breaker.wait-in-opne' (file /app/resilience4cata.properties, line 7). Did you mean 'configs.external.circuit-breaker.wait-in-open'?`
+- `ResilienceConfig.describe()` lista cada valor efectivo y de dónde viene.
+- Una configuración con nombre se define en un solo lugar: registrarla a la vez por código y externamente falla. Los overrides por instancia (`instances.<id>.*`) todavía no están soportados.
+
 ## Contrato de rendimiento
 
 Objetivos a verificar con JMH desde la primera versión ([01 §4.1](research/01-landscape.md), [03 §10](research/03-performance-internals.md)):
