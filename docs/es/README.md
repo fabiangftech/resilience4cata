@@ -50,7 +50,7 @@ resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit 
 | `classifier`, clases anotadas | El procesador los rechaza con un error explícito de "todavía no soportado" |
 | Configuración externa (módulo `config`), perfiles, `extends` | Sin empezar |
 | Registro como procesador incremental de Gradle | Pendiente: los proyectos que usan el procesador recompilan todo |
-| Benchmarks JMH | Retry (uno y cuatro servicios), circuit breaker (ventanas por cantidad y por tiempo) , timeout, bulkhead y rate limiter (1 y 4 threads) vs Resilience4j ([benchmarks](benchmarks.md)) |
+| Benchmarks JMH | Retry (uno y cuatro servicios), circuit breaker (ventanas por cantidad y por tiempo) , timeout, bulkhead y rate limiter (1 y 4 threads), y métodos async, vs Resilience4j ([benchmarks](benchmarks.md)) |
 | jcstress (módulo `stress`) | Sin empezar. Las carreras del circuit breaker están cubiertas con tests unitarios deterministas que reproducen las intercalaciones, verificados por mutación |
 
 ## Preguntas abiertas

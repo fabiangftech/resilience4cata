@@ -148,3 +148,22 @@ All threads share one limiter, and neither library waits for a permit. *Free*: o
 - **Most of resilience4cata's cost is the clock.** `System.nanoTime()` costs 21 ns on one thread and 163 ns with four on this machine (see the time-window section above); the limiter itself adds about 2–4 ns on one thread. A rejection only reads, so with four threads an exhausted limiter costs exactly what the contended clock costs. On Linux, where `nanoTime` has no shared state, these numbers should be much lower; not measured yet.
 - **Rejections are 10× cheaper and allocate nothing**; Resilience4j allocates a new `State` per attempt and ~520 B per rejected call.
 - **Contention: the first version lost with four threads, 658 ns vs 214 ns.** Every admitted call writes the one shared `tat`, and callers that lost the compare-and-set retried at once, so the cache line bounced between cores. Changing the atomic (strong, weak, acquire) changed nothing; spinning with `onSpinWait` (once or with exponential backoff) and `Thread.yield()` barely helped (565–665 ns and 414 ns). Parking for 1 ns after a lost compare-and-set, as Resilience4j does, brought it to **131 ns** (351 ns vs Resilience4j's 523 ns with eight threads). The cost moves to the caller that lost the race: on Linux a platform thread's shortest park is about 50 µs of timer slack. It only happens when admitted calls arrive faster than the cache line can move between cores, which is far above any rate a limiter is normally configured for.
+
+## Async methods, 1 thread (2026-10-24)
+
+`./gradlew :benchmark:jmh -Pjmh="AsyncBenchmark -prof gc"` — source: `benchmark/src/main/java/dev/resilience4cata/benchmark/AsyncBenchmark.java`.
+
+Success path only: the delegate returns an already completed `CompletableFuture`, and each benchmark returns the stage the caller gets. Resilience4j uses its `decorateCompletionStage` variants with the same settings; its retry and time limiter get a one-thread `ScheduledExecutorService`. *Stack* nests retry, circuit breaker, timeout and bulkhead in the same order in both libraries. The circuit breaker, rate limiter, timeout and stack rows were rerun with 6 forks because the first run was noisy (±137 ns on resilience4cata's breaker).
+
+| Policy | resilience4cata | Resilience4j 2.4.0 |
+|---|---:|---:|
+| Circuit breaker | **18.8 ± 0.5 ns**, 48 B | 85.8 ± 3.7 ns, 71 B |
+| Retry | **19.3 ± 1.6 ns**, 48 B | 28.7 ± 1.4 ns, 48 B |
+| Bulkhead | **28.1 ± 0.8 ns**, 48 B | 33.1 ± 9.5 ns, 48 B |
+| Rate limiter | **48.0 ± 1.6 ns**, 48 B | 63.6 ± 1.3 ns, 88 B |
+| Timeout | **213 ± 19 ns**, 200 B | 3551 ± 1772 ns, 184 B |
+| Stack (retry, breaker, timeout, bulkhead) | **344 ± 21 ns**, 362 B | 3600 ± 2205 ns, 352 B |
+
+- **Allocation is about the same as Resilience4j's**: each layer returns a new future (48 B). Async cannot be allocation-free; the sync path is unaffected by this work.
+- **The timeout dominates both libraries.** Each call schedules a task on a `ScheduledThreadPoolExecutor` and cancels it when the stage completes: a lock and a heap insert and removal. resilience4cata removes cancelled tasks at once (`setRemoveOnCancelPolicy`). Resilience4j's numbers vary widely between forks (1.8–5.3 µs); not investigated. A timer that does not lock, like the sync watchdog, should bring resilience4cata's 213 ns down; not done yet.
+- The rate limiter row includes one `System.nanoTime()` (≈21 ns, see above); the breaker reads no clock unless `slowCallDuration` is set.
