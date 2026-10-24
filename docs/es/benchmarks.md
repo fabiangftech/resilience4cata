@@ -95,3 +95,18 @@ Misma clase de benchmark (métodos `*Time*`): ventana de 10 segundos, evaluada d
 Dos consecuencias:
 - La ventana por cantidad, que no lee el reloj salvo que se configure `slowCallDuration`, es mucho más barata cuando sirven las dos. Es la opción por defecto.
 - Un reloj aproximado en caché (actualizado por un thread de fondo cada milisegundo) eliminaría la mayor parte de este costo. No está hecho: implica un thread daemon por JVM y resolución de milisegundos.
+
+## Timeout, 1 y 4 threads (2026-10-23)
+
+`./gradlew :benchmark:jmh -Pjmh="TimeoutBenchmark -t 4 -prof gc"` — código: `benchmark/src/main/java/dev/resilience4cata/benchmark/TimeoutBenchmark.java`.
+
+Llamadas que terminan a tiempo (trabajo trivial, timeout de 1 s). resilience4cata ejecuta la llamada en el thread del llamador y un watchdog compartido la interrumpiría si se atrasara. El `TimeLimiter` de Resilience4j necesita un `Future`, así que una llamada bloqueante tiene que pasarse a otro thread: así se usa con código síncrono, y eso es lo que se mide (un pool fijo de 4 platform threads).
+
+| Threads | Base | resilience4cata | Resilience4j 2.4.0 (`TimeLimiter` + executor) |
+|---:|---:|---:|---:|
+| 1 | 1,10 ns | **15,6 ± 0,1 ns**, 0 B | 9 225 ± 1 353 ns, 189 B |
+| 4 | 1,44 ns | **20,2 ± 2,4 ns**, 0 B | 19 194 ± 3 763 ns, 160 B |
+
+- Unos **14,5 ns de overhead por llamada**, unas 600 veces menos que pasar la llamada a otro thread. Sin leer el reloj y sin escrituras compartidas por llamada: cada thread escribe solo en su propio scope reutilizable.
+- Es más de lo que cuestan las otras políticas (retry 0,4 ns, circuit breaker 0,9 ns). Candidatos probables, todavía sin investigar: la búsqueda en el `ThreadLocal` de los scopes del thread y el compare-and-set al terminar la llamada.
+- El precio de no leer el reloj es la precisión: el watchdog revisa cada `timeout / 16` del timeout más corto en uso (entre 1 y 50 ms) e interrumpe una llamada entre su timeout y unos dos ticks después, nunca antes.

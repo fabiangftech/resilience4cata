@@ -10,4 +10,5 @@ dependencies {
     annotationProcessor project(':processor')
     implementation libs.resilience4j.retry
     implementation libs.resilience4j.circuitbreaker
+    implementation libs.resilience4j.timelimiter
 }

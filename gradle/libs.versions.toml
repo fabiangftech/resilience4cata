@@ -15,3 +15,4 @@ jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }
 jmh-annprocess = { module = "org.openjdk.jmh:jmh-generator-annprocess", version.ref = "jmh" }
 resilience4j-retry = { module = "io.github.resilience4j:resilience4j-retry", version.ref = "resilience4j" }
 resilience4j-circuitbreaker = { module = "io.github.resilience4j:resilience4j-circuitbreaker", version.ref = "resilience4j" }
+resilience4j-timelimiter = { module = "io.github.resilience4j:resilience4j-timelimiter", version.ref = "resilience4j" }

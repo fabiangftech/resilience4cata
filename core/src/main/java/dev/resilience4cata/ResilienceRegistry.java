@@ -2,6 +2,7 @@ package dev.resilience4cata;
 
 import dev.resilience4cata.generated.CircuitBreakerPolicy;
 import dev.resilience4cata.generated.RetryPolicy;
+import dev.resilience4cata.generated.TimeoutPolicy;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,13 +35,18 @@ public final class ResilienceRegistry {
     private final CircuitBreakerConfig circuitBreakerDefaults;
     private final Map<String, CircuitBreakerConfig> circuitBreakerConfigs;
     private final ConcurrentHashMap<String, CircuitBreakerPolicy> circuitBreakers = new ConcurrentHashMap<>();
+    private final TimeoutConfig timeoutDefaults;
+    private final Map<String, TimeoutConfig> timeoutConfigs;
 
     private ResilienceRegistry(RetryConfig retryDefaults, Map<String, RetryConfig> retryConfigs,
-            CircuitBreakerConfig circuitBreakerDefaults, Map<String, CircuitBreakerConfig> circuitBreakerConfigs) {
+            CircuitBreakerConfig circuitBreakerDefaults, Map<String, CircuitBreakerConfig> circuitBreakerConfigs,
+            TimeoutConfig timeoutDefaults, Map<String, TimeoutConfig> timeoutConfigs) {
         this.retryDefaults = retryDefaults;
         this.retryConfigs = Map.copyOf(retryConfigs);
         this.circuitBreakerDefaults = circuitBreakerDefaults;
         this.circuitBreakerConfigs = Map.copyOf(circuitBreakerConfigs);
+        this.timeoutDefaults = timeoutDefaults;
+        this.timeoutConfigs = Map.copyOf(timeoutConfigs);
     }
 
     /** Returns a new builder. */
@@ -68,6 +74,17 @@ public final class ResilienceRegistry {
      */
     public CircuitBreakerConfig circuitBreakerConfig(String config) {
         return lookup(config, circuitBreakerDefaults, circuitBreakerConfigs, "circuitBreaker");
+    }
+
+    /**
+     * Returns a named timeout configuration.
+     *
+     * @param config the name; {@code ""} or {@code "default"} means the defaults
+     * @return the resolved configuration
+     * @throws IllegalArgumentException if no configuration has that name
+     */
+    public TimeoutConfig timeoutConfig(String config) {
+        return lookup(config, timeoutDefaults, timeoutConfigs, "timeout");
     }
 
     private static <C> C lookup(String config, C defaults, Map<String, C> named, String kind) {
@@ -148,6 +165,30 @@ public final class ResilienceRegistry {
     }
 
     /**
+     * Returns the timeout policy for one call site. Used by generated code; not intended to be called
+     * directly. Timeouts hold no state shared between calls, so every call site gets its own policy.
+     *
+     * @param instanceId derived id of the call site
+     * @param name unused: timeouts have no shared state; kept so that every policy has the same shape
+     * @param config named configuration to start from, or {@code ""}
+     * @param overrides values set in the annotations, or {@code null}
+     * @return the policy
+     */
+    public TimeoutPolicy timeoutPolicy(String instanceId, String name, String config,
+            @Nullable Consumer<TimeoutConfig.Builder> overrides) {
+        TimeoutConfig base = timeoutConfig(config);
+        TimeoutConfig resolved;
+        if (overrides == null) {
+            resolved = base;
+        } else {
+            TimeoutConfig.Builder builder = base.toBuilder();
+            overrides.accept(builder);
+            resolved = builder.build();
+        }
+        return new TimeoutPolicy(name.isEmpty() ? instanceId : name, resolved);
+    }
+
+    /**
      * Returns a circuit breaker, to inspect or control it. Breakers are created when an annotated
      * interface is wrapped with {@code Resilient.of(...)}, so this only finds them afterwards.
      *
@@ -179,6 +220,8 @@ public final class ResilienceRegistry {
         private final Map<String, Consumer<RetryConfig.Builder>> retryConfigs = new LinkedHashMap<>();
         private @Nullable Consumer<CircuitBreakerConfig.Builder> circuitBreakerDefaults;
         private final Map<String, Consumer<CircuitBreakerConfig.Builder>> circuitBreakerConfigs = new LinkedHashMap<>();
+        private @Nullable Consumer<TimeoutConfig.Builder> timeoutDefaults;
+        private final Map<String, Consumer<TimeoutConfig.Builder>> timeoutConfigs = new LinkedHashMap<>();
 
         private Builder() {
         }
@@ -234,6 +277,31 @@ public final class ResilienceRegistry {
             return this;
         }
 
+        /**
+         * Changes the timeout defaults, which every named configuration and annotation starts from.
+         *
+         * @param defaults applied to a builder that starts from {@link TimeoutConfig#DEFAULTS}
+         * @return this builder
+         */
+        public Builder timeoutDefaults(Consumer<TimeoutConfig.Builder> defaults) {
+            this.timeoutDefaults = Objects.requireNonNull(defaults, "defaults");
+            return this;
+        }
+
+        /**
+         * Registers a named timeout configuration, referenced from {@code @Timeout(config = "name")}.
+         *
+         * @param name the name; must not be empty or {@code "default"}
+         * @param config applied to a builder that starts from the timeout defaults
+         * @return this builder
+         */
+        public Builder timeout(String name, Consumer<TimeoutConfig.Builder> config) {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(config, "config");
+            register(timeoutConfigs, name, config, "timeout");
+            return this;
+        }
+
         private static <B> void register(Map<String, Consumer<B>> configs, String name, Consumer<B> config, String kind) {
             if (name.isEmpty() || name.equals(DEFAULT)) {
                 throw new IllegalArgumentException("Use " + kind + "Defaults(...) to change the default " + kind + " config");
@@ -256,7 +324,23 @@ public final class ResilienceRegistry {
             CircuitBreakerConfig circuitBreaker = circuitBreaker(CircuitBreakerConfig.DEFAULTS, circuitBreakerDefaults, DEFAULT);
             Map<String, CircuitBreakerConfig> circuitBreakers = new LinkedHashMap<>();
             circuitBreakerConfigs.forEach((name, config) -> circuitBreakers.put(name, circuitBreaker(circuitBreaker, config, name)));
-            return new ResilienceRegistry(retry, retries, circuitBreaker, circuitBreakers);
+            TimeoutConfig timeout = timeout(TimeoutConfig.DEFAULTS, timeoutDefaults, DEFAULT);
+            Map<String, TimeoutConfig> timeouts = new LinkedHashMap<>();
+            timeoutConfigs.forEach((name, config) -> timeouts.put(name, timeout(timeout, config, name)));
+            return new ResilienceRegistry(retry, retries, circuitBreaker, circuitBreakers, timeout, timeouts);
+        }
+
+        private static TimeoutConfig timeout(TimeoutConfig base, @Nullable Consumer<TimeoutConfig.Builder> config, String name) {
+            if (config == null) {
+                return base;
+            }
+            TimeoutConfig.Builder builder = base.toBuilder();
+            config.accept(builder);
+            try {
+                return builder.build();
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid timeout config '" + name + "': " + e.getMessage(), e);
+            }
         }
 
         private static RetryConfig retry(RetryConfig base, @Nullable Consumer<RetryConfig.Builder> config, String name) {

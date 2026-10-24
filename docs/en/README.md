@@ -42,11 +42,12 @@ resilience4cata is a resilience library for **plain Java 21+**: circuit breaker,
 |---|---|
 | `@Retry` | **Done end to end**: annotation, processor validation and generation, `RetryPolicy` runtime, registry with defaults and named configs, composed annotations, type-level and method-level merging |
 | `@CircuitBreaker` | **Done end to end**: count- and time-based windows, lock-free state machine, half-open probes with `maxWaitInHalfOpen`, slow calls, `recordOn`/`ignoreOn`, shared instances by `name`, nested inside `@Retry`, and `forceOpen`/`disable`/`reset` through `registry.circuitBreaker(id)` |
-| `@Timeout`, `@Bulkhead`, `@RateLimiter`, `@Fallback` | Annotations only |
+| `@Timeout` | **Done end to end** for synchronous methods: the call stays on the caller's thread and one shared watchdog thread interrupts it when it runs late (resolution: `timeout / 16`, 1–50 ms, never early); the interrupt is always cleared afterwards. Applied per attempt, inside the circuit breaker |
+| `@Bulkhead`, `@RateLimiter`, `@Fallback` | Annotations only |
 | Async (`CompletionStage`) return types, `classifier`, annotated classes | Rejected by the processor with an explicit "not supported yet" error |
 | External configuration (`config` module), profiles, `extends` | Not started |
 | Gradle incremental-processing registration | Not done: projects that use the processor recompile fully |
-| JMH benchmarks | Retry (one and four services) and circuit breaker (count and time windows, 1 and 4 threads) vs Resilience4j ([benchmarks](benchmarks.md)) |
+| JMH benchmarks | Retry (one and four services), circuit breaker (count and time windows) and timeout (1 and 4 threads) vs Resilience4j ([benchmarks](benchmarks.md)) |
 | jcstress (`stress` module) | Not started. Races in the circuit breaker are covered by deterministic unit tests that replay the interleavings, checked by mutation |
 
 ## Open questions

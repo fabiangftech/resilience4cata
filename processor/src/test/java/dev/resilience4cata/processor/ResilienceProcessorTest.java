@@ -282,6 +282,51 @@ class ResilienceProcessorTest {
                 .contains("r4c$b.windowType(dev.resilience4cata.CircuitBreakerConfig.WindowType.TIME);");
     }
 
+    @Test
+    void nestsTheTimeoutInsideTheCircuitBreakerAsPrivateLayers() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.CircuitBreaker;
+                import dev.resilience4cata.annotation.Retry;
+                import dev.resilience4cata.annotation.Timeout;
+                public interface Client {
+                    @Retry @CircuitBreaker @Timeout("2s")
+                    String call(int id) throws java.io.IOException;
+                    @Timeout("250ms")
+                    void ping();
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        String generated = result.generatedSource("demo.Client$Resilient");
+        assertThat(generated)
+                .contains("return this.r4c$circuitBreaker0(p0);")
+                .contains("private java.lang.String r4c$circuitBreaker0(int p0) throws java.io.IOException {")
+                .contains("final java.lang.String r4c$result = this.r4c$timeout0(p0);")
+                .contains("private java.lang.String r4c$timeout0(int p0) throws java.io.IOException {")
+                .contains("r4c$result = this.delegate.call(p0);")
+                .contains("r4c$b.timeout(java.time.Duration.ofNanos(2000000000L));")
+                .contains("r4c$b.timeout(java.time.Duration.ofNanos(250000000L));");
+    }
+
+    @Test
+    void rejectsInvalidTimeouts() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Timeout;
+                public interface Client {
+                    @Timeout("0")
+                    String zero();
+                    @Timeout("soon")
+                    String invalid();
+                }
+                """);
+
+        assertThat(result.errors()).hasSize(2)
+                .anySatisfy(e -> assertThat(e).contains("@Timeout must be positive"))
+                .anySatisfy(e -> assertThat(e).contains("@Timeout(\"soon\") is not a valid duration"));
+    }
+
     private static String bundle(String name, String attributes) {
         return """
                 package demo;

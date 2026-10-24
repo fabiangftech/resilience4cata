@@ -2,6 +2,7 @@ package dev.resilience4cata.processor;
 
 import dev.resilience4cata.annotation.CircuitBreaker;
 import dev.resilience4cata.annotation.Retry;
+import dev.resilience4cata.annotation.Timeout;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
@@ -43,8 +44,10 @@ import javax.tools.JavaFileObject;
  * {@code <Interface>$Resilient} that implements the interface, delegates every method, and applies
  * the declared policies. {@code Resilient.of(...)} in the core module finds it by that name.
  *
- * <p>Policies are nested in the default order, outermost first: Retry, then CircuitBreaker, so each
- * attempt is recorded by the breaker and an open breaker stops the retries.
+ * <p>Policies are nested in the default order, outermost first: Retry, CircuitBreaker, Timeout. Each
+ * attempt is recorded by the breaker, an open breaker stops the retries, and the timeout applies to
+ * each attempt. The public method holds the outermost layer; every inner layer is a private method
+ * of the generated class, which the JIT inlines like any statically bound call.
  */
 public final class ResilienceProcessor extends AbstractProcessor {
 
@@ -56,7 +59,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
         RETRY(Retry.class, "retry", "dev.resilience4cata.generated.RetryPolicy", "retryPolicy",
                 "dev.resilience4cata.RetryConfig"),
         CIRCUIT_BREAKER(CircuitBreaker.class, "circuitBreaker", "dev.resilience4cata.generated.CircuitBreakerPolicy",
-                "circuitBreakerPolicy", "dev.resilience4cata.CircuitBreakerConfig");
+                "circuitBreakerPolicy", "dev.resilience4cata.CircuitBreakerConfig"),
+        TIMEOUT(Timeout.class, "timeout", "dev.resilience4cata.generated.TimeoutPolicy", "timeoutPolicy",
+                "dev.resilience4cata.TimeoutConfig");
 
         final Class<?> annotation;
         final String field;
@@ -270,6 +275,19 @@ public final class ResilienceProcessor extends AbstractProcessor {
             String label = annotation + "." + attribute;
             switch (attribute) {
                 case "name" -> name = (String) value;
+                case "value" -> { // @Timeout("2s")
+                    try {
+                        long nanos = Durations.parseNanos((String) value);
+                        if (nanos == 0) {
+                            valid = invalid(method, annotation + " must be positive, was \"" + value + "\"");
+                        } else {
+                            overrides.add("timeout(java.time.Duration.ofNanos(" + nanos + "L))");
+                        }
+                    } catch (IllegalArgumentException e) {
+                        valid = invalid(method, annotation + "(\"" + value + "\") is not a valid duration: "
+                                + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
+                    }
+                }
                 case "config" -> config = (String) value;
                 case "enabled" -> {
                     if (value.equals("true") || value.equals("false")) {
@@ -397,75 +415,64 @@ public final class ResilienceProcessor extends AbstractProcessor {
         }
         String returnType = TypePrinter.print(type.getReturnType());
         boolean isVoid = type.getReturnType().getKind() == TypeKind.VOID;
-        String call = "this.delegate." + method.getSimpleName() + "(" + String.join(", ", arguments) + ")";
+        String typeVariables = type.getTypeVariables().isEmpty() ? "" : methodTypeVariables(type.getTypeVariables()) + " ";
+        String throwsClause = type.getThrownTypes().isEmpty() ? "" : " throws " + TypePrinter.join(type.getThrownTypes(), ", ");
+        String signatureTail = "(" + String.join(", ", parameters) + ")" + throwsClause;
+        String args = String.join(", ", arguments);
+        String delegateCall = "this.delegate." + method.getSimpleName() + "(" + args + ")";
 
-        out.append("\n    @Override\n    public ");
-        if (!type.getTypeVariables().isEmpty()) {
-            out.append(methodTypeVariables(type.getTypeVariables())).append(' ');
+        // One layer per policy, outermost first. Layer i calls layer i + 1; the last one calls the delegate.
+        List<Kind> layers = new ArrayList<>(model.policies().keySet());
+        List<String> layerNames = new ArrayList<>();
+        for (Kind kind : layers) {
+            layerNames.add("r4c$" + kind.field + index);
         }
-        out.append(returnType).append(' ').append(method.getSimpleName())
-                .append('(').append(String.join(", ", parameters)).append(')');
-        if (!type.getThrownTypes().isEmpty()) {
-            out.append(" throws ").append(TypePrinter.join(type.getThrownTypes(), ", "));
-        }
-        out.append(" {\n");
-        for (String line : body(model.policies().keySet(), index, call, isVoid, returnType)) {
-            out.append(line.isEmpty() ? "" : "        " + line).append('\n');
+        out.append("\n    @Override\n    public ").append(typeVariables).append(returnType).append(' ')
+                .append(method.getSimpleName()).append(signatureTail).append(" {\n");
+        if (layers.isEmpty()) {
+            appendLines(out, List.of(isVoid ? delegateCall + ";" : "return " + delegateCall + ";"));
+        } else {
+            appendLines(out, layer(layers.get(0), index, inner(layerNames, 1, args, delegateCall), isVoid, returnType));
         }
         out.append("    }\n");
+        for (int i = 1; i < layers.size(); i++) {
+            out.append("\n    private ").append(typeVariables).append(returnType).append(' ').append(layerNames.get(i))
+                    .append(signatureTail).append(" {\n");
+            appendLines(out, layer(layers.get(i), index, inner(layerNames, i + 1, args, delegateCall), isVoid, returnType));
+            out.append("    }\n");
+        }
     }
 
-    /** Builds the method body from the inside out: the call, then each policy around it. */
-    private static List<String> body(Set<Kind> kinds, int index, String call, boolean isVoid, String returnType) {
-        List<String> block = isVoid ? List.of(call + ";") : List.of("return " + call + ";");
-        if (kinds.contains(Kind.CIRCUIT_BREAKER)) {
-            block = circuitBreaker(index, call, isVoid, returnType);
-        }
-        if (kinds.contains(Kind.RETRY)) {
-            block = retry(index, block, isVoid);
-        }
-        return block;
+    private static String inner(List<String> layerNames, int next, String args, String delegateCall) {
+        return next < layerNames.size() ? "this." + layerNames.get(next) + "(" + args + ")" : delegateCall;
     }
 
-    private static List<String> circuitBreaker(int index, String call, boolean isVoid, String returnType) {
-        String policy = Kind.CIRCUIT_BREAKER.policyType;
+    private static void appendLines(StringBuilder out, List<String> lines) {
+        for (String line : lines) {
+            out.append(line.isEmpty() ? "" : "        " + line).append('\n');
+        }
+    }
+
+    private static List<String> layer(Kind kind, int index, String call, boolean isVoid, String returnType) {
+        return switch (kind) {
+            case RETRY -> retry(index, call, isVoid);
+            case CIRCUIT_BREAKER -> circuitBreaker(index, call, isVoid, returnType);
+            case TIMEOUT -> timeout(index, call, isVoid, returnType);
+        };
+    }
+
+    private static List<String> retry(int index, String call, boolean isVoid) {
         List<String> lines = new ArrayList<>();
-        lines.add("final " + policy + " r4c$cb = this." + Kind.CIRCUIT_BREAKER.field + index + ";");
-        lines.add("final long r4c$cbToken = r4c$cb.acquire();");
-        lines.add("if (r4c$cbToken < 0) {");
-        lines.add("    throw r4c$cb.rejection();");
-        lines.add("}");
-        lines.add("final long r4c$cbStart = r4c$cb.startTimer();");
-        lines.add("try {");
-        if (isVoid) {
-            lines.add("    " + call + ";");
-            lines.add("    r4c$cb.onSuccess(r4c$cbToken, r4c$cbStart);");
-            lines.add("    return;");
-        } else {
-            lines.add("    final " + returnType + " r4c$result = " + call + ";");
-            lines.add("    r4c$cb.onSuccess(r4c$cbToken, r4c$cbStart);");
-            lines.add("    return r4c$result;");
-        }
-        lines.add("} catch (java.lang.Throwable r4c$cbError) {");
-        lines.add("    r4c$cb.onFailure(r4c$cbToken, r4c$cbStart, r4c$cbError);");
-        lines.add("    throw r4c$cbError;");
-        lines.add("}");
-        return lines;
-    }
-
-    private static List<String> retry(int index, List<String> inner, boolean isVoid) {
-        String policy = Kind.RETRY.policyType;
-        List<String> lines = new ArrayList<>();
-        lines.add("final " + policy + " r4c$retry = this." + Kind.RETRY.field + index + ";");
+        lines.add("final " + Kind.RETRY.policyType + " r4c$retry = this." + Kind.RETRY.field + index + ";");
         lines.add("final long r4c$start = r4c$retry.start();");
         lines.add("int r4c$attempts = 0;");
         lines.add("while (true) {");
         lines.add("    try {");
-        for (String line : inner) {
-            lines.add("        " + line);
-        }
-        if (isVoid && inner.size() == 1) {
-            lines.add("        return;"); // the bare call has no return of its own
+        if (isVoid) {
+            lines.add("        " + call + ";");
+            lines.add("        return;");
+        } else {
+            lines.add("        return " + call + ";");
         }
         lines.add("    } catch (java.lang.Throwable r4c$e) {");
         lines.add("        final long r4c$delay = r4c$retry.onFailure(++r4c$attempts, r4c$e, r4c$start);");
@@ -474,6 +481,49 @@ public final class ResilienceProcessor extends AbstractProcessor {
         lines.add("        }");
         lines.add("    }");
         lines.add("}");
+        return lines;
+    }
+
+    private static List<String> circuitBreaker(int index, String call, boolean isVoid, String returnType) {
+        List<String> lines = new ArrayList<>();
+        lines.add("final " + Kind.CIRCUIT_BREAKER.policyType + " r4c$cb = this." + Kind.CIRCUIT_BREAKER.field + index + ";");
+        lines.add("final long r4c$token = r4c$cb.acquire();");
+        lines.add("if (r4c$token < 0) {");
+        lines.add("    throw r4c$cb.rejection();");
+        lines.add("}");
+        lines.add("final long r4c$started = r4c$cb.startTimer();");
+        lines.add("try {");
+        if (isVoid) {
+            lines.add("    " + call + ";");
+            lines.add("    r4c$cb.onSuccess(r4c$token, r4c$started);");
+            lines.add("    return;");
+        } else {
+            lines.add("    final " + returnType + " r4c$result = " + call + ";");
+            lines.add("    r4c$cb.onSuccess(r4c$token, r4c$started);");
+            lines.add("    return r4c$result;");
+        }
+        lines.add("} catch (java.lang.Throwable r4c$e) {");
+        lines.add("    r4c$cb.onFailure(r4c$token, r4c$started, r4c$e);");
+        lines.add("    throw r4c$e;");
+        lines.add("}");
+        return lines;
+    }
+
+    private static List<String> timeout(int index, String call, boolean isVoid, String returnType) {
+        List<String> lines = new ArrayList<>();
+        lines.add("final " + Kind.TIMEOUT.policyType + " r4c$timeout = this." + Kind.TIMEOUT.field + index + ";");
+        lines.add("final " + Kind.TIMEOUT.policyType + ".Scope r4c$scope = r4c$timeout.enter();");
+        if (!isVoid) {
+            lines.add("final " + returnType + " r4c$result;");
+        }
+        lines.add("try {");
+        lines.add("    " + (isVoid ? "" : "r4c$result = ") + call + ";");
+        lines.add("} catch (java.lang.Throwable r4c$e) {");
+        lines.add("    r4c$timeout.failed(r4c$scope, r4c$e);");
+        lines.add("    throw r4c$e;");
+        lines.add("}");
+        lines.add("r4c$timeout.succeeded(r4c$scope);");
+        lines.add(isVoid ? "return;" : "return r4c$result;");
         return lines;
     }
 
