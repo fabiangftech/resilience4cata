@@ -1,24 +1,26 @@
 package dev.resilience4cata.generated;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Lock-free, allocation-free sliding window over the last {@code size} calls.
  *
- * <p>Each call takes the next slot with {@code getAndIncrement} and swaps its outcome in with
+ * <p>Each call takes the next slot with {@code getAndAdd} on the cursor and swaps its outcome in with
  * {@code getAndSet}. Because {@code getAndSet} returns the exact outcome it replaced, every counter
  * change is applied exactly once: the counters can lag for an instant under concurrent writes, but
  * they never drift.
  *
- * <p>Two shortcuts keep threads from writing to shared memory when nothing changes, which matters
- * more than locking once several cores share one window:
- * <ul>
- *   <li>A fast success on a full window with no failures and no slow calls changes nothing that can
- *       be observed, so it is not recorded at all (when {@code skipNoOpSuccesses} is set).</li>
- *   <li>An outcome equal to the one already in its slot does not rewrite the slot.</li>
- * </ul>
+ * <p>An outcome equal to the one already in its slot does not rewrite the slot: under contention,
+ * writes to shared cache lines cost more than the lack of locks saves. (Skipping successes on a
+ * window that holds only fast successes is done one level up, by {@link CircuitBreakerPolicy}.)
+ *
+ * <p>The counters are plain fields updated through {@link VarHandle}s. The cursor, written by every
+ * call, is a separate object so that it does not share a cache line with them; and {@code completed}
+ * is only maintained when the caller needs it (half-open probes), since it would be one more write
+ * per call.
  */
 final class CountWindow {
 
@@ -26,23 +28,49 @@ final class CountWindow {
     static final int FAILURE = 2;
     static final int SLOW = 4;
 
+    /** {@link #record} result bit: the rates may have risen and must be evaluated. */
+    static final int EVALUATE = 1;
+    /** {@link #record} result bit: a success changed the counters, so the window may now hold only fast successes. */
+    static final int MAYBE_QUIET = 2;
+
+    private static final VarHandle CALLS;
+    private static final VarHandle FAILURES;
+    private static final VarHandle SLOW_CALLS;
+    private static final VarHandle COMPLETED;
+
+    static {
+        try {
+            MethodHandles.Lookup lookup = MethodHandles.lookup();
+            CALLS = lookup.findVarHandle(CountWindow.class, "calls", int.class);
+            FAILURES = lookup.findVarHandle(CountWindow.class, "failures", int.class);
+            SLOW_CALLS = lookup.findVarHandle(CountWindow.class, "slowCalls", int.class);
+            COMPLETED = lookup.findVarHandle(CountWindow.class, "completed", int.class);
+        } catch (ReflectiveOperationException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
     private final int size;
-    private final boolean skipNoOpSuccesses;
+    private final boolean countCompleted;
     private final AtomicIntegerArray slots;
     private final AtomicLong cursor = new AtomicLong();
-    private final AtomicInteger calls = new AtomicInteger();
-    private final AtomicInteger failures = new AtomicInteger();
-    private final AtomicInteger slowCalls = new AtomicInteger();
-    private final AtomicInteger completed = new AtomicInteger();
+
+    @SuppressWarnings("unused") // accessed through the VarHandles above
+    private int calls;
+    @SuppressWarnings("unused")
+    private int failures;
+    @SuppressWarnings("unused")
+    private int slowCalls;
+    @SuppressWarnings("unused")
+    private int completed;
 
     /**
      * @param size number of calls in the window
-     * @param skipNoOpSuccesses whether to drop successes that cannot change the window; must be
-     *     {@code false} when the caller relies on {@link #completed()} counting every call
+     * @param countCompleted whether to maintain {@link #completed()}
      */
-    CountWindow(int size, boolean skipNoOpSuccesses) {
+    CountWindow(int size, boolean countCompleted) {
         this.size = size;
-        this.skipNoOpSuccesses = skipNoOpSuccesses;
+        this.countCompleted = countCompleted;
         this.slots = new AtomicIntegerArray(size);
     }
 
@@ -50,52 +78,62 @@ final class CountWindow {
      * Records one outcome.
      *
      * @param outcome {@link #FAILURE} and/or {@link #SLOW} bits, or 0 for a fast success
-     * @return {@code true} if the rates may have risen and must be evaluated: the outcome is a
-     *     failure or slow, or the window is still filling up
+     * @return {@link #EVALUATE} and/or {@link #MAYBE_QUIET} bits, or 0
      */
-    boolean record(int outcome) {
-        if (skipNoOpSuccesses && outcome == 0 && failures.get() == 0 && slowCalls.get() == 0 && calls.get() == size) {
-            return false; // every slot already holds a fast success
-        }
+    int record(int outcome) {
         int index = (int) (cursor.getAndIncrement() % size);
         int value = outcome | FILLED;
-        if (slots.get(index) == value) {
-            completed.incrementAndGet();
-            return false; // same outcome as the one it replaces: nothing changes
+        if (slots.getOpaque(index) == value) {
+            if (countCompleted) {
+                COMPLETED.getAndAdd(this, 1);
+            }
+            return 0; // same outcome as the one it replaces: nothing changes
         }
         int previous = slots.getAndSet(index, value);
         int failureDelta = (outcome & FAILURE) - (previous & FAILURE);
         if (failureDelta != 0) {
-            failures.addAndGet(failureDelta / FAILURE);
+            FAILURES.getAndAdd(this, failureDelta / FAILURE);
         }
         int slowDelta = (outcome & SLOW) - (previous & SLOW);
         if (slowDelta != 0) {
-            slowCalls.addAndGet(slowDelta / SLOW);
+            SLOW_CALLS.getAndAdd(this, slowDelta / SLOW);
         }
         boolean newSlot = (previous & FILLED) == 0;
         if (newSlot) {
-            calls.incrementAndGet();
+            CALLS.getAndAdd(this, 1);
         }
-        completed.incrementAndGet();
-        return newSlot || (outcome & (FAILURE | SLOW)) != 0;
+        if (countCompleted) {
+            COMPLETED.getAndAdd(this, 1);
+        }
+        if (outcome != 0) {
+            return EVALUATE;
+        }
+        boolean changed = newSlot || previous != FILLED;
+        return (newSlot ? EVALUATE : 0) | (changed ? MAYBE_QUIET : 0);
+    }
+
+    /** True if every slot holds a fast success. Volatile reads: used to publish and check the quiet state. */
+    boolean onlyFastSuccesses() {
+        return (int) FAILURES.getVolatile(this) == 0 && (int) SLOW_CALLS.getVolatile(this) == 0
+                && (int) CALLS.getVolatile(this) == size;
     }
 
     /** Number of slots that hold an outcome, at most {@code size}. */
     int calls() {
-        return calls.get();
+        return (int) CALLS.getVolatile(this);
     }
 
     int failures() {
-        return failures.get();
+        return (int) FAILURES.getVolatile(this);
     }
 
     int slowCalls() {
-        return slowCalls.get();
+        return (int) SLOW_CALLS.getVolatile(this);
     }
 
-    /** Number of {@link #record} calls that have finished updating the counters. */
+    /** Number of {@link #record} calls that have finished updating the counters; only if {@code countCompleted}. */
     int completed() {
-        return completed.get();
+        return (int) COMPLETED.getVolatile(this);
     }
 
     /** Recounts the slots. Only meaningful when no thread is recording; used by tests. */

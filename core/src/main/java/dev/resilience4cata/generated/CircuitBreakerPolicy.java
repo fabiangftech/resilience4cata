@@ -29,17 +29,30 @@ import java.util.function.LongSupplier;
  * <p>The state is an immutable {@code Phase} object swapped with compare-and-set. Each phase has a
  * generation number, and {@link #acquire()} returns it as the token. Outcomes whose token belongs to
  * an older phase are dropped, so a call that started while closed cannot decide a half-open probe.
+ *
+ * <p><b>Quiet state.</b> While the breaker is closed and its window holds only fast successes,
+ * another fast success changes nothing. The {@code quiet} field then holds the closed phase's
+ * generation, and {@link #acquire()} and {@link #onSuccess} only read that one field: no phase or
+ * window access, no writes. Ordering keeps it correct: a failure is counted in the window
+ * <em>before</em> {@code quiet} is cleared, and a success sets {@code quiet} <em>before</em>
+ * re-checking the window, so one of the two always sees the other. All other reads of
+ * {@code phase} and {@code quiet} are opaque: every field they lead to is final, so the objects are
+ * safely published without acquire barriers.
  */
 public final class CircuitBreakerPolicy {
 
     /** Returned by {@link #acquire()} when the call is not permitted. */
     public static final long REJECTED = -1L;
 
+    private static final long NOT_QUIET = -1L;
     private static final VarHandle PHASE;
+    private static final VarHandle QUIET;
 
     static {
         try {
-            PHASE = MethodHandles.lookup().findVarHandle(CircuitBreakerPolicy.class, "phase", Phase.class);
+            MethodHandles.Lookup lookup = MethodHandles.lookup();
+            PHASE = lookup.findVarHandle(CircuitBreakerPolicy.class, "phase", Phase.class);
+            QUIET = lookup.findVarHandle(CircuitBreakerPolicy.class, "quiet", long.class);
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(e);
         }
@@ -61,6 +74,8 @@ public final class CircuitBreakerPolicy {
 
     @SuppressWarnings("unused") // accessed through PHASE
     private volatile Phase phase;
+    @SuppressWarnings("unused") // accessed through QUIET
+    private volatile long quiet = NOT_QUIET;
 
     /**
      * Creates a closed circuit breaker.
@@ -86,7 +101,7 @@ public final class CircuitBreakerPolicy {
         this.classification = new Classification(config.recordOn(), config.ignoreOn());
         this.rejection = new CallNotPermittedException(instanceId);
         this.ticker = ticker;
-        this.phase = new Closed(0, new CountWindow(windowSize, true));
+        this.phase = new Closed(0, new CountWindow(windowSize, false));
     }
 
     /** Returns the configuration this breaker was created from. */
@@ -110,6 +125,10 @@ public final class CircuitBreakerPolicy {
      * @return a token to pass to {@link #onSuccess} or {@link #onFailure}, or {@link #REJECTED}
      */
     public long acquire() {
+        long quietToken = (long) QUIET.getOpaque(this);
+        if (quietToken >= 0) {
+            return quietToken;
+        }
         Phase current = phase();
         if (current.kind == Phase.CLOSED || !enabled) {
             return current.generation;
@@ -163,8 +182,12 @@ public final class CircuitBreakerPolicy {
      * @param start the value returned by {@link #startTimer()}
      */
     public void onSuccess(long token, long start) {
+        int slow = slowBit(start);
+        if (slow == 0 && token == (long) QUIET.getOpaque(this)) {
+            return; // quiet: one more fast success changes nothing
+        }
         if (enabled) {
-            record(token, slowBit(start));
+            record(token, slow);
         }
     }
 
@@ -196,7 +219,20 @@ public final class CircuitBreakerPolicy {
             return; // the call started in an earlier phase
         }
         if (current instanceof Closed closed) {
-            if (closed.window.record(outcome)) {
+            int changes = closed.window.record(outcome);
+            if (outcome != 0) {
+                // After the failure is counted. Write only on a change: quiet shares a cache line
+                // with phase, which every call reads.
+                if ((long) QUIET.getVolatile(this) != NOT_QUIET) {
+                    QUIET.setVolatile(this, NOT_QUIET);
+                }
+            } else if ((changes & CountWindow.MAYBE_QUIET) != 0 && closed.window.onlyFastSuccesses()) {
+                QUIET.setVolatile(this, token);
+                if (!closed.window.onlyFastSuccesses()) { // a failure raced in: undo
+                    QUIET.compareAndSet(this, token, NOT_QUIET);
+                }
+            }
+            if ((changes & CountWindow.EVALUATE) != 0) {
                 evaluateClosed(closed);
             }
         } else if (current instanceof HalfOpen halfOpen) {
@@ -226,7 +262,7 @@ public final class CircuitBreakerPolicy {
     private void evaluateHalfOpen(HalfOpen halfOpen) {
         Phase next = exceedsThresholds(halfOpen.window, halfOpenCalls)
                 ? new Open(halfOpen.generation + 1, ticker.getAsLong())
-                : new Closed(halfOpen.generation + 1, new CountWindow(windowSize, true));
+                : new Closed(halfOpen.generation + 1, new CountWindow(windowSize, false));
         PHASE.compareAndSet(this, halfOpen, next);
     }
 
@@ -236,7 +272,7 @@ public final class CircuitBreakerPolicy {
     }
 
     private Phase phase() {
-        return (Phase) PHASE.getAcquire(this);
+        return (Phase) PHASE.getOpaque(this);
     }
 
     /** Recounts the closed window's slots; used by tests when no thread is recording. */
@@ -303,7 +339,7 @@ public final class CircuitBreakerPolicy {
         HalfOpen(long generation, int probes) {
             super(HALF_OPEN, generation);
             this.permits = new AtomicInteger(probes);
-            this.window = new CountWindow(probes, false);
+            this.window = new CountWindow(probes, true);
         }
 
         @Override

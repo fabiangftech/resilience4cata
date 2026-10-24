@@ -208,6 +208,72 @@ class CircuitBreakerPolicyTest {
     }
 
     @Test
+    void aWindowFullOfSuccessesStillOpensOnFailures() {
+        CircuitBreakerPolicy cb = breaker(window(4));
+        for (int i = 0; i < 10; i++) {
+            succeed(cb); // the window becomes quiet after 4
+        }
+        fail(cb);
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.CLOSED); // 1 of 4
+        fail(cb);
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.OPEN);   // 2 of 4
+    }
+
+    @Test
+    void leavesAndReentersTheQuietStateExactly() {
+        CircuitBreakerPolicy cb = breaker(window(4).failureRateThreshold(75));
+        for (int i = 0; i < 4; i++) {
+            succeed(cb);
+        }
+        fail(cb);                      // S S S F (oldest success replaced)
+        for (int i = 0; i < 4; i++) {
+            succeed(cb);               // the failure is evicted: quiet again
+        }
+        fail(cb);
+        fail(cb);
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.CLOSED); // 2 of 4
+        fail(cb);
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.OPEN);   // 3 of 4: no stale failure was kept
+    }
+
+    @Test
+    void quietStateSurvivesConcurrentFailures() throws InterruptedException {
+        // Threads alternate long runs of successes (quiet) with bursts of failures. With a 100%
+        // threshold the breaker never opens, so afterwards the counters must still match the slots
+        // and a burst of failures must still open it.
+        CircuitBreakerPolicy cb = breaker(window(32).failureRateThreshold(100));
+        IOException failure = new IOException();
+        List<Thread> workers = new ArrayList<>();
+        CountDownLatch start = new CountDownLatch(1);
+        for (int t = 0; t < 8; t++) {
+            int seed = t;
+            workers.add(Thread.ofPlatform().start(() -> {
+                try {
+                    start.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                for (int i = 0; i < 100_000; i++) {
+                    long token = cb.acquire();
+                    if ((i + seed) % 97 < 3) {
+                        cb.onFailure(token, 0, failure);
+                    } else {
+                        cb.onSuccess(token, 0);
+                    }
+                }
+            }));
+        }
+        start.countDown();
+        for (Thread worker : workers) {
+            worker.join();
+        }
+        int[] counts = cb.closedWindowCounts();
+        assertThat(counts[0]).isEqualTo(32).isEqualTo(counts[3]);
+        assertThat(counts[1]).isEqualTo(counts[4]);
+    }
+
+    @Test
     void countersMatchTheSlotsAfterConcurrentRecording() throws InterruptedException {
         // A threshold of 100% and failures on odd calls only: the breaker never opens, so every
         // thread records into the same window.
