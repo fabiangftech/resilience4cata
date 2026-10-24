@@ -1,8 +1,11 @@
 package dev.resilience4cata.processor;
 
+import dev.resilience4cata.annotation.CircuitBreaker;
+import dev.resilience4cata.annotation.Retry;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +28,7 @@ import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.ExecutableType;
+import javax.lang.model.type.IntersectionType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.TypeVariable;
@@ -38,18 +42,41 @@ import javax.tools.JavaFileObject;
  * Generates, for every interface that uses resilience annotations, a class named
  * {@code <Interface>$Resilient} that implements the interface, delegates every method, and applies
  * the declared policies. {@code Resilient.of(...)} in the core module finds it by that name.
+ *
+ * <p>Policies are nested in the default order, outermost first: Retry, then CircuitBreaker, so each
+ * attempt is recorded by the breaker and an open breaker stops the retries.
  */
 public final class ResilienceProcessor extends AbstractProcessor {
 
     private static final String SUFFIX = "$Resilient";
-    private static final String POLICY_TYPE = "dev.resilience4cata.generated.RetryPolicy";
     private static final String REGISTRY_TYPE = "dev.resilience4cata.ResilienceRegistry";
-    private static final String CONFIG_TYPE = "dev.resilience4cata.RetryConfig";
+
+    /** Supported policies, in nesting order: outermost first. */
+    private enum Kind {
+        RETRY(Retry.class, "retry", "dev.resilience4cata.generated.RetryPolicy", "retryPolicy",
+                "dev.resilience4cata.RetryConfig"),
+        CIRCUIT_BREAKER(CircuitBreaker.class, "circuitBreaker", "dev.resilience4cata.generated.CircuitBreakerPolicy",
+                "circuitBreakerPolicy", "dev.resilience4cata.CircuitBreakerConfig");
+
+        final Class<?> annotation;
+        final String field;
+        final String policyType;
+        final String registryMethod;
+        final String configType;
+
+        Kind(Class<?> annotation, String field, String policyType, String registryMethod, String configType) {
+            this.annotation = annotation;
+            this.field = field;
+            this.policyType = policyType;
+            this.registryMethod = registryMethod;
+            this.configType = configType;
+        }
+    }
 
     private Elements elements;
     private Types types;
     private Messager messager;
-    private RetryAttributes retryAttributes;
+    private final Map<Kind, PolicyAttributes> attributes = new EnumMap<>(Kind.class);
     private final Set<String> processed = new HashSet<>();
 
     /** Creates the processor. Called by the compiler through {@link java.util.ServiceLoader}. */
@@ -62,7 +89,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
         elements = processingEnv.getElementUtils();
         types = processingEnv.getTypeUtils();
         messager = processingEnv.getMessager();
-        retryAttributes = new RetryAttributes(messager);
+        for (Kind kind : Kind.values()) {
+            attributes.put(kind, new PolicyAttributes(messager, kind.annotation));
+        }
     }
 
     @Override
@@ -96,29 +125,36 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private void inspect(TypeElement type) {
         switch (type.getKind()) {
             case ANNOTATION_TYPE -> {
-                if (RetryAttributes.hasAnnotation(type, RetryAttributes.RETRY)
-                        && !RetryAttributes.hasAnnotation(type, RetryAttributes.POLICY)) {
-                    error(type, "@" + type.getSimpleName() + " uses @Retry but is not marked with @ResiliencePolicy,"
-                            + " so its policies would be ignored. Add @ResiliencePolicy to it.");
+                for (PolicyAttributes policy : attributes.values()) {
+                    if (PolicyAttributes.hasAnnotation(type, policy.annotation())
+                            && !PolicyAttributes.hasAnnotation(type, PolicyAttributes.POLICY)) {
+                        error(type, "@" + type.getSimpleName() + " uses @" + policy.simpleName()
+                                + " but is not marked with @ResiliencePolicy, so its policies would be ignored."
+                                + " Add @ResiliencePolicy to it.");
+                    }
                 }
             }
             case INTERFACE -> generateIfNeeded(type);
             default -> {
-                if (usesRetry(type)) {
-                    error(type, "@Retry is only supported on interfaces for now. Declare the methods in an"
-                            + " interface and wrap the implementation with Resilient.of(...).");
+                if (usesAnyPolicy(type)) {
+                    error(type, "Resilience annotations are only supported on interfaces for now. Declare the"
+                            + " methods in an interface and wrap the implementation with Resilient.of(...).");
                 }
             }
         }
     }
 
-    private boolean usesRetry(TypeElement type) {
-        if (retryAttributes.on(type).isPresent()) {
-            return true;
-        }
-        for (ExecutableElement method : ElementFilter.methodsIn(type.getEnclosedElements())) {
-            if (retryAttributes.on(method).isPresent()) {
+    private boolean usesAnyPolicy(Element element) {
+        for (PolicyAttributes policy : attributes.values()) {
+            if (policy.on(element).isPresent()) {
                 return true;
+            }
+            if (element instanceof TypeElement type) {
+                for (ExecutableElement method : ElementFilter.methodsIn(type.getEnclosedElements())) {
+                    if (policy.on(method).isPresent()) {
+                        return true;
+                    }
+                }
             }
         }
         return false;
@@ -131,19 +167,31 @@ public final class ResilienceProcessor extends AbstractProcessor {
         }
         boolean valid = checkDeclaredMethods(iface);
 
-        Optional<Map<String, AnnotationValue>> typeLevel = retryAttributes.on(iface);
+        Map<Kind, Optional<Map<String, AnnotationValue>>> typeLevel = new EnumMap<>(Kind.class);
+        attributes.forEach((kind, policy) -> typeLevel.put(kind, policy.on(iface)));
         List<MethodModel> methods = new ArrayList<>();
         boolean anyPolicy = false;
         for (ExecutableElement method : members(iface)) {
             ExecutableType type = (ExecutableType) types.asMemberOf((DeclaredType) iface.asType(), method);
-            Optional<Map<String, AnnotationValue>> retry = effectiveRetry(iface, typeLevel, method);
-            RetryModel retryModel = null;
-            if (retry.isPresent()) {
+            Map<Kind, PolicyModel> policies = new EnumMap<>(Kind.class);
+            for (Kind kind : Kind.values()) {
+                Optional<Map<String, AnnotationValue>> effective = effective(kind, iface, typeLevel.get(kind), method);
+                if (effective.isEmpty()) {
+                    continue;
+                }
                 anyPolicy = true;
-                retryModel = retryModel(iface, method, type, retry.get());
-                valid &= retryModel != null;
+                PolicyModel model = policyModel(kind, iface, method, type, effective.get());
+                if (model == null) {
+                    valid = false;
+                } else {
+                    policies.put(kind, model);
+                }
             }
-            methods.add(new MethodModel(method, type, retryModel));
+            if (!policies.isEmpty() && returnsCompletionStage(type)) {
+                error(method, "Resilience annotations on methods that return a CompletionStage are not supported yet.");
+                valid = false;
+            }
+            methods.add(new MethodModel(method, type, policies));
         }
         if (!anyPolicy || !valid) {
             return;
@@ -160,9 +208,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
         boolean valid = true;
         for (ExecutableElement method : ElementFilter.methodsIn(iface.getEnclosedElements())) {
             Set<Modifier> modifiers = method.getModifiers();
-            if ((modifiers.contains(Modifier.STATIC) || modifiers.contains(Modifier.PRIVATE))
-                    && retryAttributes.on(method).isPresent()) {
-                error(method, "@Retry cannot be used on static or private methods: calls to them cannot be intercepted.");
+            if ((modifiers.contains(Modifier.STATIC) || modifiers.contains(Modifier.PRIVATE)) && usesAnyPolicy(method)) {
+                error(method, "Resilience annotations cannot be used on static or private methods:"
+                        + " calls to them cannot be intercepted.");
                 valid = false;
             }
         }
@@ -184,13 +232,14 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return new ArrayList<>(methods.values());
     }
 
-    /** Merges, lowest precedence first: declaring interface, wrapped interface, method. */
-    private Optional<Map<String, AnnotationValue>> effectiveRetry(TypeElement iface,
+    /** Merges one policy's attributes, lowest precedence first: declaring interface, wrapped interface, method. */
+    private Optional<Map<String, AnnotationValue>> effective(Kind kind, TypeElement iface,
             Optional<Map<String, AnnotationValue>> typeLevel, ExecutableElement method) {
+        PolicyAttributes policy = attributes.get(kind);
         TypeElement declaring = (TypeElement) method.getEnclosingElement();
         Optional<Map<String, AnnotationValue>> declaringLevel =
-                declaring.equals(iface) ? Optional.empty() : retryAttributes.on(declaring);
-        Optional<Map<String, AnnotationValue>> methodLevel = retryAttributes.on(method);
+                declaring.equals(iface) ? Optional.empty() : policy.on(declaring);
+        Optional<Map<String, AnnotationValue>> methodLevel = policy.on(method);
         if (declaringLevel.isEmpty() && typeLevel.isEmpty() && methodLevel.isEmpty()) {
             return Optional.empty();
         }
@@ -201,62 +250,80 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return Optional.of(merged);
     }
 
-    /** Validates the attributes and turns them into builder calls. Returns null after reporting errors. */
-    private RetryModel retryModel(TypeElement iface, ExecutableElement method, ExecutableType type,
-            Map<String, AnnotationValue> attributes) {
-        TypeMirror returnType = types.erasure(type.getReturnType());
+    private boolean returnsCompletionStage(ExecutableType type) {
         TypeElement completionStage = elements.getTypeElement("java.util.concurrent.CompletionStage");
-        if (completionStage != null && types.isAssignable(returnType, types.erasure(completionStage.asType()))) {
-            error(method, "@Retry on methods that return a CompletionStage is not supported yet.");
-            return null;
-        }
+        return completionStage != null && types.isAssignable(types.erasure(type.getReturnType()),
+                types.erasure(completionStage.asType()));
+    }
+
+    /** Validates the attributes and turns them into builder calls. Returns null after reporting errors. */
+    private PolicyModel policyModel(Kind kind, TypeElement iface, ExecutableElement method, ExecutableType type,
+            Map<String, AnnotationValue> values) {
+        String annotation = "@" + kind.annotation.getSimpleName();
         boolean valid = true;
         String name = "";
         String config = "";
         List<String> overrides = new ArrayList<>();
-        for (Map.Entry<String, AnnotationValue> entry : attributes.entrySet()) {
+        for (Map.Entry<String, AnnotationValue> entry : values.entrySet()) {
             String attribute = entry.getKey();
             Object value = entry.getValue().getValue();
+            String label = annotation + "." + attribute;
             switch (attribute) {
                 case "name" -> name = (String) value;
                 case "config" -> config = (String) value;
-                case "maxAttempts" -> {
-                    int attempts = (Integer) value;
-                    if (attempts < 1) {
-                        valid = invalid(method, "@Retry.maxAttempts must be at least 1, was " + attempts);
+                case "enabled" -> {
+                    if (value.equals("true") || value.equals("false")) {
+                        overrides.add("enabled(" + value + ")");
                     } else {
-                        overrides.add("maxAttempts(" + attempts + ")");
+                        valid = invalid(method, label + " must be \"\", \"true\" or \"false\", was \"" + value + "\"");
                     }
                 }
-                case "delay", "maxDelay", "maxDuration" -> {
+                case "classifier" -> valid = invalid(method, label + " is not supported yet.");
+                case "retryOn", "abortOn", "recordOn", "ignoreOn" ->
+                        overrides.add(attribute + "(java.util.List.of(" + classList(value) + "))");
+                case "maxAttempts", "windowSize", "minimumCalls", "halfOpenCalls" -> {
+                    int number = (Integer) value;
+                    if (number < 1) {
+                        valid = invalid(method, label + " must be at least 1, was " + number);
+                    } else {
+                        overrides.add(attribute + "(" + number + ")");
+                    }
+                }
+                case "delay", "maxDelay", "maxDuration", "slowCallDuration", "waitInOpen" -> {
                     try {
                         long nanos = Durations.parseNanos((String) value);
                         overrides.add(attribute + "(java.time.Duration.ofNanos(" + nanos + "L))");
                     } catch (IllegalArgumentException e) {
-                        valid = invalid(method, "@Retry." + attribute + " = \"" + value + "\" is not a valid duration: "
+                        valid = invalid(method, label + " = \"" + value + "\" is not a valid duration: "
                                 + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
                     }
                 }
                 case "multiplier" -> {
                     double multiplier = (Double) value;
                     if (!(multiplier >= 1) || Double.isInfinite(multiplier)) {
-                        valid = invalid(method, "@Retry.multiplier must be a finite number >= 1, was " + multiplier);
+                        valid = invalid(method, label + " must be a finite number >= 1, was " + multiplier);
                     } else {
                         overrides.add("multiplier(" + multiplier + ")");
                     }
                 }
-                case "backoff" -> overrides.add("backoff(" + CONFIG_TYPE + ".Backoff." + constant(value) + ")");
-                case "jitter" -> overrides.add("jitter(" + CONFIG_TYPE + ".Jitter." + constant(value) + ")");
-                case "retryOn", "abortOn" -> overrides.add(attribute + "(java.util.List.of(" + classList(value) + "))");
-                case "classifier" -> valid = invalid(method, "@Retry.classifier is not supported yet.");
-                case "enabled" -> {
-                    if (value.equals("true") || value.equals("false")) {
-                        overrides.add("enabled(" + value + ")");
+                case "failureRateThreshold", "slowCallRateThreshold" -> {
+                    float rate = (Float) value;
+                    if (!(rate > 0 && rate <= 100)) {
+                        valid = invalid(method, label + " must be a percentage > 0 and <= 100, was " + rate);
                     } else {
-                        valid = invalid(method, "@Retry.enabled must be \"\", \"true\" or \"false\", was \"" + value + "\"");
+                        overrides.add(attribute + "(" + rate + "f)");
                     }
                 }
-                default -> valid = invalid(method, "Unknown @Retry attribute " + attribute
+                case "backoff" -> overrides.add("backoff(" + kind.configType + ".Backoff." + constant(value) + ")");
+                case "jitter" -> overrides.add("jitter(" + kind.configType + ".Jitter." + constant(value) + ")");
+                case "windowType" -> {
+                    if (constant(value).equals("TIME")) {
+                        valid = invalid(method, label + " = TIME is not supported yet. Use COUNT.");
+                    } else {
+                        overrides.add("windowType(" + kind.configType + ".WindowType." + constant(value) + ")");
+                    }
+                }
+                default -> valid = invalid(method, "Unknown attribute " + label
                         + ". The processor and the annotations jar have different versions.");
             }
         }
@@ -264,13 +331,12 @@ public final class ResilienceProcessor extends AbstractProcessor {
             return null;
         }
         String instanceId = iface.getQualifiedName() + "#" + method.getSimpleName() + "(" + erasedParameters(type) + ")";
-        return new RetryModel(instanceId, name, config, overrides);
+        return new PolicyModel(instanceId, name, config, overrides);
     }
 
     private void write(TypeElement iface, String binaryName, List<MethodModel> methods) {
         String packageName = elements.getPackageOf(iface).getQualifiedName().toString();
         String simpleName = (packageName.isEmpty() ? binaryName : binaryName.substring(packageName.length() + 1)) + SUFFIX;
-        String typeParameters = typeParameters(iface.getTypeParameters());
         String typeArguments = iface.getTypeParameters().isEmpty() ? ""
                 : iface.getTypeParameters().stream().map(p -> p.getSimpleName().toString())
                         .collect(Collectors.joining(", ", "<", ">"));
@@ -282,12 +348,12 @@ public final class ResilienceProcessor extends AbstractProcessor {
             out.append("package ").append(packageName).append(";\n\n");
         }
         out.append("@SuppressWarnings({\"deprecation\", \"removal\"})\n");
-        out.append("public final class ").append(simpleName).append(typeParameters)
+        out.append("public final class ").append(simpleName).append(typeParameters(iface.getTypeParameters()))
                 .append(" implements ").append(ifaceType).append(" {\n\n");
         out.append("    private final ").append(ifaceType).append(" delegate;\n");
         for (int i = 0; i < methods.size(); i++) {
-            if (methods.get(i).retry() != null) {
-                out.append("    private final ").append(POLICY_TYPE).append(" retry").append(i).append(";\n");
+            for (Kind kind : methods.get(i).policies().keySet()) {
+                out.append("    private final ").append(kind.policyType).append(' ').append(kind.field).append(i).append(";\n");
             }
         }
         out.append("\n    public ").append(simpleName).append("(").append(ifaceType).append(" delegate, ")
@@ -295,11 +361,13 @@ public final class ResilienceProcessor extends AbstractProcessor {
         out.append("        this.delegate = java.util.Objects.requireNonNull(delegate, \"delegate\");\n");
         out.append("        java.util.Objects.requireNonNull(registry, \"registry\");\n");
         for (int i = 0; i < methods.size(); i++) {
-            RetryModel retry = methods.get(i).retry();
-            if (retry != null) {
-                out.append("        this.retry").append(i).append(" = registry.retryPolicy(")
-                        .append(literal(retry.instanceId())).append(", ").append(literal(retry.name())).append(", ")
-                        .append(literal(retry.config())).append(", ").append(overrides(retry.overrides())).append(");\n");
+            for (Map.Entry<Kind, PolicyModel> entry : methods.get(i).policies().entrySet()) {
+                Kind kind = entry.getKey();
+                PolicyModel policy = entry.getValue();
+                out.append("        this.").append(kind.field).append(i).append(" = registry.").append(kind.registryMethod)
+                        .append('(').append(literal(policy.instanceId())).append(", ").append(literal(policy.name()))
+                        .append(", ").append(literal(policy.config())).append(", ").append(overrides(policy.overrides()))
+                        .append(");\n");
             }
         }
         out.append("    }\n");
@@ -333,6 +401,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             parameters.add(parameterType + " p" + i);
             arguments.add("p" + i);
         }
+        String returnType = TypePrinter.print(type.getReturnType());
         boolean isVoid = type.getReturnType().getKind() == TypeKind.VOID;
         String call = "this.delegate." + method.getSimpleName() + "(" + String.join(", ", arguments) + ")";
 
@@ -340,35 +409,78 @@ public final class ResilienceProcessor extends AbstractProcessor {
         if (!type.getTypeVariables().isEmpty()) {
             out.append(methodTypeVariables(type.getTypeVariables())).append(' ');
         }
-        out.append(TypePrinter.print(type.getReturnType())).append(' ').append(method.getSimpleName())
+        out.append(returnType).append(' ').append(method.getSimpleName())
                 .append('(').append(String.join(", ", parameters)).append(')');
         if (!type.getThrownTypes().isEmpty()) {
             out.append(" throws ").append(TypePrinter.join(type.getThrownTypes(), ", "));
         }
         out.append(" {\n");
-        if (model.retry() == null) {
-            out.append("        ").append(isVoid ? "" : "return ").append(call).append(";\n");
-        } else {
-            out.append("        final ").append(POLICY_TYPE).append(" r4c$retry = this.retry").append(index).append(";\n");
-            out.append("        final long r4c$start = r4c$retry.start();\n");
-            out.append("        int r4c$attempts = 0;\n");
-            out.append("        while (true) {\n");
-            out.append("            try {\n");
-            if (isVoid) {
-                out.append("                ").append(call).append(";\n");
-                out.append("                return;\n");
-            } else {
-                out.append("                return ").append(call).append(";\n");
-            }
-            out.append("            } catch (java.lang.Throwable r4c$e) {\n");
-            out.append("                final long r4c$delay = r4c$retry.onFailure(++r4c$attempts, r4c$e, r4c$start);\n");
-            out.append("                if (r4c$delay < 0 || !r4c$retry.pause(r4c$delay)) {\n");
-            out.append("                    throw r4c$e;\n");
-            out.append("                }\n");
-            out.append("            }\n");
-            out.append("        }\n");
+        for (String line : body(model.policies().keySet(), index, call, isVoid, returnType)) {
+            out.append(line.isEmpty() ? "" : "        " + line).append('\n');
         }
         out.append("    }\n");
+    }
+
+    /** Builds the method body from the inside out: the call, then each policy around it. */
+    private static List<String> body(Set<Kind> kinds, int index, String call, boolean isVoid, String returnType) {
+        List<String> block = isVoid ? List.of(call + ";") : List.of("return " + call + ";");
+        if (kinds.contains(Kind.CIRCUIT_BREAKER)) {
+            block = circuitBreaker(index, call, isVoid, returnType);
+        }
+        if (kinds.contains(Kind.RETRY)) {
+            block = retry(index, block, isVoid);
+        }
+        return block;
+    }
+
+    private static List<String> circuitBreaker(int index, String call, boolean isVoid, String returnType) {
+        String policy = Kind.CIRCUIT_BREAKER.policyType;
+        List<String> lines = new ArrayList<>();
+        lines.add("final " + policy + " r4c$cb = this." + Kind.CIRCUIT_BREAKER.field + index + ";");
+        lines.add("final long r4c$cbToken = r4c$cb.acquire();");
+        lines.add("if (r4c$cbToken < 0) {");
+        lines.add("    throw r4c$cb.rejection();");
+        lines.add("}");
+        lines.add("final long r4c$cbStart = r4c$cb.startTimer();");
+        lines.add("try {");
+        if (isVoid) {
+            lines.add("    " + call + ";");
+            lines.add("    r4c$cb.onSuccess(r4c$cbToken, r4c$cbStart);");
+            lines.add("    return;");
+        } else {
+            lines.add("    final " + returnType + " r4c$result = " + call + ";");
+            lines.add("    r4c$cb.onSuccess(r4c$cbToken, r4c$cbStart);");
+            lines.add("    return r4c$result;");
+        }
+        lines.add("} catch (java.lang.Throwable r4c$cbError) {");
+        lines.add("    r4c$cb.onFailure(r4c$cbToken, r4c$cbStart, r4c$cbError);");
+        lines.add("    throw r4c$cbError;");
+        lines.add("}");
+        return lines;
+    }
+
+    private static List<String> retry(int index, List<String> inner, boolean isVoid) {
+        String policy = Kind.RETRY.policyType;
+        List<String> lines = new ArrayList<>();
+        lines.add("final " + policy + " r4c$retry = this." + Kind.RETRY.field + index + ";");
+        lines.add("final long r4c$start = r4c$retry.start();");
+        lines.add("int r4c$attempts = 0;");
+        lines.add("while (true) {");
+        lines.add("    try {");
+        for (String line : inner) {
+            lines.add("        " + line);
+        }
+        if (isVoid && inner.size() == 1) {
+            lines.add("        return;"); // the bare call has no return of its own
+        }
+        lines.add("    } catch (java.lang.Throwable r4c$e) {");
+        lines.add("        final long r4c$delay = r4c$retry.onFailure(++r4c$attempts, r4c$e, r4c$start);");
+        lines.add("        if (r4c$delay < 0 || !r4c$retry.pause(r4c$delay)) {");
+        lines.add("            throw r4c$e;");
+        lines.add("        }");
+        lines.add("    }");
+        lines.add("}");
+        return lines;
     }
 
     private static String typeParameters(List<? extends TypeParameterElement> parameters) {
@@ -387,7 +499,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         for (TypeVariable variable : variables) {
             TypeMirror bound = variable.getUpperBound();
             List<? extends TypeMirror> bounds = bound.getKind() == TypeKind.INTERSECTION
-                    ? ((javax.lang.model.type.IntersectionType) bound).getBounds() : List.of(bound);
+                    ? ((IntersectionType) bound).getBounds() : List.of(bound);
             declarations.add(variable.asElement().getSimpleName() + bounds(bounds));
         }
         return "<" + String.join(", ", declarations) + ">";
@@ -459,9 +571,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
         messager.printMessage(Diagnostic.Kind.ERROR, message, element);
     }
 
-    private record MethodModel(ExecutableElement method, ExecutableType type, RetryModel retry) {
+    private record MethodModel(ExecutableElement method, ExecutableType type, Map<Kind, PolicyModel> policies) {
     }
 
-    private record RetryModel(String instanceId, String name, String config, List<String> overrides) {
+    private record PolicyModel(String instanceId, String name, String config, List<String> overrides) {
     }
 }

@@ -41,11 +41,12 @@ resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit 
 | Pieza | Estado |
 |---|---|
 | `@Retry` | **Terminado de punta a punta**: anotación, validación y generación en el procesador, runtime `RetryPolicy`, registry con valores por defecto y configuraciones con nombre, anotaciones compuestas, combinación entre interfaz y método |
-| `@CircuitBreaker`, `@Timeout`, `@Bulkhead`, `@RateLimiter`, `@Fallback` | Solo las anotaciones |
-| Retornos async (`CompletionStage`), `classifier`, clases anotadas | El procesador los rechaza con un error explícito de "todavía no soportado" |
+| `@CircuitBreaker` | **Terminado de punta a punta** con ventana por cantidad: máquina de estados sin locks, sondeos en half-open, llamadas lentas, `recordOn`/`ignoreOn`, instancias compartidas por `name`, anidado dentro de `@Retry`. Pendiente: ventana por tiempo, `forceOpen`/`disable`, espera máxima en half-open |
+| `@Timeout`, `@Bulkhead`, `@RateLimiter`, `@Fallback` | Solo las anotaciones |
+| Retornos async (`CompletionStage`), `classifier`, clases anotadas, `windowType = TIME` | El procesador los rechaza con un error explícito de "todavía no soportado" |
 | Configuración externa (módulo `config`), perfiles, `extends` | Sin empezar |
 | Registro como procesador incremental de Gradle | Pendiente: los proyectos que usan el procesador recompilan todo |
-| Benchmarks JMH | Retry vs Resilience4j medido con uno y con cuatro servicios, un solo thread ([benchmarks](benchmarks.md)). jcstress sin empezar |
+| Benchmarks JMH | Retry (uno y cuatro servicios) y circuit breaker (1 y 4 threads) vs Resilience4j ([benchmarks](benchmarks.md)). jcstress sin empezar |
 
 ## Preguntas abiertas
 

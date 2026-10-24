@@ -30,10 +30,13 @@ public record RetryConfig(
         List<Class<? extends Throwable>> retryOn,
         List<Class<? extends Throwable>> abortOn) {
 
-    /** Built-in defaults: 3 attempts, exponential backoff from 200 ms up to 10 s, full jitter. */
+    /**
+     * Built-in defaults: 3 attempts, exponential backoff from 200 ms up to 10 s, full jitter. Calls
+     * rejected by an open circuit breaker ({@link CallNotPermittedException}) are not retried.
+     */
     public static final RetryConfig DEFAULTS = new RetryConfig(
             true, 3, Duration.ofMillis(200), Backoff.EXPONENTIAL, 2.0, Duration.ofSeconds(10),
-            Jitter.FULL, Duration.ZERO, List.of(Exception.class), List.of());
+            Jitter.FULL, Duration.ZERO, List.of(Exception.class), List.of(CallNotPermittedException.class));
 
     /** How the delay grows between attempts. */
     public enum Backoff {

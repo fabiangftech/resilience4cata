@@ -1,7 +1,6 @@
 package dev.resilience4cata.processor;
 
 import dev.resilience4cata.annotation.ResiliencePolicy;
-import dev.resilience4cata.annotation.Retry;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
@@ -22,25 +21,38 @@ import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 
 /**
- * Collects the {@code @Retry} attributes that are explicitly set on an element, directly or through
- * composed annotations marked with {@code @ResiliencePolicy}. Attributes left at their "unset"
- * value are ignored, so they never override anything.
+ * Collects the attributes of one policy annotation (for example {@code @Retry}) that are explicitly
+ * set on an element, directly or through composed annotations marked with {@code @ResiliencePolicy}.
+ * Attributes left at their "unset" value are ignored, so they never override anything.
  */
-final class RetryAttributes {
+final class PolicyAttributes {
 
-    static final String RETRY = Retry.class.getCanonicalName();
     static final String POLICY = ResiliencePolicy.class.getCanonicalName();
 
     private final Messager messager;
+    private final String annotation;
+    private final String simpleName;
     private final Set<String> reported = new HashSet<>();
 
-    RetryAttributes(Messager messager) {
+    PolicyAttributes(Messager messager, Class<?> annotation) {
         this.messager = messager;
+        this.annotation = annotation.getCanonicalName();
+        this.simpleName = annotation.getSimpleName();
+    }
+
+    /** The annotation's simple name, for messages: {@code "Retry"}. */
+    String simpleName() {
+        return simpleName;
+    }
+
+    /** The annotation's qualified name. */
+    String annotation() {
+        return annotation;
     }
 
     /**
-     * Returns the explicitly set attributes, or empty if the element has no {@code @Retry} at all.
-     * A direct {@code @Retry} wins over composed annotations. Two composed annotations that set the
+     * Returns the explicitly set attributes, or empty if the element does not use the annotation at
+     * all. A direct annotation wins over composed annotations. Two composed annotations that set the
      * same attribute to different values are reported as an error.
      */
     Optional<Map<String, AnnotationValue>> on(Element element) {
@@ -55,7 +67,7 @@ final class RetryAttributes {
         for (AnnotationMirror mirror : element.getAnnotationMirrors()) {
             TypeElement type = (TypeElement) mirror.getAnnotationType().asElement();
             String name = type.getQualifiedName().toString();
-            if (name.equals(RETRY)) {
+            if (name.equals(annotation)) {
                 direct = explicitValues(mirror);
                 present = true;
             } else if (hasAnnotation(type, POLICY)) {
@@ -72,7 +84,7 @@ final class RetryAttributes {
                 for (Map.Entry<String, AnnotationValue> entry : bundle.get().entrySet()) {
                     AnnotationValue previous = composed.putIfAbsent(entry.getKey(), entry.getValue());
                     if (previous != null && !previous.toString().equals(entry.getValue().toString())) {
-                        String message = "@Retry." + entry.getKey()
+                        String message = "@" + simpleName + "." + entry.getKey()
                                 + " is set to " + previous + " by @" + composedSource.get(entry.getKey())
                                 + " and to " + entry.getValue() + " by @" + type.getSimpleName()
                                 + ". Set it directly on the element to resolve the conflict.";
@@ -121,6 +133,9 @@ final class RetryAttributes {
         }
         if (v instanceof Double d) {
             return d == -1;
+        }
+        if (v instanceof Float f) {
+            return f == -1;
         }
         if (v instanceof String s) {
             return s.isEmpty();

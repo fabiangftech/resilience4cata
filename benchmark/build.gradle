@@ -9,4 +9,5 @@ dependencies {
     compileOnly project(':annotations')
     annotationProcessor project(':processor')
     implementation libs.resilience4j.retry
+    implementation libs.resilience4j.circuitbreaker
 }

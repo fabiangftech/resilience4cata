@@ -135,7 +135,7 @@ class ResilienceProcessorTest {
                 }
                 """);
 
-        assertThat(result.errors()).singleElement().asString().contains("CompletionStage is not supported yet");
+        assertThat(result.errors()).singleElement().asString().contains("CompletionStage are not supported yet");
     }
 
     @Test
@@ -220,6 +220,64 @@ class ResilienceProcessorTest {
         assertThat(result.errors()).isEmpty();
         assertThat(result.generatedSource("demo.Client$Resilient"))
                 .contains("public java.lang.String call(java.util.List<java.lang.String> p0)");
+    }
+
+    @Test
+    void nestsTheCircuitBreakerInsideTheRetry() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.CircuitBreaker;
+                import dev.resilience4cata.annotation.Retry;
+                public interface Client {
+                    @Retry(maxAttempts = 3)
+                    @CircuitBreaker(windowSize = 10, failureRateThreshold = 25, waitInOpen = "30s")
+                    String call();
+                    @CircuitBreaker
+                    void fireAndForget();
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        String generated = result.generatedSource("demo.Client$Resilient");
+        assertThat(generated)
+                .contains("r4c$b.windowSize(10);")
+                .contains("r4c$b.failureRateThreshold(25.0f);")
+                .contains("r4c$b.waitInOpen(java.time.Duration.ofNanos(30000000000L));");
+        int retryLoop = generated.indexOf("while (true)");
+        int acquire = generated.indexOf("r4c$cb.acquire()");
+        assertThat(retryLoop).isPositive().isLessThan(acquire);
+    }
+
+    @Test
+    void rejectsInvalidCircuitBreakerValues() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.CircuitBreaker;
+                public interface Client {
+                    @CircuitBreaker(windowSize = 0, failureRateThreshold = 150, waitInOpen = "soon")
+                    String call();
+                }
+                """);
+
+        assertThat(result.errors()).hasSize(3)
+                .anySatisfy(e -> assertThat(e).contains("@CircuitBreaker.windowSize must be at least 1"))
+                .anySatisfy(e -> assertThat(e).contains("@CircuitBreaker.failureRateThreshold must be a percentage"))
+                .anySatisfy(e -> assertThat(e).contains("@CircuitBreaker.waitInOpen = \"soon\" is not a valid duration"));
+    }
+
+    @Test
+    void rejectsTimeWindowsForNow() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.CircuitBreaker;
+                import dev.resilience4cata.annotation.WindowType;
+                public interface Client {
+                    @CircuitBreaker(windowType = WindowType.TIME)
+                    String call();
+                }
+                """);
+
+        assertThat(result.errors()).singleElement().asString().contains("TIME is not supported yet");
     }
 
     private static String bundle(String name, String attributes) {
