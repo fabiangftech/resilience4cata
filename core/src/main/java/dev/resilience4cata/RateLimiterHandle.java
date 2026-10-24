@@ -14,4 +14,7 @@ public interface RateLimiterHandle {
      * {@code permits}. A snapshot: concurrent calls change it immediately.
      */
     int availablePermits();
+
+    /** Reads the current state into a record. */
+    RateLimiterSnapshot snapshot();
 }

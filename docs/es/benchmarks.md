@@ -194,3 +194,98 @@ Misma máquina y configuración. Se corrió después de integrar el trabajo en p
 El costo sobre la línea base baja de unos 14,5 a 12 ns con un thread. Un CAS solo release sería todavía más barato, pero permite una interrupción antes de tiempo (ver el comentario en `TimeoutPolicy.end`), así que no se usa.
 
 **Bulkhead, camino sincrónico después de la cola de espera async** (`BulkheadBenchmark`): `exit()` con `maxWait > 0` hace ahora una lectura volatile más, para ver si hay llamadas async en cola. Sin costo medible: *Waiting* 23,1 ± 0,05 ns (antes 23,2) con un thread y 442 ± 3 ns (antes 447) con cuatro; *Free* 9,2 ns y *Full* 2,2 ns, sin cambios.
+
+## Corridas en paralelo en AWS (`infra/`)
+
+`infra/bench.sh <rev-base> <rev-nueva> [regex-de-inclusión]` corre todos los benchmarks en máquinas EC2 temporales, en paralelo, y compara dos revisiones de git. Una corrida completa (150 unidades de benchmark por cantidad de threads, 283 ejecuciones de JMH) tarda unos 20 minutos de punta a punta, en lugar de unas 3 horas en una sola máquina, y cuesta bastante menos de US$1.
+
+- **Preparación.** Cada revisión se compila en local en un clon limpio; el classpath de ejecución de sus benchmarks se empaqueta y se sube a un bucket S3 propio de la corrida, así las máquinas solo instalan un JDK (Amazon Corretto 21) y ejecutan `org.openjdk.jmh.Main`. Terraform (`infra/main.tf`) crea una VPC descartable, el bucket, un rol de instancia limitado a ese bucket, y las máquinas; `bench.sh` destruye todo al final, también si algo falla.
+- **Comparación justa.** Una unidad es un método de benchmark con una cantidad de threads. Sus ejecuciones base y nueva corren seguidas en la misma máquina (alternando cuál va primero), así cada comparación base/nueva se hace sobre el mismo hardware. Las unidades se reparten de la más larga a la más corta, cada una a la máquina menos cargada (`infra/plan.py`).
+- **Hardware.** `c7g.xlarge`: 4 cores Graviton3 sin SMT y con frecuencia fija (sin turbo), lo que hace intercambiables a las máquinas: cada una corre además un benchmark de calibración (`BulkheadBenchmark.resilience4cataFree`, 1 thread), y en 19 máquinas midió entre 20,45 y 20,47 ns (0,1 % de dispersión). La configuración de JMH es la de los propios benchmarks (3 forks × 5 × 1 s de calentamiento y de medición, `-prof gc`).
+- **Límites de la cuenta.** Esta cuenta permite solo 3 instancias spot a la vez (aparte de su cuota de 96 vCPU spot) y 64 vCPU on-demand, así que una corrida usa 3 máquinas spot y 16 on-demand del mismo tipo (`MACHINES`, `SPOT_MACHINES`).
+- Los números de Graviton no se comparan con los de Apple Silicon de las secciones anteriores; se compara base contra nueva dentro de una misma corrida.
+
+## Cierre del MVP: classifier, pipeline, eventos, testkit (2026-10-24, AWS Graviton3)
+
+Base: commit `3bc496f`. Nueva: el trabajo integrado del classifier, el `Pipeline` programático, eventos y snapshots, y el testkit (`PolicyEnvironment`). Medido con `infra/bench.sh` como se describe arriba. Dos regresiones que aparecieron en la primera corrida se corrigieron y se volvieron a medir; la tabla muestra los números finales.
+
+**Chequeo de regresiones** (resilience4cata, ns/op; todo 0 B/op en los caminos sincrónicos):
+
+| Benchmark | Threads | Base | Nueva | Cambio |
+|---|---:|---:|---:|---:|
+| Retry, éxito | 1 | 1.4 ± 0.0 | 1.2 ± 0.1 | −11% |
+| Retry, éxito | 4 | 1.3 ± 0.0 | 1.4 ± 0.1 | +3% |
+| Retry, un reintento | 1 | 7.3 ± 0.1 | 6.5 ± 0.1 | −11% |
+| Retry, un reintento | 4 | 7.3 ± 0.1 | 6.6 ± 0.1 | −10% |
+| Retry, cuatro servicios, un reintento | 1 | 38.4 ± 0.1 | 38.8 ± 0.1 | +1% |
+| Retry, cuatro servicios, un reintento | 4 | 39.2 ± 0.6 | 37.6 ± 1.2 | −4% |
+| Circuit breaker, éxito | 1 | 1.9 ± 0.0 | 1.9 ± 0.0 | 0% |
+| Circuit breaker, éxito | 4 | 1.9 ± 0.0 | 1.9 ± 0.0 | 0% |
+| Circuit breaker, mixto | 1 | 17.5 ± 0.1 | 17.2 ± 0.0 | −2% |
+| Circuit breaker, mixto | 4 | 282 ± 10 | 274 ± 29 | −3% |
+| Circuit breaker (ventana por tiempo), mixto | 4 | 126 ± 9 | 130 ± 10 | +3% |
+| Rate limiter, libre | 1 | 42.2 ± 0.1 | 41.8 ± 0.1 | −1% |
+| Rate limiter, libre | 4 | 188 ± 2 | 187 ± 2 | 0% |
+| Rate limiter, agotado | 4 | 35.0 ± 0.3 | 34.7 ± 0.2 | −1% |
+| Bulkhead, libre | 1 | 20.5 ± 0.0 | 20.5 ± 0.0 | 0% |
+| Bulkhead, lleno (rechazando) | 1 | 2.1 ± 0.1 | 2.3 ± 0.0 | **+12%** |
+| Bulkhead, lleno (rechazando) | 4 | 2.0 ± 0.0 | 2.3 ± 0.0 | **+15%** |
+| Bulkhead, modo con espera | 1 | 18.9 ± 0.0 | 18.9 ± 0.0 | 0% |
+| Bulkhead, modo con espera | 4 | 359 ± 36 | 338 ± 38 | −6% |
+| Timeout (sincrónico) | 1 | 22.4 ± 0.2 | 22.2 ± 0.2 | −1% |
+| Timeout (sincrónico) | 4 | 23.5 ± 0.3 | 23.5 ± 0.5 | 0% |
+| Circuit breaker async | 1 | 24.4 ± 0.1 | 24.4 ± 0.1 | 0% |
+| Retry async | 1 | 24.1 ± 0.1 | 24.1 ± 0.1 | 0% |
+| Rate limiter async | 4 | 275 ± 1 | 273 ± 6 | −1% |
+| Timeout async, stage pendiente | 1 | 152 ± 17 | 152 ± 12 | 0% |
+| Stack async (cinco políticas) | 1 | 122 ± 0.3 | 122 ± 0.2 | 0% |
+
+- **Los rechazos del bulkhead cuestan 0,3 ns más** (medido también en Apple Silicon: 2,06 → 2,36 ns). Un bulkhead lleno ahora revisa el campo `final` del listener de eventos antes de devolver `false`: es el precio de los eventos de rechazo. Los caminos exitosos no tienen esa revisión.
+- **Corregido: fallas de retry bajo contención.** La primera corrida mostró *cuatro servicios, un reintento* con 4 threads pasando de 37 a 57 ± 22 ns, con forks repartidos entre ~40 y 60–85 ns. `RetryPolicy` había sumado un segundo `ClassValue` (para el veredicto del classifier) que sin classifier nunca se consultaba. Todos los `ClassValue` comparten la pequeña caché de búsqueda de la clase de la excepción, y en algunas JVM el `ClassValue` extra hacía que las búsquedas chocaran y cayeran al camino lento de `ClassValue`, que escribe en esa caché compartida. Un solo `ClassValue` por política, que devuelve un veredicto de tres valores, devolvió forks parejos (39,2 → 37,6 ns).
+- **Corregido: timeout sincrónico, un thread** (22,4 → 23,8 ns, reproducido dos veces). La rama de timeout de `TimeoutPolicy.end` había crecido con la llamada del evento, lo que afecta cómo el JIT inlinea el método que corre en cada llamada. Mover esa rama a su propio método la dejó otra vez en 22,2 ns.
+- En la primera corrida, *Bulkhead, modo con espera* con 4 threads dio 366 → 452 ns; una repetición dio 359 → 338 ns, así que esa diferencia era ruido entre ejecuciones de la JVM, no una regresión.
+
+**Contra Resilience4j 2.4.0 en Graviton3** (revisión nueva, ns/op y B/op):
+
+| Benchmark | Threads | resilience4cata | Resilience4j |
+|---|---:|---:|---:|
+| Retry, éxito | 1 | **1.2 ns**, 0 B | 22.9 ns, 0 B |
+| Retry, un reintento (Resilience4j sin su `sleep(0)`) | 1 | **6.5 ns**, 0 B | 61.6 ns, 16 B |
+| Circuit breaker, éxito (Resilience4j: ventana por cantidad, estrategia `SYNCHRONIZED` por defecto) | 1 | **1.9 ns**, 0 B | 89.2 ns, 0 B |
+| Circuit breaker, éxito | 4 | **1.9 ns**, 0 B | 832 ns, 2 B |
+| Circuit breaker, mixto | 4 | **274 ns**, 0 B | 910 ns, 2 B |
+| Rate limiter, libre | 4 | **187 ns**, 0 B | 275 ns, 40 B |
+| Rate limiter, agotado | 4 | **34.7 ns**, 0 B | 1599 ns, 505 B |
+| Bulkhead, libre | 1 | 20.5 ns, 0 B | 20.4 ns, 0 B |
+| Bulkhead, libre | 4 | **264 ns**, 0 B | 432 ns, 0 B |
+| Bulkhead, lleno | 1 | **2.3 ns**, 0 B | 139 ns, 416 B |
+| Timeout (sincrónico) | 1 | **22.2 ns**, 0 B | 8842 ns, 176 B |
+| Timeout async, stage pendiente | 1 | **152 ns**, 192 B | 598 ns, 240 B |
+| Timeout async, stage pendiente | 4 | **369 ns**, 192 B | 1563 ns, 234 B |
+
+**Classifier** (`ClassifierBenchmark`: un classifier por resultado sobre la llamada protegida; todas las llamadas son exitosas):
+
+| Benchmark | Threads | resilience4cata | Resilience4j |
+|---|---:|---:|---:|
+| Circuit breaker, sin classifier | 1 | 2.1 ns, 0 B | — |
+| Circuit breaker + classifier | 1 | **2.4 ns**, 0 B | 102 ns, 24 B (`recordResult`) |
+| Circuit breaker + classifier | 4 | **2.4 ns**, 0 B | 902 ns, 18 B |
+| Retry + circuit breaker + classifier | 1 | **2.7 ns**, 0 B | 148 ns, 104 B (`retryOnResult` + `recordResult`) |
+| Retry + circuit breaker + classifier | 4 | **2.8 ns**, 0 B | 1274 ns, 90 B |
+
+Un classifier cuesta unos 0,3 ns por política en una llamada exitosa: una llamada directa y monomórfica a `classify`.
+
+**`Pipeline` programático** (`PipelineBenchmark`, ns/op; el código generado y el pipeline asignan 0 B):
+
+| Políticas | Threads | Generado (anotaciones) | `Pipeline` | Resilience4j |
+|---|---:|---:|---:|---:|
+| Retry + circuit breaker | 1 | 2.3 | 2.9 | 175, 288 B |
+| Retry + circuit breaker | 4 | 2.4 | 3.0 | 1647, 830 B |
+| Retry, breaker, rate limiter, bulkhead | 1 | 61.6 | 62.3 | 261, 328 B |
+| Retry, breaker, rate limiter, bulkhead | 4 | 318 | 294 | 1234, 350 B |
+| Las seis políticas | 1 | 76.3 | 80.3 | — |
+| Lambda que captura (retry + breaker) | 1 | 2.4 | 2.8 | 190, 336 B |
+
+- El pipeline agrega unos 0,5 ns sobre el código generado en estos stacks y sigue sin asignar memoria, también con una lambda que captura un argumento en cada llamada (el escape analysis la elimina).
+- `pipelinePolluted` (el mismo pipeline después de que otros cinco pipelines pasaron por `Pipeline.execute`) mide 7,9 ns con un thread contra 2,9 ns sin contaminar: el único punto de llamada `call.call()` dentro de `Pipeline` se vuelve megamórfico en una aplicación con muchos pipelines. El código generado tiene un punto de llamada por método y no paga ese costo.
+- Resilience4j no tiene un timeout sincrónico en el thread del llamador, así que no hay columna de Resilience4j para seis políticas.

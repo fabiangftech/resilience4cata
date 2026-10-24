@@ -19,4 +19,7 @@ public interface BulkheadHandle {
      * stale by the time it is read.
      */
     int waitingCalls();
+
+    /** Reads the current counts into a record. */
+    BulkheadSnapshot snapshot();
 }

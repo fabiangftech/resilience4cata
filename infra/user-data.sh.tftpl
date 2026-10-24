@@ -1,0 +1,42 @@
+#!/bin/bash
+# Runs this machine's share of the plan, uploads each result as soon as it exists, and powers off
+# (instance_initiated_shutdown_behavior = terminate, so powering off deletes the machine).
+set -uo pipefail
+exec > /var/log/r4c-bench.log 2>&1
+
+BUCKET='${bucket}'
+RESULTS="s3://$BUCKET/results/${name}"
+
+finish() {
+  aws s3 cp /var/log/r4c-bench.log "$RESULTS/log.txt" || true
+  printf "" | aws s3 cp - "$RESULTS/done" || true  # /dev/null uploads nothing with CLI v2
+  shutdown -h now
+}
+trap finish EXIT
+
+# Safety net: never run longer than max_minutes, even if a benchmark hangs.
+( sleep $((${max_minutes} * 60)); aws s3 cp /var/log/r4c-bench.log "$RESULTS/log.txt"; shutdown -h now ) &
+
+dnf install -y -q java-21-amazon-corretto-headless
+lscpu > /tmp/lscpu.txt && aws s3 cp /tmp/lscpu.txt "$RESULTS/lscpu.txt"
+
+for v in base new; do
+  mkdir -p "/opt/$v"
+  aws s3 cp "s3://$BUCKET/src/$v.tar.gz" - | tar xz -C "/opt/$v"
+done
+
+# version|threads|id|regex, in the planned order.
+cat > /tmp/runs.txt <<'RUNS'
+${runs}
+RUNS
+
+while IFS='|' read -r version threads id pattern; do
+  [ -n "$version" ] || continue
+  echo "== $(date +%T) $id"
+  cd "/opt/$version"
+  java -cp "$(cat classpath.txt)" org.openjdk.jmh.Main "$pattern" ${jmh_options} -t "$threads" \
+      -rf json -rff "/tmp/$id.json" > "/tmp/$id.txt" 2>&1 < /dev/null
+  aws s3 cp "/tmp/$id.json" "$RESULTS/$id.json" || true
+  aws s3 cp "/tmp/$id.txt" "$RESULTS/$id.txt" || true
+done < /tmp/runs.txt
+echo "== $(date +%T) all runs finished"

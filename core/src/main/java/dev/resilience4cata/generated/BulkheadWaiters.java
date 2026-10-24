@@ -4,7 +4,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Future;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -70,7 +70,7 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
             try {
                 MethodHandles.Lookup lookup = MethodHandles.lookup();
                 STATE = lookup.findVarHandle(Waiter.class, "state", int.class);
-                TIMER = lookup.findVarHandle(Waiter.class, "timer", ScheduledFuture.class);
+                TIMER = lookup.findVarHandle(Waiter.class, "timer", Future.class);
             } catch (ReflectiveOperationException e) {
                 throw new ExceptionInInitializerError(e);
             }
@@ -88,7 +88,7 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
         private volatile int state;
 
         @SuppressWarnings("unused") // accessed through TIMER
-        private volatile @Nullable ScheduledFuture<?> timer;
+        private volatile @Nullable Future<?> timer;
 
         Waiter(AsyncCall<T> call, BulkheadWaiters owner, BulkheadPolicy policy) {
             this.call = call;
@@ -113,7 +113,7 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
             return (int) STATE.getVolatile(this) != WAITING;
         }
 
-        void setTimer(@Nullable ScheduledFuture<?> scheduled) {
+        void setTimer(@Nullable Future<?> scheduled) {
             TIMER.setVolatile(this, scheduled);
             if (scheduled != null && isClaimed()) {
                 scheduled.cancel(false); // claimed before the timer was published: the claimer could not cancel it
@@ -121,7 +121,7 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
         }
 
         void cancelTimer() {
-            ScheduledFuture<?> scheduled = (ScheduledFuture<?>) TIMER.getVolatile(this);
+            Future<?> scheduled = (Future<?>) TIMER.getVolatile(this);
             if (scheduled != null) {
                 scheduled.cancel(false);
             }
@@ -132,6 +132,7 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
         public void run() {
             if (claim()) {
                 owner.queue.remove(this); // so that waiters timing out on a stuck bulkhead do not pile up
+                policy.rejected();
                 result.completeExceptionally(policy.rejection());
             }
         }

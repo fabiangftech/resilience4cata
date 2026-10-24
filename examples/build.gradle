@@ -6,6 +6,7 @@ description = 'Runnable examples. Not published: their tests check the generated
 
 dependencies {
     testImplementation project(':core')
+    testImplementation project(':testkit')
     testCompileOnly project(':annotations')
     testAnnotationProcessor project(':processor')
 }

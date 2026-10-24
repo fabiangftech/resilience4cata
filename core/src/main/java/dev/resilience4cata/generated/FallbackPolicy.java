@@ -1,6 +1,7 @@
 package dev.resilience4cata.generated;
 
 import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.event.FallbackEvent;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.util.List;
 import java.util.Objects;
@@ -27,6 +28,8 @@ public final class FallbackPolicy {
     private final List<Class<? extends Throwable>> applyOn;
     private final List<Class<? extends Throwable>> skipOn;
     private final Classification classification = new Classification();
+    private final @Nullable EventSink<FallbackEvent.Applied> applied;
+    private final java.util.function.LongSupplier ticker;
 
     /**
      * Creates the policy for one method.
@@ -37,9 +40,24 @@ public final class FallbackPolicy {
      */
     public FallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
             List<Class<? extends Throwable>> skipOn) {
+        this(instanceId, applyOn, skipOn, PolicyEnvironment.DEFAULT);
+    }
+
+    /**
+     * Creates the policy for one method, publishing {@link FallbackEvent}s to the environment's listeners.
+     *
+     * @param instanceId id of the method, {@code <interface>#<method>(<parameter types>)}
+     * @param applyOn failures that get the fallback
+     * @param skipOn failures that never get the fallback; wins over {@code applyOn}
+     * @param environment the clock and the event listeners
+     */
+    public FallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
+            List<Class<? extends Throwable>> skipOn, PolicyEnvironment environment) {
         this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
         this.applyOn = List.copyOf(applyOn);
         this.skipOn = List.copyOf(skipOn);
+        this.applied = environment.events.sink(FallbackEvent.Applied.class, instanceId);
+        this.ticker = environment.ticker;
     }
 
     /** Returns the method's id. */
@@ -49,13 +67,19 @@ public final class FallbackPolicy {
 
     /**
      * Whether the fallback applies to a failure: it is an instance of an {@code applyOn} type and of no
-     * {@code skipOn} type. Cached per exception class.
+     * {@code skipOn} type. Cached per exception class. Generated code calls it once per failure, right
+     * before running the fallback, so this is where {@link FallbackEvent.Applied} is published.
      *
      * @param failure the failure
      * @return {@code true} if the fallback must run
      */
     public boolean handles(Throwable failure) {
-        return classification.get(failure.getClass());
+        boolean handled = classification.get(failure.getClass());
+        EventSink<FallbackEvent.Applied> sink = applied;
+        if (handled && sink != null) {
+            sink.publish(new FallbackEvent.Applied(instanceId, ticker.getAsLong(), failure));
+        }
+        return handled;
     }
 
     /**

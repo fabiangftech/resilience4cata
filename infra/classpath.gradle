@@ -1,0 +1,13 @@
+// Gradle init script used by infra/bench.sh: compiles the benchmark module and writes its runtime
+// classpath (exactly what the jmh task runs with) to benchmark/build/r4c-classpath.txt.
+allprojects {
+    if (path == ':benchmark') {
+        tasks.register('r4cClasspath') {
+            def files = project.sourceSets.main.runtimeClasspath
+            dependsOn files
+            def out = layout.buildDirectory.file('r4c-classpath.txt')
+            outputs.file(out)
+            doLast { out.get().asFile.text = files.files.collect { it.absolutePath }.join('\n') }
+        }
+    }
+}

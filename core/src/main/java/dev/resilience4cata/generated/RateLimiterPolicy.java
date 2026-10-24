@@ -3,13 +3,15 @@ package dev.resilience4cata.generated;
 import dev.resilience4cata.RateLimitExceededException;
 import dev.resilience4cata.RateLimiterConfig;
 import dev.resilience4cata.RateLimiterHandle;
+import dev.resilience4cata.RateLimiterSnapshot;
+import dev.resilience4cata.event.RateLimiterEvent;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.LongSupplier;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Rate limiter for generated code: lets through {@code permits} calls per {@code period}.
@@ -45,8 +47,10 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
     private final long maxWaitNanos;
     private final LongSupplier ticker;
     private final RetryPolicy.Sleeper sleeper;
+    private final PolicyEnvironment environment;
     private final PaddedTat tat = new PaddedTat();
     private final RateLimitExceededException rejection;
+    private final @Nullable EventSink<RateLimiterEvent.Rejected> rejected;
 
     /**
      * Creates a rate limiter.
@@ -55,10 +59,21 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
      * @param config the configuration
      */
     public RateLimiterPolicy(String id, RateLimiterConfig config) {
-        this(id, config, System::nanoTime, TimeUnit.NANOSECONDS::sleep);
+        this(id, config, PolicyEnvironment.DEFAULT);
     }
 
     RateLimiterPolicy(String id, RateLimiterConfig config, LongSupplier ticker, RetryPolicy.Sleeper sleeper) {
+        this(id, config, PolicyEnvironment.forTest(ticker, sleeper));
+    }
+
+    /**
+     * Creates a rate limiter.
+     *
+     * @param id the rate limiter's id, used in the rejection message
+     * @param config the configuration
+     * @param environment the clock, sleeper and timer to use
+     */
+    public RateLimiterPolicy(String id, RateLimiterConfig config, PolicyEnvironment environment) {
         this.id = id;
         this.config = config;
         this.enabled = config.enabled();
@@ -66,10 +81,12 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
         this.interval = config.period().toNanos() / config.permits();
         this.tolerance = interval * config.permits();
         this.maxWaitNanos = config.maxWait().toNanos();
-        this.ticker = ticker;
-        this.sleeper = sleeper;
+        this.ticker = environment.ticker;
+        this.sleeper = environment.sleeper;
+        this.environment = environment;
         this.rejection = new RateLimitExceededException(id);
-        tat.set(ticker.getAsLong()); // a full burst is available from the start
+        this.rejected = environment.events.sink(RateLimiterEvent.Rejected.class, id);
+        tat.set(this.ticker.getAsLong()); // a full burst is available from the start
     }
 
     @Override
@@ -90,6 +107,11 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
         long now = ticker.getAsLong();
         long backlog = Math.max(tat.get() - now, 0);
         return (int) Math.max((tolerance - backlog) / interval, 0);
+    }
+
+    @Override
+    public RateLimiterSnapshot snapshot() {
+        return new RateLimiterSnapshot(id, Math.clamp(availablePermits(), 0, config.permits()), config.permits());
     }
 
     /** Returns the preallocated exception to throw when {@link #tryAcquire()} returns {@code false}. */
@@ -116,7 +138,7 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
             long next = (current - now > 0 ? current : now) + interval;
             long wait = next - now - tolerance;
             if (wait > maxWaitNanos) {
-                return false; // nothing was written
+                return rejected(now); // nothing was written
             }
             if (cell.weakCompareAndSet(current, next)) {
                 return wait <= 0 || pause(wait);
@@ -129,6 +151,20 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
         }
     }
 
+    /**
+     * Publishes {@link RateLimiterEvent.Rejected} if someone listens. Without listeners this is one null
+     * check: no allocation, and the time is the clock reading the caller already made.
+     *
+     * @return {@code false}
+     */
+    private boolean rejected(long now) {
+        EventSink<RateLimiterEvent.Rejected> sink = rejected;
+        if (sink != null) {
+            sink.publish(new RateLimiterEvent.Rejected(id, now));
+        }
+        return false;
+    }
+
     private boolean pause(long nanos) {
         try {
             sleeper.sleep(nanos);
@@ -136,7 +172,7 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
         } catch (InterruptedException e) {
             tat.add(-interval); // give the reserved permit back
             Thread.currentThread().interrupt();
-            return false;
+            return rejected(rejected != null ? ticker.getAsLong() : 0L); // no clock read without listeners
         }
     }
 
@@ -211,7 +247,7 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
         if (wait == 0) {
             AsyncSupport.relay(AsyncSupport.call(call), result);
         } else {
-            AsyncSupport.later(wait, () -> AsyncSupport.relay(AsyncSupport.call(call), result));
+            environment.later(wait, () -> AsyncSupport.relay(AsyncSupport.call(call), result));
         }
         return result;
     }
@@ -233,6 +269,7 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
             long next = (current - now > 0 ? current : now) + interval;
             long wait = next - now - tolerance;
             if (wait > maxWaitNanos) {
+                rejected(now);
                 return -1;
             }
             if (cell.weakCompareAndSet(current, next)) {

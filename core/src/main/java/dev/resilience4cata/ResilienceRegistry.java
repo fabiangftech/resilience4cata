@@ -2,9 +2,15 @@ package dev.resilience4cata;
 
 import dev.resilience4cata.generated.BulkheadPolicy;
 import dev.resilience4cata.generated.CircuitBreakerPolicy;
+import dev.resilience4cata.generated.EventDispatcher;
+import dev.resilience4cata.generated.FallbackPolicy;
+import dev.resilience4cata.generated.PolicyEnvironment;
 import dev.resilience4cata.generated.RateLimiterPolicy;
 import dev.resilience4cata.generated.RetryPolicy;
 import dev.resilience4cata.generated.TimeoutPolicy;
+import dev.resilience4cata.event.EventListener;
+import dev.resilience4cata.event.ResilienceEvent;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,6 +19,7 @@ import java.util.Objects;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.random.RandomGenerator;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -42,15 +49,17 @@ public final class ResilienceRegistry {
     private final ConcurrentHashMap<String, RateLimiterPolicy> rateLimiters = new ConcurrentHashMap<>();
     private final TimeoutConfig timeoutDefaults;
     private final Map<String, TimeoutConfig> timeoutConfigs;
+    private final ConcurrentHashMap<String, TimeoutPolicy> timeouts = new ConcurrentHashMap<>();
     private final BulkheadConfig bulkheadDefaults;
     private final Map<String, BulkheadConfig> bulkheadConfigs;
     private final ConcurrentHashMap<String, BulkheadPolicy> bulkheads = new ConcurrentHashMap<>();
+    private final PolicyEnvironment environment;
 
     private ResilienceRegistry(RetryConfig retryDefaults, Map<String, RetryConfig> retryConfigs,
             CircuitBreakerConfig circuitBreakerDefaults, Map<String, CircuitBreakerConfig> circuitBreakerConfigs,
             RateLimiterConfig rateLimiterDefaults, Map<String, RateLimiterConfig> rateLimiterConfigs,
             TimeoutConfig timeoutDefaults, Map<String, TimeoutConfig> timeoutConfigs,
-            BulkheadConfig bulkheadDefaults, Map<String, BulkheadConfig> bulkheadConfigs) {
+            BulkheadConfig bulkheadDefaults, Map<String, BulkheadConfig> bulkheadConfigs, PolicyEnvironment environment) {
         this.retryDefaults = retryDefaults;
         this.retryConfigs = Map.copyOf(retryConfigs);
         this.circuitBreakerDefaults = circuitBreakerDefaults;
@@ -61,6 +70,7 @@ public final class ResilienceRegistry {
         this.timeoutConfigs = Map.copyOf(timeoutConfigs);
         this.bulkheadDefaults = bulkheadDefaults;
         this.bulkheadConfigs = Map.copyOf(bulkheadConfigs);
+        this.environment = environment;
     }
 
     /** Returns a new builder. */
@@ -159,7 +169,7 @@ public final class ResilienceRegistry {
             resolved = builder.build();
         }
         String key = name.isEmpty() ? instanceId : name;
-        RetryPolicy policy = retries.computeIfAbsent(key, k -> new RetryPolicy(resolved));
+        RetryPolicy policy = retries.computeIfAbsent(key, k -> new RetryPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException("Retry instance '" + key
                     + "' is used with two different configurations:\n  " + policy.config() + "\n  " + resolved
@@ -191,7 +201,7 @@ public final class ResilienceRegistry {
             resolved = builder.build();
         }
         String key = name.isEmpty() ? instanceId : name;
-        CircuitBreakerPolicy policy = circuitBreakers.computeIfAbsent(key, k -> new CircuitBreakerPolicy(k, resolved));
+        CircuitBreakerPolicy policy = circuitBreakers.computeIfAbsent(key, k -> new CircuitBreakerPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException("Circuit breaker '" + key
                     + "' is used with two different configurations:\n  " + policy.config() + "\n  " + resolved
@@ -223,7 +233,7 @@ public final class ResilienceRegistry {
             resolved = builder.build();
         }
         String key = name.isEmpty() ? instanceId : name;
-        RateLimiterPolicy policy = rateLimiters.computeIfAbsent(key, k -> new RateLimiterPolicy(k, resolved));
+        RateLimiterPolicy policy = rateLimiters.computeIfAbsent(key, k -> new RateLimiterPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException("Rate limiter '" + key
                     + "' is used with two different configurations:\n  " + policy.config() + "\n  " + resolved
@@ -253,7 +263,25 @@ public final class ResilienceRegistry {
             overrides.accept(builder);
             resolved = builder.build();
         }
-        return new TimeoutPolicy(name.isEmpty() ? instanceId : name, resolved);
+        String key = name.isEmpty() ? instanceId : name;
+        TimeoutPolicy policy = new TimeoutPolicy(key, resolved, environment);
+        timeouts.putIfAbsent(key, policy); // only for snapshot(): the first call site with this id is shown
+        return policy;
+    }
+
+    /**
+     * Returns the fallback policy for one method. Used by generated code; not intended to be called
+     * directly. Fallbacks hold no state, so every method gets its own policy; the registry only adds
+     * its event listeners.
+     *
+     * @param instanceId id of the method, {@code <interface>#<method>(<parameter types>)}
+     * @param applyOn failures that get the fallback
+     * @param skipOn failures that never get the fallback; wins over {@code applyOn}
+     * @return the policy
+     */
+    public FallbackPolicy fallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
+            List<Class<? extends Throwable>> skipOn) {
+        return new FallbackPolicy(instanceId, applyOn, skipOn, environment);
     }
 
     /**
@@ -279,7 +307,7 @@ public final class ResilienceRegistry {
             resolved = builder.build();
         }
         String key = name.isEmpty() ? instanceId : name;
-        BulkheadPolicy policy = bulkheads.computeIfAbsent(key, k -> new BulkheadPolicy(k, resolved));
+        BulkheadPolicy policy = bulkheads.computeIfAbsent(key, k -> new BulkheadPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException("Bulkhead '" + key
                     + "' is used with two different configurations:\n  " + policy.config() + "\n  " + resolved
@@ -347,6 +375,37 @@ public final class ResilienceRegistry {
                 .toList();
     }
 
+    /**
+     * Reads the state of every policy instance created so far. Allocates and walks the circuit
+     * breakers' windows, so it is meant for health checks and metrics scrapes, not for every call; it
+     * adds nothing to the calls themselves.
+     *
+     * @return the snapshot, each list sorted by instance id
+     */
+    public ResilienceSnapshot snapshot() {
+        return new ResilienceSnapshot(
+                sorted(circuitBreakers, CircuitBreakerPolicy::snapshot, CircuitBreakerSnapshot::instance),
+                sorted(retries, (String id, RetryPolicy retry) -> new RetrySnapshot(id, retry.config()),
+                        RetrySnapshot::instance),
+                sorted(rateLimiters, RateLimiterPolicy::snapshot, RateLimiterSnapshot::instance),
+                sorted(timeouts, (String id, TimeoutPolicy timeout) -> new TimeoutSnapshot(id, timeout.config()),
+                        TimeoutSnapshot::instance),
+                sorted(bulkheads, BulkheadPolicy::snapshot, BulkheadSnapshot::instance));
+    }
+
+    private static <P, S> List<S> sorted(Map<String, P> policies, java.util.function.Function<P, S> snapshot,
+            java.util.function.Function<S, String> id) {
+        return sorted(policies, (String key, P policy) -> snapshot.apply(policy), id);
+    }
+
+    private static <P, S> List<S> sorted(Map<String, P> policies, java.util.function.BiFunction<String, P, S> snapshot,
+            java.util.function.Function<S, String> id) {
+        List<S> result = new ArrayList<>(policies.size());
+        policies.forEach((key, policy) -> result.add(snapshot.apply(key, policy)));
+        result.sort(Comparator.comparing(id));
+        return result;
+    }
+
     /** Builder for {@link ResilienceRegistry}. */
     public static final class Builder {
         private @Nullable Consumer<RetryConfig.Builder> retryDefaults;
@@ -359,8 +418,51 @@ public final class ResilienceRegistry {
         private final Map<String, Consumer<TimeoutConfig.Builder>> timeoutConfigs = new LinkedHashMap<>();
         private @Nullable Consumer<BulkheadConfig.Builder> bulkheadDefaults;
         private final Map<String, Consumer<BulkheadConfig.Builder>> bulkheadConfigs = new LinkedHashMap<>();
+        private final List<EventDispatcher.Subscription> listeners = new ArrayList<>();
+        private @Nullable Ticker ticker;
+        private @Nullable RandomGenerator random;
 
         private Builder() {
+        }
+
+        /**
+         * Registers a listener for one event type on every policy instance. Listeners are fixed when the
+         * registry is built: each policy looks up its listeners once, when it is created, so an event
+         * type nobody listens to costs nothing on the call path. Listeners run synchronously on the
+         * thread that caused the event; see {@link EventListener}.
+         *
+         * <pre>{@code
+         * builder.listen(CircuitBreakerEvent.StateTransition.class, t -> alerts.send(t.instance() + " is " + t.to()))
+         *        .listen(RetryEvent.class, e -> log.debug("{}", e));
+         * }</pre>
+         *
+         * @param type an event record (such as {@code CircuitBreakerEvent.StateTransition}), a policy's
+         *     event interface (such as {@code RetryEvent}), or {@code ResilienceEvent} for every event
+         * @param listener the listener
+         * @param <E> the event type
+         * @return this builder
+         */
+        public <E extends ResilienceEvent> Builder listen(Class<E> type, EventListener<? super E> listener) {
+            listeners.add(new EventDispatcher.Subscription(type, null, listener));
+            return this;
+        }
+
+        /**
+         * Registers a listener for one event type on one policy instance only. See
+         * {@link #listen(Class, EventListener)}.
+         *
+         * @param instance the instance id: the {@code name} in the annotation, or the derived
+         *     {@code <interface>#<method>(<parameter types>)}
+         * @param type the event type
+         * @param listener the listener
+         * @param <E> the event type
+         * @return this builder
+         */
+        public <E extends ResilienceEvent> Builder listen(String instance, Class<E> type,
+                EventListener<? super E> listener) {
+            Objects.requireNonNull(instance, "instance");
+            listeners.add(new EventDispatcher.Subscription(type, instance, listener));
+            return this;
         }
 
         /**
@@ -489,6 +591,38 @@ public final class ResilienceRegistry {
             return this;
         }
 
+        /**
+         * Replaces the system clock, {@code Thread.sleep} and the library's timer threads with
+         * {@code ticker} for every policy this registry creates. Meant for tests: the
+         * {@code resilience4cata-testkit} module's {@code ManualClock} makes retries with backoff,
+         * breaker waits, rate limits and timeouts follow a clock the test moves by hand.
+         *
+         * <p>Not supported: the synchronous wait of a bulkhead with {@code maxWait > 0}, which still
+         * waits in real time.
+         *
+         * @param ticker the time source
+         * @return this builder
+         */
+        public Builder ticker(Ticker ticker) {
+            this.ticker = Objects.requireNonNull(ticker, "ticker");
+            return this;
+        }
+
+        /**
+         * Draws retry jitter from {@code random} instead of {@code ThreadLocalRandom}, so that delays are
+         * reproducible, e.g. {@code new java.util.Random(42)}. It is called from the threads whose calls
+         * fail, so it must be thread-safe if several threads can fail at once ({@code java.util.Random}
+         * is, {@code SplittableRandom} is not); with several threads the order of the draws, and so which
+         * call gets which delay, is not deterministic.
+         *
+         * @param random the generator
+         * @return this builder
+         */
+        public Builder random(RandomGenerator random) {
+            this.random = Objects.requireNonNull(random, "random");
+            return this;
+        }
+
         private static <B> void register(Map<String, Consumer<B>> configs, String name, Consumer<B> config, String kind) {
             if (name.isEmpty() || name.equals(DEFAULT)) {
                 throw new IllegalArgumentException("Use " + kind + "Defaults(...) to change the default " + kind + " config");
@@ -521,7 +655,7 @@ public final class ResilienceRegistry {
             Map<String, BulkheadConfig> bulkheads = new LinkedHashMap<>();
             bulkheadConfigs.forEach((name, config) -> bulkheads.put(name, bulkhead(bulkhead, config, name)));
             return new ResilienceRegistry(retry, retries, circuitBreaker, circuitBreakers, rateLimiter, rateLimiters,
-                    timeout, timeouts, bulkhead, bulkheads);
+                    timeout, timeouts, bulkhead, bulkheads, PolicyEnvironment.of(ticker, random).withEvents(EventDispatcher.of(listeners)));
         }
 
         private static RateLimiterConfig rateLimiter(RateLimiterConfig base,

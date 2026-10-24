@@ -76,6 +76,25 @@ final class TimeWindow implements SlidingWindow {
     }
 
     @Override
+    public int[] counts(long now) {
+        long second = Math.floorDiv(now, SECOND);
+        long calls = 0;
+        long failures = 0;
+        long slowCalls = 0;
+        for (int i = 0; i < seconds; i++) {
+            Bucket bucket = buckets.get(i);
+            if (bucket != null && bucket.second > second - seconds && bucket.second <= second) {
+                calls += bucket.calls.sum();
+                failures += bucket.failures.get();
+                slowCalls += bucket.slowCalls.get();
+            }
+        }
+        // A failure is counted after its call, so a reader can see it before or without the call.
+        int recorded = (int) Math.min(calls, Integer.MAX_VALUE);
+        return new int[] {recorded, Math.clamp(failures, 0, recorded), Math.clamp(slowCalls, 0, recorded)};
+    }
+
+    @Override
     public boolean onlyFastSuccesses() {
         return false;
     }

@@ -7,3 +7,8 @@ package
 
 # The convention plugins live in a source package named "build"; keep it tracked.
 !conventions/src/main/java/dev/resilience4cata/build/
+
+# Terraform state and plugins (infra/)
+infra/.terraform/
+infra/terraform.tfstate*
+.env

@@ -11,4 +11,4 @@ dependencyResolutionManagement {
 
 rootProject.name = 'resilience4cata'
 
-include 'annotations', 'core', 'processor', 'config', 'examples', 'benchmark', 'stress'
+include 'annotations', 'core', 'processor', 'config', 'testkit', 'examples', 'benchmark', 'stress'

@@ -205,7 +205,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     valid &= fallback != null;
                     continue;
                 }
-                PolicyModel model = policyModel(kind, iface, method, type, effective.get());
+                PolicyModel model = policyModel(kind, iface, method, type, asyncResult, effective.get());
                 if (model == null) {
                     valid = false;
                 } else {
@@ -308,11 +308,12 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
     /** Validates the attributes and turns them into builder calls. Returns null after reporting errors. */
     private PolicyModel policyModel(Kind kind, TypeElement iface, ExecutableElement method, ExecutableType type,
-            Map<String, AnnotationValue> values) {
+            TypeMirror asyncResult, Map<String, AnnotationValue> values) {
         String annotation = "@" + kind.annotation.getSimpleName();
         boolean valid = true;
         String name = "";
         String config = "";
+        String classifier = null;
         List<String> overrides = new ArrayList<>();
         for (Map.Entry<String, AnnotationValue> entry : values.entrySet()) {
             String attribute = entry.getKey();
@@ -341,7 +342,14 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         valid = invalid(method, label + " must be \"\", \"true\" or \"false\", was \"" + value + "\"");
                     }
                 }
-                case "classifier" -> valid = invalid(method, label + " is not supported yet.");
+                case "classifier" -> {
+                    if (!(value instanceof TypeMirror classifierType)) {
+                        valid = false; // the compiler already reported the unresolvable class
+                        continue;
+                    }
+                    classifier = classifier(iface, method, type, asyncResult, label, classifierType);
+                    valid &= classifier != null;
+                }
                 case "retryOn", "abortOn", "recordOn", "ignoreOn" ->
                         overrides.add(attribute + "(java.util.List.of(" + classList(value) + "))");
                 case "maxAttempts", "windowSize", "minimumCalls", "halfOpenCalls", "maxConcurrent", "permits" -> {
@@ -397,11 +405,92 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         + ". The processor and the annotations jar have different versions.");
             }
         }
+        if (classifier != null) {
+            String replaced = kind == Kind.RETRY ? "retryOn" : "recordOn";
+            if (values.containsKey(replaced)) {
+                valid = invalid(method, annotation + "." + replaced + " cannot be combined with " + annotation
+                        + ".classifier: the classifier decides which exceptions count as failures. Remove "
+                        + replaced + ", or return Outcome.FAILURE for those exceptions from the classifier. ("
+                        + (kind == Kind.RETRY ? "abortOn" : "ignoreOn") + " still applies before the classifier.)");
+            }
+        }
         if (!valid) {
             return null;
         }
         String instanceId = iface.getQualifiedName() + "#" + method.getSimpleName() + "(" + erasedParameters(type) + ")";
-        return new PolicyModel(instanceId, name, config, overrides);
+        return new PolicyModel(instanceId, name, config, overrides, classifier);
+    }
+
+    /**
+     * Checks a {@code classifier} class: a concrete, non-generic class with an accessible no-argument
+     * constructor that implements {@code Classifier<X>}, where the method's value type is assignable to
+     * {@code X}. {@code asyncResult} is the {@code T} of an asynchronous method, or null. Returns the
+     * class's qualified name, or null after reporting an error.
+     */
+    private String classifier(TypeElement iface, ExecutableElement method, ExecutableType type, TypeMirror asyncResult,
+            String attribute, TypeMirror classifier) {
+        String label = attribute + " = " + TypePrinter.print(classifier) + ".class";
+        TypeElement classifierType = elements.getTypeElement("dev.resilience4cata.Classifier");
+        if (classifierType == null) {
+            return invalidClassifier(method, label + ": dev.resilience4cata.Classifier is not on the classpath. Add the"
+                    + " resilience4cata-core dependency.");
+        }
+        if (classifier.getKind() != TypeKind.DECLARED
+                || ((DeclaredType) classifier).asElement().getKind() != ElementKind.CLASS) {
+            return invalidClassifier(method, label + ": the classifier must be a class that implements"
+                    + " dev.resilience4cata.Classifier<T>.");
+        }
+        TypeElement classifierClass = (TypeElement) ((DeclaredType) classifier).asElement();
+        if (classifierClass.getModifiers().contains(Modifier.ABSTRACT)) {
+            return invalidClassifier(method, label + ": the classifier must not be abstract, because one instance is"
+                    + " created per method.");
+        }
+        if (!classifierClass.getTypeParameters().isEmpty()) {
+            return invalidClassifier(method, label + ": generic classifier classes are not supported. Implement"
+                    + " Classifier<T> with a concrete T.");
+        }
+        String samePackage = elements.getPackageOf(iface).getQualifiedName().toString();
+        for (Element e = classifierClass; e instanceof TypeElement t; e = t.getEnclosingElement()) {
+            if (!accessible(t, samePackage)) {
+                return invalidClassifier(method, label + ": " + t.getSimpleName() + " must be public, or package-private"
+                        + " in package " + samePackage + ", for the generated class to create the classifier.");
+            }
+        }
+        if (classifierClass.getNestingKind().isNested() && !classifierClass.getModifiers().contains(Modifier.STATIC)) {
+            return invalidClassifier(method, label + ": a nested classifier class must be static.");
+        }
+        boolean constructor = false;
+        for (ExecutableElement c : ElementFilter.constructorsIn(classifierClass.getEnclosedElements())) {
+            if (c.getParameters().isEmpty() && accessible(c, classifierClass, samePackage)) {
+                constructor = true;
+            }
+        }
+        if (!constructor) {
+            return invalidClassifier(method, label + ": the classifier needs a public no-argument constructor.");
+        }
+        List<? extends TypeMirror> arguments = supertypeArguments(classifier, types.erasure(classifierType.asType()));
+        if (arguments == null) {
+            return invalidClassifier(method, label + ": " + classifierClass.getSimpleName()
+                    + " does not implement dev.resilience4cata.Classifier<T>.");
+        }
+        TypeMirror value = asyncResult != null ? asyncResult : boxed(type.getReturnType());
+        if (arguments.isEmpty()) {
+            return invalidClassifier(method, label + ": " + classifierClass.getSimpleName() + " implements the raw type"
+                    + " Classifier. Implement Classifier<" + TypePrinter.print(value) + "> instead.");
+        }
+        TypeMirror classified = arguments.get(0);
+        if (value.getKind() != TypeKind.NONE && !types.isAssignable(value, classified)) {
+            return invalidClassifier(method, label + ": " + classifierClass.getSimpleName() + " implements Classifier<"
+                    + TypePrinter.print(classified) + ">, but " + method.getSimpleName() + " "
+                    + (asyncResult != null ? "completes with " : "returns ") + TypePrinter.print(value)
+                    + ". Implement Classifier<" + TypePrinter.print(value) + "> or a supertype of it.");
+        }
+        return classifierClass.getQualifiedName().toString();
+    }
+
+    private String invalidClassifier(Element element, String message) {
+        error(element, message);
+        return null;
     }
 
     /** Validates a {@code @Fallback}. Returns null after reporting errors. */
@@ -713,6 +802,10 @@ public final class ResilienceProcessor extends AbstractProcessor {
             }
             for (Kind kind : methods.get(i).policies().keySet()) {
                 out.append("    private final ").append(kind.policyType).append(' ').append(kind.field).append(i).append(";\n");
+                if (ownsClassifier(methods.get(i), kind, i)) {
+                    out.append("    private final ").append(methods.get(i).policies().get(kind).classifier()).append(' ')
+                            .append(classifierField(methods.get(i), kind, i)).append(";\n");
+                }
             }
         }
         out.append("\n    public ").append(simpleName).append("(").append(ifaceType).append(" delegate, ")
@@ -722,7 +815,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         for (int i = 0; i < methods.size(); i++) {
             FallbackModel fallback = methods.get(i).fallback();
             if (fallback != null) {
-                out.append("        this.fallback").append(i).append(" = new ").append(Kind.FALLBACK.policyType).append('(')
+                out.append("        this.fallback").append(i).append(" = registry.fallbackPolicy(")
                         .append(literal(fallback.instanceId())).append(", java.util.List.of(").append(fallback.applyOn())
                         .append("), java.util.List.of(").append(fallback.skipOn()).append("));\n");
                 if (fallback.handler() != null) {
@@ -736,6 +829,10 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         .append('(').append(literal(policy.instanceId())).append(", ").append(literal(policy.name()))
                         .append(", ").append(literal(policy.config())).append(", ").append(overrides(policy.overrides()))
                         .append(");\n");
+                if (ownsClassifier(methods.get(i), kind, i)) {
+                    out.append("        this.").append(classifierField(methods.get(i), kind, i)).append(" = new ")
+                            .append(policy.classifier()).append("();\n");
+                }
             }
         }
         out.append("    }\n");
@@ -823,7 +920,13 @@ public final class ResilienceProcessor extends AbstractProcessor {
         for (int i = layers.size() - 1; i >= 0; i--) {
             Kind kind = layers.get(i);
             String policy = "this." + kind.field + index;
-            if (kind == Kind.RETRY && fallback != null) {
+            String classifier = classifierField(model, kind, index);
+            if (classifier != null && kind == Kind.RETRY) {
+                expression = policy + ".executeAsync(() -> " + expression + ", this." + classifier + ", "
+                        + (fallback != null ? "this.fallback" + index + ", " + recovery : "null, null") + ")";
+            } else if (classifier != null) {
+                expression = policy + ".executeAsync(() -> " + expression + ", this." + classifier + ")";
+            } else if (kind == Kind.RETRY && fallback != null) {
                 expression = policy + ".executeAsync(() -> " + expression + ", this.fallback" + index + ", " + recovery + ")";
             } else {
                 expression = policy + ".executeAsync(() -> " + expression + ")";
@@ -895,9 +998,17 @@ public final class ResilienceProcessor extends AbstractProcessor {
             String returnType, List<String> arguments) {
         return switch (kind) {
             case FALLBACK -> fallback(model.fallback(), index, call, isVoid, arguments);
-            case RETRY -> retry(index, call, isVoid, model.fallback() == null ? List.of("throw r4c$e;")
-                    : fallbackLines(model.fallback(), index, "r4c$attempts", isVoid, arguments));
-            case CIRCUIT_BREAKER -> circuitBreaker(index, call, isVoid, returnType);
+            case RETRY -> classifierField(model, kind, index) == null
+                    ? retry(index, call, isVoid, giveUp(model, index, "r4c$e", "r4c$attempts", isVoid, arguments))
+                    : classifiedRetry(index, call, isVoid, returnType, model.policies().get(kind).classifier(),
+                            classifierField(model, kind, index),
+                            giveUp(model, index, "r4c$e", "r4c$attempts", isVoid, arguments),
+                            model.fallback() == null ? null
+                                    : giveUp(model, index, "r4c$c", "r4c$attempts + 1", isVoid, arguments));
+            case CIRCUIT_BREAKER -> classifierField(model, kind, index) == null
+                    ? circuitBreaker(index, call, isVoid, returnType)
+                    : classifiedCircuitBreaker(index, call, isVoid, returnType, model.policies().get(kind).classifier(),
+                            classifierField(model, kind, index));
             case RATE_LIMITER -> rateLimiter(index, call, isVoid);
             case TIMEOUT -> timeout(index, call, isVoid, returnType);
             case BULKHEAD -> bulkhead(index, call, isVoid);
@@ -926,6 +1037,128 @@ public final class ResilienceProcessor extends AbstractProcessor {
         lines.add("        }");
         lines.add("    }");
         lines.add("}");
+        return lines;
+    }
+
+    /** What the retry layer does when it gives up on the failure in {@code failure}: run the fallback, or rethrow. */
+    private static List<String> giveUp(MethodModel model, int index, String failure, String attempts, boolean isVoid,
+            List<String> arguments) {
+        return model.fallback() == null ? List.of("throw " + failure + ";")
+                : fallbackLines(model.fallback(), index, failure, attempts, isVoid, arguments);
+    }
+
+    /**
+     * The field that holds the classifier of {@code kind}'s layer, or null if it has none. When the retry and
+     * the breaker use the same classifier class, the breaker shares the retry's instance.
+     */
+    private static String classifierField(MethodModel model, Kind kind, int index) {
+        PolicyModel policy = model.policies().get(kind);
+        if (policy == null || policy.classifier() == null) {
+            return null;
+        }
+        PolicyModel retry = model.policies().get(Kind.RETRY);
+        if (kind == Kind.CIRCUIT_BREAKER && retry != null && policy.classifier().equals(retry.classifier())) {
+            return Kind.RETRY.field + "Classifier" + index;
+        }
+        return kind.field + "Classifier" + index;
+    }
+
+    /** True if {@code kind}'s layer has a classifier field of its own (one that it does not share). */
+    private static boolean ownsClassifier(MethodModel model, Kind kind, int index) {
+        String field = classifierField(model, kind, index);
+        return field != null && field.equals(kind.field + "Classifier" + index);
+    }
+
+    private static final String OUTCOME = "dev.resilience4cata.Classifier.Outcome";
+
+    /**
+     * A retry loop with a classifier. Exceptions get the classifier's verdict (abortOn still wins); a result
+     * classified FAILURE is retried, and returned when the retries give up. If the classifier throws, the
+     * loop gives up with that exception ({@code giveUpOnClassifier}, which reads it from {@code r4c$c}); null
+     * when there is no fallback, so that the exception simply propagates.
+     */
+    private static List<String> classifiedRetry(int index, String call, boolean isVoid, String returnType,
+            String classifierType, String classifierField, List<String> giveUp, List<String> giveUpOnClassifier) {
+        List<String> lines = new ArrayList<>();
+        lines.add("final " + Kind.RETRY.policyType + " r4c$retry = this." + Kind.RETRY.field + index + ";");
+        lines.add("final " + classifierType + " r4c$classifier = this." + classifierField + ";");
+        lines.add("final long r4c$start = r4c$retry.start();");
+        lines.add("int r4c$attempts = 0;");
+        lines.add("while (true) {");
+        if (!isVoid) {
+            lines.add("    final " + returnType + " r4c$result;");
+        }
+        lines.add("    try {");
+        lines.add("        " + (isVoid ? "" : "r4c$result = ") + call + ";");
+        lines.add("    } catch (java.lang.Throwable r4c$e) {");
+        lines.addAll(indent(indent(classify("null, r4c$e", giveUpOnClassifier))));
+        lines.add("        final long r4c$delay = r4c$retry.onFailure(++r4c$attempts, r4c$e, r4c$start, r4c$verdict);");
+        lines.add("        if (r4c$delay < 0 || !r4c$retry.pause(r4c$delay)) {");
+        for (String line : giveUp) {
+            lines.add("            " + line);
+        }
+        lines.add("        }");
+        lines.add("        continue;");
+        lines.add("    }");
+        lines.addAll(indent(classify((isVoid ? "null" : "r4c$result") + ", null", giveUpOnClassifier)));
+        String accept = isVoid ? "return;" : "return r4c$result;";
+        lines.add("    if (r4c$verdict != " + OUTCOME + ".FAILURE) {");
+        lines.add("        " + accept);
+        lines.add("    }");
+        lines.add("    final long r4c$wait = r4c$retry.onFailedResult(++r4c$attempts, r4c$start);");
+        lines.add("    if (r4c$wait < 0 || !r4c$retry.pause(r4c$wait)) {");
+        lines.add("        " + accept + " // rejected, but no retries left: the last result");
+        lines.add("    }");
+        lines.add("}");
+        return lines;
+    }
+
+    /** Declares {@code r4c$verdict}; if {@code onThrow} is not null, it handles an exception from the classifier in {@code r4c$c}. */
+    private static List<String> classify(String arguments, List<String> onThrow) {
+        List<String> lines = new ArrayList<>();
+        if (onThrow == null) {
+            lines.add("final " + OUTCOME + " r4c$verdict = r4c$classifier.classify(" + arguments + ");");
+            return lines;
+        }
+        lines.add("final " + OUTCOME + " r4c$verdict;");
+        lines.add("try {");
+        lines.add("    r4c$verdict = r4c$classifier.classify(" + arguments + ");");
+        lines.add("} catch (java.lang.Throwable r4c$c) {");
+        lines.addAll(indent(onThrow));
+        lines.add("}");
+        return lines;
+    }
+
+    /**
+     * A breaker layer with a classifier: the call's result or exception is recorded as the classifier says
+     * (ignoreOn still wins for exceptions). If the classifier throws, the call is recorded as a failure, so
+     * that a half-open probe permit is never lost, and the classifier's exception propagates.
+     */
+    private static List<String> classifiedCircuitBreaker(int index, String call, boolean isVoid, String returnType,
+            String classifierType, String classifierField) {
+        List<String> lines = new ArrayList<>();
+        lines.add("final " + Kind.CIRCUIT_BREAKER.policyType + " r4c$cb = this." + Kind.CIRCUIT_BREAKER.field + index + ";");
+        lines.add("final " + classifierType + " r4c$classifier = this." + classifierField + ";");
+        lines.add("final long r4c$token = r4c$cb.acquire();");
+        lines.add("if (r4c$token < 0) {");
+        lines.add("    throw r4c$cb.rejection();");
+        lines.add("}");
+        lines.add("final long r4c$started = r4c$cb.startTimer();");
+        if (!isVoid) {
+            lines.add("final " + returnType + " r4c$result;");
+        }
+        lines.add("try {");
+        lines.add("    " + (isVoid ? "" : "r4c$result = ") + call + ";");
+        lines.add("} catch (java.lang.Throwable r4c$e) {");
+        List<String> recordFailure = List.of("r4c$cb.onResult(r4c$token, r4c$started, " + OUTCOME + ".FAILURE);",
+                "throw r4c$c;");
+        lines.addAll(indent(classify("null, r4c$e", recordFailure)));
+        lines.add("    r4c$cb.onFailure(r4c$token, r4c$started, r4c$e, r4c$verdict);");
+        lines.add("    throw r4c$e;");
+        lines.add("}");
+        lines.addAll(classify((isVoid ? "null" : "r4c$result") + ", null", recordFailure));
+        lines.add("r4c$cb.onResult(r4c$token, r4c$started, r4c$verdict);");
+        lines.add(isVoid ? "return;" : "return r4c$result;");
         return lines;
     }
 
@@ -965,7 +1198,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             lines.add("    return " + call + ";");
         }
         lines.add("} catch (java.lang.Throwable r4c$e) {");
-        for (String line : fallbackLines(fallback, index, "1", isVoid, arguments)) {
+        for (String line : fallbackLines(fallback, index, "r4c$e", "1", isVoid, arguments)) {
             lines.add("    " + line);
         }
         lines.add("}");
@@ -973,17 +1206,18 @@ public final class ResilienceProcessor extends AbstractProcessor {
     }
 
     /**
-     * Statements that run the fallback for the failure in {@code r4c$e}, a catch parameter. They always
+     * Statements that run the fallback for the failure in {@code failure}, a catch parameter (normally
+     * {@code r4c$e}; {@code r4c$c} for an exception thrown by a classifier). They always
      * end the method: with the fallback's result, its exception, or the original failure rethrown.
      */
-    private static List<String> fallbackLines(FallbackModel fallback, int index, String attempts, boolean isVoid,
+    private static List<String> fallbackLines(FallbackModel fallback, int index, String failure, String attempts, boolean isVoid,
             List<String> arguments) {
         List<String> lines = new ArrayList<>();
-        lines.add("if (!this.fallback" + index + ".handles(r4c$e)) {");
-        lines.add("    throw r4c$e;");
+        lines.add("if (!this.fallback" + index + ".handles(" + failure + ")) {");
+        lines.add("    throw " + failure + ";");
         lines.add("}");
         if (fallback.handler() != null) {
-            lines.add("final dev.resilience4cata.FallbackContext r4c$context = this.fallback" + index + ".context(r4c$e, "
+            lines.add("final dev.resilience4cata.FallbackContext r4c$context = this.fallback" + index + ".context(" + failure + ", "
                     + attempts + ", new java.lang.Object[] {" + String.join(", ", arguments) + "});");
             lines.add("try {");
             String apply = "this.fallbackHandler" + index + ".apply(r4c$context)";
@@ -1003,17 +1237,17 @@ public final class ResilienceProcessor extends AbstractProcessor {
             List<String> callArguments = new ArrayList<>(arguments);
             if (target.exceptionType() == null || target.catchesAll()) {
                 if (target.exceptionType() != null) {
-                    callArguments.add("r4c$e");
+                    callArguments.add(failure);
                 }
                 lines.addAll(returning(target.receiver() + "." + target.name() + "(" + String.join(", ", callArguments) + ")", isVoid));
                 return lines; // catches everything: nothing after it would be reachable
             }
             callArguments.add("r4c$f" + k);
-            lines.add("if (r4c$e instanceof " + target.exceptionType() + " r4c$f" + k + ") {");
+            lines.add("if (" + failure + " instanceof " + target.exceptionType() + " r4c$f" + k + ") {");
             lines.addAll(indent(returning(target.receiver() + "." + target.name() + "(" + String.join(", ", callArguments) + ")", isVoid)));
             lines.add("}");
         }
-        lines.add("throw r4c$e;");
+        lines.add("throw " + failure + ";");
         return lines;
     }
 
@@ -1186,6 +1420,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
             boolean returnsValue) {
     }
 
-    private record PolicyModel(String instanceId, String name, String config, List<String> overrides) {
+    /** {@code classifier} is the qualified name of the classifier class, or null for none. */
+    private record PolicyModel(String instanceId, String name, String config, List<String> overrides,
+            String classifier) {
     }
 }

@@ -3,6 +3,8 @@ package dev.resilience4cata.generated;
 import dev.resilience4cata.BulkheadConfig;
 import dev.resilience4cata.BulkheadFullException;
 import dev.resilience4cata.BulkheadHandle;
+import dev.resilience4cata.BulkheadSnapshot;
+import dev.resilience4cata.event.BulkheadEvent;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.Objects;
@@ -49,6 +51,8 @@ public final class BulkheadPolicy implements BulkheadHandle {
     private final @Nullable Semaphore semaphore;
     private final @Nullable BulkheadWaiters waiters;
     private final BulkheadFullException rejection;
+    private final PolicyEnvironment environment;
+    private final @Nullable EventSink<BulkheadEvent.Rejected> rejected;
 
     /**
      * Creates a bulkhead.
@@ -57,7 +61,19 @@ public final class BulkheadPolicy implements BulkheadHandle {
      * @param config the configuration
      */
     public BulkheadPolicy(String id, BulkheadConfig config) {
+        this(id, config, PolicyEnvironment.DEFAULT);
+    }
+
+    /**
+     * Creates a bulkhead.
+     *
+     * @param id the bulkhead's id, used in the rejection message
+     * @param config the configuration
+     * @param environment the timer for the wait limit of queued asynchronous calls
+     */
+    public BulkheadPolicy(String id, BulkheadConfig config, PolicyEnvironment environment) {
         this.id = id;
+        this.environment = environment;
         this.config = config;
         this.enabled = config.enabled();
         this.maxConcurrent = config.maxConcurrent();
@@ -65,6 +81,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
         this.semaphore = maxWaitNanos > 0 ? new Semaphore(maxConcurrent, false) : null;
         this.waiters = maxWaitNanos > 0 ? new BulkheadWaiters() : null;
         this.rejection = new BulkheadFullException(id);
+        this.rejected = environment.events.sink(BulkheadEvent.Rejected.class, id);
     }
 
     @Override
@@ -89,6 +106,12 @@ public final class BulkheadPolicy implements BulkheadHandle {
         return waiting != null ? queuedCalls() + waiting.getQueueLength() : 0;
     }
 
+    @Override
+    public BulkheadSnapshot snapshot() {
+        return new BulkheadSnapshot(id, Math.clamp(concurrentCalls(), 0, maxConcurrent), Math.max(waitingCalls(), 0),
+                maxConcurrent);
+    }
+
     /** Returns the preallocated exception to throw when {@link #tryEnter()} returns {@code false}. */
     public BulkheadFullException rejection() {
         return rejection;
@@ -107,17 +130,31 @@ public final class BulkheadPolicy implements BulkheadHandle {
         }
         Semaphore waiting = semaphore;
         if (waiting == null) {
-            return inUse.tryIncrement(maxConcurrent);
+            return inUse.tryIncrement(maxConcurrent) || rejected();
         }
         if (waiting.tryAcquire()) {
             return true;
         }
         try {
-            return waiting.tryAcquire(maxWaitNanos, TimeUnit.NANOSECONDS);
+            return waiting.tryAcquire(maxWaitNanos, TimeUnit.NANOSECONDS) || rejected();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return false;
+            return rejected();
         }
+    }
+
+    /**
+     * Publishes {@link BulkheadEvent.Rejected} if someone listens. Without listeners this is one null
+     * check: no allocation, no clock read.
+     *
+     * @return {@code false}, so that rejecting paths can end with {@code return rejected();}
+     */
+    boolean rejected() {
+        EventSink<BulkheadEvent.Rejected> sink = rejected;
+        if (sink != null) {
+            sink.publish(new BulkheadEvent.Rejected(id, environment.ticker.getAsLong(), maxConcurrent));
+        }
+        return false;
     }
 
     /**
@@ -275,7 +312,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
         }
         BulkheadWaiters.Waiter<T> waiter = new BulkheadWaiters.Waiter<>(call, queued, this);
         queued.add(waiter);
-        waiter.setTimer(AsyncSupport.later(maxWaitNanos, waiter));
+        waiter.setTimer(environment.later(maxWaitNanos, waiter));
         drain(waiting, queued);
         return waiter.result;
     }

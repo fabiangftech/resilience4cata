@@ -30,4 +30,12 @@ interface SlidingWindow {
      * Volatile reads: used to publish and check the circuit breaker's quiet state.
      */
     boolean onlyFastSuccesses();
+
+    /**
+     * Reads the counts for a snapshot: {calls, failures, slow calls}, each clamped so that
+     * {@code 0 <= failures, slow calls <= calls}. Not used on the call path.
+     *
+     * @param now the current time in nanoseconds; only read by time-based windows
+     */
+    int[] counts(long now);
 }

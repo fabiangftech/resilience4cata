@@ -15,6 +15,12 @@ public interface CircuitBreakerHandle {
     /** The configuration the breaker was created from. */
     CircuitBreakerConfig config();
 
+    /**
+     * Reads the state and the counts of the current window. May allocate and walk the window; it adds
+     * nothing to the calls themselves.
+     */
+    CircuitBreakerSnapshot snapshot();
+
     /** Rejects every call until {@link #reset()}, whatever the outcomes. */
     void forceOpen();
 

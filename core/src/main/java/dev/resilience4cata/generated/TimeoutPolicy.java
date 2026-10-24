@@ -1,7 +1,9 @@
 package dev.resilience4cata.generated;
 
 import dev.resilience4cata.CallTimeoutException;
+import dev.resilience4cata.Ticker;
 import dev.resilience4cata.TimeoutConfig;
+import dev.resilience4cata.event.TimeoutEvent;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.time.Duration;
@@ -60,6 +62,10 @@ public final class TimeoutPolicy {
     private final long timeoutNanos;
     private final Watchdog watchdog;
     private final TimeoutTimer.@Nullable Lane lane;
+    /** A manual ticker that schedules async deadlines instead of {@link #lane}; {@code null} in production. */
+    private final @Nullable Ticker manual;
+    private final java.util.function.LongSupplier ticker;
+    private final @Nullable EventSink<TimeoutEvent.TimedOut> timedOut;
 
     /**
      * Creates a timeout policy that uses the shared watchdog.
@@ -71,12 +77,39 @@ public final class TimeoutPolicy {
         this(id, config, config.enabled() ? Watchdog.shared() : null);
     }
 
+    /**
+     * Creates a timeout policy.
+     *
+     * @param id the policy's id, used in the exception message
+     * @param config the configuration
+     * @param environment the watchdog and timer to use
+     */
+    public TimeoutPolicy(String id, TimeoutConfig config, PolicyEnvironment environment) {
+        this(id, config, config.enabled() ? environment.watchdog() : null,
+                config.enabled() ? environment.timeoutTimer() : null, config.enabled() ? environment.manual : null,
+                environment);
+    }
+
     TimeoutPolicy(String id, TimeoutConfig config, @Nullable Watchdog watchdog) {
         this(id, config, watchdog, config.enabled() ? TimeoutTimer.shared() : null);
     }
 
     TimeoutPolicy(String id, TimeoutConfig config, @Nullable Watchdog watchdog, @Nullable TimeoutTimer timer) {
+        this(id, config, watchdog, timer, null, PolicyEnvironment.DEFAULT);
+    }
+
+    /** For tests: a manual watchdog and timer, and the listeners of {@code events}. */
+    TimeoutPolicy(String id, TimeoutConfig config, @Nullable Watchdog watchdog, @Nullable TimeoutTimer timer,
+            PolicyEnvironment events) {
+        this(id, config, watchdog, timer, null, events);
+    }
+
+    private TimeoutPolicy(String id, TimeoutConfig config, @Nullable Watchdog watchdog, @Nullable TimeoutTimer timer,
+            @Nullable Ticker manual, PolicyEnvironment environment) {
         this.id = id;
+        this.ticker = environment.ticker;
+        this.timedOut = environment.events.sink(TimeoutEvent.TimedOut.class, id);
+        this.manual = manual;
         this.config = config;
         this.enabled = config.enabled();
         this.timeoutNanos = config.timeout().toNanos();
@@ -165,14 +198,30 @@ public final class TimeoutPolicy {
             scope.owner.pop();
             return;
         }
-        // The watchdog got there first: wait until its interrupt has been sent, then clear it.
+        timedOut(scope, call, failure);
+    }
+
+    /**
+     * The watchdog got there first: wait until its interrupt has been sent, clear it, and throw. Kept
+     * out of {@link #end} so that the per-call method stays small enough to inline.
+     */
+    private void timedOut(Scope scope, long call, @Nullable Throwable failure) {
         while (((long) STATE.getAcquire(scope) & STATE_BITS) == INTERRUPTING) {
             Thread.onSpinWait();
         }
         Thread.interrupted();
         STATE.setRelease(scope, call | IDLE);
         scope.owner.pop();
+        publishTimedOut();
         throw new CallTimeoutException(id, Duration.ofNanos(timeoutNanos), failure);
+    }
+
+    /** Publishes {@link TimeoutEvent.TimedOut} if someone listens; reads the clock only then. */
+    private void publishTimedOut() {
+        EventSink<TimeoutEvent.TimedOut> sink = timedOut;
+        if (sink != null) {
+            sink.publish(new TimeoutEvent.TimedOut(id, ticker.getAsLong(), config.timeout()));
+        }
     }
 
     /** One timed call in progress on one thread. Reused by that thread for later calls. */
@@ -241,7 +290,8 @@ public final class TimeoutPolicy {
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
         CompletionStage<T> stage = AsyncSupport.call(call);
         TimeoutTimer.Lane deadlines = lane;
-        if (deadlines == null) {
+        Ticker time = manual;
+        if (deadlines == null && time == null) {
             CompletableFuture<T> result = new CompletableFuture<>();
             AsyncSupport.relay(stage, result);
             return result;
@@ -259,7 +309,16 @@ public final class TimeoutPolicy {
         }
         CompletableFuture<T> result = new CompletableFuture<>();
         Expiry<T> expiry = new Expiry<>(this, stage, result);
-        deadlines.timer.schedule(expiry, deadlines);
+        if (deadlines != null) {
+            deadlines.timer.schedule(expiry, deadlines);
+        } else if (time != null) {
+            // Manual ticker: the expiry never enters a lane, so it stays NEW until it fires or is cancelled.
+            time.schedule(timeoutNanos, () -> {
+                if (expiry.tryMove(TimerEntry.NEW, TimerEntry.FIRED)) {
+                    expiry.run();
+                }
+            });
+        }
         stage.whenComplete(expiry);
         return result;
     }
@@ -280,6 +339,7 @@ public final class TimeoutPolicy {
         @Override
         public void run() {
             if (result.completeExceptionally(new CallTimeoutException(policy.id, policy.config.timeout(), null))) {
+                policy.publishTimedOut(); // only when the timeout won against the stage's completion
                 AsyncSupport.cancel(stage);
             }
         }

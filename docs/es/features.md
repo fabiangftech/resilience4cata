@@ -131,6 +131,138 @@ ResilienceRegistry registry = ResilienceConfig.load()   // resilience4cata.prope
 - `ResilienceConfig.describe()` lista cada valor efectivo y de dónde viene.
 - Una configuración con nombre se define en un solo lugar: registrarla a la vez por código y externamente falla. Los overrides por instancia (`instances.<id>.*`) todavía no están soportados.
 
+## Classifiers: resultados como fallas
+
+`@Retry` y `@CircuitBreaker` aceptan un `classifier`: una clase que implementa `dev.resilience4cata.Classifier<T>` y decide, para cada llamada, si su resultado o su excepción es un `SUCCESS`, un `FAILURE` o algo para `IGNORE`.
+
+```java
+public final class HttpStatusClassifier implements Classifier<HttpResponse<String>> {
+    @Override
+    public Outcome classify(@Nullable HttpResponse<String> response, @Nullable Throwable failure) {
+        if (failure != null) {
+            return failure instanceof IOException ? Outcome.FAILURE : Outcome.IGNORE;
+        }
+        int status = response.statusCode();
+        return status >= 500 || status == 429 ? Outcome.FAILURE : Outcome.SUCCESS;
+    }
+}
+
+public interface Api {
+    @Retry(maxAttempts = 3, classifier = HttpStatusClassifier.class)
+    @CircuitBreaker(classifier = HttpStatusClassifier.class)
+    HttpResponse<String> get(URI uri) throws IOException;
+}
+```
+
+- El procesador verifica la clase al compilar: concreta y no genérica, con un constructor público sin argumentos, y con un `T` al que se pueda asignar el tipo de retorno del método (o el `T` de su `CompletionStage<T>`). Se crea una instancia por método; el retry y el breaker la comparten si nombran la misma clase.
+- El classifier reemplaza a `retryOn` / `recordOn` (poner los dos es un error de compilación). `abortOn` / `ignoreOn` se siguen aplicando primero, así que un breaker abierto sigue cortando los reintentos por defecto.
+- **Retry:** solo se reintenta lo que es `FAILURE`, sea un resultado o una excepción. Si los intentos se agotan con un resultado `FAILURE`, se devuelve el último resultado; `@Fallback` solo atiende excepciones, así que no corre. `maxDuration` se aplica como siempre.
+- **Circuit breaker:** `FAILURE` cuenta como falla (y como lenta si lo fue), `SUCCESS` como éxito. `IGNORE` no se registra, y una sonda half-open devuelve su permiso.
+- Un classifier no debería lanzar excepciones. Si lo hace, su excepción pasa a ser la falla de la llamada: el breaker registra una falla, el retry se detiene y `@Fallback` la recibe.
+- Los métodos async se comportan igual.
+- Costo: los métodos sin classifier generan exactamente el mismo código que antes. Con uno, una llamada exitosa hace una llamada directa a `classify` por política, sin asignar memoria ni leer el reloj.
+
+## API programática
+
+Para código que no se puede anotar (clases de terceros, lambdas, scripts), se arma un `Pipeline` a partir del registry. Es inmutable y thread-safe; se construye una vez y se reutiliza.
+
+```java
+Pipeline<Receipt> charge = Pipeline.builder(registry, "payments", Receipt.class)
+        .retry("external")                                   // configuración con nombre
+        .circuitBreaker(cb -> cb.failureRateThreshold(25))   // valores por defecto + ajustes
+        .rateLimiter("external", rl -> rl.permits(50))       // configuración con nombre + ajustes
+        .timeout(t -> t.timeout(Duration.ofSeconds(2)))
+        .bulkhead()                                          // valores por defecto
+        .fallbackHandler(context -> Receipt.pending(context.attempts()))
+        .build();
+
+Receipt receipt = charge.execute(() -> client.charge(order));            // lanza lo que lanza charge
+CompletableFuture<Receipt> later = charge.executeAsync(() -> client.chargeAsync(order));
+```
+
+- Cada política es opcional y se configura con los valores por defecto, una configuración con nombre, ajustes, o ambos. Las políticas se anidan en el mismo orden que con anotaciones (Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead), sin importar en qué orden se llamen los métodos del builder.
+- El id (`"payments"`) nombra las instancias de las políticas: `registry.circuitBreaker("payments")` devuelve el breaker. Pipelines con el mismo id y la misma configuración comparten instancias; el mismo id con otra configuración es un error.
+- `execute` declara la excepción checked de la llamada. Cuando los reintentos se agotan, lanza la falla propia de la llamada o un rechazo (`CallNotPermittedException`, `RateLimitExceededException`, `CallTimeoutException`, `BulkheadFullException`).
+- `classifier(...)` (o `retryClassifier` / `circuitBreakerClassifier`) decide qué se reintenta y qué se registra, incluidos los resultados, con las mismas reglas que el atributo de la anotación.
+- `fallback(Function<Throwable, T>)` y `fallbackHandler(FallbackHandler<T>)` corren para las fallas elegidas con `fallbackApplyOn` / `fallbackSkipOn`.
+- `executeAsync` usa la forma async no bloqueante de cada política.
+- El camino exitoso sincrónico no asigna memoria más allá de tu propia lambda. Aun así, una sola clase `Pipeline` atiende todos los puntos de llamada, así que su llamada a tu lambda se vuelve megamórfica en una aplicación con muchos pipelines: las anotaciones siguen siendo la opción más rápida donde se pueden usar.
+- Límites: no hay `run(Runnable)` (la lambda devuelve `null`), y los fallbacks async devuelven un valor, no un stage.
+
+## Eventos e inspección del estado
+
+Las políticas publican eventos tipados. Los listeners se registran en el builder del registry, para un record de evento, la interfaz de eventos de una política o `ResilienceEvent` para todos, y opcionalmente para una sola instancia:
+
+```java
+ResilienceRegistry registry = ResilienceRegistry.builder()
+        .listen(CircuitBreakerEvent.StateTransition.class,
+                t -> alerts.send(t.instance() + ": " + t.from() + " -> " + t.to()))
+        .listen("payments", RetryEvent.class, e -> log.debug("{}", e))
+        .listen(ResilienceEvent.class, e -> {
+            switch (e) {
+                case BulkheadEvent.Rejected r -> metrics.bulkheadRejected(r.instance());
+                case FallbackEvent.Applied f -> log.warn("fallback for {}", f.instance(), f.failure());
+                default -> { }
+            }
+        })
+        .build();
+```
+
+| Evento | Cuándo |
+|---|---|
+| `CircuitBreakerEvent.StateTransition(from, to)` | Cada cambio de estado, publicado una sola vez por el thread que lo hizo |
+| `CircuitBreakerEvent.CallNotPermitted(state)` | Una llamada rechazada con el breaker abierto, forzado a abierto o sin sondas half-open |
+| `RetryEvent.Retrying(attempt, delay, failure)` | Un intento fallido que se va a reintentar |
+| `RetryEvent.GaveUp(attempts, reason, failure)` | No hay más intentos: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` o `INTERRUPTED` |
+| `TimeoutEvent.TimedOut(timeout)` | Una llamada superó su timeout |
+| `BulkheadEvent.Rejected` / `RateLimiterEvent.Rejected` | Se rechazó una llamada |
+| `FallbackEvent.Applied(failure)` | El fallback corre para una falla |
+
+Todo evento lleva `instance()` (el `name`, o `<interfaz>#<método>(<tipos de parámetros>)`) y `nanoTime()`. Las llamadas exitosas no publican nada; para eso está el snapshot.
+
+- **Sin costo si no se usa.** Los listeners quedan fijos al construir el registry (no se pueden registrar después, igual que el resto de la configuración). Cada política busca sus listeners una vez, al crearse, así que un tipo de evento que nadie escucha nunca asigna memoria, ni toma locks, ni lee el reloj.
+- **Sincrónicos.** Los listeners corren en el thread que causó el evento: el del llamador en llamadas sincrónicas, un thread virtual de la librería en timeouts async y reintentos diferidos. Tienen que ser rápidos y no bloquear; el trabajo lento va a una cola.
+- **Aislados.** Un listener que lanza una excepción no afecta a la llamada ni a los otros listeners: su excepción va al uncaught exception handler del thread.
+- Los eventos publicados desde threads distintos pueden llegar desordenados; cada transición llega exactamente una vez.
+- Hueco conocido: cuando el propio classifier lanza una excepción, el retry se rinde sin publicar `GaveUp`.
+
+`registry.snapshot()` devuelve records de solo lectura de todas las instancias creadas hasta ahora, para health checks y lecturas de métricas. Puede asignar memoria y recorrer las ventanas, y no le agrega nada a las llamadas:
+
+```java
+ResilienceSnapshot s = registry.snapshot();
+for (CircuitBreakerSnapshot cb : s.circuitBreakers()) {
+    System.out.printf("%s %s failureRate=%.1f%% calls=%d%n", cb.instance(), cb.state(), cb.failureRate(), cb.bufferedCalls());
+}
+s.bulkheads().forEach(b -> gauge(b.instance(), b.concurrentCalls(), b.waitingCalls(), b.maxConcurrent()));
+s.rateLimiters().forEach(r -> gauge(r.instance(), r.availablePermits()));
+```
+
+Las tasas son porcentajes, o `-1` hasta que la ventana tiene `minimumCalls` llamadas (la tasa de llamadas lentas también es `-1` si la detección de llamadas lentas está apagada). Los retries y timeouts muestran su configuración resuelta. Para una sola instancia: `registry.circuitBreaker(id).snapshot()`, `bulkhead(id).snapshot()` y `rateLimiter(id).snapshot()`.
+
+## Tests
+
+Agregá `testImplementation("dev.resilience4cata:resilience4cata-testkit")`. Un `ManualClock` reemplaza el reloj del sistema y los timers de la librería en un registry, así los tests mueven el tiempo a mano en lugar de esperar:
+
+```java
+ManualClock clock = new ManualClock();
+ResilienceRegistry registry = ResilienceTesting.registry(clock).build(); // también fija la semilla del jitter en 42
+Inventory inventory = Resilient.of(Inventory.class, stub, registry);
+
+inventory.fetch("a");                  // @Retry(delay = "1s"): 3 fallas y después éxito; vuelve al instante
+assertThat(clock.elapsed()).isEqualTo(Duration.ofSeconds(3));
+
+clock.advance(Duration.ofSeconds(30)); // un breaker abierto con waitInOpen = 30s deja pasar la siguiente llamada como sonda
+```
+
+- Las esperas (backoff de reintentos, esperas del rate limiter) avanzan el reloj en vez de bloquear.
+- Las esperas del breaker, las llamadas lentas, los permisos del rate limiter y el `maxDuration` del retry se miden con el reloj.
+- El backoff de reintentos async, las esperas async del rate limiter, los límites de espera async del bulkhead y los timeouts async corren en el thread que llama a `advance`, antes de que vuelva.
+- Los timeouts sincrónicos disparan exactamente cuando el reloj pasa el plazo (sin holgura). Un stub que simula una dependencia lenta con `clock.sleep(Duration.ofSeconds(5))` termina en `CallTimeoutException`.
+- `ResilienceRegistry.builder().random(new Random(seed))` hace reproducible el jitter sin el testkit. El generador tiene que ser thread-safe (`Random` lo es, `SplittableRandom` no).
+- `clock.advanceUntilIdle()` corre todas las tareas diferidas pendientes; `ResilienceTesting.elapseWaitInOpen(breaker, clock)` pasa la espera en abierto de un breaker.
+- El reloj es una SPI (`dev.resilience4cata.Ticker`, se configura con `Builder.ticker(...)`), así que se pueden enchufar otros relojes de test.
+- Límites: un bulkhead sincrónico con `maxWait` espera en tiempo real. Un sleep que termina en timeout igual avanza el reloj su duración completa. Con varios threads avanzando el mismo reloj, el orden de las tareas no es determinista.
+
 ## Contrato de rendimiento
 
 Objetivos a verificar con JMH desde la primera versión ([01 §4.1](research/01-landscape.md), [03 §10](research/03-performance-internals.md)):
@@ -145,4 +277,4 @@ Objetivos a verificar con JMH desde la primera versión ([01 §4.1](research/01-
 | Estructuras sin locks correctas | jcstress |
 | Comparación publicada y reproducible contra Resilience4j 2.4.0 | 11 escenarios JMH ([03 §9](research/03-performance-internals.md)) |
 
-Ninguno de estos números se ha medido todavía en resilience4cata. La mayoría de las llamadas reales dependen de I/O (milisegundos), así que la propuesta es "overhead casi nulo que escala con los threads, más anotaciones sin framework", no solo velocidad bruta.
+Las mediciones actuales están en [benchmarks](benchmarks.md). La mayoría de las llamadas reales dependen de I/O (milisegundos), así que la propuesta es "overhead casi nulo que escala con los threads, más anotaciones sin framework", no solo velocidad bruta.

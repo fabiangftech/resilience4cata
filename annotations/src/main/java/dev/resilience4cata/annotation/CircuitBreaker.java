@@ -52,8 +52,17 @@ public @interface CircuitBreaker {
     Class<? extends Throwable>[] ignoreOn() default {};
 
     /**
-     * Classifier for results and exceptions. Must implement {@code dev.resilience4cata.Classifier};
-     * the annotation processor checks it. {@code void.class} means inherit.
+     * Classifier for results and exceptions: a class implementing {@code dev.resilience4cata.Classifier<T>},
+     * where the method's return type (or {@code T} of its {@code CompletionStage<T>}) is assignable to
+     * {@code T}, with a public no-argument constructor. One instance is created per method (shared with
+     * {@code @Retry} if it uses the same class). The annotation processor checks it. {@code void.class}
+     * means none.
+     *
+     * <p>With a classifier, the breaker records each call as the classifier says: {@code FAILURE} counts
+     * as a failure, {@code SUCCESS} as a success, and {@code IGNORE} is not recorded (a half-open probe
+     * gives its permit back). It replaces {@code recordOn} (setting both is a compile error);
+     * {@code ignoreOn} still wins over it. An exception thrown by the classifier is recorded as a
+     * failure and propagates as the call's failure.
      */
     Class<?> classifier() default void.class;
 

@@ -131,6 +131,138 @@ ResilienceRegistry registry = ResilienceConfig.load()   // classpath resilience4
 - `ResilienceConfig.describe()` lists every effective value and where it comes from.
 - A named config must be configured in one place: registering it both programmatically and externally fails. Per-instance overrides (`instances.<id>.*`) are not supported yet.
 
+## Classifiers: results as failures
+
+`@Retry` and `@CircuitBreaker` take a `classifier`: a class implementing `dev.resilience4cata.Classifier<T>` that decides, for each call, whether its result or exception is a `SUCCESS`, a `FAILURE` or something to `IGNORE`.
+
+```java
+public final class HttpStatusClassifier implements Classifier<HttpResponse<String>> {
+    @Override
+    public Outcome classify(@Nullable HttpResponse<String> response, @Nullable Throwable failure) {
+        if (failure != null) {
+            return failure instanceof IOException ? Outcome.FAILURE : Outcome.IGNORE;
+        }
+        int status = response.statusCode();
+        return status >= 500 || status == 429 ? Outcome.FAILURE : Outcome.SUCCESS;
+    }
+}
+
+public interface Api {
+    @Retry(maxAttempts = 3, classifier = HttpStatusClassifier.class)
+    @CircuitBreaker(classifier = HttpStatusClassifier.class)
+    HttpResponse<String> get(URI uri) throws IOException;
+}
+```
+
+- The processor checks the class at compile time: concrete and non-generic, a public no-argument constructor, and a `T` that the method's return type (or the `T` of its `CompletionStage<T>`) is assignable to. One instance is created per method; the retry and the breaker share it when they name the same class.
+- The classifier replaces `retryOn` / `recordOn` (setting both is a compile error). `abortOn` / `ignoreOn` still apply first, so an open breaker still stops retries by default.
+- **Retry:** only `FAILURE` is retried, whether it is a result or an exception. When the attempts run out on a `FAILURE` result, the last result is returned; `@Fallback` handles exceptions only, so it does not run. `maxDuration` applies as usual.
+- **Circuit breaker:** `FAILURE` counts as a failure (and as slow if it was slow), `SUCCESS` as a success. `IGNORE` is not recorded, and a half-open probe gives its permit back.
+- A classifier should not throw. If it does, its exception becomes the call's failure: the breaker records a failure, the retry stops, and `@Fallback` gets it.
+- Asynchronous methods behave the same way.
+- Cost: methods without a classifier generate exactly the same code as before. With one, a successful call makes one direct `classify` call per policy, with no allocation and no clock read.
+
+## Programmatic API
+
+For code that cannot be annotated (third-party classes, lambdas, scripts), build a `Pipeline` from the registry. It is immutable and thread-safe; build it once and reuse it.
+
+```java
+Pipeline<Receipt> charge = Pipeline.builder(registry, "payments", Receipt.class)
+        .retry("external")                                   // named config
+        .circuitBreaker(cb -> cb.failureRateThreshold(25))   // defaults + overrides
+        .rateLimiter("external", rl -> rl.permits(50))       // named config + overrides
+        .timeout(t -> t.timeout(Duration.ofSeconds(2)))
+        .bulkhead()                                          // defaults
+        .fallbackHandler(context -> Receipt.pending(context.attempts()))
+        .build();
+
+Receipt receipt = charge.execute(() -> client.charge(order));            // throws what charge throws
+CompletableFuture<Receipt> later = charge.executeAsync(() -> client.chargeAsync(order));
+```
+
+- Every policy is optional, configured from the defaults, a named config, overrides, or both. Policies nest in the same order as with annotations (Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead), whatever order the builder methods are called in.
+- The id (`"payments"`) names the policy instances: `registry.circuitBreaker("payments")` returns the breaker. Pipelines with the same id and configuration share instances; the same id with a different configuration is an error.
+- `execute` declares the call's checked exception. Once retries give up it throws the call's own failure or a rejection (`CallNotPermittedException`, `RateLimitExceededException`, `CallTimeoutException`, `BulkheadFullException`).
+- `classifier(...)` (or `retryClassifier` / `circuitBreakerClassifier`) decides what is retried and recorded, results included, with the same rules as the annotation attribute.
+- `fallback(Function<Throwable, T>)` and `fallbackHandler(FallbackHandler<T>)` run for the failures selected by `fallbackApplyOn` / `fallbackSkipOn`.
+- `executeAsync` uses each policy's non-blocking async form.
+- The synchronous success path allocates nothing beyond your own lambda. Still, one `Pipeline` class serves every call site, so its call to your lambda becomes megamorphic in an application with many pipelines: annotations remain the fastest option where they can be used.
+- Limits: no `run(Runnable)` (return `null` from the lambda), and async fallbacks return a value, not a stage.
+
+## Events and state inspection
+
+Policies publish typed events. Listeners are registered on the registry builder, for an event record, a policy's event interface, or `ResilienceEvent` for everything, and optionally for one instance only:
+
+```java
+ResilienceRegistry registry = ResilienceRegistry.builder()
+        .listen(CircuitBreakerEvent.StateTransition.class,
+                t -> alerts.send(t.instance() + ": " + t.from() + " -> " + t.to()))
+        .listen("payments", RetryEvent.class, e -> log.debug("{}", e))
+        .listen(ResilienceEvent.class, e -> {
+            switch (e) {
+                case BulkheadEvent.Rejected r -> metrics.bulkheadRejected(r.instance());
+                case FallbackEvent.Applied f -> log.warn("fallback for {}", f.instance(), f.failure());
+                default -> { }
+            }
+        })
+        .build();
+```
+
+| Event | When |
+|---|---|
+| `CircuitBreakerEvent.StateTransition(from, to)` | Every state change, published once by the thread that made it |
+| `CircuitBreakerEvent.CallNotPermitted(state)` | A call rejected while open, forced open or out of half-open probes |
+| `RetryEvent.Retrying(attempt, delay, failure)` | A failed attempt that will be retried |
+| `RetryEvent.GaveUp(attempts, reason, failure)` | No more attempts: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` or `INTERRUPTED` |
+| `TimeoutEvent.TimedOut(timeout)` | A call ran past its timeout |
+| `BulkheadEvent.Rejected` / `RateLimiterEvent.Rejected` | A call was rejected |
+| `FallbackEvent.Applied(failure)` | The fallback runs for a failure |
+
+Every event carries `instance()` (the `name`, or `<interface>#<method>(<parameter types>)`) and `nanoTime()`. Successful calls publish nothing; use the snapshot for that.
+
+- **Zero cost when unused.** Listeners are fixed when the registry is built (there is no registration afterwards, like the rest of the configuration). Each policy looks up its listeners once, at creation, so an event type nobody listens to never allocates, locks or reads a clock.
+- **Synchronous.** Listeners run on the thread that caused the event: the caller's thread for synchronous calls, a library virtual thread for asynchronous timeouts and deferred retries. Keep them fast and non-blocking; hand slow work to a queue.
+- **Isolated.** A listener that throws does not affect the call or the other listeners: its exception goes to the thread's uncaught exception handler.
+- Events published from different threads can arrive out of order; each transition arrives exactly once.
+- Known gap: when a classifier itself throws, the retry gives up without publishing `GaveUp`.
+
+`registry.snapshot()` returns read-only records of every instance created so far, for health checks and metrics scrapes. It may allocate and walk the windows, and adds nothing to calls:
+
+```java
+ResilienceSnapshot s = registry.snapshot();
+for (CircuitBreakerSnapshot cb : s.circuitBreakers()) {
+    System.out.printf("%s %s failureRate=%.1f%% calls=%d%n", cb.instance(), cb.state(), cb.failureRate(), cb.bufferedCalls());
+}
+s.bulkheads().forEach(b -> gauge(b.instance(), b.concurrentCalls(), b.waitingCalls(), b.maxConcurrent()));
+s.rateLimiters().forEach(r -> gauge(r.instance(), r.availablePermits()));
+```
+
+Rates are percentages, or `-1` until the window holds `minimumCalls` calls (the slow-call rate is also `-1` when slow-call detection is off). Retries and timeouts show their resolved configuration. Single instances have `registry.circuitBreaker(id).snapshot()`, `bulkhead(id).snapshot()` and `rateLimiter(id).snapshot()`.
+
+## Testing
+
+Add `testImplementation("dev.resilience4cata:resilience4cata-testkit")`. A `ManualClock` replaces the system clock and the library's timers in one registry, so tests move time by hand instead of waiting:
+
+```java
+ManualClock clock = new ManualClock();
+ResilienceRegistry registry = ResilienceTesting.registry(clock).build(); // also seeds jitter with 42
+Inventory inventory = Resilient.of(Inventory.class, stub, registry);
+
+inventory.fetch("a");                  // @Retry(delay = "1s"): 3 failures, then success; returns at once
+assertThat(clock.elapsed()).isEqualTo(Duration.ofSeconds(3));
+
+clock.advance(Duration.ofSeconds(30)); // an open breaker with waitInOpen = 30s lets the next call probe
+```
+
+- Sleeps (retry backoff, rate limiter waits) advance the clock instead of blocking.
+- Breaker waits, slow calls, rate limiter permits and retry `maxDuration` are measured on the clock.
+- Async retry backoff, async rate limiter waits, async bulkhead wait limits and async timeouts run on the thread that calls `advance`, before it returns.
+- Sync timeouts fire exactly when the clock passes the deadline (no slack). A stub that simulates a slow dependency with `clock.sleep(Duration.ofSeconds(5))` ends with `CallTimeoutException`.
+- `ResilienceRegistry.builder().random(new Random(seed))` makes jitter reproducible without the testkit. The generator must be thread-safe (`Random` is, `SplittableRandom` is not).
+- `clock.advanceUntilIdle()` runs every pending delayed task; `ResilienceTesting.elapseWaitInOpen(breaker, clock)` moves past a breaker's wait in open.
+- The clock is an SPI (`dev.resilience4cata.Ticker`, set with `Builder.ticker(...)`), so other test clocks can plug in.
+- Limits: a sync bulkhead with `maxWait` waits in real time. A sleep that times out still advances the clock by its full length. With several threads advancing the same clock, task order is not deterministic.
+
 ## Performance contract
 
 Targets to verify with JMH from the first release ([01 §4.1](research/01-landscape.md), [03 §10](research/03-performance-internals.md)):
@@ -145,4 +277,4 @@ Targets to verify with JMH from the first release ([01 §4.1](research/01-landsc
 | Correct lock-free structures | jcstress |
 | Published, reproducible comparison against Resilience4j 2.4.0 | 11 JMH scenarios ([03 §9](research/03-performance-internals.md)) |
 
-None of these numbers have been measured yet for resilience4cata. Most real calls are I/O-bound (milliseconds), so the pitch is "near-zero overhead that scales with threads, plus annotations without a framework", not raw speed alone.
+Current measurements are in [benchmarks](benchmarks.md). Most real calls are I/O-bound (milliseconds), so the pitch is "near-zero overhead that scales with threads, plus annotations without a framework", not raw speed alone.

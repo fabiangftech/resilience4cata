@@ -3,7 +3,10 @@ package dev.resilience4cata.generated;
 import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.CircuitBreakerConfig;
 import dev.resilience4cata.CircuitBreakerHandle;
+import dev.resilience4cata.CircuitBreakerSnapshot;
 import dev.resilience4cata.CircuitBreakerState;
+import dev.resilience4cata.event.CircuitBreakerEvent;
+import dev.resilience4cata.Classifier;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.List;
@@ -11,6 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongSupplier;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Circuit breaker for generated code: lock-free, and allocation-free except on state transitions
@@ -82,6 +86,8 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
     private final ClassValue<Outcome> classification;
     private final CallNotPermittedException rejection;
     private final LongSupplier ticker;
+    private final @Nullable EventSink<CircuitBreakerEvent.StateTransition> transitions;
+    private final @Nullable EventSink<CircuitBreakerEvent.CallNotPermitted> notPermitted;
 
     @SuppressWarnings("unused") // accessed through PHASE
     private volatile Phase phase;
@@ -95,10 +101,21 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @param config the configuration
      */
     public CircuitBreakerPolicy(String id, CircuitBreakerConfig config) {
-        this(id, config, System::nanoTime);
+        this(id, config, PolicyEnvironment.DEFAULT);
     }
 
     CircuitBreakerPolicy(String id, CircuitBreakerConfig config, LongSupplier ticker) {
+        this(id, config, PolicyEnvironment.forTest(ticker, RetryPolicy.Sleeper.NONE));
+    }
+
+    /**
+     * Creates a circuit breaker in its initial state: closed, or disabled if the configuration says so.
+     *
+     * @param id the breaker's id, used in the rejection message
+     * @param config the configuration
+     * @param environment the clock to use
+     */
+    public CircuitBreakerPolicy(String id, CircuitBreakerConfig config, PolicyEnvironment environment) {
         this.id = id;
         this.config = config;
         this.timeWindow = config.windowType() == CircuitBreakerConfig.WindowType.TIME;
@@ -113,7 +130,9 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         this.halfOpenCalls = config.halfOpenCalls();
         this.classification = new Classification(config.recordOn(), config.ignoreOn());
         this.rejection = new CallNotPermittedException(id);
-        this.ticker = ticker;
+        this.ticker = environment.ticker;
+        this.transitions = environment.events.sink(CircuitBreakerEvent.StateTransition.class, id);
+        this.notPermitted = environment.events.sink(CircuitBreakerEvent.CallNotPermitted.class, id);
         this.phase = initialPhase(0);
     }
 
@@ -130,6 +149,28 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
     @Override
     public CircuitBreakerState state() {
         return phase().state();
+    }
+
+    @Override
+    public CircuitBreakerSnapshot snapshot() {
+        Phase current = phase();
+        int[] counts;
+        int minimum;
+        if (current instanceof Closed closed) {
+            counts = closed.window.counts(timeWindow ? ticker.getAsLong() : 0L);
+            minimum = minimumCalls;
+        } else if (current instanceof HalfOpen halfOpen) {
+            counts = halfOpen.window.counts(0L);
+            minimum = halfOpenCalls;
+        } else {
+            counts = new int[3];
+            minimum = 1;
+        }
+        int calls = counts[0];
+        boolean evaluated = calls > 0 && calls >= minimum;
+        float failureRate = evaluated ? counts[1] * 100f / calls : -1f;
+        float slowCallRate = evaluated && timed ? counts[2] * 100f / calls : -1f;
+        return new CircuitBreakerSnapshot(id, current.state(), failureRate, slowCallRate, calls, counts[1], counts[2]);
     }
 
     /** Returns the preallocated exception to throw when {@link #acquire()} returns {@link #REJECTED}. */
@@ -174,7 +215,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
             if (current instanceof Open open) {
                 long now = ticker.getAsLong();
                 if (now - open.openedAt < waitInOpenNanos) {
-                    return REJECTED;
+                    return rejected(CircuitBreakerState.OPEN, now);
                 }
                 Phase halfOpen = new HalfOpen(open.generation + 1, halfOpenCalls, now);
                 if (!transition(current, halfOpen)) {
@@ -189,7 +230,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
                     if (now - halfOpen.startedAt >= maxWaitInHalfOpenNanos) {
                         // The probes took too long: open again.
                         transition(current, new Open(halfOpen.generation + 1, now));
-                        return REJECTED;
+                        return rejected(CircuitBreakerState.OPEN, now);
                     }
                 }
                 // Never below zero: a rejected call must not use up a permit that an ignored probe gives back.
@@ -198,16 +239,30 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
                 do {
                     left = permits.get();
                     if (left <= 0) {
-                        return REJECTED;
+                        return rejected(CircuitBreakerState.HALF_OPEN, 0L);
                     }
                 } while (!permits.compareAndSet(left, left - 1));
                 return halfOpen.generation;
             }
             if (current.kind == Phase.FORCED_OPEN) {
-                return REJECTED;
+                return rejected(CircuitBreakerState.FORCED_OPEN, 0L);
             }
             return current.generation;
         }
+    }
+
+    /**
+     * Publishes {@link CircuitBreakerEvent.CallNotPermitted} if someone listens, and returns {@link #REJECTED}.
+     * Without listeners this is one null check: no allocation and no clock read.
+     *
+     * @param now the clock reading the caller already has, or 0 to read it here (only when publishing)
+     */
+    private long rejected(CircuitBreakerState state, long now) {
+        EventSink<CircuitBreakerEvent.CallNotPermitted> sink = notPermitted;
+        if (sink != null) {
+            sink.publish(new CircuitBreakerEvent.CallNotPermitted(id, now != 0L ? now : ticker.getAsLong(), state));
+        }
+        return REJECTED;
     }
 
     /**
@@ -246,6 +301,37 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
             case FAILURE -> record(token, SlidingWindow.FAILURE | slowBit(start));
             case SUCCESS -> record(token, slowBit(start));
             case IGNORED -> release(token);
+        }
+    }
+
+    /**
+     * Records a call that threw, for a method with a {@link Classifier}: the classifier's verdict
+     * replaces {@code recordOn}, while {@code ignoreOn} still wins over it.
+     *
+     * @param token the value returned by {@link #acquire()}
+     * @param start the value returned by {@link #startTimer()}
+     * @param failure the exception thrown by the call
+     * @param outcome what the method's classifier returned for {@code failure}
+     */
+    public void onFailure(long token, long start, Throwable failure, Classifier.Outcome outcome) {
+        onResult(token, start, classification.get(failure.getClass()) == Outcome.IGNORED
+                ? Classifier.Outcome.IGNORE : outcome);
+    }
+
+    /**
+     * Records a call that returned normally, for a method with a {@link Classifier}: the result is
+     * recorded as the classifier said. {@code IGNORE} records nothing and gives a half-open probe
+     * permit back; a {@code SUCCESS} costs the same as {@link #onSuccess}.
+     *
+     * @param token the value returned by {@link #acquire()}
+     * @param start the value returned by {@link #startTimer()}
+     * @param outcome what the method's classifier returned for the result
+     */
+    public void onResult(long token, long start, Classifier.Outcome outcome) {
+        switch (outcome) {
+            case SUCCESS -> onSuccess(token, start);
+            case FAILURE -> record(token, SlidingWindow.FAILURE | slowBit(start));
+            case IGNORE -> release(token);
         }
     }
 
@@ -323,10 +409,17 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         return timeWindow ? new TimeWindow(windowSize) : new CountWindow(windowSize, false);
     }
 
-    /** Swaps the phase, then clears the quiet state, which only a closed phase can have. */
+    /**
+     * Swaps the phase, then clears the quiet state, which only a closed phase can have. The thread whose
+     * compare-and-set wins publishes the transition, after the new phase is in place: exactly once.
+     */
     private boolean transition(Phase from, Phase to) {
         if (PHASE.compareAndSet(this, from, to)) {
             clearQuiet();
+            EventSink<CircuitBreakerEvent.StateTransition> sink = transitions;
+            if (sink != null) {
+                sink.publish(new CircuitBreakerEvent.StateTransition(id, ticker.getAsLong(), from.state(), to.state()));
+            }
             return true;
         }
         return false;
@@ -498,6 +591,44 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
             } else {
                 Throwable cause = AsyncSupport.unwrap(failure);
                 onFailure(token, started, cause);
+                result.completeExceptionally(cause);
+            }
+        });
+        return result;
+    }
+
+    /**
+     * Same as {@link #executeAsync(AsyncCall)}, with a classifier that decides how results and exceptions
+     * are recorded (see {@link #onResult} and {@link #onFailure(long, long, Throwable, Classifier.Outcome)}).
+     * An exception thrown by the classifier is recorded as a failure and fails the future.
+     *
+     * @param call the next layer
+     * @param classifier the method's classifier
+     * @param <T> the result type
+     * @return a future that completes with the call's outcome
+     */
+    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier) {
+        long token = acquire();
+        if (token < 0) {
+            return CompletableFuture.failedFuture(rejection());
+        }
+        long started = startTimer();
+        CompletableFuture<T> result = new CompletableFuture<>();
+        AsyncSupport.call(call).whenComplete((value, failure) -> {
+            Throwable cause = failure == null ? null : AsyncSupport.unwrap(failure);
+            Classifier.Outcome outcome;
+            try {
+                outcome = classifier.classify(cause == null ? value : null, cause);
+            } catch (Throwable classifierFailure) {
+                onResult(token, started, Classifier.Outcome.FAILURE);
+                result.completeExceptionally(classifierFailure);
+                return;
+            }
+            if (cause == null) {
+                onResult(token, started, outcome);
+                result.complete(value);
+            } else {
+                onFailure(token, started, cause, outcome);
                 result.completeExceptionally(cause);
             }
         });

@@ -146,7 +146,7 @@ class TimeoutPolicyTest {
 
     @Test
     void disabledTimeoutsDoNothing() {
-        TimeoutPolicy timeout = new TimeoutPolicy("test", TimeoutConfig.builder().enabled(false).build(), null);
+        TimeoutPolicy timeout = new TimeoutPolicy("test", TimeoutConfig.builder().enabled(false).build(), (Watchdog) null);
         assertThat(timeout.enter()).isNull();
         timeout.succeeded(null);
         timeout.failed(null, new IOException());

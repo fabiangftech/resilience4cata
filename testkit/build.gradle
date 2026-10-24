@@ -1,0 +1,9 @@
+plugins {
+    id 'r4c.java-library'
+}
+
+description = 'Test support: a manual clock for retries, breakers, rate limiters and timeouts, and seeded jitter.'
+
+dependencies {
+    api project(':core')
+}

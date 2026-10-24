@@ -45,7 +45,7 @@ final class Watchdog {
 
     private final ConcurrentLinkedQueue<ThreadScopes> threads = new ConcurrentLinkedQueue<>();
     private final ThreadLocal<ThreadScopes> local = ThreadLocal.withInitial(this::register);
-    private final AtomicLong tick = new AtomicLong(MAX_TICK);
+    private final AtomicLong tick;
     @SuppressWarnings("unused") // accessed through NOW
     private volatile long now;
     // Owned by the watchdog thread: the last real clock reading, and the coarse clock built from it.
@@ -70,8 +70,21 @@ final class Watchdog {
 
     /** Creates a watchdog that only moves when {@link #tick(long)} is called; used directly by tests. */
     Watchdog(long now) {
+        this(now, MAX_TICK);
+    }
+
+    private Watchdog(long now, long tick) {
         this.now = now;
         this.coarse = now;
+        this.tick = new AtomicLong(tick);
+    }
+
+    /**
+     * Creates a watchdog for a manual {@code Ticker}: it moves only when {@link #tick(long)} is called
+     * with the ticker's exact time, so its tick, and with it the slack added to every timeout, is zero.
+     */
+    static Watchdog manual(long now) {
+        return new Watchdog(now, 0);
     }
 
     /** Makes the tick short enough for a timeout of this length. */

@@ -125,17 +125,235 @@ class ResilienceProcessorTest {
     }
 
     @Test
-    void rejectsClassifiersForNow() {
+    void generatesClassifiedLayersThatCompileWithoutWarnings() {
         Compilation result = compile("demo.Client", """
                 package demo;
+                import dev.resilience4cata.Classifier;
+                import dev.resilience4cata.annotation.CircuitBreaker;
+                import dev.resilience4cata.annotation.Fallback;
                 import dev.resilience4cata.annotation.Retry;
+                import java.util.concurrent.CompletableFuture;
+                import java.util.concurrent.CompletionStage;
                 public interface Client {
-                    @Retry(classifier = String.class)
-                    String call();
+                    @Retry(classifier = Status.class) @CircuitBreaker(classifier = Status.class)
+                    Integer both(String id) throws java.io.IOException;
+                    @Retry(classifier = Status.class) @CircuitBreaker(classifier = Any.class)
+                    @Fallback(method = "recover")
+                    Integer different(String id) throws java.io.IOException;
+                    @Retry(classifier = Any.class) @Fallback(Zero.class)
+                    int primitive();
+                    @CircuitBreaker(classifier = Any.class)
+                    void nothing();
+                    @Retry(classifier = Any.class)
+                    <T> T generic(T value);
+                    @Retry(classifier = Status.class) @CircuitBreaker(classifier = Status.class) @Fallback(method = "later")
+                    CompletionStage<Integer> async(String id);
+                    @Retry(classifier = Status.class)
+                    CompletableFuture<Integer> future();
+                    @CircuitBreaker(classifier = Status.class)
+                    CompletionStage<Integer> breakerOnly();
+
+                    default Integer recover(String id, java.io.IOException e) { return -1; }
+                    default Integer recover(String id) { return -2; }
+                    default Integer later(String id) { return -3; }
+
+                    final class Status implements Classifier<Integer> {
+                        @Override
+                        public Outcome classify(Integer result, Throwable failure) {
+                            return failure != null || result >= 500 ? Outcome.FAILURE : Outcome.SUCCESS;
+                        }
+                    }
+
+                    final class Any implements Classifier<Object> {
+                        @Override
+                        public Outcome classify(Object result, Throwable failure) {
+                            return Outcome.SUCCESS;
+                        }
+                    }
+
+                    final class Zero implements dev.resilience4cata.FallbackHandler<Integer> {
+                        @Override
+                        public Integer apply(dev.resilience4cata.FallbackContext context) {
+                            return 0;
+                        }
+                    }
                 }
                 """);
 
-        assertThat(result.errors()).singleElement().asString().contains("classifier is not supported yet");
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.success()).isTrue();
+        String generated = result.generatedSource("demo.Client$Resilient");
+        assertThat(generated)
+                // one instance per method; the breaker shares the retry's when both use the same class
+                .contains("this.retryClassifier0 = new demo.Client.Status();")
+                .doesNotContain("circuitBreakerClassifier0")
+                .contains("this.retryClassifier1 = new demo.Client.Status();")
+                .contains("this.circuitBreakerClassifier1 = new demo.Client.Any();")
+                .contains("r4c$retry.onFailure(++r4c$attempts, r4c$e, r4c$start, r4c$verdict)")
+                .contains("r4c$retry.onFailedResult(++r4c$attempts, r4c$start)")
+                .contains("r4c$cb.onFailure(r4c$token, r4c$started, r4c$e, r4c$verdict);")
+                .contains("r4c$cb.onResult(r4c$token, r4c$started, r4c$verdict);")
+                // a classifier exception goes to the fallback, counted as one more attempt
+                .contains("this.fallback2.context(r4c$c, r4c$attempts + 1, new java.lang.Object[] {});")
+                .contains("if (r4c$c instanceof java.io.IOException r4c$f0) {")
+                .contains("this.retry5.executeAsync(() -> this.circuitBreaker5.executeAsync(() -> this.delegate.async(p0),"
+                        + " this.retryClassifier5), this.retryClassifier5, this.fallback5,")
+                .contains("this.retry6.executeAsync(() -> this.delegate.future(), this.retryClassifier6, null, null)")
+                .contains("this.circuitBreaker7.executeAsync(() -> this.delegate.breakerOnly(), this.circuitBreakerClassifier7)");
+    }
+
+    @Test
+    void mergesClassifiersLikeOtherAttributes() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.Classifier;
+                import dev.resilience4cata.annotation.ResiliencePolicy;
+                import dev.resilience4cata.annotation.Retry;
+                import java.lang.annotation.Retention;
+                import java.lang.annotation.RetentionPolicy;
+                @Retry(classifier = Client.Lenient.class)
+                public interface Client {
+                    String inherited();
+                    @Retry(classifier = Client.Strict.class)
+                    String overridden();
+                    @Bundle
+                    String bundled();
+
+                    @ResiliencePolicy
+                    @Retry(classifier = Strict.class)
+                    @Retention(RetentionPolicy.CLASS)
+                    @interface Bundle {
+                    }
+
+                    final class Lenient implements Classifier<Object> {
+                        @Override
+                        public Outcome classify(Object result, Throwable failure) {
+                            return Outcome.SUCCESS;
+                        }
+                    }
+
+                    final class Strict implements Classifier<CharSequence> {
+                        @Override
+                        public Outcome classify(CharSequence result, Throwable failure) {
+                            return Outcome.FAILURE;
+                        }
+                    }
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Client$Resilient"))
+                .contains("this.retryClassifier0 = new demo.Client.Lenient();")
+                .contains("this.retryClassifier1 = new demo.Client.Strict();")
+                .contains("this.retryClassifier2 = new demo.Client.Strict();");
+    }
+
+    @Test
+    void rejectsInvalidClassifiers() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.Classifier;
+                import dev.resilience4cata.annotation.CircuitBreaker;
+                import dev.resilience4cata.annotation.Retry;
+                import java.util.concurrent.CompletionStage;
+                public interface Client {
+                    @Retry(classifier = String.class)
+                    String notAClassifier();
+                    @Retry(classifier = Numbers.class)
+                    String wrongType();
+                    @CircuitBreaker(classifier = Numbers.class)
+                    CompletionStage<String> wrongAsyncType();
+                    @Retry(classifier = Abstract.class)
+                    Integer isAbstract();
+                    @Retry(classifier = NoConstructor.class)
+                    Integer noConstructor();
+                    @Retry(classifier = Generic.class)
+                    Integer generic();
+                    @Retry(classifier = Raw.class)
+                    Integer raw();
+                    @Retry(classifier = Numbers.class, retryOn = RuntimeException.class)
+                    Integer withRetryOn();
+                    @CircuitBreaker(classifier = Numbers.class, recordOn = RuntimeException.class)
+                    Integer withRecordOn();
+                    @Retry(classifier = Numbers.class, abortOn = RuntimeException.class)
+                    Integer withAbortOn();
+
+                    class Numbers implements Classifier<Number> {
+                        @Override
+                        public Outcome classify(Number result, Throwable failure) {
+                            return Outcome.SUCCESS;
+                        }
+                    }
+
+                    abstract class Abstract implements Classifier<Integer> {
+                    }
+
+                    final class NoConstructor implements Classifier<Integer> {
+                        private NoConstructor() {
+                        }
+
+                        @Override
+                        public Outcome classify(Integer result, Throwable failure) {
+                            return Outcome.SUCCESS;
+                        }
+                    }
+
+                    final class Generic<T> implements Classifier<T> {
+                        @Override
+                        public Outcome classify(T result, Throwable failure) {
+                            return Outcome.SUCCESS;
+                        }
+                    }
+
+                    @SuppressWarnings("rawtypes")
+                    final class Raw implements Classifier {
+                        @Override
+                        public Outcome classify(Object result, Throwable failure) {
+                            return Outcome.SUCCESS;
+                        }
+                    }
+                }
+                """);
+
+        assertThat(result.errors()).hasSize(9)
+                .anySatisfy(e -> assertThat(e).contains("@Retry.classifier = java.lang.String.class: String does not implement"
+                        + " dev.resilience4cata.Classifier<T>."))
+                .anySatisfy(e -> assertThat(e).contains("Numbers implements Classifier<java.lang.Number>, but wrongType"
+                        + " returns java.lang.String. Implement Classifier<java.lang.String> or a supertype of it."))
+                .anySatisfy(e -> assertThat(e).contains("but wrongAsyncType completes with java.lang.String"))
+                .anySatisfy(e -> assertThat(e).contains("the classifier must not be abstract"))
+                .anySatisfy(e -> assertThat(e).contains("the classifier needs a public no-argument constructor"))
+                .anySatisfy(e -> assertThat(e).contains("generic classifier classes are not supported"))
+                .anySatisfy(e -> assertThat(e).contains("implements the raw type Classifier. Implement"
+                        + " Classifier<java.lang.Integer> instead."))
+                .anySatisfy(e -> assertThat(e).contains("@Retry.retryOn cannot be combined with @Retry.classifier"))
+                .anySatisfy(e -> assertThat(e).contains("@CircuitBreaker.recordOn cannot be combined with"
+                        + " @CircuitBreaker.classifier"));
+    }
+
+    @Test
+    void rejectsANonStaticNestedClassifier() {
+        Compilation result = Compilation.compile(workDir, Map.of("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Retry;
+                public interface Client {
+                    @Retry(classifier = other.Holder.Inner.class)
+                    String inner();
+                }
+                """, "other.Holder", """
+                package other;
+                import dev.resilience4cata.Classifier;
+                public class Holder {
+                    public final class Inner implements Classifier<Object> {
+                        @Override
+                        public Outcome classify(Object result, Throwable failure) {
+                            return Outcome.SUCCESS;
+                        }
+                    }
+                }
+                """));
+
+        assertThat(result.errors()).singleElement().asString().contains("a nested classifier class must be static");
     }
 
     @Test

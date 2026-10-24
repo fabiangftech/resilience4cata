@@ -46,8 +46,16 @@ public @interface Retry {
     Class<? extends Throwable>[] abortOn() default {};
 
     /**
-     * Classifier for results and exceptions. Must implement {@code dev.resilience4cata.Classifier};
-     * the annotation processor checks it. {@code void.class} means inherit.
+     * Classifier for results and exceptions: a class implementing {@code dev.resilience4cata.Classifier<T>},
+     * where the method's return type (or {@code T} of its {@code CompletionStage<T>}) is assignable to
+     * {@code T}, with a public no-argument constructor. One instance is created per method. The
+     * annotation processor checks it. {@code void.class} means none.
+     *
+     * <p>With a classifier, an attempt is retried only if the classifier returns {@code FAILURE}, for a
+     * result or an exception. It replaces {@code retryOn} (setting both is a compile error); {@code abortOn}
+     * still wins over it. When the retries give up on a {@code FAILURE} result, that last result is
+     * returned (no {@code @Fallback}, which only handles exceptions). {@code SUCCESS} and {@code IGNORE}
+     * end the loop. An exception thrown by the classifier ends the retries as the call's failure.
      */
     Class<?> classifier() default void.class;
 

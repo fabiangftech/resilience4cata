@@ -1,13 +1,17 @@
 package dev.resilience4cata.generated;
 
+import dev.resilience4cata.Classifier;
 import dev.resilience4cata.RetryConfig;
+import dev.resilience4cata.event.RetryEvent;
+import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
+import java.util.random.RandomGenerator;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -32,6 +36,7 @@ public final class RetryPolicy {
     /** Returned by {@link #onFailure} when the call must not be retried. */
     public static final long NO_RETRY = -1L;
 
+    private final String id;
     private final RetryConfig config;
     private final boolean enabled;
     private final int maxAttempts;
@@ -41,20 +46,38 @@ public final class RetryPolicy {
     private final long maxDelayNanos;
     private final RetryConfig.Jitter jitter;
     private final long maxDurationNanos;
-    private final ClassValue<Boolean> retryable;
+    // One ClassValue per policy, as before classifiers: every extra ClassValue on the same exception class
+    // shares that class's small lookup cache, and collisions there made failure paths contend under load.
+    private final Classification verdicts;
     private final LongSupplier ticker;
     private final Sleeper sleeper;
+    private final @Nullable RandomGenerator random;
+    private final PolicyEnvironment environment;
+    private final @Nullable EventSink<RetryEvent.Retrying> retrying;
+    private final @Nullable EventSink<RetryEvent.GaveUp> gaveUp;
 
     /**
-     * Creates a policy from a resolved configuration.
+     * Creates a policy from a resolved configuration, with the production environment.
      *
      * @param config the configuration
      */
     public RetryPolicy(RetryConfig config) {
-        this(config, System::nanoTime, TimeUnit.NANOSECONDS::sleep);
+        this("retry", config, PolicyEnvironment.DEFAULT);
     }
 
     RetryPolicy(RetryConfig config, LongSupplier ticker, Sleeper sleeper) {
+        this("retry", config, PolicyEnvironment.forTest(ticker, sleeper));
+    }
+
+    /**
+     * Creates a policy from a resolved configuration.
+     *
+     * @param id the policy's id
+     * @param config the configuration
+     * @param environment the clock, sleeper, random generator and timers to use
+     */
+    public RetryPolicy(String id, RetryConfig config, PolicyEnvironment environment) {
+        this.id = id;
         this.config = config;
         this.enabled = config.enabled();
         this.maxAttempts = config.maxAttempts();
@@ -64,9 +87,13 @@ public final class RetryPolicy {
         this.maxDelayNanos = config.maxDelay().toNanos();
         this.jitter = config.jitter();
         this.maxDurationNanos = config.maxDuration().toNanos();
-        this.retryable = new Classification(config.retryOn(), config.abortOn());
-        this.ticker = ticker;
-        this.sleeper = sleeper;
+        this.verdicts = new Classification(config.retryOn(), config.abortOn());
+        this.ticker = environment.ticker;
+        this.sleeper = environment.sleeper;
+        this.random = environment.random;
+        this.environment = environment;
+        this.retrying = environment.events.sink(RetryEvent.Retrying.class, id);
+        this.gaveUp = environment.events.sink(RetryEvent.GaveUp.class, id);
     }
 
     /** Returns the configuration this policy was created from. */
@@ -92,15 +119,76 @@ public final class RetryPolicy {
      * @return the delay in nanoseconds before the next attempt, or {@link #NO_RETRY}
      */
     public long onFailure(int attempts, Throwable failure, long start) {
-        if (!enabled || attempts >= maxAttempts || failure instanceof InterruptedException
-                || Thread.currentThread().isInterrupted() || !retryable.get(failure.getClass())) {
+        return decide(attempts, failure, start, verdicts.get(failure.getClass()) == Verdict.RETRY);
+    }
+
+    /**
+     * Decides whether to retry after a failure, for a method with a {@link Classifier}: the
+     * classifier's verdict replaces {@code retryOn}, while {@code abortOn} still wins over it. Only a
+     * {@link Classifier.Outcome#FAILURE FAILURE} verdict is retried.
+     *
+     * @param attempts attempts made so far, including the one that just failed
+     * @param failure the exception thrown by the attempt
+     * @param start the value returned by {@link #start()}
+     * @param outcome what the method's classifier returned for {@code failure}
+     * @return the delay in nanoseconds before the next attempt, or {@link #NO_RETRY}
+     */
+    public long onFailure(int attempts, Throwable failure, long start, Classifier.Outcome outcome) {
+        // With a classifier only abortOn counts: its verdict replaces retryOn.
+        return decide(attempts, failure, start,
+                outcome == Classifier.Outcome.FAILURE && verdicts.get(failure.getClass()) != Verdict.ABORT);
+    }
+
+    /**
+     * Decides whether to retry after an attempt returned a result that the method's classifier
+     * classified as {@link Classifier.Outcome#FAILURE FAILURE}. When this returns {@link #NO_RETRY},
+     * the caller returns that last result.
+     *
+     * @param attempts attempts made so far, including the one whose result was rejected
+     * @param start the value returned by {@link #start()}
+     * @return the delay in nanoseconds before the next attempt, or {@link #NO_RETRY}
+     */
+    public long onFailedResult(int attempts, long start) {
+        return decide(attempts, null, start, true);
+    }
+
+    /**
+     * The one place where every retry decision is made. {@code failure} is null for a rejected result;
+     * {@code retryable} is what the exception lists or the classifier said.
+     */
+    private long decide(int attempts, @Nullable Throwable failure, long start, boolean retryable) {
+        if (!enabled) {
+            return NO_RETRY;
+        }
+        // Same order of checks as without events; the reason is only worked out when someone listens.
+        if (attempts >= maxAttempts || failure instanceof InterruptedException
+                || Thread.currentThread().isInterrupted() || !retryable) {
+            if (gaveUp != null) {
+                publishGaveUp(attempts, failure, retryable);
+            }
             return NO_RETRY;
         }
         long delay = withJitter(baseDelay(attempts));
         if (maxDurationNanos > 0 && ticker.getAsLong() - start + delay > maxDurationNanos) {
+            EventSink<RetryEvent.GaveUp> sink = gaveUp;
+            if (sink != null) {
+                sink.publish(new RetryEvent.GaveUp(id, ticker.getAsLong(), attempts, RetryEvent.Reason.MAX_DURATION, failure));
+            }
             return NO_RETRY;
         }
+        EventSink<RetryEvent.Retrying> sink = retrying;
+        if (sink != null) {
+            sink.publish(new RetryEvent.Retrying(id, ticker.getAsLong(), attempts, Duration.ofNanos(delay), failure));
+        }
         return delay;
+    }
+
+    private void publishGaveUp(int attempts, @Nullable Throwable failure, boolean retryable) {
+        RetryEvent.Reason reason = attempts >= maxAttempts ? RetryEvent.Reason.MAX_ATTEMPTS
+                : failure instanceof InterruptedException || Thread.currentThread().isInterrupted()
+                        ? RetryEvent.Reason.INTERRUPTED
+                        : RetryEvent.Reason.NOT_RETRYABLE;
+        Objects.requireNonNull(gaveUp).publish(new RetryEvent.GaveUp(id, ticker.getAsLong(), attempts, reason, failure));
     }
 
     /**
@@ -135,10 +223,14 @@ public final class RetryPolicy {
         if (delay <= 0) {
             return 0L;
         }
+        if (jitter == RetryConfig.Jitter.NONE) {
+            return delay;
+        }
+        RandomGenerator generator = random != null ? random : ThreadLocalRandom.current();
         return switch (jitter) {
             case NONE -> delay;
-            case FULL -> ThreadLocalRandom.current().nextLong(delay + 1);
-            case EQUAL -> delay / 2 + ThreadLocalRandom.current().nextLong(delay - delay / 2 + 1);
+            case FULL -> generator.nextLong(delay + 1);
+            case EQUAL -> delay / 2 + generator.nextLong(delay - delay / 2 + 1);
         };
     }
 
@@ -146,10 +238,25 @@ public final class RetryPolicy {
     @FunctionalInterface
     interface Sleeper {
         void sleep(long nanos) throws InterruptedException;
+
+        /** For policies that never sleep. */
+        Sleeper NONE = nanos -> {
+            throw new UnsupportedOperationException("this policy does not sleep");
+        };
     }
 
-    /** Caches, per exception class, whether it is retryable. {@code abortOn} wins over {@code retryOn}. */
-    private static final class Classification extends ClassValue<Boolean> {
+    /** What the exception lists say about one exception class. */
+    private enum Verdict {
+        /** In {@code retryOn} and not in {@code abortOn}. */
+        RETRY,
+        /** In neither list. */
+        NOT_LISTED,
+        /** In {@code abortOn}, which wins over {@code retryOn}. */
+        ABORT
+    }
+
+    /** Caches the {@link Verdict} per exception class. */
+    private static final class Classification extends ClassValue<Verdict> {
         private final List<Class<? extends Throwable>> retryOn;
         private final List<Class<? extends Throwable>> abortOn;
 
@@ -159,18 +266,18 @@ public final class RetryPolicy {
         }
 
         @Override
-        protected Boolean computeValue(Class<?> type) {
+        protected Verdict computeValue(Class<?> type) {
             for (Class<? extends Throwable> abort : abortOn) {
                 if (abort.isAssignableFrom(type)) {
-                    return false;
+                    return Verdict.ABORT;
                 }
             }
             for (Class<? extends Throwable> retry : retryOn) {
                 if (retry.isAssignableFrom(type)) {
-                    return true;
+                    return Verdict.RETRY;
                 }
             }
-            return false;
+            return Verdict.NOT_LISTED;
         }
     }
 
@@ -199,7 +306,28 @@ public final class RetryPolicy {
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call,
             @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery) {
         CompletableFuture<T> result = new CompletableFuture<>();
-        new AsyncAttempts<>(this, call, fallback, recovery, result, start()).run();
+        new AsyncAttempts<>(this, call, null, fallback, recovery, result, start()).run();
+        return result;
+    }
+
+    /**
+     * Same as {@link #executeAsync(AsyncCall, FallbackPolicy, Recovery)}, with a classifier that decides
+     * which results and exceptions are retried (see {@link #onFailure(int, Throwable, long, Classifier.Outcome)}
+     * and {@link #onFailedResult}). When the retries give up on a rejected result, the future completes
+     * with that result. An exception thrown by the classifier ends the retries as the call's failure.
+     *
+     * @param call one attempt: the next layer
+     * @param classifier the method's classifier
+     * @param fallback decides which failures get the fallback; {@code null} for none
+     * @param recovery the generated fallback; {@code null} for none
+     * @param <T> the result type
+     * @return a future that completes with the first accepted result, the last rejected result, the fallback's
+     *     result, or the last failure
+     */
+    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
+            @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery) {
+        CompletableFuture<T> result = new CompletableFuture<>();
+        new AsyncAttempts<>(this, call, classifier, fallback, recovery, result, start()).run();
         return result;
     }
 
@@ -207,16 +335,19 @@ public final class RetryPolicy {
     private static final class AsyncAttempts<T> implements Runnable, BiConsumer<T, Throwable> {
         private final RetryPolicy policy;
         private final AsyncCall<T> call;
+        private final @Nullable Classifier<? super T> classifier;
         private final @Nullable FallbackPolicy fallback;
         private final @Nullable Recovery<T> recovery;
         private final CompletableFuture<T> result;
         private final long start;
         private int attempts; // written by one attempt's callback before the next attempt is started
 
-        AsyncAttempts(RetryPolicy policy, AsyncCall<T> call, @Nullable FallbackPolicy fallback,
-                @Nullable Recovery<T> recovery, CompletableFuture<T> result, long start) {
+        AsyncAttempts(RetryPolicy policy, AsyncCall<T> call, @Nullable Classifier<? super T> classifier,
+                @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery, CompletableFuture<T> result,
+                long start) {
             this.policy = policy;
             this.call = call;
+            this.classifier = classifier;
             this.fallback = fallback;
             this.recovery = recovery;
             this.result = result;
@@ -230,15 +361,50 @@ public final class RetryPolicy {
 
         @Override
         public void accept(T value, Throwable failure) {
+            Classifier<? super T> classifier = this.classifier;
             if (failure == null) {
-                result.complete(value);
+                if (classifier == null) {
+                    result.complete(value);
+                    return;
+                }
+                Classifier.Outcome outcome;
+                try {
+                    outcome = classifier.classify(value, null);
+                } catch (Throwable classifierFailure) {
+                    giveUp(classifierFailure, ++attempts);
+                    return;
+                }
+                long delay = outcome == Classifier.Outcome.FAILURE ? policy.onFailedResult(++attempts, start) : NO_RETRY;
+                if (delay >= 0) {
+                    policy.environment.later(delay, this);
+                } else {
+                    result.complete(value); // accepted, or rejected with no retries left: the last result
+                }
                 return;
             }
             Throwable cause = AsyncSupport.unwrap(failure);
-            long delay = policy.onFailure(++attempts, cause, start);
+            long delay;
+            if (classifier == null) {
+                delay = policy.onFailure(++attempts, cause, start);
+            } else {
+                Classifier.Outcome outcome;
+                try {
+                    outcome = classifier.classify(null, cause);
+                } catch (Throwable classifierFailure) {
+                    giveUp(classifierFailure, ++attempts);
+                    return;
+                }
+                delay = policy.onFailure(++attempts, cause, start, outcome);
+            }
             if (delay >= 0) {
-                AsyncSupport.later(delay, this);
-            } else if (fallback != null && recovery != null) {
+                policy.environment.later(delay, this);
+            } else {
+                giveUp(cause, attempts);
+            }
+        }
+
+        private void giveUp(Throwable cause, int attempts) {
+            if (fallback != null && recovery != null) {
                 fallback.recoverOrFail(cause, attempts, recovery, result);
             } else {
                 result.completeExceptionally(cause);

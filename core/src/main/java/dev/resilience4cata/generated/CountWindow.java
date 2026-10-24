@@ -115,6 +115,13 @@ final class CountWindow implements SlidingWindow {
                 && (int) CALLS.getVolatile(this) == size;
     }
 
+    @Override
+    public int[] counts(long now) {
+        // Counters are updated one after the other, so a concurrent reader can see one change without the other.
+        int recorded = Math.clamp(calls(), 0, size);
+        return new int[] {recorded, Math.clamp(failures(), 0, recorded), Math.clamp(slowCalls(), 0, recorded)};
+    }
+
     /** Number of slots that hold an outcome, at most {@code size}. */
     int calls() {
         return (int) CALLS.getVolatile(this);
