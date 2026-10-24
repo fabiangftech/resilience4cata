@@ -289,3 +289,45 @@ Un classifier cuesta unos 0,3 ns por política en una llamada exitosa: una llama
 - El pipeline agrega unos 0,5 ns sobre el código generado en estos stacks y sigue sin asignar memoria, también con una lambda que captura un argumento en cada llamada (el escape analysis la elimina).
 - `pipelinePolluted` (el mismo pipeline después de que otros cinco pipelines pasaron por `Pipeline.execute`) mide 7,9 ns con un thread contra 2,9 ns sin contaminar: el único punto de llamada `call.call()` dentro de `Pipeline` se vuelve megamórfico en una aplicación con muchos pipelines. El código generado tiene un punto de llamada por método y no paga ese costo.
 - Resilience4j no tiene un timeout sincrónico en el thread del llamador, así que no hay columna de Resilience4j para seis políticas.
+
+## Clases anotadas, genéricos, overrides de config, bulkhead con ticker (2026-10-24, AWS Graviton3)
+
+Base: commit `53a6651`. Nueva: clases anotadas (estilo subclase), `@Fallback` en métodos genéricos y stages async con comodín, `onExhaustedResult` / `GaveUp` cuando falla el classifier / `Pipeline.run` y fallbacks async del pipeline, overrides por instancia en `config`, y el `maxWait` del bulkhead sincrónico con un ticker manual. Mismo método que la sección anterior (`infra/bench.sh`, 19 `c7g.xlarge`, 160 unidades, 329 ejecuciones; calibración 20,51–20,54 ns, 0,1 % de dispersión).
+
+**Chequeo de regresiones** (resilience4cata, ns/op, 1 thread salvo que se indique; todo 0 B/op en los caminos sincrónicos):
+
+| Benchmark | Base | Nueva | Cambio |
+|---|---:|---:|---:|
+| Retry, éxito | 1.3 ± 0.0 | 1.3 ± 0.0 | +2% |
+| Retry, un reintento | 6.5 ± 0.0 | 6.5 ± 0.0 | +1% |
+| Retry, cuatro servicios, un reintento (4 threads) | 37.8 ± 0.9 | 37.7 ± 0.5 | 0% |
+| Circuit breaker, éxito | 1.8 ± 0.0 | 1.9 ± 0.0 | +1% |
+| Circuit breaker, mixto | 17.2 ± 0.0 | 17.2 ± 0.0 | 0% |
+| Rate limiter, libre | 41.7 ± 0.1 | 41.7 ± 0.1 | 0% |
+| Rate limiter, agotado | 34.2 ± 0.1 | 34.6 ± 0.1 | +1% |
+| Bulkhead, libre | 20.5 ± 0.0 | 20.5 ± 0.0 | 0% |
+| Bulkhead, lleno | 2.3 ± 0.0 | 2.3 ± 0.0 | −1% |
+| Bulkhead, modo con espera | 18.9 ± 0.0 | 18.9 ± 0.0 | 0% |
+| Classifier en retry + breaker | 2.8 ± 0.0 | 2.7 ± 0.0 | −3% |
+| Circuit breaker async | 24.4 ± 0.1 | 24.4 ± 0.1 | 0% |
+| Timeout async, stage pendiente | 149 ± 12 | 149 ± 12 | 0% |
+| Stack async (cinco políticas) | 122 ± 0.2 | 122 ± 0.2 | 0% |
+| Timeout (sincrónico) | 22.1 ± 0.2 | 23.7 ± 0.1 | **+7%** |
+| Timeout (sincrónico), 4 threads | 23.6 ± 0.2 | 23.4 ± 0.3 | −1% |
+
+- Con un thread todo queda dentro de ±2 %, salvo el timeout sincrónico. Con cuatro threads las diferencias van en las dos direcciones dentro de su margen de error (por ejemplo *Bulkhead, libre* 258 → 228 ± 32 ns, *Circuit breaker, mixto* 257 → 271 ± 22 ns).
+- **Pendiente: timeout sincrónico +1,5 ns con un thread.** Es estable (6 forks: 22,1–22,4 contra 23,6–23,8 ns, también con `-XX:-TieredCompilation`: 22,3–22,5 contra 23,6–23,8 ns), pero el código que ejecuta no cambió: el `TimedService$Resilient` generado, `TimeoutPolicy` y `Watchdog` son idénticos, el estado resuelto de la política es idéntico, y el `ThreadLocal` del watchdog cae en su slot directo en los dos builds. Con cuatro threads no hay diferencia. La "corrección" de la sección anterior para el mismo número (sacar la rama de timeout de `end`) puede haber sido el mismo efecto de layout en sentido contrario. Paso siguiente: `-prof perfasm` en las máquinas (necesita `perf` y `hsdis`) para comparar el código compilado.
+- La capa de retry con classifier ganó un `try`/`catch` alrededor de `classify` (para el `GaveUp` cuando el classifier lanza una excepción); los benchmarks del classifier no muestran costo.
+
+**Nuevo en esta ronda** (ns/op, 0 B/op):
+
+| Benchmark | Threads | Resultado |
+|---|---:|---:|
+| Retry, éxito: clase anotada (subclase) vs wrapper de interfaz | 1 | **1.0** vs 1.2 |
+| Retry, un reintento: clase anotada vs wrapper de interfaz | 1 | **5.6** vs 6.5 |
+| Retry, un reintento: clase anotada vs wrapper de interfaz | 4 | **5.5** vs 6.6 |
+| `Pipeline.run` (llamada void), retry + circuit breaker | 1 | 3.0 (`execute`: 2.9) |
+
+- El estilo subclase es un poco más rápido que el wrapper: el override llama directo a `super.metodo()` en vez de pasar por un campo `delegate`, una carga y una llamada de interfaz menos.
+- `Pipeline.run` cuesta lo mismo que `execute` y no asigna memoria.
+- Sin medir, a propósito: los overrides por instancia de config (se resuelven una vez al crear la instancia) y el modo ticker del bulkhead (solo relojes de test; el camino por defecto suma la lectura de un `boolean` `final` después de un `tryAcquire` fallido, y *Bulkhead, modo con espera* no cambia).

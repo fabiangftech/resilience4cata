@@ -34,16 +34,16 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Checks what Gradle needs to treat the processor as isolating: the registration resource, exactly one
- * originating element per generated file (the interface it wraps), and output that depends only on the
- * interface and what it references, so recompiling the interface alone, with everything else read from
- * class files, generates the same source.
+ * originating element per generated file (the interface it wraps, or the class it extends), and output that
+ * depends only on that type and what it references, so recompiling the type alone, with everything else read
+ * from class files, generates the same source.
  */
 class IncrementalProcessingTest {
 
     private static final String REGISTRATION = "META-INF/gradle/incremental.annotation.processors";
 
-    private static final Map<String, String> SOURCES = Map.of(
-            "demo.Standard", """
+    private static final Map<String, String> SOURCES = Map.ofEntries(
+            Map.entry("demo.Standard", """
                     package demo;
                     import dev.resilience4cata.annotation.CircuitBreaker;
                     import dev.resilience4cata.annotation.ResiliencePolicy;
@@ -55,16 +55,16 @@ class IncrementalProcessingTest {
                     @Retention(RetentionPolicy.CLASS)
                     @Target({ElementType.TYPE, ElementType.METHOD})
                     public @interface Standard {}
-                    """,
-            "demo.Handler", """
+                    """),
+            Map.entry("demo.Handler", """
                     package demo;
                     import dev.resilience4cata.FallbackContext;
                     import dev.resilience4cata.FallbackHandler;
                     public class Handler implements FallbackHandler<String> {
                         @Override public String apply(FallbackContext context) { return "fallback"; }
                     }
-                    """,
-            "demo.Client", """
+                    """),
+            Map.entry("demo.Client", """
                     package demo;
                     import dev.resilience4cata.annotation.Fallback;
                     @Standard
@@ -75,23 +75,44 @@ class IncrementalProcessingTest {
                         String other();
                         default String recover(IllegalStateException e) { return "recovered"; }
                     }
-                    """,
-            "demo.Base", """
+                    """),
+            Map.entry("demo.Base", """
                     package demo;
                     import dev.resilience4cata.annotation.Timeout;
                     public interface Base {
                         @Timeout("2s")
                         int base();
                     }
-                    """,
-            "demo.Sub", """
+                    """),
+            Map.entry("demo.Sub", """
                     package demo;
                     public interface Sub extends Base {
                         int own();
                         interface Nested extends Base {}
                     }
-                    """,
-            "demo.Plain", "package demo; public class Plain {}");
+                    """),
+            Map.entry("demo.BaseService", """
+                    package demo;
+                    import dev.resilience4cata.annotation.Retry;
+                    public class BaseService {
+                        @Retry(maxAttempts = 2) public String inherited() { return ""; }
+                        public String second() { return ""; }
+                        protected String recover(Exception e) { return "recovered"; }
+                    }
+                    """),
+            Map.entry("demo.Service", """
+                    package demo;
+                    import dev.resilience4cata.annotation.Fallback;
+                    @Standard
+                    public class Service extends BaseService implements Base {
+                        public Service(String name) {}
+                        Service() {}
+                        @Fallback(Handler.class) public String call(String argument) { return argument; }
+                        @Fallback(method = "recover") public String other() { return ""; }
+                        @Override public int base() { return 1; }
+                    }
+                    """),
+            Map.entry("demo.Plain", "package demo; public class Plain {}"));
 
     @TempDir
     Path workDir;
@@ -119,7 +140,9 @@ class IncrementalProcessingTest {
                 Map.entry("demo.Client$Resilient", List.of("demo.Client")),
                 Map.entry("demo.Base$Resilient", List.of("demo.Base")),
                 Map.entry("demo.Sub$Resilient", List.of("demo.Sub")),
-                Map.entry("demo.Sub$Nested$Resilient", List.of("demo.Sub.Nested")));
+                Map.entry("demo.Sub$Nested$Resilient", List.of("demo.Sub.Nested")),
+                Map.entry("demo.BaseService$Resilient", List.of("demo.BaseService")),
+                Map.entry("demo.Service$Resilient", List.of("demo.Service")));
     }
 
     @Test
@@ -133,7 +156,7 @@ class IncrementalProcessingTest {
         try (Stream<Path> files = Files.walk(full.classes())) {
             for (Path file : files.filter(Files::isRegularFile).toList()) {
                 String name = file.getFileName().toString();
-                if (name.startsWith("Client") || name.startsWith("Sub")) {
+                if (name.startsWith("Client") || name.startsWith("Sub") || name.startsWith("Service")) {
                     continue;
                 }
                 Path target = previous.resolve(full.classes().relativize(file));
@@ -142,14 +165,24 @@ class IncrementalProcessingTest {
             }
         }
         Compilation partial = Compilation.compile(workDir.resolve("partial"),
-                Map.of("demo.Client", SOURCES.get("demo.Client"), "demo.Sub", SOURCES.get("demo.Sub")),
+                Map.of("demo.Client", SOURCES.get("demo.Client"), "demo.Sub", SOURCES.get("demo.Sub"),
+                        "demo.Service", SOURCES.get("demo.Service")),
                 new ResilienceProcessor(), List.of(previous));
 
         assertThat(partial.errors()).isEmpty();
-        for (String generated : List.of("demo.Client$Resilient", "demo.Sub$Resilient", "demo.Sub$Nested$Resilient")) {
+        for (String generated : List.of("demo.Client$Resilient", "demo.Sub$Resilient", "demo.Sub$Nested$Resilient",
+                "demo.Service$Resilient")) {
             assertThat(partial.generatedSource(generated)).isEqualTo(full.generatedSource(generated));
         }
         assertThat(Files.exists(partial.generated().resolve("demo/Base$Resilient.java"))).isFalse();
+        assertThat(Files.exists(partial.generated().resolve("demo/BaseService$Resilient.java"))).isFalse();
+        // the subclass merges what it inherits from the superclass and the interface, both read from class files
+        assertThat(partial.generatedSource("demo.Service$Resilient"))
+                .contains("extends demo.Service {")
+                .contains("\"demo.Service#inherited()\"")
+                .contains("\"demo.Service#base()\"")
+                .contains("return this.recover(r4c$f0);")
+                .contains("public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry, java.lang.String p0)");
     }
 
     private static List<String> lines(URL url) throws IOException {

@@ -26,6 +26,10 @@ import org.jspecify.annotations.Nullable;
  *   <li><b>Delayed tasks run when the clock passes their deadline</b>, on the thread that calls
  *       {@link #advance}, before it returns: async retry backoff, async rate limiter waits, async
  *       bulkhead wait limits and async timeouts.</li>
+ *   <li><b>Synchronous bulkhead waits end on this clock.</b> A caller blocked on a full bulkhead with
+ *       {@code maxWait} gets a slot as soon as one is released, and is rejected when the clock passes
+ *       {@code maxWait} (advanced by another thread, or by the slot holder sleeping on this clock); it
+ *       waits as long as the clock does not move.</li>
  *   <li><b>Synchronous timeouts fire when the clock passes their deadline</b>, exactly (no slack): the
  *       timed call's thread is interrupted. A stub that simulates a slow dependency with
  *       {@link #sleep(Duration)} therefore ends with {@code CallTimeoutException}. The clock still

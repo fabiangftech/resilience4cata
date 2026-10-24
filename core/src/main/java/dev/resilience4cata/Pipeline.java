@@ -11,6 +11,7 @@ import dev.resilience4cata.generated.TimeoutPolicy;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -31,6 +32,7 @@ import org.jspecify.annotations.Nullable;
  *
  * Receipt receipt = charge.execute(() -> client.charge(order));
  * CompletableFuture<Receipt> later = charge.executeAsync(() -> client.chargeAsync(order));
+ * charge.run(() -> client.cancel(order));                  // a call with no result
  * }</pre>
  *
  * <p>Every policy is optional. They nest in the same order as in generated code, outermost first:
@@ -48,7 +50,8 @@ import org.jspecify.annotations.Nullable;
  * <p><b>Exceptions.</b> {@link #execute} declares the checked exception of the call, and throws the
  * call's own failure once retries give up, or the policies' unchecked rejections
  * ({@link CallNotPermittedException}, {@link RateLimitExceededException}, {@link CallTimeoutException},
- * {@link BulkheadFullException}). A fallback may return a result, rethrow the failure it was given, or
+ * {@link BulkheadFullException}), or a {@link ResultRejectedException} for a result that the retry's
+ * classifier rejected, with {@link Builder#onExhaustedResult onExhaustedResult(THROW)}. A fallback may return a result, rethrow the failure it was given, or
  * throw an unchecked exception; any other checked exception it throws is wrapped in an
  * {@link java.lang.reflect.UndeclaredThrowableException}.
  *
@@ -66,9 +69,11 @@ public final class Pipeline<T> {
     private final String id;
     private final @Nullable FallbackPolicy fallback;
     private final @Nullable FallbackHandler<? extends T> fallbackHandler;
+    private final @Nullable FallbackHandler<? extends CompletionStage<T>> asyncFallbackHandler;
     private final @Nullable Recovery<T> recovery;
     private final @Nullable RetryPolicy retry;
     private final @Nullable Classifier<? super T> retryClassifier;
+    private final boolean throwOnExhaustedResult;
     private final @Nullable CircuitBreakerPolicy circuitBreaker;
     private final @Nullable Classifier<? super T> circuitBreakerClassifier;
     private final @Nullable RateLimiterPolicy rateLimiter;
@@ -97,17 +102,41 @@ public final class Pipeline<T> {
                 : builder.retryClassifier != null ? builder.retryClassifier : builder.classifier;
         this.circuitBreakerClassifier = circuitBreakerStep == null ? null
                 : builder.circuitBreakerClassifier != null ? builder.circuitBreakerClassifier : builder.classifier;
+        this.throwOnExhaustedResult = builder.onExhaustedResult == ExhaustedResult.THROW;
         FallbackHandler<? extends T> handler = builder.fallbackHandler;
-        if (handler == null) {
+        FallbackHandler<? extends CompletionStage<T>> asyncHandler = builder.asyncFallbackHandler;
+        this.fallbackHandler = handler;
+        this.asyncFallbackHandler = asyncHandler;
+        if (handler == null && asyncHandler == null) {
             this.fallback = null;
-            this.fallbackHandler = null;
             this.recovery = null;
         } else {
             FallbackPolicy policy = registry.fallbackPolicy(id, builder.fallbackApplyOn, builder.fallbackSkipOn);
             this.fallback = policy;
-            this.fallbackHandler = handler;
-            this.recovery = (failure, attempts) ->
-                    CompletableFuture.<T>completedFuture(handler.apply(policy.context(failure, attempts, NO_ARGUMENTS)));
+            if (asyncHandler != null) {
+                // FallbackPolicy turns a null stage into a NullPointerException.
+                this.recovery = (failure, attempts) -> asyncHandler.apply(policy.context(failure, attempts, NO_ARGUMENTS));
+            } else {
+                FallbackHandler<? extends T> sync = Objects.requireNonNull(handler);
+                this.recovery = (failure, attempts) ->
+                        CompletableFuture.<T>completedFuture(sync.apply(policy.context(failure, attempts, NO_ARGUMENTS)));
+            }
+        }
+    }
+
+    /** A synchronous call with only an asynchronous fallback waits (not interruptibly) for the fallback's stage. */
+    private static <T> T await(FallbackHandler<? extends CompletionStage<T>> handler, FallbackContext context)
+            throws Throwable {
+        CompletionStage<T> stage = handler.apply(context);
+        if (stage == null) {
+            throw new NullPointerException("The asynchronous fallback of pipeline '" + context.instanceId()
+                    + "' returned null instead of a CompletionStage");
+        }
+        try {
+            return stage.toCompletableFuture().join();
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            throw cause != null ? cause : e;
         }
     }
 
@@ -141,6 +170,26 @@ public final class Pipeline<T> {
     /** Returns the id of the pipeline's policy instances. */
     public String id() {
         return id;
+    }
+
+    /**
+     * Runs a call with no result through the pipeline, on the calling thread, with the same policies and
+     * semantics as {@link #execute}. A classifier receives {@code null} as the result of a call that
+     * returns normally, and the fallback's result, if one runs, is discarded. Allocates nothing on success,
+     * like {@link #execute}.
+     *
+     * @param call the call to protect; called again by the retry, if there is one
+     * @param <X> the checked exception the call may throw
+     * @throws X the call's last failure, when no fallback handles it
+     */
+    public <X extends Throwable> void run(PipelineRunnable<X> call) throws X {
+        execute(Pipeline.<T, X>asCall(call));
+    }
+
+    /** A runnable's {@code call()} always returns {@code null}, which every {@code T} accepts. */
+    @SuppressWarnings("unchecked")
+    private static <T, X extends Throwable> PipelineCall<? extends T, X> asCall(PipelineRunnable<X> call) {
+        return (PipelineCall<? extends T, X>) (PipelineCall<?, X>) Objects.requireNonNull(call, "call");
     }
 
     /**
@@ -204,7 +253,7 @@ public final class Pipeline<T> {
                 try {
                     verdict = classifier.classify(null, e);
                 } catch (RuntimeException | Error classifierFailure) {
-                    return giveUp(classifierFailure, attempts + 1);
+                    return classifierFailed(retry, classifierFailure, attempts + 1);
                 }
                 long delay = retry.onFailure(++attempts, e, start, verdict);
                 if (delay < 0 || !retry.pause(delay)) {
@@ -220,19 +269,29 @@ public final class Pipeline<T> {
             try {
                 verdict = classifier.classify(result, null);
             } catch (RuntimeException | Error classifierFailure) {
-                return giveUp(classifierFailure, attempts + 1);
+                return classifierFailed(retry, classifierFailure, attempts + 1);
             }
             if (verdict != Classifier.Outcome.FAILURE) {
                 return result;
             }
             long wait = retry.onFailedResult(++attempts, start);
             if (wait < 0 || !retry.pause(wait)) {
-                return result; // rejected, but no retries left: the last result
+                // Rejected, but no retries left: the last result, or a ResultRejectedException.
+                return throwOnExhaustedResult ? giveUp(retry.rejected(result, attempts), attempts) : result;
             }
         }
     }
 
-    /** Ends the retries with an unchecked failure (the classifier's): the fallback's result if it handles it. */
+    /** The classifier threw: the retries end with its exception, as in generated code. */
+    private T classifierFailed(RetryPolicy retry, Throwable classifierFailure, int attempts) {
+        retry.onClassifierFailure(attempts, classifierFailure);
+        return giveUp(classifierFailure, attempts);
+    }
+
+    /**
+     * Ends the retries with an unchecked failure (the classifier's, or a {@link ResultRejectedException}):
+     * the fallback's result if it handles it.
+     */
     private T giveUp(Throwable failure, int attempts) {
         FallbackPolicy fallback = this.fallback;
         if (fallback == null || !fallback.handles(failure)) {
@@ -242,10 +301,11 @@ public final class Pipeline<T> {
     }
 
     private T fallback(Throwable failure, int attempts) {
-        FallbackHandler<? extends T> handler = Objects.requireNonNull(fallbackHandler);
+        FallbackHandler<? extends T> handler = fallbackHandler;
         FallbackPolicy policy = Objects.requireNonNull(fallback);
         try {
-            return handler.apply(policy.context(failure, attempts, NO_ARGUMENTS));
+            FallbackContext context = policy.context(failure, attempts, NO_ARGUMENTS);
+            return handler != null ? handler.apply(context) : await(Objects.requireNonNull(asyncFallbackHandler), context);
         } catch (Throwable thrown) {
             if (thrown == failure) {
                 // The call's own failure: an unchecked exception, or the X that execute declares.
@@ -396,7 +456,7 @@ public final class Pipeline<T> {
         if (retry != null) {
             Classifier<? super T> classifier = retryClassifier;
             return classifier == null ? retry.executeAsync(next, fallback, recovery)
-                    : retry.executeAsync(next, classifier, fallback, recovery);
+                    : retry.executeAsync(next, classifier, throwOnExhaustedResult, fallback, recovery);
         }
         FallbackPolicy fallback = this.fallback;
         Recovery<T> recovery = this.recovery;
@@ -458,6 +518,20 @@ public final class Pipeline<T> {
         return text.append(']').toString();
     }
 
+    /**
+     * What a retry with a classifier does when it gives up on a result that the classifier rejected, like
+     * {@code @Retry(onExhaustedResult = ...)}.
+     */
+    public enum ExhaustedResult {
+        /** Return the last result (the default). The fallback does not run. */
+        RETURN,
+        /**
+         * Throw a {@link ResultRejectedException} holding the last result, which goes to the fallback like
+         * any other failure.
+         */
+        THROW
+    }
+
     /** A configured policy: a named configuration, and overrides applied on top of it. */
     private record Step<B>(String config, @Nullable Consumer<B> overrides) {
     }
@@ -481,6 +555,8 @@ public final class Pipeline<T> {
         private @Nullable Classifier<? super T> retryClassifier;
         private @Nullable Classifier<? super T> circuitBreakerClassifier;
         private @Nullable FallbackHandler<? extends T> fallbackHandler;
+        private @Nullable FallbackHandler<? extends CompletionStage<T>> asyncFallbackHandler;
+        private @Nullable ExhaustedResult onExhaustedResult;
         private List<Class<? extends Throwable>> fallbackApplyOn = List.of(Throwable.class);
         private List<Class<? extends Throwable>> fallbackSkipOn = List.of();
 
@@ -724,8 +800,9 @@ public final class Pipeline<T> {
         /**
          * Lets a classifier decide what the retry retries, like {@code @Retry(classifier = ...)}: only
          * {@code FAILURE} is retried; its verdict replaces {@code retryOn}, while {@code abortOn} still wins.
-         * A result classified {@code FAILURE} is retried too, and returned if the retries give up on it. A
-         * classifier that throws ends the retries with its exception.
+         * A result classified {@code FAILURE} is retried too, and returned if the retries give up on it (or
+         * thrown, see {@link #onExhaustedResult}). A classifier that throws ends the retries with its
+         * exception.
          *
          * @param classifier decides whether each attempt is a success, a failure or ignored
          * @return this builder
@@ -735,6 +812,23 @@ public final class Pipeline<T> {
                 throw new IllegalStateException("The retry classifier of pipeline '" + id + "' is set twice");
             }
             retryClassifier = Objects.requireNonNull(classifier, "classifier");
+            return this;
+        }
+
+        /**
+         * Chooses what the retry does when it gives up on a result that its classifier rejected, like
+         * {@code @Retry(onExhaustedResult = ...)}: return it ({@link ExhaustedResult#RETURN}, the default) or
+         * throw a {@link ResultRejectedException} that goes to the fallback ({@link ExhaustedResult#THROW}).
+         * Needs a retry with a classifier ({@link #classifier} or {@link #retryClassifier}).
+         *
+         * @param onExhaustedResult what to do with the last rejected result
+         * @return this builder
+         */
+        public Builder<T> onExhaustedResult(ExhaustedResult onExhaustedResult) {
+            if (this.onExhaustedResult != null) {
+                throw new IllegalStateException("onExhaustedResult of pipeline '" + id + "' is set twice");
+            }
+            this.onExhaustedResult = Objects.requireNonNull(onExhaustedResult, "onExhaustedResult");
             return this;
         }
 
@@ -759,6 +853,9 @@ public final class Pipeline<T> {
          * up, for failures selected by {@link #fallbackApplyOn} and {@link #fallbackSkipOn} (by default,
          * every failure, including rejections by the other policies).
          *
+         * <p>{@link Pipeline#executeAsync} uses it too, unless an asynchronous fallback is set
+         * ({@link #fallbackAsync}).
+         *
          * @param fallback returns the alternative result, or throws an unchecked exception to fail the call
          * @return this builder
          */
@@ -779,6 +876,41 @@ public final class Pipeline<T> {
                 throw new IllegalStateException("The fallback of pipeline '" + id + "' is set twice");
             }
             fallbackHandler = Objects.requireNonNull(handler, "handler");
+            return this;
+        }
+
+        /**
+         * Adds an asynchronous fallback, for {@link Pipeline#executeAsync}: it returns a stage instead of a
+         * value, so that the alternative result can come from another asynchronous call. It runs for the same
+         * failures as {@link #fallback}, once retries give up. A stage that fails fails the call with its
+         * failure (unwrapped); a fallback that returns {@code null} fails it with a
+         * {@link NullPointerException}.
+         *
+         * <p>Can be combined with {@link #fallback}: then {@link Pipeline#execute} uses the synchronous one
+         * and {@link Pipeline#executeAsync} this one. Without a synchronous fallback, {@link Pipeline#execute}
+         * and {@link Pipeline#run} wait for this one's stage.
+         *
+         * @param fallback returns a stage with the alternative result, or throws an unchecked exception to
+         *     fail the call
+         * @return this builder
+         */
+        public Builder<T> fallbackAsync(Function<? super Throwable, ? extends CompletionStage<T>> fallback) {
+            Objects.requireNonNull(fallback, "fallback");
+            return fallbackAsyncHandler(context -> fallback.apply(context.failure()));
+        }
+
+        /**
+         * Same as {@link #fallbackAsync}, with a {@link FallbackContext}: the failure, the number of attempts
+         * made and the pipeline id.
+         *
+         * @param handler returns a stage with the alternative result, or throws to fail the call
+         * @return this builder
+         */
+        public Builder<T> fallbackAsyncHandler(FallbackHandler<? extends CompletionStage<T>> handler) {
+            if (asyncFallbackHandler != null) {
+                throw new IllegalStateException("The asynchronous fallback of pipeline '" + id + "' is set twice");
+            }
+            asyncFallbackHandler = Objects.requireNonNull(handler, "handler");
             return this;
         }
 
@@ -821,7 +953,7 @@ public final class Pipeline<T> {
          */
         public Pipeline<T> build() {
             if ((fallbackApplyOn.size() != 1 || fallbackApplyOn.get(0) != Throwable.class || !fallbackSkipOn.isEmpty())
-                    && fallbackHandler == null) {
+                    && fallbackHandler == null && asyncFallbackHandler == null) {
                 throw new IllegalStateException("Pipeline '" + id + "' selects fallback failures but has no fallback");
             }
             if (classifier != null && retry == null && circuitBreaker == null) {
@@ -829,6 +961,10 @@ public final class Pipeline<T> {
             }
             if (retryClassifier != null && retry == null) {
                 throw new IllegalStateException("Pipeline '" + id + "' has a retry classifier but no retry");
+            }
+            if (onExhaustedResult != null && (retry == null || (retryClassifier == null && classifier == null))) {
+                throw new IllegalStateException("Pipeline '" + id + "' sets onExhaustedResult but has no retry with a"
+                        + " classifier: only a classifier can reject a result");
             }
             if (circuitBreakerClassifier != null && circuitBreaker == null) {
                 throw new IllegalStateException("Pipeline '" + id + "' has a circuit breaker classifier but no circuit breaker");

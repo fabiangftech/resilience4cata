@@ -165,15 +165,40 @@ class ResilienceConfigTest {
     }
 
     @Test
-    void namedConfigRegisteredTwiceIsAnError() {
-        ResilienceRegistry.Builder builder = ResilienceRegistry.builder()
-                .retry("external", r -> r.maxAttempts(9));
+    void namedConfigInCodeAndExternallyIsMergedWithExternalValuesWinning() {
         ResilienceConfig config = text("configs.external.retry.maxAttempts=2").build();
-        assertThatThrownBy(() -> config.applyTo(builder))
-                .isInstanceOf(ConfigException.class)
-                .hasMessageContaining("[R4C-CFG-011] retry config 'external' is already registered")
-                .hasMessageContaining("ResilienceRegistry.Builder.retry(\"external\", ...)")
-                .hasMessageContaining("'configs.external.retry.maxAttempts' (test.properties, line 1)");
+        ResilienceRegistry before = config.applyTo(ResilienceRegistry.builder()
+                .retry("external", r -> r.maxAttempts(9).delay(Duration.ofMillis(7)))).build();
+        ResilienceRegistry after = config.applyTo(ResilienceRegistry.builder())
+                .retry("external", r -> r.maxAttempts(9).delay(Duration.ofMillis(7))).build();
+        for (ResilienceRegistry registry : List.of(before, after)) {
+            assertThat(registry.retryConfig("external").maxAttempts()).isEqualTo(2);
+            assertThat(registry.retryConfig("external").delay()).isEqualTo(Duration.ofMillis(7));
+        }
+    }
+
+    @Test
+    void mergedNamedConfigKeepsInheritanceAndProfiles() {
+        ResilienceRegistry registry = text("""
+                configs.base.circuitBreaker.minimumCalls=4
+                configs.external.extends=base
+                configs.external.circuitBreaker.windowSize=8
+                profiles.test.configs.external.circuitBreaker.windowSize=6
+                """).profiles("test").build().applyTo(ResilienceRegistry.builder()
+                        .circuitBreaker("external", cb -> cb.minimumCalls(30).windowSize(50).waitInOpen(Duration.ZERO)))
+                .build();
+        CircuitBreakerConfig external = registry.circuitBreakerConfig("external");
+        assertThat(external.minimumCalls()).isEqualTo(4);
+        assertThat(external.windowSize()).isEqualTo(6);
+        assertThat(external.waitInOpen()).isEqualTo(Duration.ZERO);
+    }
+
+    @Test
+    void mergedNamedConfigThatBecomesInvalidFailsAtRegistryBuild() {
+        ResilienceRegistry.Builder builder = text("configs.external.retry.delay=2s").build()
+                .applyTo(ResilienceRegistry.builder().retry("external", r -> r.maxDelay(Duration.ofSeconds(1))));
+        assertThatIllegalArgumentException().isThrownBy(builder::build)
+                .withMessageContaining("Invalid retry config 'external'").withMessageContaining("maxDelay");
     }
 
     // ---- extends ----
@@ -433,8 +458,6 @@ class ResilienceConfigTest {
                 .contains("Did you mean 'R4C_CONFIGS_EXTERNAL_RETRY_MAXATTEMPTS'?");
         assertThat(failure(ResilienceConfig.builder().environment(Map.of("R4C_WHATEVER", "1"))).problems().get(0))
                 .contains("for example R4C_CONFIGS_EXTERNAL_RETRY_MAXATTEMPTS");
-        assertThat(failure(ResilienceConfig.builder().environment(Map.of("R4C_INSTANCES_X_RETRY_DELAY", "1s")))
-                .problems().get(0)).startsWith("[R4C-CFG-008]");
     }
 
     @Test
@@ -473,7 +496,6 @@ class ResilienceConfigTest {
         assertThat(problem("defaults.retry=1")).contains("incomplete key").contains("defaults.<policy>.<attribute>");
         assertThat(problem("configs.external.retry.delay.extra=1")).contains("incomplete key");
         assertThat(problem("configs..retry.delay=1s")).contains("empty segment");
-        assertThat(problem("instances.payments.retry.delay=1s")).startsWith("[R4C-CFG-008]");
         assertThat(problem("something=1")).startsWith("[R4C-CFG-001] unknown key 'something'");
     }
 

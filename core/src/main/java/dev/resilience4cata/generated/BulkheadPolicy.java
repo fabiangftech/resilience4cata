@@ -10,6 +10,7 @@ import java.lang.invoke.VarHandle;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import org.jspecify.annotations.Nullable;
@@ -39,6 +40,11 @@ import org.jspecify.annotations.Nullable;
  * the oldest asynchronous waiter and the synchronous callers blocked on the semaphore; a new
  * synchronous caller can still take a free permit ahead of everyone (the semaphore is non-fair), while
  * a new asynchronous caller queues behind the asynchronous callers already waiting.
+ *
+ * <p>With a manual {@link dev.resilience4cata.Ticker} (a test clock), synchronous waits follow the
+ * ticker instead of real time: a blocked caller gets a slot as soon as one is released and is rejected
+ * when the ticker passes {@code maxWait}, never before (see {@link TickerWait}). It waits for as long as
+ * the ticker does not move.
  */
 public final class BulkheadPolicy implements BulkheadHandle {
 
@@ -47,6 +53,8 @@ public final class BulkheadPolicy implements BulkheadHandle {
     private final boolean enabled;
     private final int maxConcurrent;
     private final long maxWaitNanos;
+    /** Whether synchronous waits are measured on a manual {@link dev.resilience4cata.Ticker} instead of real time. */
+    private final boolean waitsOnTicker;
     private final PaddedCounter inUse = new PaddedCounter();
     private final @Nullable Semaphore semaphore;
     private final @Nullable BulkheadWaiters waiters;
@@ -78,6 +86,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
         this.enabled = config.enabled();
         this.maxConcurrent = config.maxConcurrent();
         this.maxWaitNanos = config.maxWait().toNanos();
+        this.waitsOnTicker = environment.manual != null && maxWaitNanos > 0;
         this.semaphore = maxWaitNanos > 0 ? new Semaphore(maxConcurrent, false) : null;
         this.waiters = maxWaitNanos > 0 ? new BulkheadWaiters() : null;
         this.rejection = new BulkheadFullException(id);
@@ -135,11 +144,132 @@ public final class BulkheadPolicy implements BulkheadHandle {
         if (waiting.tryAcquire()) {
             return true;
         }
+        if (waitsOnTicker) {
+            return awaitOnTicker(waiting);
+        }
         try {
             return waiting.tryAcquire(maxWaitNanos, TimeUnit.NANOSECONDS) || rejected();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return rejected();
+        }
+    }
+
+    /**
+     * Waits for a slot with the wait limit measured on the registry's manual ticker: the thread blocks on
+     * the semaphore without a time limit, so it is queued there like any synchronous waiter (and every
+     * release, hand-off rule and {@link #waitingCalls()} sees it), and a {@link TickerWait} scheduled on
+     * the ticker ends the wait when the ticker passes {@code maxWait}. Not used without a manual ticker.
+     */
+    private boolean awaitOnTicker(Semaphore waiting) {
+        TickerWait wait = new TickerWait(Thread.currentThread(), waiting);
+        Future<?> deadline = environment.later(maxWaitNanos, wait);
+        boolean acquired;
+        try {
+            waiting.acquire();
+            acquired = true;
+        } catch (InterruptedException e) {
+            acquired = false;
+        }
+        return afterTickerWait(wait, deadline, acquired);
+    }
+
+    /**
+     * Ends a {@link #awaitOnTicker} wait, whether the semaphore was {@code acquired} or the wait was
+     * interrupted. If the deadline has not fired, it never will: a permit taken is kept, and an
+     * interrupt is the caller's, so it is a rejection with the flag set again, as without a ticker. If
+     * the deadline fired, its interrupt is cleared, and a permit this thread acquired is kept: the
+     * semaphore gave it while the thread was still queued, typically because a slot was released just
+     * before the deadline and the thread had not run yet. If the deadline also took a permit for this
+     * call ({@code GRANTED}), that one is one too many and is released. Otherwise the deadline's
+     * decision stands.
+     */
+    boolean afterTickerWait(TickerWait wait, @Nullable Future<?> deadline, boolean acquired) {
+        int outcome = wait.finish();
+        if (outcome == TickerWait.DONE) {
+            if (deadline != null) {
+                deadline.cancel(false);
+            }
+            if (acquired) {
+                return true;
+            }
+            Thread.currentThread().interrupt();
+            return rejected();
+        }
+        if (acquired) {
+            if (outcome == TickerWait.GRANTED) {
+                exit();
+            }
+            return true;
+        }
+        return outcome == TickerWait.GRANTED || rejected();
+    }
+
+    /**
+     * The deadline of one synchronous wait on a manual ticker; its {@link #run()} runs on the thread
+     * that advances the ticker past {@code maxWait}. The waiting thread and the deadline race on one
+     * state, set once from {@code WAITING}: to {@code DONE} by the waiting thread when it got a permit
+     * or was interrupted by someone else first, or to {@code DECIDING} by the deadline, which then takes
+     * a permit for the waiter if one is free right now ({@code GRANTED}, so that a slot released before
+     * the deadline is never missed because the waiter had not woken up yet) or gives up
+     * ({@code TIMED_OUT}), and interrupts the waiter to wake it. The waiter then waits for the decision
+     * and clears that interrupt, so it never leaks to the caller.
+     */
+    static final class TickerWait implements Runnable {
+
+        private static final VarHandle STATE;
+
+        static {
+            try {
+                STATE = MethodHandles.lookup().findVarHandle(TickerWait.class, "state", int.class);
+            } catch (ReflectiveOperationException e) {
+                throw new ExceptionInInitializerError(e);
+            }
+        }
+
+        static final int WAITING = 0;
+        static final int DONE = 1;
+        static final int DECIDING = 2;
+        static final int GRANTED = 3;
+        static final int TIMED_OUT = 4;
+
+        private final Thread thread;
+        private final Semaphore semaphore;
+
+        @SuppressWarnings("unused") // accessed through STATE
+        private volatile int state;
+
+        TickerWait(Thread thread, Semaphore semaphore) {
+            this.thread = thread;
+            this.semaphore = semaphore;
+        }
+
+        /** The deadline: decides the wait's outcome unless the waiting thread finished first. */
+        @Override
+        public void run() {
+            if (STATE.compareAndSet(this, WAITING, DECIDING)) {
+                int decision = semaphore.tryAcquire() ? GRANTED : TIMED_OUT;
+                thread.interrupt();
+                STATE.setVolatile(this, decision);
+            }
+        }
+
+        /**
+         * Called by the waiting thread when its wait on the semaphore ends.
+         *
+         * @return {@code DONE} if the deadline had not fired; otherwise the deadline's decision,
+         *     {@code GRANTED} or {@code TIMED_OUT}, with the deadline's interrupt cleared
+         */
+        int finish() {
+            int witness = (int) STATE.compareAndExchange(this, WAITING, DONE);
+            if (witness == WAITING) {
+                return DONE;
+            }
+            while ((witness = (int) STATE.getVolatile(this)) == DECIDING) {
+                Thread.onSpinWait();
+            }
+            Thread.interrupted(); // the deadline's interrupt (set before its decision was published)
+            return witness;
         }
     }
 
@@ -331,6 +461,19 @@ public final class BulkheadPolicy implements BulkheadHandle {
     /** Test seam: the drain that ends a queued {@link #executeAsync}. */
     void drainForTest() {
         drain(Objects.requireNonNull(semaphore), Objects.requireNonNull(waiters));
+    }
+
+    /**
+     * Test seam: the deadline of a synchronous wait on a manual ticker for {@code thread}, as
+     * {@link #awaitOnTicker} creates it, without scheduling it. Requires {@code maxWait > 0}.
+     */
+    TickerWait tickerWaitForTest(Thread thread) {
+        return new TickerWait(thread, Objects.requireNonNull(semaphore));
+    }
+
+    /** Test seam: takes a permit without waiting, as a blocked {@code acquire()} that returns does. */
+    boolean tryAcquireForTest() {
+        return Objects.requireNonNull(semaphore).tryAcquire();
     }
 
     /** Calls the next layer holding a slot, and frees the slot when its stage completes. */

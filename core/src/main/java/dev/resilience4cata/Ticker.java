@@ -14,7 +14,8 @@ import java.util.function.LongConsumer;
  * (circuit breaker waits and slow calls, rate limiter permits, retry {@code maxDuration}), sleeps through
  * {@link #sleep(long)} (retry backoff, rate limiter waits), schedules asynchronous delays (async retry
  * backoff, async rate limiter waits, async bulkhead wait limits, async timeouts) through
- * {@link #schedule(long, Runnable)}, and times out synchronous calls when the ticker reports, through
+ * {@link #schedule(long, Runnable)}, ends synchronous bulkhead waits ({@code maxWait}) with a task
+ * scheduled the same way, and times out synchronous calls when the ticker reports, through
  * {@link #onAdvance(LongConsumer)}, that it has moved past their deadline.
  *
  * <p>Implementations must be thread-safe: policies call them from every thread that makes calls.

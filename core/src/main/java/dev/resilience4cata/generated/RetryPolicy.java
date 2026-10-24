@@ -1,6 +1,7 @@
 package dev.resilience4cata.generated;
 
 import dev.resilience4cata.Classifier;
+import dev.resilience4cata.ResultRejectedException;
 import dev.resilience4cata.RetryConfig;
 import dev.resilience4cata.event.RetryEvent;
 import java.time.Duration;
@@ -142,7 +143,7 @@ public final class RetryPolicy {
     /**
      * Decides whether to retry after an attempt returned a result that the method's classifier
      * classified as {@link Classifier.Outcome#FAILURE FAILURE}. When this returns {@link #NO_RETRY},
-     * the caller returns that last result.
+     * the caller returns that last result, or throws {@link #rejected} for {@code onExhaustedResult = THROW}.
      *
      * @param attempts attempts made so far, including the one whose result was rejected
      * @param start the value returned by {@link #start()}
@@ -150,6 +151,34 @@ public final class RetryPolicy {
      */
     public long onFailedResult(int attempts, long start) {
         return decide(attempts, null, start, true);
+    }
+
+    /**
+     * Called when the method's classifier threw while classifying an attempt: the retries end, and the
+     * classifier's exception fails the call (or goes to the fallback). Publishes
+     * {@link RetryEvent.GaveUp} with {@link RetryEvent.Reason#CLASSIFIER_FAILED} if someone listens.
+     *
+     * @param attempts attempts made so far, including the one being classified
+     * @param failure what the classifier threw
+     */
+    public void onClassifierFailure(int attempts, Throwable failure) {
+        EventSink<RetryEvent.GaveUp> sink = gaveUp;
+        if (sink != null && enabled) {
+            sink.publish(new RetryEvent.GaveUp(id, ticker.getAsLong(), attempts, RetryEvent.Reason.CLASSIFIER_FAILED,
+                    failure));
+        }
+    }
+
+    /**
+     * Creates the exception that generated code throws, for {@code onExhaustedResult = THROW}, when
+     * {@link #onFailedResult} gives up on a rejected result.
+     *
+     * @param result the rejected result; {@code null} for a {@code void} method
+     * @param attempts attempts made, including the last one
+     * @return the exception to throw (or to give to the fallback)
+     */
+    public ResultRejectedException rejected(@Nullable Object result, int attempts) {
+        return new ResultRejectedException(id, result, attempts);
     }
 
     /**
@@ -306,7 +335,7 @@ public final class RetryPolicy {
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call,
             @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery) {
         CompletableFuture<T> result = new CompletableFuture<>();
-        new AsyncAttempts<>(this, call, null, fallback, recovery, result, start()).run();
+        new AsyncAttempts<>(this, call, null, false, fallback, recovery, result, start()).run();
         return result;
     }
 
@@ -314,7 +343,8 @@ public final class RetryPolicy {
      * Same as {@link #executeAsync(AsyncCall, FallbackPolicy, Recovery)}, with a classifier that decides
      * which results and exceptions are retried (see {@link #onFailure(int, Throwable, long, Classifier.Outcome)}
      * and {@link #onFailedResult}). When the retries give up on a rejected result, the future completes
-     * with that result. An exception thrown by the classifier ends the retries as the call's failure.
+     * with that result. An exception thrown by the classifier ends the retries as the call's failure, after
+     * {@link #onClassifierFailure}.
      *
      * @param call one attempt: the next layer
      * @param classifier the method's classifier
@@ -326,8 +356,28 @@ public final class RetryPolicy {
      */
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
             @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery) {
+        return executeAsync(call, classifier, false, fallback, recovery);
+    }
+
+    /**
+     * Same as {@link #executeAsync(AsyncCall, Classifier, FallbackPolicy, Recovery)}, and chooses what
+     * happens when the retries give up on a rejected result.
+     *
+     * @param call one attempt: the next layer
+     * @param classifier the method's classifier
+     * @param throwOnExhaustedResult {@code true} for {@code onExhaustedResult = THROW}: the call fails with
+     *     {@link #rejected a ResultRejectedException}, which goes to the fallback like any failure;
+     *     {@code false} to complete with the last result
+     * @param fallback decides which failures get the fallback; {@code null} for none
+     * @param recovery the generated fallback; {@code null} for none
+     * @param <T> the result type
+     * @return a future that completes with the first accepted result, the last rejected result (or a
+     *     {@link ResultRejectedException}), the fallback's result, or the last failure
+     */
+    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
+            boolean throwOnExhaustedResult, @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery) {
         CompletableFuture<T> result = new CompletableFuture<>();
-        new AsyncAttempts<>(this, call, classifier, fallback, recovery, result, start()).run();
+        new AsyncAttempts<>(this, call, classifier, throwOnExhaustedResult, fallback, recovery, result, start()).run();
         return result;
     }
 
@@ -336,6 +386,7 @@ public final class RetryPolicy {
         private final RetryPolicy policy;
         private final AsyncCall<T> call;
         private final @Nullable Classifier<? super T> classifier;
+        private final boolean throwOnExhaustedResult;
         private final @Nullable FallbackPolicy fallback;
         private final @Nullable Recovery<T> recovery;
         private final CompletableFuture<T> result;
@@ -343,11 +394,12 @@ public final class RetryPolicy {
         private int attempts; // written by one attempt's callback before the next attempt is started
 
         AsyncAttempts(RetryPolicy policy, AsyncCall<T> call, @Nullable Classifier<? super T> classifier,
-                @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery, CompletableFuture<T> result,
+                boolean throwOnExhaustedResult, @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery, CompletableFuture<T> result,
                 long start) {
             this.policy = policy;
             this.call = call;
             this.classifier = classifier;
+            this.throwOnExhaustedResult = throwOnExhaustedResult;
             this.fallback = fallback;
             this.recovery = recovery;
             this.result = result;
@@ -371,12 +423,14 @@ public final class RetryPolicy {
                 try {
                     outcome = classifier.classify(value, null);
                 } catch (Throwable classifierFailure) {
-                    giveUp(classifierFailure, ++attempts);
+                    classifierFailed(classifierFailure);
                     return;
                 }
                 long delay = outcome == Classifier.Outcome.FAILURE ? policy.onFailedResult(++attempts, start) : NO_RETRY;
                 if (delay >= 0) {
                     policy.environment.later(delay, this);
+                } else if (outcome == Classifier.Outcome.FAILURE && throwOnExhaustedResult) {
+                    giveUp(policy.rejected(value, attempts), attempts);
                 } else {
                     result.complete(value); // accepted, or rejected with no retries left: the last result
                 }
@@ -391,7 +445,7 @@ public final class RetryPolicy {
                 try {
                     outcome = classifier.classify(null, cause);
                 } catch (Throwable classifierFailure) {
-                    giveUp(classifierFailure, ++attempts);
+                    classifierFailed(classifierFailure);
                     return;
                 }
                 delay = policy.onFailure(++attempts, cause, start, outcome);
@@ -401,6 +455,12 @@ public final class RetryPolicy {
             } else {
                 giveUp(cause, attempts);
             }
+        }
+
+        /** The classifier threw: the retries end with its exception. */
+        private void classifierFailed(Throwable classifierFailure) {
+            policy.onClassifierFailure(++attempts, classifierFailure);
+            giveUp(classifierFailure, attempts);
         }
 
         private void giveUp(Throwable cause, int attempts) {

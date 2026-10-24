@@ -97,20 +97,6 @@ class ResilienceProcessorTest {
     }
 
     @Test
-    void rejectsClasses() {
-        Compilation result = compile("demo.Service", """
-                package demo;
-                import dev.resilience4cata.annotation.Retry;
-                public class Service {
-                    @Retry
-                    public String call() { return ""; }
-                }
-                """);
-
-        assertThat(result.errors()).singleElement().asString().contains("only supported on interfaces for now");
-    }
-
-    @Test
     void rejectsStaticMethods() {
         Compilation result = compile("demo.Client", """
                 package demo;
@@ -768,7 +754,9 @@ class ResilienceProcessorTest {
                         .contains("recover(java.lang.String) is private")
                         .contains("returns java.lang.Object, which is not assignable to java.lang.String")
                         .contains("throws java.lang.Exception, which find does not declare"))
-                .anySatisfy(e -> assertThat(e).contains("generic methods is not supported yet"));
+                .anySatisfy(e -> assertThat(e).contains("@Fallback(demo.Client.Text.class): Text implements"
+                        + " FallbackHandler<java.lang.String>, but the generic method generic returns T, which depends on its"
+                        + " type parameters"));
     }
 
     @Test
@@ -843,7 +831,7 @@ class ResilienceProcessorTest {
                 import java.util.concurrent.CompletionStage;
                 public interface Client {
                     @Retry
-                    CompletionStage<? extends Number> wildcard();
+                    CompletionStage<? super Number> wildcard();
                     @Retry
                     Custom custom();
                     @Fallback(method = "recover")
@@ -866,7 +854,8 @@ class ResilienceProcessorTest {
 
         assertThat(result.errors()).hasSize(4)
                 .anySatisfy(e -> assertThat(e).contains("must return CompletionStage<T> or CompletableFuture<T>")
-                        .contains("returns java.util.concurrent.CompletionStage<? extends java.lang.Number>"))
+                        .contains("not ? super X")
+                        .contains("returns java.util.concurrent.CompletionStage<? super java.lang.Number>"))
                 .anySatisfy(e -> assertThat(e).contains("returns demo.Client.Custom"))
                 .anySatisfy(e -> assertThat(e).contains("recover(java.lang.String) returns java.lang.Integer, which is neither"
                         + " java.lang.String nor a CompletionStage of it"))

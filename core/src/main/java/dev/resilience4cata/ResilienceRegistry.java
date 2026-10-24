@@ -19,6 +19,7 @@ import java.util.Objects;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.random.RandomGenerator;
 import org.jspecify.annotations.Nullable;
 
@@ -54,12 +55,14 @@ public final class ResilienceRegistry {
     private final Map<String, BulkheadConfig> bulkheadConfigs;
     private final ConcurrentHashMap<String, BulkheadPolicy> bulkheads = new ConcurrentHashMap<>();
     private final PolicyEnvironment environment;
+    private final Instances instances;
 
     private ResilienceRegistry(RetryConfig retryDefaults, Map<String, RetryConfig> retryConfigs,
             CircuitBreakerConfig circuitBreakerDefaults, Map<String, CircuitBreakerConfig> circuitBreakerConfigs,
             RateLimiterConfig rateLimiterDefaults, Map<String, RateLimiterConfig> rateLimiterConfigs,
             TimeoutConfig timeoutDefaults, Map<String, TimeoutConfig> timeoutConfigs,
-            BulkheadConfig bulkheadDefaults, Map<String, BulkheadConfig> bulkheadConfigs, PolicyEnvironment environment) {
+            BulkheadConfig bulkheadDefaults, Map<String, BulkheadConfig> bulkheadConfigs, PolicyEnvironment environment,
+            Instances instances) {
         this.retryDefaults = retryDefaults;
         this.retryConfigs = Map.copyOf(retryConfigs);
         this.circuitBreakerDefaults = circuitBreakerDefaults;
@@ -71,6 +74,49 @@ public final class ResilienceRegistry {
         this.bulkheadDefaults = bulkheadDefaults;
         this.bulkheadConfigs = Map.copyOf(bulkheadConfigs);
         this.environment = environment;
+        this.instances = instances;
+    }
+
+    /** Per-instance overrides ({@link Builder#retryInstance}, ...), by instance id. Immutable. */
+    private record Instances(Map<String, Consumer<RetryConfig.Builder>> retry,
+            Map<String, Consumer<CircuitBreakerConfig.Builder>> circuitBreaker,
+            Map<String, Consumer<RateLimiterConfig.Builder>> rateLimiter,
+            Map<String, Consumer<TimeoutConfig.Builder>> timeout,
+            Map<String, Consumer<BulkheadConfig.Builder>> bulkhead) {
+        Instances {
+            retry = Map.copyOf(retry);
+            circuitBreaker = Map.copyOf(circuitBreaker);
+            rateLimiter = Map.copyOf(rateLimiter);
+            timeout = Map.copyOf(timeout);
+            bulkhead = Map.copyOf(bulkhead);
+        }
+    }
+
+    /**
+     * Resolves one instance's configuration: the named config ({@code base}), then the annotation's or
+     * pipeline step's values ({@code overrides}), then the instance's own overrides ({@code instance}).
+     * Runs once, when the instance is created.
+     */
+    private static <C, B> C resolve(C base, @Nullable Consumer<B> overrides, @Nullable Consumer<B> instance,
+            Function<C, B> toBuilder, Function<B, C> build, String kind, String key) {
+        if (overrides == null && instance == null) {
+            return base;
+        }
+        B builder = toBuilder.apply(base);
+        if (overrides != null) {
+            overrides.accept(builder);
+        }
+        if (instance == null) {
+            return build.apply(builder);
+        }
+        instance.accept(builder);
+        try {
+            return build.apply(builder);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid " + kind + " config for instance '" + key
+                    + "' after its per-instance overrides (" + kind + "Instance(\"" + key + "\", ...), or"
+                    + " instances.<id>.* in external configuration): " + e.getMessage(), e);
+        }
     }
 
     /** Returns a new builder. */
@@ -159,16 +205,9 @@ public final class ResilienceRegistry {
      */
     public RetryPolicy retryPolicy(String instanceId, String name, String config,
             @Nullable Consumer<RetryConfig.Builder> overrides) {
-        RetryConfig base = retryConfig(config);
-        RetryConfig resolved;
-        if (overrides == null) {
-            resolved = base;
-        } else {
-            RetryConfig.Builder builder = base.toBuilder();
-            overrides.accept(builder);
-            resolved = builder.build();
-        }
         String key = name.isEmpty() ? instanceId : name;
+        RetryConfig resolved = resolve(retryConfig(config), overrides, instances.retry().get(key), RetryConfig::toBuilder,
+                RetryConfig.Builder::build, "retry", key);
         RetryPolicy policy = retries.computeIfAbsent(key, k -> new RetryPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException("Retry instance '" + key
@@ -191,16 +230,9 @@ public final class ResilienceRegistry {
      */
     public CircuitBreakerPolicy circuitBreakerPolicy(String instanceId, String name, String config,
             @Nullable Consumer<CircuitBreakerConfig.Builder> overrides) {
-        CircuitBreakerConfig base = circuitBreakerConfig(config);
-        CircuitBreakerConfig resolved;
-        if (overrides == null) {
-            resolved = base;
-        } else {
-            CircuitBreakerConfig.Builder builder = base.toBuilder();
-            overrides.accept(builder);
-            resolved = builder.build();
-        }
         String key = name.isEmpty() ? instanceId : name;
+        CircuitBreakerConfig resolved = resolve(circuitBreakerConfig(config), overrides, instances.circuitBreaker().get(key), CircuitBreakerConfig::toBuilder,
+                CircuitBreakerConfig.Builder::build, "circuitBreaker", key);
         CircuitBreakerPolicy policy = circuitBreakers.computeIfAbsent(key, k -> new CircuitBreakerPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException("Circuit breaker '" + key
@@ -223,16 +255,9 @@ public final class ResilienceRegistry {
      */
     public RateLimiterPolicy rateLimiterPolicy(String instanceId, String name, String config,
             @Nullable Consumer<RateLimiterConfig.Builder> overrides) {
-        RateLimiterConfig base = rateLimiterConfig(config);
-        RateLimiterConfig resolved;
-        if (overrides == null) {
-            resolved = base;
-        } else {
-            RateLimiterConfig.Builder builder = base.toBuilder();
-            overrides.accept(builder);
-            resolved = builder.build();
-        }
         String key = name.isEmpty() ? instanceId : name;
+        RateLimiterConfig resolved = resolve(rateLimiterConfig(config), overrides, instances.rateLimiter().get(key), RateLimiterConfig::toBuilder,
+                RateLimiterConfig.Builder::build, "rateLimiter", key);
         RateLimiterPolicy policy = rateLimiters.computeIfAbsent(key, k -> new RateLimiterPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException("Rate limiter '" + key
@@ -254,16 +279,9 @@ public final class ResilienceRegistry {
      */
     public TimeoutPolicy timeoutPolicy(String instanceId, String name, String config,
             @Nullable Consumer<TimeoutConfig.Builder> overrides) {
-        TimeoutConfig base = timeoutConfig(config);
-        TimeoutConfig resolved;
-        if (overrides == null) {
-            resolved = base;
-        } else {
-            TimeoutConfig.Builder builder = base.toBuilder();
-            overrides.accept(builder);
-            resolved = builder.build();
-        }
         String key = name.isEmpty() ? instanceId : name;
+        TimeoutConfig resolved = resolve(timeoutConfig(config), overrides, instances.timeout().get(key), TimeoutConfig::toBuilder,
+                TimeoutConfig.Builder::build, "timeout", key);
         TimeoutPolicy policy = new TimeoutPolicy(key, resolved, environment);
         timeouts.putIfAbsent(key, policy); // only for snapshot(): the first call site with this id is shown
         return policy;
@@ -297,16 +315,9 @@ public final class ResilienceRegistry {
      */
     public BulkheadPolicy bulkheadPolicy(String instanceId, String name, String config,
             @Nullable Consumer<BulkheadConfig.Builder> overrides) {
-        BulkheadConfig base = bulkheadConfig(config);
-        BulkheadConfig resolved;
-        if (overrides == null) {
-            resolved = base;
-        } else {
-            BulkheadConfig.Builder builder = base.toBuilder();
-            overrides.accept(builder);
-            resolved = builder.build();
-        }
         String key = name.isEmpty() ? instanceId : name;
+        BulkheadConfig resolved = resolve(bulkheadConfig(config), overrides, instances.bulkhead().get(key), BulkheadConfig::toBuilder,
+                BulkheadConfig.Builder::build, "bulkhead", key);
         BulkheadPolicy policy = bulkheads.computeIfAbsent(key, k -> new BulkheadPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException("Bulkhead '" + key
@@ -418,6 +429,16 @@ public final class ResilienceRegistry {
         private final Map<String, Consumer<TimeoutConfig.Builder>> timeoutConfigs = new LinkedHashMap<>();
         private @Nullable Consumer<BulkheadConfig.Builder> bulkheadDefaults;
         private final Map<String, Consumer<BulkheadConfig.Builder>> bulkheadConfigs = new LinkedHashMap<>();
+        private final Map<String, Consumer<RetryConfig.Builder>> retryOverlays = new LinkedHashMap<>();
+        private final Map<String, Consumer<RetryConfig.Builder>> retryInstances = new LinkedHashMap<>();
+        private final Map<String, Consumer<CircuitBreakerConfig.Builder>> circuitBreakerOverlays = new LinkedHashMap<>();
+        private final Map<String, Consumer<CircuitBreakerConfig.Builder>> circuitBreakerInstances = new LinkedHashMap<>();
+        private final Map<String, Consumer<RateLimiterConfig.Builder>> rateLimiterOverlays = new LinkedHashMap<>();
+        private final Map<String, Consumer<RateLimiterConfig.Builder>> rateLimiterInstances = new LinkedHashMap<>();
+        private final Map<String, Consumer<TimeoutConfig.Builder>> timeoutOverlays = new LinkedHashMap<>();
+        private final Map<String, Consumer<TimeoutConfig.Builder>> timeoutInstances = new LinkedHashMap<>();
+        private final Map<String, Consumer<BulkheadConfig.Builder>> bulkheadOverlays = new LinkedHashMap<>();
+        private final Map<String, Consumer<BulkheadConfig.Builder>> bulkheadInstances = new LinkedHashMap<>();
         private final List<EventDispatcher.Subscription> listeners = new ArrayList<>();
         private @Nullable Ticker ticker;
         private @Nullable RandomGenerator random;
@@ -491,6 +512,43 @@ public final class ResilienceRegistry {
         }
 
         /**
+         * Overrides attributes of the named retry configuration {@code name}: applied after
+         * {@link #retry(String, Consumer)} whatever the order of the calls or, if {@code name} is not
+         * registered with it, on top of the retry defaults, which defines {@code name}. Several calls for
+         * the same name apply in call order. Meant for external configuration, which overrides code
+         * attribute by attribute: {@code ResilienceConfig.applyTo(...)} registers {@code configs.<name>.*}
+         * with it.
+         *
+         * @param name the name; must not be empty or {@code "default"}
+         * @param overlay applied after the programmatic configuration of {@code name}, if any
+         * @return this builder
+         */
+        public Builder retryOverlay(String name, Consumer<RetryConfig.Builder> overlay) {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(overlay, "overlay");
+            compose(retryOverlays, checkedName(name, "retry"), overlay);
+            return this;
+        }
+
+        /**
+         * Overrides attributes of one retry instance, after its named configuration and the values set in
+         * its annotation (or pipeline step). Applied once, when the instance is created; an id that no
+         * instance uses is ignored. Several calls for the same id apply in call order, so calls made
+         * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
+         *
+         * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
+         *     derived {@code <interface>#<method>(<parameter types>)}
+         * @param overrides applied last when the instance's configuration is resolved
+         * @return this builder
+         */
+        public Builder retryInstance(String id, Consumer<RetryConfig.Builder> overrides) {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(overrides, "overrides");
+            compose(retryInstances, checkedId(id), overrides);
+            return this;
+        }
+
+        /**
          * Changes the circuit breaker defaults, which every named configuration and annotation starts from.
          *
          * @param defaults applied to a builder that starts from {@link CircuitBreakerConfig#DEFAULTS}
@@ -513,6 +571,43 @@ public final class ResilienceRegistry {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(config, "config");
             register(circuitBreakerConfigs, name, config, "circuitBreaker");
+            return this;
+        }
+
+        /**
+         * Overrides attributes of the named circuit breaker configuration {@code name}: applied after
+         * {@link #circuitBreaker(String, Consumer)} whatever the order of the calls or, if {@code name} is not
+         * registered with it, on top of the circuit breaker defaults, which defines {@code name}. Several calls for
+         * the same name apply in call order. Meant for external configuration, which overrides code
+         * attribute by attribute: {@code ResilienceConfig.applyTo(...)} registers {@code configs.<name>.*}
+         * with it.
+         *
+         * @param name the name; must not be empty or {@code "default"}
+         * @param overlay applied after the programmatic configuration of {@code name}, if any
+         * @return this builder
+         */
+        public Builder circuitBreakerOverlay(String name, Consumer<CircuitBreakerConfig.Builder> overlay) {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(overlay, "overlay");
+            compose(circuitBreakerOverlays, checkedName(name, "circuitBreaker"), overlay);
+            return this;
+        }
+
+        /**
+         * Overrides attributes of one circuit breaker instance, after its named configuration and the values set in
+         * its annotation (or pipeline step). Applied once, when the instance is created; an id that no
+         * instance uses is ignored. Several calls for the same id apply in call order, so calls made
+         * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
+         *
+         * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
+         *     derived {@code <interface>#<method>(<parameter types>)}
+         * @param overrides applied last when the instance's configuration is resolved
+         * @return this builder
+         */
+        public Builder circuitBreakerInstance(String id, Consumer<CircuitBreakerConfig.Builder> overrides) {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(overrides, "overrides");
+            compose(circuitBreakerInstances, checkedId(id), overrides);
             return this;
         }
 
@@ -542,6 +637,43 @@ public final class ResilienceRegistry {
         }
 
         /**
+         * Overrides attributes of the named rate limiter configuration {@code name}: applied after
+         * {@link #rateLimiter(String, Consumer)} whatever the order of the calls or, if {@code name} is not
+         * registered with it, on top of the rate limiter defaults, which defines {@code name}. Several calls for
+         * the same name apply in call order. Meant for external configuration, which overrides code
+         * attribute by attribute: {@code ResilienceConfig.applyTo(...)} registers {@code configs.<name>.*}
+         * with it.
+         *
+         * @param name the name; must not be empty or {@code "default"}
+         * @param overlay applied after the programmatic configuration of {@code name}, if any
+         * @return this builder
+         */
+        public Builder rateLimiterOverlay(String name, Consumer<RateLimiterConfig.Builder> overlay) {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(overlay, "overlay");
+            compose(rateLimiterOverlays, checkedName(name, "rateLimiter"), overlay);
+            return this;
+        }
+
+        /**
+         * Overrides attributes of one rate limiter instance, after its named configuration and the values set in
+         * its annotation (or pipeline step). Applied once, when the instance is created; an id that no
+         * instance uses is ignored. Several calls for the same id apply in call order, so calls made
+         * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
+         *
+         * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
+         *     derived {@code <interface>#<method>(<parameter types>)}
+         * @param overrides applied last when the instance's configuration is resolved
+         * @return this builder
+         */
+        public Builder rateLimiterInstance(String id, Consumer<RateLimiterConfig.Builder> overrides) {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(overrides, "overrides");
+            compose(rateLimiterInstances, checkedId(id), overrides);
+            return this;
+        }
+
+        /**
          * Changes the timeout defaults, which every named configuration and annotation starts from.
          *
          * @param defaults applied to a builder that starts from {@link TimeoutConfig#DEFAULTS}
@@ -567,6 +699,43 @@ public final class ResilienceRegistry {
         }
 
         /**
+         * Overrides attributes of the named timeout configuration {@code name}: applied after
+         * {@link #timeout(String, Consumer)} whatever the order of the calls or, if {@code name} is not
+         * registered with it, on top of the timeout defaults, which defines {@code name}. Several calls for
+         * the same name apply in call order. Meant for external configuration, which overrides code
+         * attribute by attribute: {@code ResilienceConfig.applyTo(...)} registers {@code configs.<name>.*}
+         * with it.
+         *
+         * @param name the name; must not be empty or {@code "default"}
+         * @param overlay applied after the programmatic configuration of {@code name}, if any
+         * @return this builder
+         */
+        public Builder timeoutOverlay(String name, Consumer<TimeoutConfig.Builder> overlay) {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(overlay, "overlay");
+            compose(timeoutOverlays, checkedName(name, "timeout"), overlay);
+            return this;
+        }
+
+        /**
+         * Overrides attributes of one timeout instance, after its named configuration and the values set in
+         * its annotation (or pipeline step). Applied once, when the instance is created; an id that no
+         * instance uses is ignored. Several calls for the same id apply in call order, so calls made
+         * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
+         *
+         * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
+         *     derived {@code <interface>#<method>(<parameter types>)}
+         * @param overrides applied last when the instance's configuration is resolved
+         * @return this builder
+         */
+        public Builder timeoutInstance(String id, Consumer<TimeoutConfig.Builder> overrides) {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(overrides, "overrides");
+            compose(timeoutInstances, checkedId(id), overrides);
+            return this;
+        }
+
+        /**
          * Changes the bulkhead defaults, which every named configuration and annotation starts from.
          *
          * @param defaults applied to a builder that starts from {@link BulkheadConfig#DEFAULTS}
@@ -588,6 +757,43 @@ public final class ResilienceRegistry {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(config, "config");
             register(bulkheadConfigs, name, config, "bulkhead");
+            return this;
+        }
+
+        /**
+         * Overrides attributes of the named bulkhead configuration {@code name}: applied after
+         * {@link #bulkhead(String, Consumer)} whatever the order of the calls or, if {@code name} is not
+         * registered with it, on top of the bulkhead defaults, which defines {@code name}. Several calls for
+         * the same name apply in call order. Meant for external configuration, which overrides code
+         * attribute by attribute: {@code ResilienceConfig.applyTo(...)} registers {@code configs.<name>.*}
+         * with it.
+         *
+         * @param name the name; must not be empty or {@code "default"}
+         * @param overlay applied after the programmatic configuration of {@code name}, if any
+         * @return this builder
+         */
+        public Builder bulkheadOverlay(String name, Consumer<BulkheadConfig.Builder> overlay) {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(overlay, "overlay");
+            compose(bulkheadOverlays, checkedName(name, "bulkhead"), overlay);
+            return this;
+        }
+
+        /**
+         * Overrides attributes of one bulkhead instance, after its named configuration and the values set in
+         * its annotation (or pipeline step). Applied once, when the instance is created; an id that no
+         * instance uses is ignored. Several calls for the same id apply in call order, so calls made
+         * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
+         *
+         * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
+         *     derived {@code <interface>#<method>(<parameter types>)}
+         * @param overrides applied last when the instance's configuration is resolved
+         * @return this builder
+         */
+        public Builder bulkheadInstance(String id, Consumer<BulkheadConfig.Builder> overrides) {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(overrides, "overrides");
+            compose(bulkheadInstances, checkedId(id), overrides);
             return this;
         }
 
@@ -632,6 +838,32 @@ public final class ResilienceRegistry {
             }
         }
 
+        private static String checkedName(String name, String kind) {
+            if (name.isEmpty() || name.equals(DEFAULT)) {
+                throw new IllegalArgumentException("Use " + kind + "Defaults(...) to change the default " + kind + " config");
+            }
+            return name;
+        }
+
+        private static String checkedId(String id) {
+            if (id.isEmpty()) {
+                throw new IllegalArgumentException("The instance id must not be empty");
+            }
+            return id;
+        }
+
+        private static <B> void compose(Map<String, Consumer<B>> map, String key, Consumer<B> consumer) {
+            map.merge(key, consumer, Consumer::andThen);
+        }
+
+        /** The programmatic configuration of each name, followed by its overlay. */
+        private static <B> Map<String, Consumer<B>> withOverlays(Map<String, Consumer<B>> configs,
+                Map<String, Consumer<B>> overlays) {
+            Map<String, Consumer<B>> all = new LinkedHashMap<>(configs);
+            overlays.forEach((name, overlay) -> all.merge(name, overlay, Consumer::andThen));
+            return all;
+        }
+
         /**
          * Resolves and validates every configuration.
          *
@@ -641,21 +873,23 @@ public final class ResilienceRegistry {
         public ResilienceRegistry build() {
             RetryConfig retry = retry(RetryConfig.DEFAULTS, retryDefaults, DEFAULT);
             Map<String, RetryConfig> retries = new LinkedHashMap<>();
-            retryConfigs.forEach((name, config) -> retries.put(name, retry(retry, config, name)));
+            withOverlays(retryConfigs, retryOverlays).forEach((name, config) -> retries.put(name, retry(retry, config, name)));
             CircuitBreakerConfig circuitBreaker = circuitBreaker(CircuitBreakerConfig.DEFAULTS, circuitBreakerDefaults, DEFAULT);
             Map<String, CircuitBreakerConfig> circuitBreakers = new LinkedHashMap<>();
-            circuitBreakerConfigs.forEach((name, config) -> circuitBreakers.put(name, circuitBreaker(circuitBreaker, config, name)));
+            withOverlays(circuitBreakerConfigs, circuitBreakerOverlays).forEach((name, config) -> circuitBreakers.put(name, circuitBreaker(circuitBreaker, config, name)));
             RateLimiterConfig rateLimiter = rateLimiter(RateLimiterConfig.DEFAULTS, rateLimiterDefaults, DEFAULT);
             Map<String, RateLimiterConfig> rateLimiters = new LinkedHashMap<>();
-            rateLimiterConfigs.forEach((name, config) -> rateLimiters.put(name, rateLimiter(rateLimiter, config, name)));
+            withOverlays(rateLimiterConfigs, rateLimiterOverlays).forEach((name, config) -> rateLimiters.put(name, rateLimiter(rateLimiter, config, name)));
             TimeoutConfig timeout = timeout(TimeoutConfig.DEFAULTS, timeoutDefaults, DEFAULT);
             Map<String, TimeoutConfig> timeouts = new LinkedHashMap<>();
-            timeoutConfigs.forEach((name, config) -> timeouts.put(name, timeout(timeout, config, name)));
+            withOverlays(timeoutConfigs, timeoutOverlays).forEach((name, config) -> timeouts.put(name, timeout(timeout, config, name)));
             BulkheadConfig bulkhead = bulkhead(BulkheadConfig.DEFAULTS, bulkheadDefaults, DEFAULT);
             Map<String, BulkheadConfig> bulkheads = new LinkedHashMap<>();
-            bulkheadConfigs.forEach((name, config) -> bulkheads.put(name, bulkhead(bulkhead, config, name)));
+            withOverlays(bulkheadConfigs, bulkheadOverlays).forEach((name, config) -> bulkheads.put(name, bulkhead(bulkhead, config, name)));
             return new ResilienceRegistry(retry, retries, circuitBreaker, circuitBreakers, rateLimiter, rateLimiters,
-                    timeout, timeouts, bulkhead, bulkheads, PolicyEnvironment.of(ticker, random).withEvents(EventDispatcher.of(listeners)));
+                    timeout, timeouts, bulkhead, bulkheads, PolicyEnvironment.of(ticker, random).withEvents(EventDispatcher.of(listeners)),
+                    new Instances(retryInstances, circuitBreakerInstances, rateLimiterInstances, timeoutInstances,
+                            bulkheadInstances));
         }
 
         private static RateLimiterConfig rateLimiter(RateLimiterConfig base,

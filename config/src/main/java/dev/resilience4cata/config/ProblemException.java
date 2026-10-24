@@ -15,7 +15,10 @@ final class ProblemException extends RuntimeException {
     static final String NOT_SUPPORTED = "R4C-CFG-008";
     static final String UNREADABLE = "R4C-CFG-009";
     static final String AMBIGUOUS = "R4C-CFG-010";
+    /** No longer reported: a named config set both in code and externally is merged, external winning. */
     static final String REGISTERED_TWICE = "R4C-CFG-011";
+    static final String INVALID_INSTANCE_ID = "R4C-CFG-012";
+    static final String UNKNOWN_INSTANCE = "R4C-CFG-013";
 
     private final String code;
 

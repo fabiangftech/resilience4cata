@@ -253,8 +253,9 @@ final class Sources {
      * turns every non-alphanumeric character into '_', so it cannot be reversed by splitting: instead
      * the name is matched against the key grammar with the known policy and attribute names, and must
      * match exactly one key. Policies and attributes may be written with or without '_' between words
-     * ({@code CIRCUITBREAKER} or {@code CIRCUIT_BREAKER}); a '_' inside a config or profile name stands
-     * for '-'.
+     * ({@code CIRCUITBREAKER} or {@code CIRCUIT_BREAKER}); a '_' inside a config, profile or instance
+     * name stands for '-'. Instance ids are therefore limited to such names
+     * ({@code R4C_INSTANCES_PAYMENTS_RETRY_MAXATTEMPTS}); derived ids need a file or system property.
      */
     static final class EnvironmentNames {
 
@@ -273,16 +274,20 @@ final class Sources {
                 throw new ProblemException(ProblemException.AMBIGUOUS, origin + " is ambiguous: it matches "
                         + String.join(" and ", keys) + ". Set the key in a properties file or system property instead");
             }
-            if (tokens.length > 0 && tokens[0].equals("instances")) {
-                throw new ProblemException(ProblemException.NOT_SUPPORTED, origin
-                        + ": per-instance overrides (instances.<id>.*) are not supported yet");
-            }
             String hint = nearMisses.isEmpty() ? ""
                     : ". Did you mean '" + Suggestions.environmentName(nearMisses.get(0)) + "'?";
+            if (tokens.length > 0 && tokens[0].equals("instances")) {
+                throw new ProblemException(ProblemException.UNKNOWN_KEY, "unknown " + origin + hint + " Expected "
+                        + ENV_PREFIX + "INSTANCES_<NAME>_<POLICY>_<ATTRIBUTE>. In environment variables the instance"
+                        + " id can only be a name of lowercase letters and digits, with '_' standing for '-'"
+                        + " (payments-api: " + ENV_PREFIX + "INSTANCES_PAYMENTS_API_RETRY_MAXATTEMPTS); set any other"
+                        + " id, such as a derived id com.acme.Api#get(java.lang.String), in a file or a system property:"
+                        + " r4c.instances.\"<id>\".<policy>.<attribute>");
+            }
             throw new ProblemException(ProblemException.UNKNOWN_KEY, "unknown " + origin + hint
                     + " Expected " + ENV_PREFIX + "DEFAULTS_<POLICY>_<ATTRIBUTE>, " + ENV_PREFIX
                     + "CONFIGS_<NAME>_<POLICY>_<ATTRIBUTE>, " + ENV_PREFIX + "CONFIGS_<NAME>_EXTENDS, " + ENV_PREFIX
-                    + "PROFILES_<PROFILE>_… or " + ENV_PREFIX + "PROFILES_ACTIVE, for example "
+                    + "INSTANCES_<NAME>_<POLICY>_<ATTRIBUTE>, " + ENV_PREFIX + "PROFILES_<PROFILE>_… or " + ENV_PREFIX + "PROFILES_ACTIVE, for example "
                     + ENV_PREFIX + "CONFIGS_EXTERNAL_RETRY_MAXATTEMPTS");
         }
 
@@ -323,6 +328,13 @@ final class Sources {
                         keys.add("configs." + config + ".extends");
                     }
                     policyAttribute(t, j, "configs." + config + ".", keys, nearMisses);
+                }
+            } else if (t[i].equals("instances")) {
+                for (int j = i + 2; j < t.length; j++) {
+                    String instance = name(t, i + 1, j);
+                    if (instance != null) {
+                        policyAttribute(t, j, "instances." + instance + ".", keys, nearMisses);
+                    }
                 }
             }
         }

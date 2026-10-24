@@ -54,10 +54,21 @@ public @interface Retry {
      * <p>With a classifier, an attempt is retried only if the classifier returns {@code FAILURE}, for a
      * result or an exception. It replaces {@code retryOn} (setting both is a compile error); {@code abortOn}
      * still wins over it. When the retries give up on a {@code FAILURE} result, that last result is
-     * returned (no {@code @Fallback}, which only handles exceptions). {@code SUCCESS} and {@code IGNORE}
-     * end the loop. An exception thrown by the classifier ends the retries as the call's failure.
+     * returned (no {@code @Fallback}, which only handles exceptions), or thrown inside a
+     * {@code ResultRejectedException} with {@link #onExhaustedResult()} {@code = THROW}. {@code SUCCESS}
+     * and {@code IGNORE} end the loop. An exception thrown by the classifier ends the retries as the
+     * call's failure.
      */
     Class<?> classifier() default void.class;
+
+    /**
+     * What happens when the retries give up on a result that the {@link #classifier()} rejected:
+     * {@link ExhaustedResult#RETURN RETURN} it (the default), or {@link ExhaustedResult#THROW THROW} a
+     * {@code dev.resilience4cata.ResultRejectedException} holding it, which goes to {@code @Fallback} like
+     * any other failure. Needs a classifier (setting it without one is a compile error). Decided at compile
+     * time: it is not part of the retry's configuration.
+     */
+    ExhaustedResult onExhaustedResult() default ExhaustedResult.INHERIT;
 
     /** Tri-state switch: {@code ""}, {@code "true"} or {@code "false"}. */
     String enabled() default "";

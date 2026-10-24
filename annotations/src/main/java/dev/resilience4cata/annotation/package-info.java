@@ -11,5 +11,11 @@
  *   <li>{@code enabled} is tri-state: {@code ""} (inherit), {@code "true"} or {@code "false"}.</li>
  *   <li>A method-level annotation overrides a type-level one attribute by attribute.</li>
  * </ul>
+ *
+ * <p>The annotations go on interfaces, applied with {@code Resilient.of(Interface.class, impl, registry)},
+ * or on non-final classes, applied with {@code Resilient.create(TheClass.class, registry, args...)} through
+ * a generated subclass. A class is processed only if it declares an annotation itself; it then also inherits
+ * the annotations of its interfaces and superclasses, with this precedence, lowest first: interface,
+ * interface method, class, class method. In a class, calls the object makes to itself are intercepted too.
  */
 package dev.resilience4cata.annotation;

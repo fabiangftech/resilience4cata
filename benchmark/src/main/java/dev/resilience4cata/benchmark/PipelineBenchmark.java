@@ -2,6 +2,7 @@ package dev.resilience4cata.benchmark;
 
 import dev.resilience4cata.Pipeline;
 import dev.resilience4cata.PipelineCall;
+import dev.resilience4cata.PipelineRunnable;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
 import dev.resilience4cata.RetryConfig;
@@ -51,6 +52,8 @@ import org.openjdk.jmh.annotations.Warmup;
  *       Whether the lambda is allocated depends on escape analysis inlining {@code execute}; {@code -prof
  *       gc} shows it. Resilience4j is called the same way: {@code retry.executeSupplier(() ->
  *       breaker.executeSupplier(() -> service.echo(argument)))}.</li>
+ *   <li>{@code pipelineRunRetryCircuitBreaker}: the same pipeline as {@code pipelineRetryCircuitBreaker},
+ *       called through {@code run(PipelineRunnable)} (a call with no result) instead of {@code execute}.</li>
  *   <li>{@code pipelinePolluted}: the same pipeline as {@code pipelineRetryCircuitBreaker}, measured
  *       after five other pipelines with different policy sets and calls have run through the same
  *       {@code Pipeline} code, as in an application with many pipelines. This is the case that generated
@@ -77,6 +80,7 @@ public class PipelineBenchmark {
     private Pipeline<String> pipelineFour;
     private Pipeline<String> pipelineAll;
     private PipelineCall<String, RuntimeException> pipelineCall;
+    private PipelineRunnable<RuntimeException> pipelineRunnable;
     private Retry retry;
     private CircuitBreaker breaker;
     private PipelineService.Impl forResilience4j;
@@ -119,6 +123,7 @@ public class PipelineBenchmark {
                 .build();
         PipelineService.Impl target = forPipeline;
         pipelineCall = target::call;
+        pipelineRunnable = target::call;
 
         retry = Retry.of("bench", io.github.resilience4j.retry.RetryConfig.custom()
                 .maxAttempts(3)
@@ -161,6 +166,11 @@ public class PipelineBenchmark {
     @Benchmark
     public String pipelineRetryCircuitBreaker() {
         return pipelineRetryCircuitBreaker.execute(pipelineCall);
+    }
+
+    @Benchmark
+    public void pipelineRunRetryCircuitBreaker() {
+        pipelineRetryCircuitBreaker.run(pipelineRunnable);
     }
 
     @Benchmark

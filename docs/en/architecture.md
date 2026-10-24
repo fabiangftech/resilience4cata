@@ -81,8 +81,8 @@ Generated code embeds the processor version, and `core` checks it at class initi
 
 | Style | Annotations that count | Precedence, lowest first |
 |---|---|---|
-| Wrapper: `Resilient.of(PaymentClient.class, impl, registry)` | Interface only. The implementation is not known at compile time; annotating it is a compile error | declaring interface < wrapped interface < interface method |
-| Subclass (planned): `Resilient.create(HttpPaymentClient.class, registry)` | Interface and implementation | interface < interface method < class < class method |
+| Wrapper: `Resilient.of(PaymentClient.class, impl, registry)` | Interface only. The implementation is not known at compile time; annotating it makes the class use the subclass style instead | declaring interface < wrapped interface < interface method |
+| Subclass: `Resilient.create(HttpPaymentClient.class, registry)` | Interface and implementation | interface < interface method < class < class method |
 
 In the subclass style the implementation **wins**, attribute by attribute: a class method that sets only `maxAttempts` keeps the `delay` declared on the interface.
 

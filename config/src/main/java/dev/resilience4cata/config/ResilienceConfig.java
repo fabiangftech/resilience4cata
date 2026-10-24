@@ -1,6 +1,12 @@
 package dev.resilience4cata.config;
 
+import dev.resilience4cata.BulkheadSnapshot;
+import dev.resilience4cata.CircuitBreakerSnapshot;
+import dev.resilience4cata.RateLimiterSnapshot;
 import dev.resilience4cata.ResilienceRegistry;
+import dev.resilience4cata.ResilienceSnapshot;
+import dev.resilience4cata.RetrySnapshot;
+import dev.resilience4cata.TimeoutSnapshot;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,6 +41,8 @@ import org.jspecify.annotations.Nullable;
  * defaults.retry.maxAttempts=3                          # defaults.&lt;policy&gt;.&lt;attribute&gt;
  * configs.external.circuitBreaker.failureRateThreshold=50  # configs.&lt;name&gt;.&lt;policy&gt;.&lt;attribute&gt;
  * configs.batch.extends=external                        # inherit every policy of another config
+ * instances.payments.retry.maxAttempts=5               # instances.&lt;id&gt;.&lt;policy&gt;.&lt;attribute&gt;
+ * instances."com.acme.Api#get(java.lang.String)".timeout.value=2s   # derived ids are quoted
  * profiles.test.configs.external.retry.maxAttempts=1    # applied only when the profile is active
  * profiles.active=test                                  # comma-separated, later profiles win
  * </pre>
@@ -42,7 +50,9 @@ import org.jspecify.annotations.Nullable;
  * {@code bulkhead}; attributes are those of the annotation with the same name ({@code @Timeout}'s
  * duration is {@code timeout.value}). Policy and attribute names may be written in camelCase or
  * kebab-case ({@code circuit-breaker.wait-in-open}). Config and profile names are lowercase letters
- * and digits separated by single hyphens. Keys may carry a {@code resilience4cata.} or {@code r4c.}
+ * and digits separated by single hyphens. An instance id is the policy's {@code name}, or the derived
+ * {@code <interface>#<method>(<parameter types>)} when it has none; it is case-sensitive and must be
+ * written in double quotes unless it is made of letters, digits, {@code _} and {@code -}. Keys may carry a {@code resilience4cata.} or {@code r4c.}
  * prefix; in system properties the prefix is required, and other system properties are ignored.
  *
  * <h2>Values</h2>
@@ -57,11 +67,16 @@ import org.jspecify.annotations.Nullable;
  * {@code R4C_CONFIGS_EXTERNAL_RETRY_MAXATTEMPTS} sets {@code configs.external.retry.maxAttempts},
  * {@code R4C_CONFIGS_SLOW_EXTERNAL_TIMEOUT_VALUE} sets {@code configs.slow-external.timeout.value}.
  * Policy and attribute words may also be separated ({@code CIRCUIT_BREAKER_WAIT_IN_OPEN}). A
- * variable must map to exactly one key.
+ * variable must map to exactly one key. Instances can be addressed only by a name of lowercase
+ * letters and digits ({@code R4C_INSTANCES_PAYMENTS_API_RETRY_MAXATTEMPTS} sets
+ * {@code instances.payments-api.retry.maxAttempts}); other ids need a file or system property.
  *
  * <h2>Precedence</h2>
  * Lowest first: built-in defaults, {@code defaults.*}, {@code configs.<name>.*} (root of the
- * {@code extends} chain first), then active profiles in order, then annotation attributes. For one
+ * {@code extends} chain first; external values override a config of the same name registered in
+ * code, attribute by attribute), then active profiles in order, then annotation attributes, then
+ * {@code instances.<id>.*}, which override the annotations so that operators can retune an instance
+ * without recompiling. For one
  * key, sources rank: classpath resources &lt; files and {@code Properties} &lt; environment
  * variables &lt; system properties; among sources of the same kind, the one added last wins. A
  * profile key wins over a non-profile key whatever their sources.
@@ -71,7 +86,11 @@ import org.jspecify.annotations.Nullable;
  * invalid combinations (for example {@code maxDelay} shorter than {@code delay}) all fail
  * {@link Builder#build()} with one {@link ConfigException} that lists every problem, with its key and
  * source (file and line, environment variable or system property) and the closest valid key.
- * Nothing is reloaded afterwards.
+ * Nothing is reloaded afterwards. Instances are created later, when an annotated interface is wrapped,
+ * so {@code build()} cannot know whether an instance id exists, and checks combinations of
+ * per-instance values only when the instance sets every attribute involved; call
+ * {@link #verifyInstances(ResilienceRegistry)} once the services are wrapped to catch ids that match
+ * no instance.
  */
 public final class ResilienceConfig {
 
@@ -83,14 +102,22 @@ public final class ResilienceConfig {
     private final List<String> activeProfiles;
     private final Map<PolicyType<?, ?>, Map<String, Setting>> defaults;
     private final Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> configs;
+    private final Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> instances;
 
     private ResilienceConfig(List<String> activeProfiles, Map<PolicyType<?, ?>, Map<String, Setting>> defaults,
-            Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> configs) {
+            Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> configs,
+            Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> instances) {
         this.activeProfiles = List.copyOf(activeProfiles);
         this.defaults = immutable(defaults);
+        this.configs = immutableByName(configs);
+        this.instances = immutableByName(instances);
+    }
+
+    private static Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> immutableByName(
+            Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> map) {
         Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> copy = new TreeMap<>();
-        configs.forEach((name, policies) -> copy.put(name, immutable(policies)));
-        this.configs = Collections.unmodifiableMap(copy);
+        map.forEach((name, policies) -> copy.put(name, immutable(policies)));
+        return Collections.unmodifiableMap(copy);
     }
 
     private static Map<PolicyType<?, ?>, Map<String, Setting>> immutable(Map<PolicyType<?, ?>, Map<String, Setting>> map) {
@@ -125,33 +152,83 @@ public final class ResilienceConfig {
     }
 
     /**
-     * Registers the configured defaults and named configs on a registry builder. A named config is
-     * registered for each policy that it, or a config it extends, sets.
+     * Registers the configured defaults, named configs and per-instance overrides on a registry
+     * builder. A named config is registered for each policy that it, or a config it extends, sets.
      *
-     * <p>Named configs must be registered in one place: if the builder already has a config with
-     * the same policy and name, this fails. Programmatic {@code *Defaults(...)} calls made after this
-     * one replace the external defaults of that policy.
+     * <p>A named config may also be registered in code ({@code ResilienceRegistry.Builder.retry("name",
+     * ...)}), before or after this call: the external values override the code's attribute by
+     * attribute ({@code retryOverlay}). Per-instance overrides are registered with
+     * {@code retryInstance(...)} and the like; programmatic calls to those made after this one win.
+     * Programmatic {@code *Defaults(...)} calls made after this one replace the external defaults of
+     * that policy.
      *
      * @param registry the builder to configure
      * @return {@code registry}, for chaining
-     * @throws ConfigException if {@code registry} already has a named config that this one sets
      */
     public ResilienceRegistry.Builder applyTo(ResilienceRegistry.Builder registry) {
         Objects.requireNonNull(registry, "registry");
         defaults.forEach((policy, settings) -> policy.registerDefaults(registry, settings));
-        configs.forEach((name, policies) -> policies.forEach((policy, settings) -> {
-            try {
-                policy.registerNamed(registry, name, settings);
-            } catch (IllegalArgumentException e) {
-                String origins = settings.values().stream().map(Setting::origin).collect(Collectors.joining(", "));
-                throw new ConfigException(List.of(new ProblemException(ProblemException.REGISTERED_TWICE,
-                        policy.name + " config '" + name + "' is already registered on this ResilienceRegistry.Builder"
-                                + " (ResilienceRegistry.Builder." + policy.name + "(\"" + name + "\", ...)), and"
-                                + " external configuration sets it too: " + origins + ". Configure each named config"
-                                + " in one place only, programmatically or externally").render()));
-            }
-        }));
+        configs.forEach((name, policies) -> policies.forEach((policy, settings) ->
+                policy.registerNamed(registry, name, settings)));
+        instances.forEach((id, policies) -> policies.forEach((policy, settings) ->
+                policy.registerInstance(registry, id, settings)));
         return registry;
+    }
+
+    /**
+     * Checks that every per-instance override ({@code instances.<id>.<policy>.*}) matches an instance
+     * of that policy that {@code registry} has created. Instances are created when an annotated
+     * interface is wrapped with {@code Resilient.of(...)} or a pipeline is built, so call this after
+     * that, for example at the end of startup or in a test; an override that matches nothing is
+     * otherwise silently unused.
+     *
+     * @param registry a registry built from this configuration
+     * @throws ConfigException listing every override that matches no instance, with its source and
+     *     the closest instance id
+     */
+    public void verifyInstances(ResilienceRegistry registry) {
+        Objects.requireNonNull(registry, "registry");
+        ResilienceSnapshot snapshot = registry.snapshot();
+        Map<PolicyType<?, ?>, Set<String>> known = new LinkedHashMap<>();
+        known.put(PolicyType.RETRY, ids(snapshot.retries(), RetrySnapshot::instance));
+        known.put(PolicyType.CIRCUIT_BREAKER, ids(snapshot.circuitBreakers(), CircuitBreakerSnapshot::instance));
+        known.put(PolicyType.RATE_LIMITER, ids(snapshot.rateLimiters(), RateLimiterSnapshot::instance));
+        known.put(PolicyType.TIMEOUT, ids(snapshot.timeouts(), TimeoutSnapshot::instance));
+        known.put(PolicyType.BULKHEAD, ids(snapshot.bulkheads(), BulkheadSnapshot::instance));
+        Problems problems = new Problems();
+        instances.forEach((id, policies) -> policies.forEach((policy, settings) -> {
+            Set<String> ids = Objects.requireNonNull(known.get(policy));
+            if (ids.contains(id)) {
+                return;
+            }
+            String origins = settings.values().stream().map(Setting::origin).collect(Collectors.joining(", "));
+            StringBuilder message = new StringBuilder(origins).append(settings.size() == 1 ? " sets " : " set ")
+                    .append(policy.name).append(" instance '").append(id).append("', but this registry has no ")
+                    .append(policy.name).append(" instance with that id");
+            List<String> others = known.entrySet().stream().filter(e -> e.getValue().contains(id))
+                    .map(e -> e.getKey().name).toList();
+            if (!others.isEmpty()) {
+                message.append(" ('").append(id).append("' is a ").append(String.join(" and ", others))
+                        .append(" instance: per-instance overrides cannot add a policy that the method does not"
+                                + " declare)");
+            }
+            String closest = Suggestions.closest(id, ids);
+            if (closest != null) {
+                message.append(". Did you mean '").append(Key.quoted(closest)).append("'?");
+            } else {
+                message.append(". An instance id is the policy's name, or <interface>#<method>(<parameter types>)"
+                        + " when it has none");
+            }
+            message.append(" Known ").append(policy.name).append(" instances: ").append(ids);
+            problems.add(new ProblemException(ProblemException.UNKNOWN_INSTANCE, message.toString()));
+        }));
+        problems.throwIfAny();
+    }
+
+    private static <S> Set<String> ids(List<S> snapshots, java.util.function.Function<S, String> id) {
+        Set<String> ids = new TreeSet<>();
+        snapshots.forEach(s -> ids.add(id.apply(s)));
+        return ids;
     }
 
     /**
@@ -182,6 +259,15 @@ public final class ResilienceConfig {
     }
 
     /**
+     * Returns the instance ids that external configuration overrides ({@code instances.<id>.*}), sorted.
+     *
+     * @return the instance ids
+     */
+    public Set<String> instanceIds() {
+        return instances.keySet();
+    }
+
+    /**
      * Describes every effective value and where it comes from, one per line, for diagnostics. Named
      * configs include what they inherit through {@code extends}.
      *
@@ -193,6 +279,8 @@ public final class ResilienceConfig {
                 line(out, "defaults." + policy.name + "." + attribute, s)));
         configs.forEach((name, policies) -> policies.forEach((policy, settings) -> settings.forEach((attribute, s) ->
                 line(out, "configs." + name + "." + policy.name + "." + attribute, s))));
+        instances.forEach((id, policies) -> policies.forEach((policy, settings) -> settings.forEach((attribute, s) ->
+                line(out, "instances." + Key.quoted(id) + "." + policy.name + "." + attribute, s))));
         return out.toString();
     }
 
@@ -431,6 +519,7 @@ public final class ResilienceConfig {
             Map<PolicyType<?, ?>, Map<String, Setting>> defaults = new HashMap<>();
             Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> own = new HashMap<>();
             Map<String, Setting> parents = new HashMap<>();
+            Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> instances = new HashMap<>();
             for (Setting s : effective.values()) {
                 Key key = s.key();
                 switch (key.section()) {
@@ -440,6 +529,10 @@ public final class ResilienceConfig {
                             .computeIfAbsent(Objects.requireNonNull(key.policy()), p -> new LinkedHashMap<>())
                             .put(Objects.requireNonNull(key.attribute()), s);
                     case EXTENDS -> parents.put(Objects.requireNonNull(key.config()), s);
+                    case INSTANCE -> instances.computeIfAbsent(Objects.requireNonNull(key.instance()),
+                                    c -> new HashMap<>())
+                            .computeIfAbsent(Objects.requireNonNull(key.policy()), p -> new LinkedHashMap<>())
+                            .put(Objects.requireNonNull(key.attribute()), s);
                     default -> {
                     }
                 }
@@ -469,10 +562,18 @@ public final class ResilienceConfig {
                         }
                     });
                     policy.validate(defaults.getOrDefault(policy, Map.of()), named, problems);
+                    Map<String, Map<String, Setting>> overrides = new TreeMap<>();
+                    instances.forEach((id, policies) -> {
+                        Map<String, Setting> settings = policies.get(policy);
+                        if (settings != null) {
+                            overrides.put(id, settings);
+                        }
+                    });
+                    policy.validateInstances(defaults.getOrDefault(policy, Map.of()), overrides, problems);
                 }
             }
             problems.throwIfAny();
-            return new ResilienceConfig(active, defaults, configs);
+            return new ResilienceConfig(active, defaults, configs, instances);
         }
 
         private List<String> activeProfiles(Map<String, Setting> merged, Problems problems) {

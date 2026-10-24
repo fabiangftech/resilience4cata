@@ -70,6 +70,43 @@ public interface PaymentClient {
 
 If two composed annotations on the same element set the same attribute to different values, the build fails. There is no silent "last one wins".
 
+### Annotated classes
+
+A non-final class that declares at least one resilience annotation gets a generated subclass, `<Class>$Resilient`. It overrides each method that has policies and ends it with `super.method(...)`, so calls the object makes to itself go through the policies too:
+
+```java
+public class InventoryService implements InventoryApi {      // InventoryApi: @Retry(delay = "100ms")
+    public InventoryService(Repository repository) { ... }
+
+    @Override
+    @Retry(maxAttempts = 4)                    // wins over the interface; keeps its delay
+    public Stock stock(String sku) { ... }
+
+    public Report report(String sku) {
+        return new Report(this.price(sku));    // intercepted: price() is retried, then falls back
+    }
+
+    @Retry(maxAttempts = 3) @Fallback(method = "cachedPrice")
+    public Price price(String sku) { ... }
+
+    protected Price cachedPrice(String sku, Exception e) { ... }   // not private: the subclass calls it
+}
+
+InventoryService service = Resilient.create(InventoryService.class, registry, repository);
+InventoryService typed = new InventoryService$Resilient(registry, repository);   // same, checked by the compiler
+```
+
+- Precedence, lowest first: interface, interface method, class, class method. A method that overrides a superclass method wins over it. The class's type-level annotations apply to every method it can override, inherited ones included, but not to `toString`/`equals`/`hashCode` and the other `Object` methods, which only take annotations written on them. Type-level annotations skip final methods.
+- `Resilient.create` picks the constructor that fits the arguments, as the compiler would; with no fit or several (for example `null` passed to overloaded constructors) it fails and names them. The generated constructors take a `ResilienceRegistry` first, then the class's own parameters.
+- A class that implements an annotated interface but declares no annotation itself is not processed: wrap it with `Resilient.of(InventoryApi.class, impl, registry)`, which applies only the interface's policies and does not intercept self-invocation.
+- Compile errors: final, sealed, abstract, inner (non-static) or private classes, records, enums, classes with only private constructors, and final, private or static methods annotated at method level.
+- Methods the class's constructor calls on `this` run before the policies are set up: don't annotate them.
+
+### Generic methods and wildcard stages
+
+- `@Fallback` works on generic methods such as `<T> T load(Class<T> type, String id)`. A sibling fallback declares the same type parameters in the same order with the same bounds (names may differ), e.g. `default <U> U load(Class<U> type, String id, IOException e)`; the generated code calls it with explicit type arguments. A `FallbackHandler<X>` can only be used when the method's result type does not use its type parameters (`<T> String describe(T value)`), because one `X` cannot fit every `T` without an unchecked cast; this is a compile error.
+- An asynchronous method may return `CompletionStage<? extends X>` or `CompletableFuture<? extends X>` (`?` means `? extends Object`). The policies work with `X`: fallbacks return an `X`, a `CompletionStage<X>` or a `CompletionStage<? extends X>`, and classifiers must accept `X`. `? super X` is a compile error.
+
 ## Execution order
 
 Default, outermost first ([04 §5](research/04-api-and-configuration.md)):
@@ -100,7 +137,8 @@ Resolution order, lowest to highest precedence ([04 §6](research/04-api-and-con
 9. programmatic override
 ```
 
-- External config (8) overrides annotations, as in MicroProfile Fault Tolerance: operators can retune without recompiling. `locked` prevents this for a given instance.
+- External config (8) overrides annotations, as in MicroProfile Fault Tolerance: operators can retune without recompiling. A `locked` attribute that prevents this for one instance is planned, not implemented.
+- A named config registered both in code and externally is merged: external values override the code's attribute by attribute, whatever the call order.
 - Everything is validated and resolved **once**, when the instance is created, into immutable records. The hot path never looks up configuration.
 - Unknown keys fail with a "did you mean …?" message.
 - **No hot reload.** Configuration is immutable once the registry is built; changing it means restarting the application.
@@ -111,6 +149,8 @@ configs.external.circuitBreaker.failureRateThreshold=50
 configs.external.retry.delay=200ms
 configs.batch.extends=external
 configs.batch.timeout.value=30s
+instances.payments.circuitBreaker.minimumCalls=20
+instances."com.acme.Api#get(java.lang.String)".retry.maxAttempts=5
 profiles.test.configs.external.retry.maxAttempts=1
 ```
 
@@ -129,7 +169,9 @@ ResilienceRegistry registry = ResilienceConfig.load()   // classpath resilience4
 - Values: durations as in annotations (`250ms`, `2s`, `PT2S`), case-insensitive enums, exception classes by fully qualified name (comma-separated).
 - Every problem is reported at once by `build()`, with the key, its source (file and line, environment variable, system property) and the closest valid key, e.g. `[R4C-CFG-001] unknown key 'configs.external.circuit-breaker.wait-in-opne' (file /app/resilience4cata.properties, line 7). Did you mean 'configs.external.circuit-breaker.wait-in-open'?`
 - `ResilienceConfig.describe()` lists every effective value and where it comes from.
-- A named config must be configured in one place: registering it both programmatically and externally fails. Per-instance overrides (`instances.<id>.*`) are not supported yet.
+- Per-instance overrides: `instances.<id>.<policy>.<attribute>`, where `<id>` is the policy's `name`, or the derived `<interface>#<method>(<parameter types>)` when it has none. Ids are case-sensitive; one that contains anything other than letters, digits, `_` and `-` goes in double quotes: `instances."com.acme.Api#get(java.lang.String)".retry.max-attempts=5`. They apply after the annotation values, once, when the instance is created, and also under profiles (`profiles.test.instances.…`). Environment variables can address only lowercase names (`R4C_INSTANCES_PAYMENTS_API_RETRY_MAXATTEMPTS`); use a file or a system property (`-Dr4c.instances."<id>".retry.maxAttempts=5`) for derived ids. Programmatically: `ResilienceRegistry.Builder.retryInstance(id, r -> …)` and the like; calls made after `applyTo` win.
+- Instances are created when services are wrapped, so `build()` cannot know whether an id exists: call `config.verifyInstances(registry)` after wrapping them to get `[R4C-CFG-013]` with a "did you mean" for overrides that match no instance. Per-instance values that only make sense with the annotation's values (for example a `delay` longer than the default `maxDelay`) are checked when the instance is created.
+- A named config may be configured both programmatically and externally: the external values override the code's attribute by attribute (`ResilienceRegistry.Builder.retryOverlay(...)` and the like).
 
 ## Classifiers: results as failures
 
@@ -156,9 +198,9 @@ public interface Api {
 
 - The processor checks the class at compile time: concrete and non-generic, a public no-argument constructor, and a `T` that the method's return type (or the `T` of its `CompletionStage<T>`) is assignable to. One instance is created per method; the retry and the breaker share it when they name the same class.
 - The classifier replaces `retryOn` / `recordOn` (setting both is a compile error). `abortOn` / `ignoreOn` still apply first, so an open breaker still stops retries by default.
-- **Retry:** only `FAILURE` is retried, whether it is a result or an exception. When the attempts run out on a `FAILURE` result, the last result is returned; `@Fallback` handles exceptions only, so it does not run. `maxDuration` applies as usual.
+- **Retry:** only `FAILURE` is retried, whether it is a result or an exception. When the attempts run out on a `FAILURE` result, the last result is returned by default; `@Fallback` handles exceptions only, so it does not run. With `@Retry(onExhaustedResult = ExhaustedResult.THROW)` the retry throws a `ResultRejectedException` instead, holding the last result (`result()`, `result(Class)`) and the attempts; it goes to `@Fallback` like any other failure (a sibling method can take `ResultRejectedException`). `onExhaustedResult` needs a classifier (compile error otherwise) and is decided at compile time, not by configuration. `maxDuration` applies as usual.
 - **Circuit breaker:** `FAILURE` counts as a failure (and as slow if it was slow), `SUCCESS` as a success. `IGNORE` is not recorded, and a half-open probe gives its permit back.
-- A classifier should not throw. If it does, its exception becomes the call's failure: the breaker records a failure, the retry stops, and `@Fallback` gets it.
+- A classifier should not throw. If it does, its exception becomes the call's failure: the breaker records a failure, the retry stops and publishes `RetryEvent.GaveUp` with reason `CLASSIFIER_FAILED`, and `@Fallback` gets it.
 - Asynchronous methods behave the same way.
 - Cost: methods without a classifier generate exactly the same code as before. With one, a successful call makes one direct `classify` call per policy, with no allocation and no clock read.
 
@@ -178,16 +220,19 @@ Pipeline<Receipt> charge = Pipeline.builder(registry, "payments", Receipt.class)
 
 Receipt receipt = charge.execute(() -> client.charge(order));            // throws what charge throws
 CompletableFuture<Receipt> later = charge.executeAsync(() -> client.chargeAsync(order));
+charge.run(() -> client.cancel(order));                                  // a call with no result
 ```
 
 - Every policy is optional, configured from the defaults, a named config, overrides, or both. Policies nest in the same order as with annotations (Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead), whatever order the builder methods are called in.
 - The id (`"payments"`) names the policy instances: `registry.circuitBreaker("payments")` returns the breaker. Pipelines with the same id and configuration share instances; the same id with a different configuration is an error.
-- `execute` declares the call's checked exception. Once retries give up it throws the call's own failure or a rejection (`CallNotPermittedException`, `RateLimitExceededException`, `CallTimeoutException`, `BulkheadFullException`).
+- `execute` declares the call's checked exception. Once retries give up it throws the call's own failure or a rejection (`CallNotPermittedException`, `RateLimitExceededException`, `CallTimeoutException`, `BulkheadFullException`), or a `ResultRejectedException` with `onExhaustedResult(THROW)`.
 - `classifier(...)` (or `retryClassifier` / `circuitBreakerClassifier`) decides what is retried and recorded, results included, with the same rules as the annotation attribute.
 - `fallback(Function<Throwable, T>)` and `fallbackHandler(FallbackHandler<T>)` run for the failures selected by `fallbackApplyOn` / `fallbackSkipOn`.
 - `executeAsync` uses each policy's non-blocking async form.
 - The synchronous success path allocates nothing beyond your own lambda. Still, one `Pipeline` class serves every call site, so its call to your lambda becomes megamorphic in an application with many pipelines: annotations remain the fastest option where they can be used.
-- Limits: no `run(Runnable)` (return `null` from the lambda), and async fallbacks return a value, not a stage.
+- `run(PipelineRunnable<X>)` protects a call with no result, with the same policies and semantics and no allocation on success; a classifier sees `null` as its result and a fallback's result is discarded.
+- `onExhaustedResult(Pipeline.ExhaustedResult.THROW)` (needs a retry classifier) throws a `ResultRejectedException` when retries give up on a rejected result, like the annotation attribute.
+- `fallbackAsync(Function<Throwable, CompletionStage<T>>)` / `fallbackAsyncHandler(FallbackHandler<CompletionStage<T>>)` give `executeAsync` a fallback that returns a stage. Combined with `fallback`, each mode uses its own; with only an async fallback, `execute` and `run` wait for its stage.
 
 ## Events and state inspection
 
@@ -213,7 +258,7 @@ ResilienceRegistry registry = ResilienceRegistry.builder()
 | `CircuitBreakerEvent.StateTransition(from, to)` | Every state change, published once by the thread that made it |
 | `CircuitBreakerEvent.CallNotPermitted(state)` | A call rejected while open, forced open or out of half-open probes |
 | `RetryEvent.Retrying(attempt, delay, failure)` | A failed attempt that will be retried |
-| `RetryEvent.GaveUp(attempts, reason, failure)` | No more attempts: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` or `INTERRUPTED` |
+| `RetryEvent.GaveUp(attempts, reason, failure)` | No more attempts: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE`, `INTERRUPTED` or `CLASSIFIER_FAILED` (the classifier threw; `failure` is its exception) |
 | `TimeoutEvent.TimedOut(timeout)` | A call ran past its timeout |
 | `BulkheadEvent.Rejected` / `RateLimiterEvent.Rejected` | A call was rejected |
 | `FallbackEvent.Applied(failure)` | The fallback runs for a failure |
@@ -224,7 +269,6 @@ Every event carries `instance()` (the `name`, or `<interface>#<method>(<paramete
 - **Synchronous.** Listeners run on the thread that caused the event: the caller's thread for synchronous calls, a library virtual thread for asynchronous timeouts and deferred retries. Keep them fast and non-blocking; hand slow work to a queue.
 - **Isolated.** A listener that throws does not affect the call or the other listeners: its exception goes to the thread's uncaught exception handler.
 - Events published from different threads can arrive out of order; each transition arrives exactly once.
-- Known gap: when a classifier itself throws, the retry gives up without publishing `GaveUp`.
 
 `registry.snapshot()` returns read-only records of every instance created so far, for health checks and metrics scrapes. It may allocate and walk the windows, and adds nothing to calls:
 
@@ -258,10 +302,11 @@ clock.advance(Duration.ofSeconds(30)); // an open breaker with waitInOpen = 30s 
 - Breaker waits, slow calls, rate limiter permits and retry `maxDuration` are measured on the clock.
 - Async retry backoff, async rate limiter waits, async bulkhead wait limits and async timeouts run on the thread that calls `advance`, before it returns.
 - Sync timeouts fire exactly when the clock passes the deadline (no slack). A stub that simulates a slow dependency with `clock.sleep(Duration.ofSeconds(5))` ends with `CallTimeoutException`.
+- A sync bulkhead with `maxWait` waits on the clock: a blocked caller gets a slot as soon as one is released, and is rejected when the clock passes `maxWait`, whether another thread advances it or the call holding the slot sleeps on it with `clock.sleep(...)`. It waits for as long as the clock does not move.
 - `ResilienceRegistry.builder().random(new Random(seed))` makes jitter reproducible without the testkit. The generator must be thread-safe (`Random` is, `SplittableRandom` is not).
 - `clock.advanceUntilIdle()` runs every pending delayed task; `ResilienceTesting.elapseWaitInOpen(breaker, clock)` moves past a breaker's wait in open.
 - The clock is an SPI (`dev.resilience4cata.Ticker`, set with `Builder.ticker(...)`), so other test clocks can plug in.
-- Limits: a sync bulkhead with `maxWait` waits in real time. A sleep that times out still advances the clock by its full length. With several threads advancing the same clock, task order is not deterministic.
+- Limits: a sleep that times out still advances the clock by its full length. With several threads advancing the same clock, task order is not deterministic.
 
 ## Performance contract
 

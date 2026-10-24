@@ -289,3 +289,45 @@ A classifier costs about 0.3 ns per policy on a successful call: one direct, mon
 - The pipeline adds about 0.5 ns over generated code on these stacks and stays allocation-free, also with a lambda that captures an argument on every call (escape analysis removes it).
 - `pipelinePolluted` (the same pipeline after five other pipelines ran through `Pipeline.execute`) measures 7.9 ns on one thread against 2.9 ns unpolluted: the single `call.call()` site inside `Pipeline` turns megamorphic in an application with many pipelines. Generated code has one call site per method and does not have this cost.
 - Resilience4j has no synchronous caller-thread timeout, so there is no Resilience4j column for six policies.
+
+## Annotated classes, generics, config overrides, ticker bulkhead (2026-10-24, AWS Graviton3)
+
+Base: commit `53a6651`. New: annotated classes (subclass style), `@Fallback` on generic methods and wildcard async stages, `onExhaustedResult` / `GaveUp` on classifier failure / `Pipeline.run` and async pipeline fallbacks, `config` per-instance overrides, and the sync bulkhead's `maxWait` on a manual ticker. Same method as the previous section (`infra/bench.sh`, 19 `c7g.xlarge`, 160 units, 329 runs; calibration 20.51–20.54 ns, 0.1% spread).
+
+**No regression check** (resilience4cata, ns/op, 1 thread unless noted; all 0 B/op on sync paths):
+
+| Benchmark | Base | New | Change |
+|---|---:|---:|---:|
+| Retry, success | 1.3 ± 0.0 | 1.3 ± 0.0 | +2% |
+| Retry, one retry | 6.5 ± 0.0 | 6.5 ± 0.0 | +1% |
+| Retry, four services, one retry (4 threads) | 37.8 ± 0.9 | 37.7 ± 0.5 | 0% |
+| Circuit breaker, success | 1.8 ± 0.0 | 1.9 ± 0.0 | +1% |
+| Circuit breaker, mixed | 17.2 ± 0.0 | 17.2 ± 0.0 | 0% |
+| Rate limiter, free | 41.7 ± 0.1 | 41.7 ± 0.1 | 0% |
+| Rate limiter, exhausted | 34.2 ± 0.1 | 34.6 ± 0.1 | +1% |
+| Bulkhead, free | 20.5 ± 0.0 | 20.5 ± 0.0 | 0% |
+| Bulkhead, full | 2.3 ± 0.0 | 2.3 ± 0.0 | −1% |
+| Bulkhead, waiting mode | 18.9 ± 0.0 | 18.9 ± 0.0 | 0% |
+| Classifier on retry + breaker | 2.8 ± 0.0 | 2.7 ± 0.0 | −3% |
+| Async circuit breaker | 24.4 ± 0.1 | 24.4 ± 0.1 | 0% |
+| Async timeout, pending stage | 149 ± 12 | 149 ± 12 | 0% |
+| Async stack (five policies) | 122 ± 0.2 | 122 ± 0.2 | 0% |
+| Timeout (sync) | 22.1 ± 0.2 | 23.7 ± 0.1 | **+7%** |
+| Timeout (sync), 4 threads | 23.6 ± 0.2 | 23.4 ± 0.3 | −1% |
+
+- Everything at one thread is within ±2% except the sync timeout. At four threads the differences go both ways within their error bars (for example *Bulkhead, free* 258 → 228 ± 32 ns, *Circuit breaker, mixed* 257 → 271 ± 22 ns).
+- **Open: sync timeout +1.5 ns on one thread.** It is stable (6 forks: 22.1–22.4 vs 23.6–23.8 ns, also with `-XX:-TieredCompilation`: 22.3–22.5 vs 23.6–23.8 ns), but the code it runs did not change: the generated `TimedService$Resilient`, `TimeoutPolicy` and `Watchdog` are identical, the policy's resolved state is identical, and the watchdog's `ThreadLocal` lands in its home slot in both builds. Four threads show no difference. The previous section's "fix" for the same number (moving the timed-out branch out of `end`) may have been the same layout effect going the other way. Next step: `-prof perfasm` on the machines (needs `perf` and `hsdis`) to compare the compiled code.
+- The classified retry layer gained a `try`/`catch` around `classify` (for `GaveUp` on a throwing classifier); the classifier benchmarks show no cost.
+
+**New in this round** (ns/op, 0 B/op):
+
+| Benchmark | Threads | Result |
+|---|---:|---:|
+| Retry, success: annotated class (subclass) vs interface wrapper | 1 | **1.0** vs 1.2 |
+| Retry, one retry: annotated class vs interface wrapper | 1 | **5.6** vs 6.5 |
+| Retry, one retry: annotated class vs interface wrapper | 4 | **5.5** vs 6.6 |
+| `Pipeline.run` (void call), retry + circuit breaker | 1 | 3.0 (`execute`: 2.9) |
+
+- The subclass style is slightly faster than the wrapper: the override calls `super.method()` directly instead of going through a `delegate` field, one load and one interface call fewer.
+- `Pipeline.run` costs the same as `execute` and allocates nothing.
+- Not measured, by design: config per-instance overrides (resolved once at creation) and the bulkhead's ticker mode (test clocks only; the default path adds one `final` boolean read after a failed `tryAcquire`, and *Bulkhead, waiting mode* is unchanged).

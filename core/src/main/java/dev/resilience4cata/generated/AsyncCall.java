@@ -18,4 +18,22 @@ public interface AsyncCall<T> {
      * @throws Throwable if the call fails before returning a stage
      */
     CompletionStage<T> call() throws Throwable;
+
+    /**
+     * Views a stage of a subtype of {@code T} as a stage of {@code T}, without allocating. Generated code
+     * uses it for methods that return {@code CompletionStage<? extends T>} (or {@code ?}): the policies
+     * work with {@code T}, the wildcard's upper bound.
+     *
+     * <p>Safe because the policies only read the stages they are given (they observe completion and may
+     * cancel them; they never complete them with a value), and the generated method returns the result
+     * again as a stage of {@code ? extends T}, so no caller can put a {@code T} into it either.
+     *
+     * @param stage a stage of some subtype of {@code T}, as the delegate returned it
+     * @param <T> the upper bound of the method's wildcard
+     * @return the same stage
+     */
+    @SuppressWarnings("unchecked")
+    static <T> CompletionStage<T> widen(CompletionStage<? extends T> stage) {
+        return (CompletionStage<T>) stage;
+    }
 }
