@@ -9,6 +9,7 @@
 #   include-regex          only Class.method names matching it (default: every benchmark)
 #
 # Environment: MACHINES (default 19), SPOT_MACHINES (default 3; the rest are on-demand), THREADS (default 1,4),
+# JMH_OPTIONS (default "-prof gc"; e.g. add "-jvmArgsAppend -XX:..." to test a JVM flag),
 # AWS_REGION (default us-east-1). Credentials: AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or AWS_PROFILE;
 # a .env at the repository root is loaded if present (AWS_ACCESS_KEY is accepted for the key id).
 # Results: benchmark/build/aws/<run-id>/ (raw JMH JSON and output per run, summary.md).
@@ -18,6 +19,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 INFRA="$ROOT/infra"
 MACHINES=${MACHINES:-19}
 SPOT_MACHINES=${SPOT_MACHINES:-3}
+JMH_OPTIONS=${JMH_OPTIONS:--prof gc}
 THREADS=${THREADS:-1,4}
 [ $# -ge 2 ] || { sed -n '2,15p' "$0"; exit 2; }
 
@@ -53,7 +55,7 @@ cat "$WORK/revisions.txt"
 python3 "$INFRA/plan.py" plan "$WORK/src-base" "$WORK/src-new" "$MACHINES" "$THREADS" ${3:+"$3"} > "$WORK/plan.json"
 
 TF=(terraform -chdir="$INFRA")
-VARS=(-var "run_id=$RUN_ID" -var "region=$AWS_REGION" -var "spot_machines=$SPOT_MACHINES" -var "plan_file=$WORK/plan.json"
+VARS=(-var "run_id=$RUN_ID" -var "region=$AWS_REGION" -var "spot_machines=$SPOT_MACHINES" -var "jmh_options=$JMH_OPTIONS" -var "plan_file=$WORK/plan.json"
       -var "base_bundle=$WORK/base.tar.gz" -var "new_bundle=$WORK/new.tar.gz")
 destroy() {
   log "destroying run $RUN_ID"
@@ -86,7 +88,8 @@ deadline=$(( $(date +%s) + 50 * 60 ))
 pending=$NAMES
 while [ -n "$pending" ] && [ "$(date +%s)" -lt "$deadline" ]; do
   sleep 20
-  done_now=$(aws s3 ls --recursive "s3://$BUCKET/results/" | awk '$4 ~ /\/done$/ {split($4, p, "/"); print p[2]}')
+  # Nothing uploaded yet makes `aws s3 ls` fail; that must not end the run (set -e, pipefail).
+  done_now=$({ aws s3 ls --recursive "s3://$BUCKET/results/" || true; } | awk '$4 ~ /\/done$/ {split($4, p, "/"); print p[2]}')
   still=""
   for n in $pending; do
     if grep -qx "$n" <<< "$done_now"; then log "$n finished"; else still="$still $n"; fi

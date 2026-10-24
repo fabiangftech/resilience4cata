@@ -11,4 +11,16 @@ package
 # Terraform state and plugins (infra/)
 infra/.terraform/
 infra/terraform.tfstate*
+infra/.terraform.tfstate.lock.info
+infra/crash*.log
+infra/*.tfplan
+infra/*.tfvars
+
+# Local secrets (AWS keys for infra/bench.sh)
 .env
+.env.*
+!.env.example
+
+# OS and tooling noise
+.DS_Store
+__pycache__/
