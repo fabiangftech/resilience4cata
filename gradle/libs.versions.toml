@@ -1,7 +1,9 @@
 [versions]
 junit = "6.1.3"
 # The oldest JUnit the junit module supports: its main code compiles against it, and its tests also run on it.
-junitMinimum = "6.1.3"
+# Never bump these two with the rest of JUnit: .github/dependabot.yml ignores their artifacts.
+junitMinimum = "5.10.5"
+junitPlatformMinimum = "1.10.5"
 assertj = "3.27.7"
 jspecify = "1.0.1"
 jmh = "1.37"
@@ -20,7 +22,7 @@ junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 junit-platform-testkit = { module = "org.junit.platform:junit-platform-testkit" }
 junit-jupiter-api-minimum = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junitMinimum" }
-junit-bom-minimum = { module = "org.junit:junit-bom", version.ref = "junitMinimum" }
+junit-platform-testkit-minimum = { module = "org.junit.platform:junit-platform-testkit", version.ref = "junitPlatformMinimum" }
 assertj = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }

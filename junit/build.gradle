@@ -31,8 +31,8 @@ testing {
             }
             dependencies {
                 implementation project()
-                implementation platform(libs.junit.bom.minimum)
-                implementation libs.junit.platform.testkit
+                // Explicit versions, no JUnit BOM: the BOM is the build's own artifact, so Dependabot would bump it.
+                implementation libs.junit.platform.testkit.minimum
                 implementation libs.assertj
             }
         }

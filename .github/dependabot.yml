@@ -6,6 +6,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # The oldest JUnit that resilience4cata-junit supports (junitMinimum, junitPlatformMinimum in
+      # gradle/libs.versions.toml): the module compiles against it and minimumJUnitTest runs on it. The rest of
+      # the build gets JUnit through the junit-bom entry, which these rules do not touch.
+      - dependency-name: 'org.junit.jupiter:junit-jupiter-api'
+      - dependency-name: 'org.junit.platform:junit-platform-testkit'
     groups:
       junit:
         patterns: ['org.junit*']
