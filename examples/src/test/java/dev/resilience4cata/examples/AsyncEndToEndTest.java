@@ -11,6 +11,7 @@ import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -116,7 +117,8 @@ class AsyncEndToEndTest {
                 .cause().isInstanceOf(CallTimeoutException.class)
                 .hasMessageContaining("StatusClient#slow");
         assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isBetween(90L, 3_000L);
-        assertThat(neverCompletes).isCancelled();
+        // The stage is cancelled right after the future fails, so wait for it rather than check at once.
+        assertThatThrownBy(() -> neverCompletes.get(5, TimeUnit.SECONDS)).isInstanceOf(CancellationException.class);
     }
 
     @Test

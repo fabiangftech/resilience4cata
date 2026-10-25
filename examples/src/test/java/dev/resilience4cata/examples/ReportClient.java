@@ -15,7 +15,11 @@ public interface ReportClient {
     @Bulkhead(name = "exports", maxConcurrent = 1)
     String exportPdf(String id);
 
+    /** Holds the slot that {@link #waitForSlot} waits for; no timeout, so it keeps it until released. */
+    @Bulkhead(name = "slots", maxConcurrent = 1, maxWait = "10s")
+    String holdSlot(String id);
+
     @Timeout("100ms")
-    @Bulkhead(maxConcurrent = 1, maxWait = "10s")
+    @Bulkhead(name = "slots", maxConcurrent = 1, maxWait = "10s")
     String waitForSlot(String id);
 }

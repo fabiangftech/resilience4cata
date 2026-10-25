@@ -42,6 +42,11 @@ class BulkheadEndToEndTest {
             }
 
             @Override
+            public String holdSlot(String id) {
+                return block(id);
+            }
+
+            @Override
             public String waitForSlot(String id) {
                 return block(id);
             }
@@ -104,8 +109,9 @@ class BulkheadEndToEndTest {
 
     @Test
     void aTimeoutStopsTheWaitForASlot() {
-        hold(() -> client.waitForSlot("hold-slot"));
-        while (registry.bulkhead("dev.resilience4cata.examples.ReportClient#waitForSlot(java.lang.String)").concurrentCalls() == 0) {
+        // The holder has no timeout: one that timed out first would free the slot before the second call waits.
+        hold(() -> client.holdSlot("hold-slot"));
+        while (registry.bulkhead("slots").concurrentCalls() == 0) {
             Thread.onSpinWait();
         }
         long start = System.nanoTime();
