@@ -100,8 +100,49 @@ public final class ResilienceProcessor extends AbstractProcessor {
     /** What generated methods call: the wrapped instance for an interface, {@code super} for a class. */
     private String delegateReceiver = "this.delegate";
 
+    /**
+     * Whether {@link #process} claims the annotations it sees. javac's {@code -Xlint:processing} warns about
+     * every annotation that no processor claimed, so a {@code "*"} processor that claims nothing makes
+     * {@code -Xlint:all -Werror} builds fail. Claiming {@code "*"} would hide the annotations from processors
+     * that run after this one, so it is only done when this is the only processor on the processor path.
+     */
+    private final boolean claimsAnnotations;
+
     /** Creates the processor. Called by the compiler through {@link java.util.ServiceLoader}. */
     public ResilienceProcessor() {
+        this(aloneOnProcessorPath());
+    }
+
+    /** For tests: decides whether the processor claims the annotations it sees. */
+    ResilienceProcessor(boolean claimsAnnotations) {
+        this.claimsAnnotations = claimsAnnotations;
+    }
+
+    /** True when every processor registered next to this one is this one; see {@link #claimsAnnotations}. */
+    private static boolean aloneOnProcessorPath() {
+        try {
+            // Lists the registered processors without instantiating them.
+            List<String> names = java.util.ServiceLoader.load(javax.annotation.processing.Processor.class,
+                            ResilienceProcessor.class.getClassLoader())
+                    .stream().map(provider -> provider.type().getName()).toList();
+            return aloneAmong(names);
+        } catch (java.util.ServiceConfigurationError | LinkageError e) {
+            return false; // unsure: stay cooperative
+        }
+    }
+
+    /**
+     * True when {@code names} (the registered processors) contains only this library's processors: this one
+     * and {@link AnnotationClaimer}, which is registered next to it.
+     */
+    static boolean aloneAmong(List<String> names) {
+        Set<String> ours = Set.of(ResilienceProcessor.class.getName(), AnnotationClaimer.class.getName());
+        return names.contains(ResilienceProcessor.class.getName()) && ours.containsAll(names);
+    }
+
+    /** Whether {@link #process} claims the annotations it sees; see the field. */
+    boolean claimsAnnotations() {
+        return claimsAnnotations;
     }
 
     @Override
@@ -132,7 +173,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         for (Element root : roundEnv.getRootElements()) {
             scan(root);
         }
-        return false;
+        return claimsAnnotations;
     }
 
     private void scan(Element element) {

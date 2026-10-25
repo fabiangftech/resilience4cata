@@ -329,7 +329,7 @@ assertThat(clock.elapsed()).isBetween(Duration.ZERO, Duration.ofMillis(100));
 
 Add the processor to `annotationProcessor` (Gradle) or `annotationProcessorPaths` (Maven) as shown above. Putting it on the compile class path is not enough: since JDK 23, `javac` no longer runs processors found on the class path unless asked to. There is no reflection fallback, by design.
 
-**`warning: No processor claimed any of these annotations`** with `-Xlint:all -Werror`. The processor looks at every type, because composed annotations are user-defined, and leaves the annotations unclaimed for other processors. Add `-Xlint:-processing` to the compiler arguments.
+**`warning: No processor claimed any of these annotations`** with `-Xlint:all -Werror`. Builds with `-Xlint:all -Werror` work: when resilience4cata's processor is the only one on the processor path it claims the annotations it sees, and next to other processors it claims only its own (`dev.resilience4cata.annotation.*`), so they still see everything else. If the warning lists other annotations, another processor left them unclaimed; add `-Xlint:-processing` to the compiler arguments.
 
 **`[R4C-RT-004]`**: `core` and `processor` versions differ. Use the BOM.
 

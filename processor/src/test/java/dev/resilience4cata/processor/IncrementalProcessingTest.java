@@ -121,12 +121,13 @@ class IncrementalProcessingTest {
     void registersTheProcessorAsIsolating() throws IOException {
         List<URL> resources = Collections.list(getClass().getClassLoader().getResources(REGISTRATION));
         assertThat(resources).hasSize(1);
-        assertThat(lines(resources.get(0))).containsExactly(ResilienceProcessor.class.getName() + ",isolating");
+        assertThat(lines(resources.get(0))).containsExactly(ResilienceProcessor.class.getName() + ",isolating",
+                AnnotationClaimer.class.getName() + ",isolating");
 
         List<URL> services = Collections.list(getClass().getClassLoader()
                 .getResources("META-INF/services/" + Processor.class.getName()));
         assertThat(services).hasSize(1);
-        assertThat(lines(services.get(0))).containsExactly(ResilienceProcessor.class.getName());
+        assertThat(lines(services.get(0))).containsExactly(ResilienceProcessor.class.getName(), AnnotationClaimer.class.getName());
     }
 
     @Test

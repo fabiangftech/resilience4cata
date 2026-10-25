@@ -1,1 +1,2 @@
 dev.resilience4cata.processor.ResilienceProcessor
+dev.resilience4cata.processor.AnnotationClaimer

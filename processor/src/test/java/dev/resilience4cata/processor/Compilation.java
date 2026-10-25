@@ -60,7 +60,20 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
         }
     }
 
+    /**
+     * Compiles {@code sources} on the test classpath with several processors, in order, and the given
+     * compiler options instead of the default lint options (which turn {@code -Xlint:processing} off).
+     */
+    static Compilation compile(Path workDir, Map<String, String> sources, List<Processor> processors, List<String> lint) {
+        return compile(workDir, sources, processors, System.getProperty("java.class.path"), lint);
+    }
+
     private static Compilation compile(Path workDir, Map<String, String> sources, Processor processor, String path) {
+        return compile(workDir, sources, List.of(processor), path, List.of("-Xlint:all", "-Xlint:-processing", "-Werror"));
+    }
+
+    private static Compilation compile(Path workDir, Map<String, String> sources, List<Processor> processors, String path,
+            List<String> lint) {
         try {
             Path sourceDir = Files.createDirectories(workDir.resolve("src"));
             Path classes = Files.createDirectories(workDir.resolve("classes"));
@@ -77,11 +90,11 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
             try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
                 fileManager.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, List.of(classes));
                 fileManager.setLocationFromPaths(StandardLocation.SOURCE_OUTPUT, List.of(generated));
-                List<String> options = List.of("-classpath", path,
-                        "-Xlint:all", "-Xlint:-processing", "-Werror");
+                List<String> options = new ArrayList<>(List.of("-classpath", path));
+                options.addAll(lint);
                 JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnostics, options, null,
                         fileManager.getJavaFileObjectsFromPaths(files));
-                task.setProcessors(List.of(processor));
+                task.setProcessors(processors);
                 boolean success = task.call();
                 return new Compilation(success, diagnostics.getDiagnostics(), generated, classes);
             }

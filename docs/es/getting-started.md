@@ -329,7 +329,7 @@ assertThat(clock.elapsed()).isBetween(Duration.ZERO, Duration.ofMillis(100));
 
 Agrega el processor a `annotationProcessor` (Gradle) o a `annotationProcessorPaths` (Maven) como se muestra arriba. Ponerlo en el class path de compilación no alcanza: desde JDK 23, `javac` ya no ejecuta los processors que encuentra en el class path salvo que se le pida. No hay fallback por reflexión, por diseño.
 
-**`warning: No processor claimed any of these annotations`** con `-Xlint:all -Werror`. El processor revisa todos los tipos, porque las anotaciones compuestas las define el usuario, y deja las anotaciones sin reclamar para otros processors. Agrega `-Xlint:-processing` a los argumentos del compilador.
+**`warning: No processor claimed any of these annotations`** con `-Xlint:all -Werror`. Los builds con `-Xlint:all -Werror` funcionan: cuando el processor de resilience4cata es el único en el processor path reclama las anotaciones que ve, y junto a otros processors reclama solo las suyas (`dev.resilience4cata.annotation.*`), así los demás siguen viendo todo lo demás. Si la advertencia lista otras anotaciones, las dejó sin reclamar otro processor; agrega `-Xlint:-processing` a los argumentos del compilador.
 
 **`[R4C-RT-004]`**: las versiones de `core` y `processor` no coinciden. Usa el BOM.
 
