@@ -141,7 +141,8 @@ class AsyncPoliciesTest {
         CompletableFuture<String> pending = new CompletableFuture<>();
         CompletableFuture<String> result = timeout.executeAsync(() -> pending);
         assertThatThrownBy(() -> result.get(5, TimeUnit.SECONDS)).cause().isInstanceOf(CallTimeoutException.class);
-        assertThat(pending).as("cancelled").isCancelled();
+        // The stage is cancelled right after the result fails, on the timer's thread: wait for it.
+        assertThatThrownBy(() -> pending.get(5, TimeUnit.SECONDS)).isInstanceOf(java.util.concurrent.CancellationException.class);
         assertThat(pending.complete("late")).isFalse();
         assertThat(failureOf(result)).isInstanceOf(CallTimeoutException.class);
     }
