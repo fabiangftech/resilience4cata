@@ -100,7 +100,7 @@ Planned, not promised; names and scope can change:
 
 | Feature | Tier | Notes |
 |---|---|---|
-| Hedging (`@Hedge`) | v1 | Resilience4j has none |
+| Hedging (`@Hedge`) | v1 | Resilience4j has `resilience4j-hedge` (async, programmatic only); ours would be an annotation |
 | Adaptive concurrency limit (`@AdaptiveLimit`: AIMD, Vegas, Gradient2) | v1 | |
 | OpenTelemetry tracing | later | metrics are in `resilience4cata-opentelemetry` since 0.3.0 ([guide](guides/opentelemetry.md)) |
 | YAML configuration | v1 | separate module, so `core` stays dependency-free |

@@ -100,7 +100,7 @@ Planificado, no prometido; los nombres y el alcance pueden cambiar:
 
 | Funcionalidad | Nivel | Notas |
 |---|---|---|
-| Hedging (`@Hedge`) | v1 | Resilience4j no lo tiene |
+| Hedging (`@Hedge`) | v1 | Resilience4j tiene `resilience4j-hedge` (async, solo programático); el nuestro sería una anotación |
 | Límite de concurrencia adaptativo (`@AdaptiveLimit`: AIMD, Vegas, Gradient2) | v1 | |
 | Tracing de OpenTelemetry | más adelante | las métricas están en `resilience4cata-opentelemetry` desde 0.3.0 ([guía](guides/opentelemetry.md)) |
 | Configuración YAML | v1 | módulo separado, para que `core` siga sin dependencias |
