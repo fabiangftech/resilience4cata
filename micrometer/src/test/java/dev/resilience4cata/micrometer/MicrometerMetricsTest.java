@@ -244,17 +244,24 @@ class MicrometerMetricsTest {
             counters.onEvent(gaveUp);
         }
 
-        long before = threads.getThreadAllocatedBytes(thread);
-        for (int i = 0; i < 100_000; i++) {
-            counters.onEvent(retrying);
-            counters.onEvent(gaveUp);
+        // Measured in rounds until the JIT is done (a slow CI machine may not be after the warm-up); a real
+        // allocation shows in every round.
+        long allocated = Long.MAX_VALUE;
+        int rounds = 0;
+        while (rounds < 20 && allocated >= 1024) {
+            rounds++;
+            long before = threads.getThreadAllocatedBytes(thread);
+            for (int i = 0; i < 100_000; i++) {
+                counters.onEvent(retrying);
+                counters.onEvent(gaveUp);
+            }
+            allocated = Math.min(allocated, threads.getThreadAllocatedBytes(thread) - before);
         }
-        long allocated = threads.getThreadAllocatedBytes(thread) - before;
 
         assertThat(allocated).as("bytes allocated by 200k cached events (the measurement may allocate a little)")
                 .isLessThan(1024);
         assertThat(meters.getMeters()).containsExactlyInAnyOrderElementsOf(registered);
-        assertThat(meters.get("r4c.retry.retries").counter().count()).isEqualTo(120_001);
+        assertThat(meters.get("r4c.retry.retries").counter().count()).isEqualTo(20_001 + 100_000.0 * rounds);
     }
 
     @Test

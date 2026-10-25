@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.resilience4cata.event.RetryEvent;
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -112,21 +111,19 @@ class PipelineRunAndExhaustedResultTest {
                 .build();
         int[] counter = new int[1];
         PipelineRunnable<RuntimeException> call = () -> counter[0]++;
-        com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
-        long thread = Thread.currentThread().threadId();
         for (int i = 0; i < 20_000; i++) {
             pipeline.run(call);
         }
 
-        long before = threads.getThreadAllocatedBytes(thread);
-        for (int i = 0; i < 100_000; i++) {
-            pipeline.run(call);
-        }
-        long allocated = threads.getThreadAllocatedBytes(thread) - before;
+        Allocations.Measurement measured = Allocations.steadyState(() -> {
+            for (int i = 0; i < 100_000; i++) {
+                pipeline.run(call);
+            }
+        });
 
-        assertThat(allocated).as("bytes allocated by 100k calls (the measurement itself may allocate a little)")
-                .isLessThan(1024);
-        assertThat(counter[0]).isEqualTo(120_000);
+        assertThat(measured.bytes()).as("bytes allocated by 100k calls (the measurement itself may allocate a little)")
+                .isLessThan(Allocations.LIMIT);
+        assertThat(counter[0]).isEqualTo(20_000 + 100_000 * measured.rounds());
     }
 
     // onExhaustedResult

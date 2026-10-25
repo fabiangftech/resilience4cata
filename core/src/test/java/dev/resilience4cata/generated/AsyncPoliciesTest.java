@@ -115,7 +115,7 @@ class AsyncPoliciesTest {
     @Test
     void aStageThatCompletesInTimeCancelsItsTimer() throws Exception {
         TimeoutPolicy timeout = new TimeoutPolicy("test", TimeoutConfig.builder().timeout(Duration.ofHours(1)).build());
-        int queued = AsyncSupport.queuedTimers();
+        int queued = settledQueuedTimers();
         CompletableFuture<String> pending = new CompletableFuture<>();
         CompletableFuture<String> result = timeout.executeAsync(() -> pending);
         awaitQueuedTimers(queued + 1);
@@ -124,6 +124,24 @@ class AsyncPoliciesTest {
         pending.complete("done");
         assertThat(result.get(1, TimeUnit.SECONDS)).isEqualTo("done");
         awaitQueuedTimers(queued); // removed within a tick of the cancel, not after the hour
+    }
+
+    /**
+     * The shared timer's count once timers left by earlier tests (short timeouts that are still due) have
+     * fired: unchanged over several ticks. Taken as the base right away, a timer that fires during this test
+     * would move the count and fail it on a slow machine.
+     */
+    private static int settledQueuedTimers() throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        int count = AsyncSupport.queuedTimers();
+        int stable = 0;
+        while (stable < 5 && System.nanoTime() < deadline) {
+            Thread.sleep(50);
+            int now = AsyncSupport.queuedTimers();
+            stable = now == count ? stable + 1 : 0;
+            count = now;
+        }
+        return count;
     }
 
     /** The shared timer thread works in ticks, so the count settles within a few milliseconds. */
