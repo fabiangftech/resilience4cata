@@ -79,7 +79,7 @@ Los métodos de los builders de Resilience4j (las properties de Spring Boot usan
 | `intervalFunction(IntervalFunction.ofExponentialBackoff(…))` | | `backoff = EXPONENTIAL`, `multiplier`, `maxDelay` | ×2, máx. 10 s |
 | `IntervalFunction.ofRandomized(…)`, `ofExponentialRandomBackoff(…)` | | `jitter = FULL` o `EQUAL` | `FULL` |
 | `retryExceptions` / `retryOnException(predicate)` | todas las excepciones | `retryOn` o `classifier` | `Exception` |
-| `ignoreExceptions` | ninguna | `abortOn` | `CallNotPermittedException` |
+| `ignoreExceptions` | ninguna | `abortOn` | — (un breaker abierto nunca se reintenta de todos modos) |
 | `retryOnResult(predicate)` | | `classifier` | — |
 | `failAfterMaxAttempts` | `false` | `onExhaustedResult = THROW` | `RETURN` |
 | sin equivalente | | `maxDuration` (presupuesto de tiempo para todos los intentos) | 0 = ilimitado |
@@ -109,7 +109,7 @@ Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead �
 
 ### Un breaker abierto detiene los retries :id=open-breaker
 
-`abortOn` tiene como valor predeterminado `CallNotPermittedException`, así que en cuanto el breaker se abre, el retry se rinde de inmediato en lugar de seguir reintentando contra él. En Resilience4j tienes que agregar tú mismo esa excepción a `ignoreExceptions`.
+Un retry nunca reintenta `CallNotPermittedException`, diga lo que diga su `abortOn`, así que en cuanto el breaker se abre, el retry se rinde de inmediato en lugar de seguir reintentando contra él. En Resilience4j tienes que agregar tú mismo esa excepción a `ignoreExceptions`.
 
 ### Los errores no se registran ni se reintentan de forma predeterminada :id=errors
 

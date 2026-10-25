@@ -86,7 +86,7 @@ flowchart TD
 
 A sibling method takes the annotated method's parameters, optionally followed by one exception parameter, and returns a type assignable to the method's return type. In an interface it is a `default` or `static` method; in an [annotated class](../guides/annotated-classes.md) it must not be `private`.
 
-- **The exception parameter selects the failures it handles.** `unknownPrice(String sku, Exception failure)` handles `Exception`s only: an `Error` does not match and is rethrown, even though `applyOn` is `Throwable`. Take `Throwable` (or no exception parameter at all) to handle everything.
+- **The exception parameter selects the failures it handles.** `unknownPrice(String sku, Exception failure)` handles `Exception`s only: an `Error` does not match and is rethrown, even though `applyOn` is `Throwable`, and no `FallbackEvent.Applied` is published for it. Take `Throwable` (or no exception parameter at all) to handle everything.
 - **Several overloads** with different exception types are allowed; the most specific one that matches is called:
 
 <!-- snippet: fallback-overloads -->
@@ -108,7 +108,7 @@ static String describeFallback(String sku, CallNotPermittedException e) {
 }
 ```
 
-A `FileNotFoundException` gets the first, any other `IOException` the second, and `CallNotPermittedException` (the breaker is open) the third. A failure that no overload accepts, such as an `IllegalStateException` here, is rethrown.
+A `FileNotFoundException` gets the first, any other `IOException` the second, and `CallNotPermittedException` (the breaker is open) the third. A failure that no overload accepts, such as an `IllegalStateException` here, is rethrown, with no `FallbackEvent.Applied`.
 
 - Overloads are tried most specific exception type first, whatever order you declare them in. An overload that catches everything (one taking `Throwable`, or one with no exception parameter) ends the list: overloads after it could never be reached, so they are not used.
 - A sibling may not throw a checked exception that the annotated method does not declare.
@@ -225,7 +225,7 @@ long price = quote.execute(() -> backend.quote("sku-1", 3));
 
 | Event | When | Fields |
 |---|---|---|
-| `FallbackEvent.Applied` | A failure passed `applyOn`/`skipOn` and the fallback is about to run | `instance`, `nanoTime`, `failure` |
+| `FallbackEvent.Applied` | A fallback is about to run: the failure passed `applyOn`/`skipOn` and, with sibling methods, one of them takes it. Published once per call, also when the fallback then throws; never for a failure that is rethrown | `instance`, `nanoTime`, `failure` |
 
 See [Observability](../guides/observability.md).
 

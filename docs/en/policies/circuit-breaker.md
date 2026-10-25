@@ -167,7 +167,7 @@ breaker.reset();       // back to CLOSED with an empty window
 
 The breaker is the third layer: inside Retry, around RateLimiter, Timeout and Bulkhead.
 
-- **It stops retries.** Every attempt of a `@Retry` goes through the breaker and is recorded. Once it opens, the next attempt gets `CallNotPermittedException`, which is in the retry's default `abortOn`, so the retry stops without waiting (see the [overview](README.md#an-open-breaker-stops-the-retries)).
+- **It stops retries.** Every attempt of a `@Retry` goes through the breaker and is recorded. Once it opens, the next attempt gets `CallNotPermittedException`, which a retry never retries, whatever its `abortOn`, `retryOn` or classifier say, so the retry stops without waiting (see [Retry](retry.md#attributes) and the [overview](README.md#an-open-breaker-stops-the-retries)).
 - **It records the inner policies' rejections.** `RateLimitExceededException`, `CallTimeoutException` and `BulkheadFullException` are `Exception`s, so by default they count as failures: your own rate limiter or bulkhead can open the breaker. If you don't want that, list them in `ignoreOn`. Timeouts are usually worth recording.
 - Rejected calls never reach the rate limiter, so they do not use up its permits.
 - A `@Fallback` on the method sees `CallNotPermittedException` like any other failure; a sibling method can take it as its parameter to answer differently while the breaker is open.

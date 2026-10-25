@@ -79,7 +79,7 @@ El método generado es un bucle simple alrededor de tu llamada. Mientras las lla
 flowchart TD
     attempt["Llamar al método"] --> threw{"¿Lanzó una excepción?"}
     threw -- no --> done["Devolver el resultado"]
-    threw -- sí --> retryable{"¿Reintentable?<br/>en retryOn, no en abortOn,<br/>quedan intentos, thread no interrumpido"}
+    threw -- sí --> retryable{"¿Reintentable?<br/>en retryOn, no en abortOn, no es un breaker abierto,<br/>quedan intentos, thread no interrumpido"}
     retryable -- no --> fail["Relanzar la última falla<br/>(o ejecutar el fallback)"]
     retryable -- sí --> delay["Calcular la espera:<br/>backoff, tope maxDelay, luego jitter"]
     delay --> budget{"¿maxDuration definido y<br/>transcurrido + espera > maxDuration?"}
@@ -87,7 +87,7 @@ flowchart TD
     budget -- no --> sleep["Esperar"] --> attempt
 ```
 
-- **Qué se reintenta.** Una excepción que es instancia de un tipo de `retryOn` (por defecto: `Exception`) y de ningún tipo de `abortOn` (por defecto: `CallNotPermittedException`). `abortOn` gana sobre `retryOn`. Todo lo demás se relanza enseguida, así que por defecto los `Error` (`OutOfMemoryError`, `AssertionError`, …) nunca se reintentan. Un método que termina normalmente nunca se reintenta, salvo que un [classifier](../guides/classifiers.md) diga que su resultado es una falla.
+- **Qué se reintenta.** Una excepción que es instancia de un tipo de `retryOn` (por defecto: `Exception`) y de ningún tipo de `abortOn` (por defecto: ninguno). `abortOn` gana sobre `retryOn`. Una `CallNotPermittedException` (un circuit breaker abierto) nunca se reintenta, digan lo que digan las listas. Todo lo demás se relanza enseguida, así que por defecto los `Error` (`OutOfMemoryError`, `AssertionError`, …) nunca se reintentan. Un método que termina normalmente nunca se reintenta, salvo que un [classifier](../guides/classifiers.md) diga que su resultado es una falla.
 - **Conteo.** `maxAttempts` cuenta cada llamada, incluida la primera: `maxAttempts = 3` significa como máximo dos reintentos.
 - **Esperas.** Antes del reintento *n* (después de *n* intentos fallidos), la espera base es `delay` con backoff `FIXED`, o `delay × multiplier^(n−1)` con tope en `maxDelay` con `EXPONENTIAL`. Luego el jitter la vuelve aleatoria: `FULL` elige una espera entre 0 y la espera base, `EQUAL` entre la mitad y el total, `NONE` la deja igual. Con los valores por defecto, las esperas base son 200 ms, 400 ms, 800 ms… hasta 10 s.
 - **Presupuesto de tiempo.** Con `maxDuration`, el retry se rinde en lugar de esperar cuando el siguiente intento empezaría después del presupuesto (tiempo desde el primer intento + la siguiente espera > `maxDuration`). Nunca corta un intento en curso: para eso agrega [`@Timeout`](timeout.md), que se aplica por intento.
@@ -107,7 +107,7 @@ flowchart TD
 | `jitter` | `Jitter` | `FULL` | `defaults.retry.jitter` | `NONE`, `FULL` (de 0 a la espera) o `EQUAL` (la mitad de la espera más una mitad aleatoria). |
 | `maxDuration` | duración | `0` (sin presupuesto) | `defaults.retry.maxDuration` | Presupuesto de tiempo para toda la operación, con intentos y esperas. |
 | `retryOn` | `Class<? extends Throwable>[]` | `{Exception.class}` | `defaults.retry.retryOn` | Excepciones que se reintentan, subclases incluidas. |
-| `abortOn` | `Class<? extends Throwable>[]` | `{CallNotPermittedException.class}` | `defaults.retry.abortOn` | Excepciones que detienen los reintentos; gana sobre `retryOn` y sobre el classifier. |
+| `abortOn` | `Class<? extends Throwable>[]` | `{}` | `defaults.retry.abortOn` | Excepciones que detienen los reintentos; gana sobre `retryOn` y sobre el classifier. Un breaker abierto los detiene esté en la lista o no. |
 | `classifier` | `Class<?>` | ninguno | solo anotación | Un `Classifier<T>` que decide qué se reintenta, resultados incluidos. Reemplaza a `retryOn`. Ver [Classifiers](../guides/classifiers.md). |
 | `onExhaustedResult` | `ExhaustedResult` | `RETURN` | solo anotación | Con un classifier: devolver el último resultado rechazado, o `THROW` para lanzar una `ResultRejectedException`. |
 | `name` | `String` | una instancia por método | solo anotación | Id de la instancia; los métodos con el mismo `name` comparten una política de retry. |
@@ -129,8 +129,18 @@ byte[] download(String path) throws IOException;
 
 Con `jitter = NONE`, un `download` que lanza `IOException` una y otra vez se llama a los 0 s, 0,5 s, 1,5 s y 3,5 s, y luego se rinde: un intento más tras una espera de 2 s empezaría después del presupuesto de 4 s. Una `FileNotFoundException` también es una `IOException`, pero `abortOn` gana, así que falla después de una llamada. Una `IllegalStateException` no está en `retryOn`, así que también falla después de una llamada.
 
-> [!WARNING]
-> Una lista que escribes en la anotación **reemplaza** a la lista por defecto, no se suma a ella. El `abortOn` de arriba deja fuera a `CallNotPermittedException`, así que si este método también tuviera un circuit breaker, un breaker abierto se reintentaría. Escribe `abortOn = {FileNotFoundException.class, CallNotPermittedException.class}` para conservar ambas.
+Una lista que escribes en la anotación **reemplaza** a la lista por defecto, no se suma a ella.
+
+Una llamada rechazada por un circuit breaker nunca se reintenta, digan lo que digan `abortOn`, `retryOn` o un classifier: ese aborto viene incorporado, no es una entrada de `abortOn`, así que una lista que escribas no puede quitarlo. Aquí `abortOn` solo lista `IllegalArgumentException`:
+
+<!-- snippet: retry-open-breaker -->
+```java
+@Retry(maxAttempts = 5, delay = "1s", abortOn = IllegalArgumentException.class)
+@CircuitBreaker(windowSize = 2, minimumCalls = 2, waitInOpen = "1m")
+String report(String id);
+```
+
+Si `report` sigue fallando, los dos primeros intentos abren el breaker, el tercero recibe `CallNotPermittedException` y el retry se rinde ahí (`GaveUp` con `NOT_RETRYABLE`, tras 3 intentos) en lugar de esperar dos esperas más. Mientras el breaker siga abierto, cada llamada hace un intento y no espera nada.
 
 ## Compartir e ids de instancia
 
@@ -145,7 +155,7 @@ No hay handle para un retry: `registry` no tiene un método `retry(id)`. `regist
 Retry es la segunda capa, dentro de Fallback y alrededor de todo lo demás (ver el [resumen](README.md)):
 
 - Cada intento pasa de nuevo por el circuit breaker, el rate limiter, el timeout y el bulkhead. Cada intento lo registra el breaker y tiene su propio timeout.
-- Un breaker abierto lanza `CallNotPermittedException`, que está en el `abortOn` por defecto: el retry se detiene enseguida en lugar de esperar para nada.
+- Un breaker abierto lanza `CallNotPermittedException`, que nunca se reintenta, diga lo que diga `abortOn`: el retry se detiene enseguida en lugar de esperar para nada (ver [arriba](#atributos)).
 - Los rechazos de las políticas internas (`RateLimitExceededException`, `CallTimeoutException`, `BulkheadFullException`) son `Exception`, así que por defecto se reintentan, después de la espera del backoff. Agrégalos a `abortOn` si un rechazo debe fallar rápido.
 - El slot del bulkhead solo se ocupa mientras corre un intento, no durante la espera entre intentos.
 - Con `@Fallback`, el fallback se ejecuta una vez, después del último intento, y su `FallbackContext.attempts()` dice cuántos se hicieron.
@@ -184,7 +194,7 @@ El id del pipeline (`"inventory"`) es el id de la instancia. `retry()` usa los v
 | `RetryEvent.Retrying` | Un intento fallido se va a reintentar | `instance`, `nanoTime`, `attempt`, `delay`, `failure` (`null` para un resultado rechazado) |
 | `RetryEvent.GaveUp` | No quedan intentos | `instance`, `nanoTime`, `attempts`, `reason`, `failure` |
 
-`GaveUp.reason()` es `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (no está en `retryOn`, o está en `abortOn`), `INTERRUPTED` o `CLASSIFIER_FAILED`. Las llamadas exitosas no publican nada. Los listeners se registran en el builder del registry; ver [Observabilidad](../guides/observability.md).
+`GaveUp.reason()` es `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (no está en `retryOn`, está en `abortOn`, o es un breaker abierto), `INTERRUPTED` o `CLASSIFIER_FAILED`. Las llamadas exitosas no publican nada. Los listeners se registran en el builder del registry; ver [Observabilidad](../guides/observability.md).
 
 ## Probarlo con `ManualClock`
 

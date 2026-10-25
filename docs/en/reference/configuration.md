@@ -79,7 +79,7 @@ Everything is resolved once, when an instance is created. Nothing is reloaded af
 | `defaults.retry.jitter` | `R4C_DEFAULTS_RETRY_JITTER` | enum | `full` | `none`, `full`, `equal` | `full`: random in [0, d]. `equal`: d/2 plus a random half. `none`: exactly d. |
 | `defaults.retry.maxDuration` | `R4C_DEFAULTS_RETRY_MAXDURATION` | duration | `0` | ≥ 0; `0` = unlimited | Time budget for the whole operation: gives up when waiting for the next delay would go past it. |
 | `defaults.retry.retryOn` | `R4C_DEFAULTS_RETRY_RETRYON` | class list | `java.lang.Exception` | exception classes | Failures that are retried, subclasses included. `Error`s are not retried by default. |
-| `defaults.retry.abortOn` | `R4C_DEFAULTS_RETRY_ABORTON` | class list | `dev.resilience4cata.CallNotPermittedException` | exception classes | Failures that are never retried; they win over `retryOn` and a classifier. So an open breaker stops retries. |
+| `defaults.retry.abortOn` | `R4C_DEFAULTS_RETRY_ABORTON` | class list | — | exception classes | Failures that are never retried; they win over `retryOn` and a classifier. A `CallNotPermittedException` (open breaker) is never retried either, whether listed or not. |
 
 ## Circuit breaker :id=circuit-breaker
 

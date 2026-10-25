@@ -4,6 +4,17 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Unreleased] :id=unreleased
+
+### Cambiado
+
+- **Un circuit breaker abierto siempre detiene los reintentos.** Una llamada rechazada con `CallNotPermittedException` nunca se reintenta, digan lo que digan `abortOn`, `retryOn` o un classifier, en el código generado (sincrónico y async) y en `Pipeline`. En 0.1.0 esto venía del `abortOn` por defecto, así que definir tu propio `abortOn` lo quitaba sin aviso y el retry seguía llamando a un breaker abierto. `RetryConfig.DEFAULTS.abortOn()` (y `defaults.retry.abortOn`) ahora está vacío; [Retry](policies/retry.md#atributos).
+
+### Corregido
+
+- `FallbackEvent.Applied` ya no se publica para una falla que ningún método hermano de fallback recibe (por ejemplo un `Error` cuando el único hermano recibe `Exception`): esa falla se relanza, y el evento ahora significa que un fallback realmente se ejecutó.
+- Un classifier que lanza dentro de `@CircuitBreaker` (o del breaker de un `Pipeline`) ahora termina la llamada enseguida, sync y async: el retry que lo rodea ya no clasifica la excepción del classifier como la falla del método ni la reintenta (lo que podía abrir el breaker y mostrar `CallNotPermittedException` en su lugar). El breaker registra una falla, el retry publica `GaveUp(CLASSIFIER_FAILED)` una vez, y el fallback o quien llama recibe la excepción del classifier. Ver [Un classifier que lanza](guides/classifiers.md#un-classifier-que-lanza).
+
 ## [0.1.0] - 2026-10-25 :id=0.1.0
 
 Primera versión. Artefactos en Maven Central bajo el groupId `dev.resilience4cata`: `resilience4cata-annotations`, `-core`, `-processor`, `-config`, `-testkit` y `-bom`. Requiere Java 21 o posterior; probado en Java 21 y 25.

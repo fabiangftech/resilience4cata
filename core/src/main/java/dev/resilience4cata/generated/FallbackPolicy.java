@@ -27,6 +27,7 @@ public final class FallbackPolicy {
     private final String instanceId;
     private final List<Class<? extends Throwable>> applyOn;
     private final List<Class<? extends Throwable>> skipOn;
+    private final @Nullable List<Class<? extends Throwable>> taken;
     private final Classification classification = new Classification();
     private final @Nullable EventSink<FallbackEvent.Applied> applied;
     private final java.util.function.LongSupplier ticker;
@@ -53,9 +54,27 @@ public final class FallbackPolicy {
      */
     public FallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
             List<Class<? extends Throwable>> skipOn, PolicyEnvironment environment) {
+        this(instanceId, applyOn, skipOn, null, environment);
+    }
+
+    /**
+     * Creates the policy for a method whose sibling fallback methods do not take every failure: a failure
+     * that is not an instance of one of {@code taken} is rethrown, so this policy does not handle it either.
+     *
+     * @param instanceId id of the method, {@code <interface>#<method>(<parameter types>)}
+     * @param applyOn failures that get the fallback
+     * @param skipOn failures that never get the fallback; wins over {@code applyOn}
+     * @param taken the exception types of the sibling fallback methods, or {@code null} if a fallback
+     *     takes every failure (a handler, or a sibling that takes {@code Throwable} or no exception)
+     * @param environment the clock and the event listeners
+     */
+    public FallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
+            List<Class<? extends Throwable>> skipOn, @Nullable List<Class<? extends Throwable>> taken,
+            PolicyEnvironment environment) {
         this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
         this.applyOn = List.copyOf(applyOn);
         this.skipOn = List.copyOf(skipOn);
+        this.taken = taken == null ? null : List.copyOf(taken);
         this.applied = environment.events.sink(FallbackEvent.Applied.class, instanceId);
         this.ticker = environment.ticker;
     }
@@ -66,9 +85,11 @@ public final class FallbackPolicy {
     }
 
     /**
-     * Whether the fallback applies to a failure: it is an instance of an {@code applyOn} type and of no
-     * {@code skipOn} type. Cached per exception class. Generated code calls it once per failure, right
-     * before running the fallback, so this is where {@link FallbackEvent.Applied} is published.
+     * Whether the fallback applies to a failure: it is an instance of an {@code applyOn} type, of no
+     * {@code skipOn} type and, with sibling fallback methods that do not take every failure, of the
+     * exception type of one of them. Cached per exception class. Generated code calls it once per failure
+     * and runs a fallback exactly when it returns {@code true}, so this is where
+     * {@link FallbackEvent.Applied} is published: only for failures that a fallback really handles.
      *
      * @param failure the failure
      * @return {@code true} if the fallback must run
@@ -123,6 +144,15 @@ public final class FallbackPolicy {
             }
             for (Class<? extends Throwable> applied : applyOn) {
                 if (applied.isAssignableFrom(type)) {
+                    return taken == null || takes(type);
+                }
+            }
+            return false;
+        }
+
+        private boolean takes(Class<?> type) {
+            for (Class<? extends Throwable> parameter : Objects.requireNonNull(taken)) {
+                if (parameter.isAssignableFrom(type)) {
                     return true;
                 }
             }

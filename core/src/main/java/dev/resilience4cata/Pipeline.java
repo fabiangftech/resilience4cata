@@ -3,6 +3,7 @@ package dev.resilience4cata;
 import dev.resilience4cata.generated.AsyncCall;
 import dev.resilience4cata.generated.BulkheadPolicy;
 import dev.resilience4cata.generated.CircuitBreakerPolicy;
+import dev.resilience4cata.generated.ClassifierFailure;
 import dev.resilience4cata.generated.FallbackPolicy;
 import dev.resilience4cata.generated.RateLimiterPolicy;
 import dev.resilience4cata.generated.Recovery;
@@ -226,6 +227,8 @@ public final class Pipeline<T> {
         while (true) {
             try {
                 return circuitBreakerLayer(call);
+            } catch (ClassifierFailure inner) {
+                return classifierFailed(retry, Objects.requireNonNull(inner.getCause()), attempts + 1);
             } catch (Throwable e) {
                 long delay = retry.onFailure(++attempts, e, start);
                 if (delay < 0 || !retry.pause(delay)) {
@@ -248,6 +251,8 @@ public final class Pipeline<T> {
             T result;
             try {
                 result = circuitBreakerLayer(call);
+            } catch (ClassifierFailure inner) {
+                return classifierFailed(retry, Objects.requireNonNull(inner.getCause()), attempts + 1);
             } catch (Throwable e) {
                 Classifier.Outcome verdict;
                 try {
@@ -282,7 +287,7 @@ public final class Pipeline<T> {
         }
     }
 
-    /** The classifier threw: the retries end with its exception, as in generated code. */
+    /** The classifier (the retry's, or the breaker's) threw: the retries end with its exception, as in generated code. */
     private T classifierFailed(RetryPolicy retry, Throwable classifierFailure, int attempts) {
         retry.onClassifierFailure(attempts, classifierFailure);
         return giveUp(classifierFailure, attempts);
@@ -344,7 +349,11 @@ public final class Pipeline<T> {
         }
     }
 
-    /** The breaker layer with a classifier, as in generated code: a throwing classifier records a failure. */
+    /**
+     * The breaker layer with a classifier, as in generated code: a throwing classifier records a failure,
+     * and its exception goes to the retry wrapped in a {@link ClassifierFailure}, so that the retry ends
+     * the call with it instead of classifying it again.
+     */
     private <X extends Throwable> T classifiedCircuitBreakerLayer(CircuitBreakerPolicy cb,
             Classifier<? super T> classifier, PipelineCall<? extends T, X> call) throws X {
         long token = cb.acquire();
@@ -361,7 +370,7 @@ public final class Pipeline<T> {
                 verdict = classifier.classify(null, e);
             } catch (RuntimeException | Error classifierFailure) {
                 cb.onResult(token, started, Classifier.Outcome.FAILURE);
-                throw classifierFailure;
+                throw classifierFailure(classifierFailure);
             }
             cb.onFailure(token, started, e, verdict);
             throw e;
@@ -371,10 +380,18 @@ public final class Pipeline<T> {
             verdict = classifier.classify(result, null);
         } catch (RuntimeException | Error classifierFailure) {
             cb.onResult(token, started, Classifier.Outcome.FAILURE);
-            throw classifierFailure;
+            throw classifierFailure(classifierFailure);
         }
         cb.onResult(token, started, verdict);
         return result;
+    }
+
+    /** The breaker classifier's exception as the breaker layer throws it: wrapped for the retry, if there is one. */
+    private RuntimeException classifierFailure(Throwable classifierFailure) {
+        if (retry != null) {
+            return new ClassifierFailure(classifierFailure);
+        }
+        throw Pipeline.<RuntimeException>sneaky(classifierFailure); // unchecked: thrown by a Classifier
     }
 
     private <X extends Throwable> T rateLimiterLayer(PipelineCall<? extends T, X> call) throws X {
@@ -449,8 +466,9 @@ public final class Pipeline<T> {
         if (circuitBreaker != null) {
             AsyncCall<T> inner = next;
             Classifier<? super T> classifier = circuitBreakerClassifier;
+            boolean insideRetry = this.retry != null;
             next = classifier == null ? () -> circuitBreaker.executeAsync(inner)
-                    : () -> circuitBreaker.executeAsync(inner, classifier);
+                    : () -> circuitBreaker.executeAsync(inner, classifier, insideRetry);
         }
         RetryPolicy retry = this.retry;
         if (retry != null) {
@@ -801,7 +819,8 @@ public final class Pipeline<T> {
 
         /**
          * Lets a classifier decide what the retry retries, like {@code @Retry(classifier = ...)}: only
-         * {@code FAILURE} is retried; its verdict replaces {@code retryOn}, while {@code abortOn} still wins.
+         * {@code FAILURE} is retried; its verdict replaces {@code retryOn}, while {@code abortOn} still wins, and
+         * a {@link CallNotPermittedException} is never retried.
          * A result classified {@code FAILURE} is retried too, and returned if the retries give up on it (or
          * thrown, see {@link #onExhaustedResult}). A classifier that throws ends the retries with its
          * exception.

@@ -79,7 +79,7 @@ The generated method is a plain loop around your call. Nothing is allocated and 
 flowchart TD
     attempt["Call the method"] --> threw{"Did it throw?"}
     threw -- no --> done["Return the result"]
-    threw -- yes --> retryable{"Retryable?<br/>in retryOn, not in abortOn,<br/>attempts left, thread not interrupted"}
+    threw -- yes --> retryable{"Retryable?<br/>in retryOn, not in abortOn, not an open breaker,<br/>attempts left, thread not interrupted"}
     retryable -- no --> fail["Rethrow the last failure<br/>(or run the fallback)"]
     retryable -- yes --> delay["Compute the delay:<br/>backoff, capped at maxDelay, then jitter"]
     delay --> budget{"maxDuration set and<br/>elapsed + delay > maxDuration?"}
@@ -87,7 +87,7 @@ flowchart TD
     budget -- no --> sleep["Wait for the delay"] --> attempt
 ```
 
-- **What is retried.** An exception that is an instance of a `retryOn` type (default: `Exception`) and of no `abortOn` type (default: `CallNotPermittedException`). `abortOn` wins over `retryOn`. Anything else is rethrown at once, so `Error`s (`OutOfMemoryError`, `AssertionError`, …) are never retried by default. A method that returns normally is never retried, unless a [classifier](../guides/classifiers.md) says its result is a failure.
+- **What is retried.** An exception that is an instance of a `retryOn` type (default: `Exception`) and of no `abortOn` type (default: none). `abortOn` wins over `retryOn`. A `CallNotPermittedException` (an open circuit breaker) is never retried, whatever the lists say. Anything else is rethrown at once, so `Error`s (`OutOfMemoryError`, `AssertionError`, …) are never retried by default. A method that returns normally is never retried, unless a [classifier](../guides/classifiers.md) says its result is a failure.
 - **Counting.** `maxAttempts` counts every call, the first one included: `maxAttempts = 3` means at most two retries.
 - **Delays.** Before retry *n* (after *n* failed attempts), the base delay is `delay` with `FIXED` backoff, or `delay × multiplier^(n−1)` capped at `maxDelay` with `EXPONENTIAL`. Jitter then randomizes it: `FULL` picks a delay between 0 and the base delay, `EQUAL` picks between half of it and all of it, `NONE` keeps it. With the defaults the base delays are 200 ms, 400 ms, 800 ms… up to 10 s.
 - **Time budget.** With `maxDuration`, the retry gives up instead of waiting when the next attempt would start after the budget (time since the first attempt + the next delay > `maxDuration`). It never cuts an attempt short: for that, add [`@Timeout`](timeout.md), which applies per attempt.
@@ -107,7 +107,7 @@ flowchart TD
 | `jitter` | `Jitter` | `FULL` | `defaults.retry.jitter` | `NONE`, `FULL` (0 to the delay) or `EQUAL` (half the delay plus a random half). |
 | `maxDuration` | duration | `0` (no budget) | `defaults.retry.maxDuration` | Time budget for the whole operation, across attempts and delays. |
 | `retryOn` | `Class<? extends Throwable>[]` | `{Exception.class}` | `defaults.retry.retryOn` | Exceptions that are retried, subclasses included. |
-| `abortOn` | `Class<? extends Throwable>[]` | `{CallNotPermittedException.class}` | `defaults.retry.abortOn` | Exceptions that stop the retries; wins over `retryOn` and the classifier. |
+| `abortOn` | `Class<? extends Throwable>[]` | `{}` | `defaults.retry.abortOn` | Exceptions that stop the retries; wins over `retryOn` and the classifier. An open breaker stops them whether listed or not. |
 | `classifier` | `Class<?>` | none | annotation only | A `Classifier<T>` that decides what is retried, results included. Replaces `retryOn`. See [Classifiers](../guides/classifiers.md). |
 | `onExhaustedResult` | `ExhaustedResult` | `RETURN` | annotation only | With a classifier: return the last rejected result, or `THROW` a `ResultRejectedException`. |
 | `name` | `String` | one instance per method | annotation only | Instance id; methods with the same `name` share one retry policy. |
@@ -129,8 +129,18 @@ byte[] download(String path) throws IOException;
 
 With `jitter = NONE`, a `download` that keeps throwing `IOException` is called at 0 s, 0.5 s, 1.5 s and 3.5 s, then gives up: one more attempt after a 2 s delay would start after the 4 s budget. A `FileNotFoundException` is an `IOException` too, but `abortOn` wins, so it fails after one call. An `IllegalStateException` is not in `retryOn`, so it fails after one call as well.
 
-> [!WARNING]
-> A list you write in the annotation **replaces** the default list, it does not add to it. The `abortOn` above leaves out `CallNotPermittedException`, so if this method also had a circuit breaker, an open breaker would be retried. Write `abortOn = {FileNotFoundException.class, CallNotPermittedException.class}` to keep both.
+A list you write in the annotation **replaces** the default list, it does not add to it.
+
+A call rejected by a circuit breaker is never retried, whatever `abortOn`, `retryOn` or a classifier say: this abort is built in, not an entry of `abortOn`, so a list you write cannot drop it. Here `abortOn` lists only `IllegalArgumentException`:
+
+<!-- snippet: retry-open-breaker -->
+```java
+@Retry(maxAttempts = 5, delay = "1s", abortOn = IllegalArgumentException.class)
+@CircuitBreaker(windowSize = 2, minimumCalls = 2, waitInOpen = "1m")
+String report(String id);
+```
+
+If `report` keeps failing, the first two attempts open the breaker, the third gets `CallNotPermittedException`, and the retry gives up there (`GaveUp` with `NOT_RETRYABLE`, after 3 attempts) instead of waiting through two more delays. While the breaker stays open, each call makes one attempt and waits for nothing.
 
 ## Sharing and instance ids
 
@@ -145,7 +155,7 @@ There is no handle for a retry: `registry` has no `retry(id)` method. `registry.
 Retry is the second layer, inside Fallback and around everything else (see the [overview](README.md)):
 
 - Each attempt goes through the circuit breaker, the rate limiter, the timeout and the bulkhead again. Each attempt is recorded by the breaker and has its own timeout.
-- An open breaker throws `CallNotPermittedException`, which is in the default `abortOn`: the retry stops at once instead of waiting for nothing.
+- An open breaker throws `CallNotPermittedException`, which is never retried, whatever `abortOn` says: the retry stops at once instead of waiting for nothing (see [above](#attributes)).
 - Rejections by the inner policies (`RateLimitExceededException`, `CallTimeoutException`, `BulkheadFullException`) are `Exception`s, so they are retried by default, after the backoff delay. Add them to `abortOn` if a rejection should fail fast.
 - The bulkhead slot is held only while an attempt runs, not during the delay between attempts.
 - With `@Fallback`, the fallback runs once, after the last attempt, and its `FallbackContext.attempts()` tells how many were made.
@@ -184,7 +194,7 @@ The pipeline's id (`"inventory"`) is the instance id. `retry()` uses the default
 | `RetryEvent.Retrying` | A failed attempt will be retried | `instance`, `nanoTime`, `attempt`, `delay`, `failure` (`null` for a rejected result) |
 | `RetryEvent.GaveUp` | No more attempts | `instance`, `nanoTime`, `attempts`, `reason`, `failure` |
 
-`GaveUp.reason()` is `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (not in `retryOn`, or in `abortOn`), `INTERRUPTED` or `CLASSIFIER_FAILED`. Successful calls publish nothing. Listeners are registered on the registry builder; see [Observability](../guides/observability.md).
+`GaveUp.reason()` is `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (not in `retryOn`, in `abortOn`, or an open breaker), `INTERRUPTED` or `CLASSIFIER_FAILED`. Successful calls publish nothing. Listeners are registered on the registry builder; see [Observability](../guides/observability.md).
 
 ## Testing it with `ManualClock`
 

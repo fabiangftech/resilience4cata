@@ -43,7 +43,10 @@ public sealed interface RetryEvent extends ResilienceEvent {
         MAX_ATTEMPTS,
         /** Another attempt would end after {@code maxDuration}. */
         MAX_DURATION,
-        /** The failure is not retryable: not in {@code retryOn}, or in {@code abortOn}. */
+        /**
+         * The failure is not retryable: not in {@code retryOn}, in {@code abortOn}, or a
+         * {@code CallNotPermittedException} from an open circuit breaker.
+         */
         NOT_RETRYABLE,
         /** The thread was interrupted. */
         INTERRUPTED,

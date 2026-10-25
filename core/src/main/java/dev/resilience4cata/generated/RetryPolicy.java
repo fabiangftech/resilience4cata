@@ -1,5 +1,6 @@
 package dev.resilience4cata.generated;
 
+import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.Classifier;
 import dev.resilience4cata.ResultRejectedException;
 import dev.resilience4cata.RetryConfig;
@@ -125,8 +126,9 @@ public final class RetryPolicy {
 
     /**
      * Decides whether to retry after a failure, for a method with a {@link Classifier}: the
-     * classifier's verdict replaces {@code retryOn}, while {@code abortOn} still wins over it. Only a
-     * {@link Classifier.Outcome#FAILURE FAILURE} verdict is retried.
+     * classifier's verdict replaces {@code retryOn}, while {@code abortOn} and the implicit abort on
+     * {@link CallNotPermittedException} still win over it. Only a {@link Classifier.Outcome#FAILURE FAILURE}
+     * verdict is retried.
      *
      * @param attempts attempts made so far, including the one that just failed
      * @param failure the exception thrown by the attempt
@@ -135,7 +137,7 @@ public final class RetryPolicy {
      * @return the delay in nanoseconds before the next attempt, or {@link #NO_RETRY}
      */
     public long onFailure(int attempts, Throwable failure, long start, Classifier.Outcome outcome) {
-        // With a classifier only abortOn counts: its verdict replaces retryOn.
+        // With a classifier only abortOn counts: its verdict replaces retryOn. decide adds the open-breaker abort.
         return decide(attempts, failure, start,
                 outcome == Classifier.Outcome.FAILURE && verdicts.get(failure.getClass()) != Verdict.ABORT);
     }
@@ -183,7 +185,10 @@ public final class RetryPolicy {
 
     /**
      * The one place where every retry decision is made. {@code failure} is null for a rejected result;
-     * {@code retryable} is what the exception lists or the classifier said.
+     * {@code retryable} is what the exception lists or the classifier said. A call rejected by a circuit
+     * breaker ({@link CallNotPermittedException}) is never retried, whatever the lists or the classifier
+     * say: retrying would only be rejected again. That abort is implicit, not an entry of {@code abortOn},
+     * so a user's {@code abortOn} cannot drop it.
      */
     private long decide(int attempts, @Nullable Throwable failure, long start, boolean retryable) {
         if (!enabled) {
@@ -191,7 +196,8 @@ public final class RetryPolicy {
         }
         // Same order of checks as without events; the reason is only worked out when someone listens.
         if (attempts >= maxAttempts || failure instanceof InterruptedException
-                || Thread.currentThread().isInterrupted() || !retryable) {
+                || Thread.currentThread().isInterrupted() || !retryable
+                || failure instanceof CallNotPermittedException) {
             if (gaveUp != null) {
                 publishGaveUp(attempts, failure, retryable);
             }
@@ -344,7 +350,8 @@ public final class RetryPolicy {
      * which results and exceptions are retried (see {@link #onFailure(int, Throwable, long, Classifier.Outcome)}
      * and {@link #onFailedResult}). When the retries give up on a rejected result, the future completes
      * with that result. An exception thrown by the classifier ends the retries as the call's failure, after
-     * {@link #onClassifierFailure}.
+     * {@link #onClassifierFailure}; so does one thrown by a breaker's classifier inside this retry, which
+     * arrives wrapped in a {@link ClassifierFailure} (with or without a classifier here).
      *
      * @param call one attempt: the next layer
      * @param classifier the method's classifier
@@ -437,6 +444,10 @@ public final class RetryPolicy {
                 return;
             }
             Throwable cause = AsyncSupport.unwrap(failure);
+            if (cause instanceof ClassifierFailure inner) {
+                classifierFailed(Objects.requireNonNull(inner.getCause())); // the breaker's classifier threw
+                return;
+            }
             long delay;
             if (classifier == null) {
                 delay = policy.onFailure(++attempts, cause, start);
@@ -457,7 +468,7 @@ public final class RetryPolicy {
             }
         }
 
-        /** The classifier threw: the retries end with its exception. */
+        /** The classifier (this retry's, or the breaker's inside it) threw: the retries end with its exception. */
         private void classifierFailed(Throwable classifierFailure) {
             policy.onClassifierFailure(++attempts, classifierFailure);
             giveUp(classifierFailure, attempts);

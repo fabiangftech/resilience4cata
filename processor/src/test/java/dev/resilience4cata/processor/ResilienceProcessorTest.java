@@ -167,6 +167,8 @@ class ResilienceProcessorTest {
                     CompletableFuture<Integer> future();
                     @CircuitBreaker(classifier = Status.class)
                     CompletionStage<Integer> breakerOnly();
+                    @Retry @CircuitBreaker(classifier = Status.class) @Fallback(method = "recover")
+                    Integer plainRetry(String id) throws java.io.IOException;
 
                     default Integer recover(String id, java.io.IOException e) { return -1; }
                     default Integer recover(String id) { return -2; }
@@ -212,9 +214,24 @@ class ResilienceProcessorTest {
                 .contains("this.fallback2.context(r4c$c, r4c$attempts + 1, new java.lang.Object[] {});")
                 .contains("if (r4c$c instanceof java.io.IOException r4c$f0) {")
                 .contains("this.retry5.executeAsync(() -> this.circuitBreaker5.executeAsync(() -> this.delegate.async(p0),"
-                        + " this.retryClassifier5), this.retryClassifier5, this.fallback5,")
+                        + " this.retryClassifier5, true), this.retryClassifier5, this.fallback5,")
                 .contains("this.retry6.executeAsync(() -> this.delegate.future(), this.retryClassifier6, null, null)")
                 .contains("this.circuitBreaker7.executeAsync(() -> this.delegate.breakerOnly(), this.circuitBreakerClassifier7)");
+        // inside a retry, a breaker's classifier exception is wrapped, and the retry ends the call with it
+        // (methods 0, 1 and 8); a breaker without a retry (method 3) rethrows it as is
+        assertThat(generated.split("throw new dev.resilience4cata.generated.ClassifierFailure\\(r4c\\$c\\);", -1))
+                .hasSize(1 + 3 * 2);
+        assertThat(generated.split("catch \\(dev.resilience4cata.generated.ClassifierFailure r4c\\$w\\)", -1)).hasSize(1 + 3);
+        assertThat(generated)
+                .contains("            } catch (dev.resilience4cata.generated.ClassifierFailure r4c$w) {\n"
+                        + "                try {\n"
+                        + "                    throw r4c$w.failure();\n"
+                        + "                } catch (java.lang.Throwable r4c$c) {\n"
+                        + "                    r4c$retry.onClassifierFailure(r4c$attempts + 1, r4c$c);\n"
+                        + "                    if (!this.fallback8.handles(r4c$c)) {\n")
+                .contains("        } catch (java.lang.Throwable r4c$c) {\n"
+                        + "            r4c$cb.onResult(r4c$token, r4c$started, dev.resilience4cata.Classifier.Outcome.FAILURE);\n"
+                        + "            throw r4c$c;\n");
     }
 
     @Test
@@ -709,6 +726,32 @@ class ResilienceProcessorTest {
         assertThat(generated)
                 .contains("return demo.Client.recover(p0, r4c$f")
                 .contains("return this.delegate.recover(p0);");
+    }
+
+    @Test
+    void passesTheSiblingExceptionTypesWhenNoneTakesEveryFailure() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Fallback;
+                public interface Client {
+                    @Fallback(method = "recover")
+                    String find(String id) throws java.io.IOException;
+                    @Fallback(method = "anything")
+                    String other(String id);
+
+                    default String recover(String id, java.io.IOException e) { return "io"; }
+                    static String recover(String id, IllegalStateException e) { return "state"; }
+                    default String anything(String id, Throwable e) { return "any"; }
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Client$Resilient"))
+                .contains("this.fallback0 = registry.fallbackPolicy(\"demo.Client#find(java.lang.String)\","
+                        + " java.util.List.of(java.lang.Throwable.class), java.util.List.of(),"
+                        + " java.util.List.of(java.lang.IllegalStateException.class, java.io.IOException.class));")
+                .contains("this.fallback1 = registry.fallbackPolicy(\"demo.Client#other(java.lang.String)\","
+                        + " java.util.List.of(java.lang.Throwable.class), java.util.List.of());");
     }
 
     @Test

@@ -2,6 +2,7 @@ package dev.resilience4cata.generated;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.RetryConfig;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -77,6 +78,22 @@ class RetryPolicyTest {
 
         assertThat(retry.onFailure(1, new IllegalStateException(), 0)).isGreaterThanOrEqualTo(0);
         assertThat(retry.onFailure(1, new IllegalArgumentException(), 0)).isEqualTo(RetryPolicy.NO_RETRY);
+    }
+
+    @Test
+    void anOpenBreakerIsNeverRetriedWhateverTheListsSay() {
+        CallNotPermittedException rejected = new CallNotPermittedException("cb");
+
+        assertThat(RetryConfig.DEFAULTS.abortOn()).as("an implicit rule, not a list entry").isEmpty();
+        assertThat(policy(noJitter()).onFailure(1, rejected, 0)).isEqualTo(RetryPolicy.NO_RETRY);
+        // A custom abortOn replaces the default list but keeps the implicit abort.
+        assertThat(policy(noJitter().abortOn(List.of(IllegalArgumentException.class))).onFailure(1, rejected, 0))
+                .isEqualTo(RetryPolicy.NO_RETRY);
+        // Even naming it in retryOn does not retry it.
+        assertThat(policy(noJitter().retryOn(List.of(CallNotPermittedException.class, RuntimeException.class)))
+                .onFailure(1, rejected, 0)).isEqualTo(RetryPolicy.NO_RETRY);
+        assertThat(policy(noJitter().abortOn(List.of())).onFailure(1, rejected, 0)).isEqualTo(RetryPolicy.NO_RETRY);
+        assertThat(sleeps).isEmpty();
     }
 
     @Test

@@ -123,9 +123,9 @@ final class HttpCatalog implements CatalogApi {
 
 ### Retries stop as soon as the breaker opens :id=open-breaker-stops-retries
 
-This is the default, on purpose. The retry is outside the circuit breaker (order: Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead), and `RetryConfig.DEFAULTS.abortOn` is `[CallNotPermittedException]`: once the breaker rejects an attempt, retrying would only be rejected again. The retry gives up with `GaveUp(reason = NOT_RETRYABLE)` and rethrows the `CallNotPermittedException` (or the fallback runs).
+This is the default, on purpose. The retry is outside the circuit breaker (order: Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead), and a retry never retries a `CallNotPermittedException`: once the breaker rejects an attempt, retrying would only be rejected again. The retry gives up with `GaveUp(reason = NOT_RETRYABLE)` and rethrows the `CallNotPermittedException` (or the fallback runs).
 
-If you set `abortOn` yourself, keep `CallNotPermittedException` in the list unless you really want to retry into an open breaker. See [Retry](../policies/retry.md) and [Circuit breaker](../policies/circuit-breaker.md).
+This holds whatever `abortOn` and `retryOn` say, and with a classifier too; it is not an entry of `abortOn`, so setting your own list does not remove it. See [Retry](../policies/retry.md) and [Circuit breaker](../policies/circuit-breaker.md).
 
 ### A timeout does not stop my code :id=timeout-not-interrupting
 

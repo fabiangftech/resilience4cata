@@ -19,11 +19,11 @@ Every event implements the sealed interface `dev.resilience4cata.event.Resilienc
 | Circuit breaker | `CircuitBreakerEvent.StateTransition` | `CircuitBreakerState from`, `CircuitBreakerState to` | the state changes, exactly once per change, including `forceOpen()`, `disable()` and `reset()` |
 | Circuit breaker | `CircuitBreakerEvent.CallNotPermitted` | `CircuitBreakerState state` | a call is rejected (`OPEN`, `FORCED_OPEN`, or `HALF_OPEN` with every probe taken) |
 | Retry | `RetryEvent.Retrying` | `int attempt`, `Duration delay`, `@Nullable Throwable failure` | an attempt failed and another one will run after `delay`; `failure` is `null` when a [classifier](classifiers.md) rejected a result |
-| Retry | `RetryEvent.GaveUp` | `int attempts`, `RetryEvent.Reason reason`, `@Nullable Throwable failure` | the retry stops without a success: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (the failure is not in `retryOn`, or is in `abortOn`, for example an open breaker), `INTERRUPTED`, `CLASSIFIER_FAILED` |
+| Retry | `RetryEvent.GaveUp` | `int attempts`, `RetryEvent.Reason reason`, `@Nullable Throwable failure` | the retry stops without a success: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (the failure is not in `retryOn`, is in `abortOn`, or is an open breaker's `CallNotPermittedException`), `INTERRUPTED`, `CLASSIFIER_FAILED` |
 | Rate limiter | `RateLimiterEvent.Rejected` | none | a call is rejected with `RateLimitExceededException` |
 | Timeout | `TimeoutEvent.TimedOut` | `Duration timeout` | a call times out |
 | Bulkhead | `BulkheadEvent.Rejected` | `int maxConcurrent` | a call is rejected with `BulkheadFullException` |
-| Fallback | `FallbackEvent.Applied` | `Throwable failure` | a fallback is about to run for `failure` |
+| Fallback | `FallbackEvent.Applied` | `Throwable failure` | a fallback is about to run for `failure`; not published when the failure is rethrown because no fallback takes it (`skipOn`, or no sibling method accepts its type) |
 
 A retry with `enabled = false` publishes nothing. A first failure that is not retryable publishes `GaveUp` with `attempts = 1` and `NOT_RETRYABLE`.
 

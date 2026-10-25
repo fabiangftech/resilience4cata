@@ -86,7 +86,7 @@ flowchart TD
 
 Un método hermano recibe los parámetros del método anotado, opcionalmente seguidos de un parámetro de excepción, y devuelve un tipo asignable al tipo de retorno del método. En una interfaz es un método `default` o `static`; en una [clase anotada](../guides/annotated-classes.md) no puede ser `private`.
 
-- **El parámetro de excepción elige las fallas que maneja.** `unknownPrice(String sku, Exception failure)` solo maneja `Exception`: un `Error` no coincide y se relanza, aunque `applyOn` sea `Throwable`. Recibe `Throwable` (o ningún parámetro de excepción) para manejar todo.
+- **El parámetro de excepción elige las fallas que maneja.** `unknownPrice(String sku, Exception failure)` solo maneja `Exception`: un `Error` no coincide y se relanza, aunque `applyOn` sea `Throwable`, y no se publica `FallbackEvent.Applied` para él. Recibe `Throwable` (o ningún parámetro de excepción) para manejar todo.
 - **Se permiten varias sobrecargas** con distintos tipos de excepción; se llama la más específica que coincida:
 
 <!-- snippet: fallback-overloads -->
@@ -108,7 +108,7 @@ static String describeFallback(String sku, CallNotPermittedException e) {
 }
 ```
 
-Una `FileNotFoundException` va a la primera, cualquier otra `IOException` a la segunda, y `CallNotPermittedException` (el breaker está abierto) a la tercera. Una falla que ninguna sobrecarga acepta, como una `IllegalStateException` aquí, se relanza.
+Una `FileNotFoundException` va a la primera, cualquier otra `IOException` a la segunda, y `CallNotPermittedException` (el breaker está abierto) a la tercera. Una falla que ninguna sobrecarga acepta, como una `IllegalStateException` aquí, se relanza, sin `FallbackEvent.Applied`.
 
 - Las sobrecargas se prueban empezando por el tipo de excepción más específico, sin importar el orden en que las declares. Una sobrecarga que lo atrapa todo (una que recibe `Throwable`, o una sin parámetro de excepción) cierra la lista: las sobrecargas posteriores nunca se alcanzarían, así que no se usan.
 - Un hermano no puede lanzar una excepción checked que el método anotado no declara.
@@ -225,7 +225,7 @@ long price = quote.execute(() -> backend.quote("sku-1", 3));
 
 | Evento | Cuándo | Campos |
 |---|---|---|
-| `FallbackEvent.Applied` | Una falla pasó `applyOn`/`skipOn` y el fallback está por ejecutarse | `instance`, `nanoTime`, `failure` |
+| `FallbackEvent.Applied` | Un fallback está por ejecutarse: la falla pasó `applyOn`/`skipOn` y, con métodos hermanos, uno de ellos la recibe. Se publica una vez por llamada, también cuando el fallback luego lanza; nunca para una falla que se relanza | `instance`, `nanoTime`, `failure` |
 
 Ver [Observabilidad](../guides/observability.md).
 

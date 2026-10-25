@@ -42,7 +42,11 @@ public @interface Retry {
     /** Exceptions that trigger a retry. Empty means inherit. */
     Class<? extends Throwable>[] retryOn() default {};
 
-    /** Exceptions that stop retrying immediately. */
+    /**
+     * Exceptions that stop retrying immediately; they win over {@code retryOn} and the classifier. Empty
+     * means inherit (the built-in default is empty). Whatever this lists, a call rejected by a circuit
+     * breaker ({@code dev.resilience4cata.CallNotPermittedException}) is never retried.
+     */
     Class<? extends Throwable>[] abortOn() default {};
 
     /**
@@ -53,7 +57,7 @@ public @interface Retry {
      *
      * <p>With a classifier, an attempt is retried only if the classifier returns {@code FAILURE}, for a
      * result or an exception. It replaces {@code retryOn} (setting both is a compile error); {@code abortOn}
-     * still wins over it. When the retries give up on a {@code FAILURE} result, that last result is
+     * still wins over it, and a {@code CallNotPermittedException} is never retried. When the retries give up on a {@code FAILURE} result, that last result is
      * returned (no {@code @Fallback}, which only handles exceptions), or thrown inside a
      * {@code ResultRejectedException} with {@link #onExhaustedResult()} {@code = THROW}. {@code SUCCESS}
      * and {@code IGNORE} end the loop. An exception thrown by the classifier ends the retries as the

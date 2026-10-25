@@ -317,6 +317,22 @@ public final class ResilienceRegistry {
     }
 
     /**
+     * Returns the fallback policy for a method whose sibling fallback methods do not take every failure.
+     * Used by generated code; not intended to be called directly. A failure that is not an instance of
+     * one of {@code taken} is not handled, so no {@code FallbackEvent.Applied} is published for it.
+     *
+     * @param instanceId id of the method, {@code <interface>#<method>(<parameter types>)}
+     * @param applyOn failures that get the fallback
+     * @param skipOn failures that never get the fallback; wins over {@code applyOn}
+     * @param taken the exception types of the sibling fallback methods
+     * @return the policy
+     */
+    public FallbackPolicy fallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
+            List<Class<? extends Throwable>> skipOn, List<Class<? extends Throwable>> taken) {
+        return new FallbackPolicy(instanceId, applyOn, skipOn, taken, environment);
+    }
+
+    /**
      * Returns the bulkhead for one call site, creating it on first use. Used by generated code; not
      * intended to be called directly.
      *

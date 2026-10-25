@@ -51,7 +51,7 @@ Response get(String orderId) throws IOException;
 
 - The class is named in the annotation and created by the generated code: it must be concrete, non-generic, top-level or `static` nested, accessible, with a no-argument constructor, and implement `Classifier<X>` with the method's result assignable to `X`. The processor checks all of this when you compile ([`R4C-CLS-001`](../errors.md#r4c-cls-001) to [`R4C-CLS-010`](../errors.md#r4c-cls-010)).
 - One instance is created per method. When `@Retry` and `@CircuitBreaker` name the same class, they share that instance.
-- A classifier **replaces** `retryOn` (on `@Retry`) or `recordOn` (on `@CircuitBreaker`); setting both is a compile error ([`R4C-CLS-011`](../errors.md#r4c-cls-011)). `abortOn` and `ignoreOn` still apply, and win over the classifier: an open breaker's `CallNotPermittedException` still stops the retries.
+- A classifier **replaces** `retryOn` (on `@Retry`) or `recordOn` (on `@CircuitBreaker`); setting both is a compile error ([`R4C-CLS-011`](../errors.md#r4c-cls-011)). `abortOn` and `ignoreOn` still apply, and win over the classifier. An open breaker's `CallNotPermittedException` always stops the retries, even if the classifier returns `FAILURE` for it.
 - It is annotation-only: there is no config key for it. On a `Pipeline`, pass an instance (below).
 - Asynchronous methods are classified the same way, with the value of the stage or its unwrapped failure.
 
@@ -73,6 +73,14 @@ public final class OrdersApi$Resilient implements OrdersApi {
             final Response r4c$result;
             try {
                 r4c$result = this.r4c$circuitBreaker0(p0);
+            } catch (dev.resilience4cata.generated.ClassifierFailure r4c$w) {
+                // the breaker's classifier threw: end the call with its exception, never retry it
+                try {
+                    throw r4c$w.failure();
+                } catch (java.lang.Throwable r4c$c) {
+                    r4c$retry.onClassifierFailure(r4c$attempts + 1, r4c$c);
+                    throw r4c$c;
+                }
             } catch (java.lang.Throwable r4c$e) {
                 // … classify(null, r4c$e), then retry or rethrow
                 continue;
@@ -126,10 +134,10 @@ default Response unavailable(String orderId, ResultRejectedException rejected) {
 A classifier should not throw. If it does, its exception becomes the call's failure, the same for sync and async methods:
 
 - `@CircuitBreaker` records the call as a `FAILURE`, then throws the classifier's exception.
-- `@Retry` stops at once, publishes `RetryEvent.GaveUp` with reason `CLASSIFIER_FAILED` (with the classifier's exception as `failure`), and throws it.
+- `@Retry` stops at once, publishes `RetryEvent.GaveUp` with reason `CLASSIFIER_FAILED` (with the classifier's exception as `failure`, and the attempts made so far, this one included), and throws it.
 - `@Fallback`, if present, receives it.
 
-Since the breaker is inside the retry, a classifier that throws inside the breaker layer throws an exception that the retry layer then classifies like any other failure. Keep classifiers total: handle `null` results and unexpected exception types explicitly.
+This holds wherever the classifier runs. When the breaker's classifier throws, the retry around it does not classify that exception as the method's failure, and does not retry it, whether the retry has the same classifier, another one, or none: the breaker hands the exception to the retry in an internal wrapper (`dev.resilience4cata.generated.ClassifierFailure`, never seen by callers), and the call ends as above. The caller, or the fallback, gets the classifier's exception itself. Still, keep classifiers total: handle `null` results and unexpected exception types explicitly.
 
 ## Same thing with `Pipeline`
 

@@ -133,7 +133,7 @@ Each policy becomes one layer of straight-line code: the public method holds the
 
 ### An open breaker stops the retries
 
-The retry's default `abortOn` is `CallNotPermittedException`, the exception an open circuit breaker throws. So once the breaker opens, the retry gives up at the next attempt instead of waiting through its backoff, and the fallback answers:
+A retry never retries `CallNotPermittedException`, the exception an open circuit breaker throws, whatever its `abortOn` says. So once the breaker opens, the retry gives up at the next attempt instead of waiting through its backoff, and the fallback answers:
 
 <!-- snippet: policies-open-breaker -->
 ```java
@@ -147,8 +147,6 @@ assertThat(checkout.placeOrder("cart-1")).isEqualTo("queued cart-1");  // the fa
 assertThat(calls).hasValue(0);                  // the breaker rejected the first attempt...
 assertThat(clock.elapsed()).isZero();           // ...and the retry did not wait to try again
 ```
-
-If you set `abortOn` yourself, you replace that default: include `CallNotPermittedException` in your list to keep this behaviour.
 
 ### Rejections are failures to the outer layers
 

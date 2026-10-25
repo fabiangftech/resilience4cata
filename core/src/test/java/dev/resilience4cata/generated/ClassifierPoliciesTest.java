@@ -108,6 +108,16 @@ class ClassifierPoliciesTest {
         assertThat(retry.onFailure(1, new InterruptedException(), 0, Outcome.FAILURE)).isEqualTo(RetryPolicy.NO_RETRY);
     }
 
+    @Test
+    void anOpenBreakerStopsClassifiedRetriesWithACustomAbortOn() {
+        RetryPolicy retry = retry(RetryConfig.builder().maxAttempts(5).abortOn(List.of(IllegalArgumentException.class)));
+
+        // The classifier says FAILURE, abortOn does not list it: the implicit abort still wins.
+        assertThat(retry.onFailure(1, new CallNotPermittedException("cb"), 0, Outcome.FAILURE))
+                .isEqualTo(RetryPolicy.NO_RETRY);
+        assertThat(retry.onFailure(1, new IllegalStateException(), 0, Outcome.FAILURE)).isNotNegative();
+    }
+
     // --- Retry, async
 
     private static final Classifier<Integer> STATUS = (result, failure) -> {

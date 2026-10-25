@@ -608,6 +608,22 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @return a future that completes with the call's outcome
      */
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier) {
+        return executeAsync(call, classifier, false);
+    }
+
+    /**
+     * Same as {@link #executeAsync(AsyncCall, Classifier)}; with {@code insideRetry}, an exception thrown by
+     * the classifier fails the future wrapped in a {@link ClassifierFailure}, so that the retry around this
+     * breaker ends the call with it instead of classifying it as the call's failure.
+     *
+     * @param call the next layer
+     * @param classifier the method's classifier
+     * @param insideRetry {@code true} if a retry runs this breaker (it unwraps the {@code ClassifierFailure})
+     * @param <T> the result type
+     * @return a future that completes with the call's outcome
+     */
+    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
+            boolean insideRetry) {
         long token = acquire();
         if (token < 0) {
             return CompletableFuture.failedFuture(rejection());
@@ -621,7 +637,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
                 outcome = classifier.classify(cause == null ? value : null, cause);
             } catch (Throwable classifierFailure) {
                 onResult(token, started, Classifier.Outcome.FAILURE);
-                result.completeExceptionally(classifierFailure);
+                result.completeExceptionally(insideRetry ? new ClassifierFailure(classifierFailure) : classifierFailure);
                 return;
             }
             if (cause == null) {

@@ -16,7 +16,8 @@ import java.util.Objects;
  * @param jitter randomisation applied to each delay
  * @param maxDuration time budget for the whole operation; {@link Duration#ZERO} means unlimited
  * @param retryOn exceptions that trigger a retry
- * @param abortOn exceptions that stop retrying; they win over {@code retryOn}
+ * @param abortOn exceptions that stop retrying; they win over {@code retryOn}. A
+ *     {@link CallNotPermittedException} always stops retrying, whether listed or not
  */
 public record RetryConfig(
         boolean enabled,
@@ -31,12 +32,14 @@ public record RetryConfig(
         List<Class<? extends Throwable>> abortOn) {
 
     /**
-     * Built-in defaults: 3 attempts, exponential backoff from 200 ms up to 10 s, full jitter. Calls
-     * rejected by an open circuit breaker ({@link CallNotPermittedException}) are not retried.
+     * Built-in defaults: 3 attempts, exponential backoff from 200 ms up to 10 s, full jitter, retry on
+     * {@link Exception}, empty {@code abortOn}. Whatever the configuration, a call rejected by a circuit
+     * breaker ({@link CallNotPermittedException}) is never retried: that abort is built in, not an entry
+     * of {@code abortOn}.
      */
     public static final RetryConfig DEFAULTS = new RetryConfig(
             true, 3, Duration.ofMillis(200), Backoff.EXPONENTIAL, 2.0, Duration.ofSeconds(10),
-            Jitter.FULL, Duration.ZERO, List.of(Exception.class), List.of(CallNotPermittedException.class));
+            Jitter.FULL, Duration.ZERO, List.of(Exception.class), List.of());
 
     /** How the delay grows between attempts. */
     public enum Backoff {

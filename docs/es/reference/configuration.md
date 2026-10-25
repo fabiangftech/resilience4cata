@@ -79,7 +79,7 @@ Atributos de `@Retry`. Ver [Retry](../policies/retry.md).
 | `defaults.retry.jitter` | `R4C_DEFAULTS_RETRY_JITTER` | enum | `full` | `none`, `full`, `equal` | `full`: aleatoria en [0, d]. `equal`: d/2 más una mitad aleatoria. `none`: exactamente d. |
 | `defaults.retry.maxDuration` | `R4C_DEFAULTS_RETRY_MAXDURATION` | duración | `0` | ≥ 0; `0` = sin límite | Presupuesto de tiempo de toda la operación: se rinde cuando la siguiente espera lo superaría. |
 | `defaults.retry.retryOn` | `R4C_DEFAULTS_RETRY_RETRYON` | lista de clases | `java.lang.Exception` | clases de excepción | Fallos que se reintentan, subclases incluidas. Por defecto los `Error` no se reintentan. |
-| `defaults.retry.abortOn` | `R4C_DEFAULTS_RETRY_ABORTON` | lista de clases | `dev.resilience4cata.CallNotPermittedException` | clases de excepción | Fallos que nunca se reintentan; ganan sobre `retryOn` y sobre un clasificador. Así un breaker abierto detiene los reintentos. |
+| `defaults.retry.abortOn` | `R4C_DEFAULTS_RETRY_ABORTON` | lista de clases | — | clases de excepción | Fallos que nunca se reintentan; ganan sobre `retryOn` y sobre un clasificador. Una `CallNotPermittedException` (breaker abierto) tampoco se reintenta nunca, esté en la lista o no. |
 
 ## Circuit breaker :id=circuit-breaker
 

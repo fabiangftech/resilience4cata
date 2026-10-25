@@ -625,11 +625,17 @@ public final class ResilienceProcessor extends AbstractProcessor {
         if (handler != null) {
             Handler checked = handler(iface, method, type, asyncResult, handler);
             return checked == null ? null : new FallbackModel(instanceId, applyOn, skipOn, checked.name(),
-                    checked.returnsValue(), List.of(), checkedThrown, checked.widens());
+                    checked.returnsValue(), List.of(), checkedThrown, checked.widens(), null);
         }
         List<FallbackTarget> targets = fallbackTargets(iface, method, type, asyncResult, methodName);
-        return targets == null ? null
-                : new FallbackModel(instanceId, applyOn, skipOn, null, true, targets, checkedThrown, false);
+        if (targets == null) {
+            return null;
+        }
+        // Without a sibling that takes everything, the failures none of them takes are rethrown: the
+        // policy must not handle them either, or it would publish FallbackEvent.Applied for them.
+        String taken = targets.stream().anyMatch(FallbackTarget::catchesAll) ? null
+                : String.join(", ", targets.stream().map(FallbackTarget::exceptionClass).toList());
+        return new FallbackModel(instanceId, applyOn, skipOn, null, true, targets, checkedThrown, false, taken);
     }
 
     /**
@@ -902,7 +908,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
             String typeArguments = type.getTypeVariables().isEmpty() ? ""
                     : "<" + TypePrinter.join(type.getTypeVariables(), ", ") + ">";
             FallbackTarget target = new FallbackTarget(receiver, typeArguments + name,
-                    exception == null ? null : TypePrinter.print(exception), catchesAll, returnsValue, widens);
+                    exception == null ? null : TypePrinter.print(exception),
+                    exception == null ? null : TypePrinter.print(types.erasure(exception)) + ".class",
+                    catchesAll, returnsValue, widens);
             targets.add(target);
             exceptionTypes.put(target, exception);
         }
@@ -1078,7 +1086,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
             if (fallback != null) {
                 out.append("        this.fallback").append(i).append(" = registry.fallbackPolicy(")
                         .append(literal(fallback.instanceId())).append(", java.util.List.of(").append(fallback.applyOn())
-                        .append("), java.util.List.of(").append(fallback.skipOn()).append("));\n");
+                        .append("), java.util.List.of(").append(fallback.skipOn()).append(")")
+                        .append(fallback.taken() == null ? "" : ", java.util.List.of(" + fallback.taken() + ")")
+                        .append(");\n");
                 if (fallback.handler() != null) {
                     out.append("        this.fallbackHandler").append(i).append(" = new ").append(fallback.handler()).append("();\n");
                 }
@@ -1211,7 +1221,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         + (model.policies().get(kind).throwOnExhaustedResult() ? "true, " : "")
                         + (fallback != null ? "this.fallback" + index + ", " + recovery : "null, null") + ")";
             } else if (classifier != null) {
-                expression = policy + ".executeAsync(() -> " + expression + ", this." + classifier + ")";
+                expression = policy + ".executeAsync(() -> " + expression + ", this." + classifier
+                        + (layers.contains(Kind.RETRY) ? ", true" : "") + ")";
             } else if (kind == Kind.RETRY && fallback != null) {
                 expression = policy + ".executeAsync(() -> " + expression + ", this.fallback" + index + ", " + recovery + ")";
             } else {
@@ -1300,26 +1311,34 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return switch (kind) {
             case FALLBACK -> fallback(model.fallback(), index, call, isVoid, arguments);
             case RETRY -> classifierField(model, kind, index) == null
-                    ? retry(index, call, isVoid, giveUp(model, index, "r4c$e", "r4c$attempts", isVoid, arguments))
+                    ? retry(index, call, isVoid, giveUp(model, index, "r4c$e", "r4c$attempts", isVoid, arguments),
+                            classifierField(model, Kind.CIRCUIT_BREAKER, index) == null ? null
+                                    : onClassifierFailure(giveUp(model, index, "r4c$c", "r4c$attempts + 1", isVoid, arguments)))
                     : classifiedRetry(index, call, isVoid, returnType, model.policies().get(kind).classifier(),
                             classifierField(model, kind, index),
                             giveUp(model, index, "r4c$e", "r4c$attempts", isVoid, arguments),
-                            model.fallback() == null ? null
-                                    : giveUp(model, index, "r4c$c", "r4c$attempts + 1", isVoid, arguments),
+                            onClassifierFailure(giveUp(model, index, "r4c$c", "r4c$attempts + 1", isVoid, arguments)),
+                            classifierField(model, Kind.CIRCUIT_BREAKER, index) != null,
                             !model.policies().get(kind).throwOnExhaustedResult() ? null
                                     : model.fallback() == null ? List.of()
                                     : giveUp(model, index, "r4c$r", "r4c$attempts", isVoid, arguments));
             case CIRCUIT_BREAKER -> classifierField(model, kind, index) == null
                     ? circuitBreaker(index, call, isVoid, returnType)
                     : classifiedCircuitBreaker(index, call, isVoid, returnType, model.policies().get(kind).classifier(),
-                            classifierField(model, kind, index));
+                            classifierField(model, kind, index), model.policies().containsKey(Kind.RETRY));
             case RATE_LIMITER -> rateLimiter(index, call, isVoid);
             case TIMEOUT -> timeout(index, call, isVoid, returnType);
             case BULKHEAD -> bulkhead(index, call, isVoid);
         };
     }
 
-    private static List<String> retry(int index, String call, boolean isVoid, List<String> giveUp) {
+    /**
+     * A retry loop. {@code onClassifierFailure} is null, unless the breaker inside has a classifier: then the
+     * statements that end the call with that classifier's exception, which the breaker throws wrapped in a
+     * {@code ClassifierFailure} (see {@link #innerClassifierFailure}).
+     */
+    private static List<String> retry(int index, String call, boolean isVoid, List<String> giveUp,
+            List<String> onClassifierFailure) {
         List<String> lines = new ArrayList<>();
         lines.add("final " + Kind.RETRY.policyType + " r4c$retry = this." + Kind.RETRY.field + index + ";");
         lines.add("final long r4c$start = r4c$retry.start();");
@@ -1331,6 +1350,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
             lines.add("        return;");
         } else {
             lines.add("        return " + call + ";");
+        }
+        if (onClassifierFailure != null) {
+            lines.addAll(innerClassifierFailure(onClassifierFailure));
         }
         lines.add("    } catch (java.lang.Throwable r4c$e) {");
         lines.add("        final long r4c$delay = r4c$retry.onFailure(++r4c$attempts, r4c$e, r4c$start);");
@@ -1376,19 +1398,46 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private static final String OUTCOME = "dev.resilience4cata.Classifier.Outcome";
 
     /**
+     * What the retry layer does when a classifier throws (its own, or the breaker's): publishes the give-up
+     * and ends the call with the exception in {@code r4c$c}, through {@code giveUp} (the fallback, or a rethrow).
+     */
+    private static List<String> onClassifierFailure(List<String> giveUp) {
+        List<String> lines = new ArrayList<>();
+        lines.add("r4c$retry.onClassifierFailure(r4c$attempts + 1, r4c$c);");
+        lines.addAll(giveUp);
+        return lines;
+    }
+
+    /**
+     * A catch clause of the retry's try, before the one for the call's failures: the breaker inside threw
+     * its classifier's exception wrapped in a {@code ClassifierFailure}, which ends the call at once (it is
+     * neither classified nor retried). {@code failure()} hands the exception back to a catch parameter, so
+     * that {@code throw r4c$c} is a precise rethrow.
+     */
+    private static List<String> innerClassifierFailure(List<String> onClassifierFailure) {
+        List<String> lines = new ArrayList<>();
+        lines.add("    } catch (dev.resilience4cata.generated.ClassifierFailure r4c$w) {");
+        lines.add("        try {");
+        lines.add("            throw r4c$w.failure();");
+        lines.add("        } catch (java.lang.Throwable r4c$c) {");
+        for (String line : onClassifierFailure) {
+            lines.add("            " + line);
+        }
+        lines.add("        }");
+        return lines;
+    }
+
+    /**
      * A retry loop with a classifier. Exceptions get the classifier's verdict (abortOn still wins); a result
      * classified FAILURE is retried, and returned when the retries give up. If the classifier throws, the
-     * loop publishes the give-up and gives up with that exception ({@code giveUpOnClassifier}, which reads it
-     * from {@code r4c$c}); null when there is no fallback, so that the exception simply propagates.
+     * loop publishes the give-up and gives up with that exception ({@code onClassifierFailure}, which reads it
+     * from {@code r4c$c}); with {@code classifiedBreaker}, the same happens when the breaker's classifier throws.
      * {@code giveUpOnRejected} is null for {@code onExhaustedResult = RETURN}; for {@code THROW}, the fallback
      * statements that read the {@code ResultRejectedException} from {@code r4c$r}, or empty without a fallback.
      */
     private static List<String> classifiedRetry(int index, String call, boolean isVoid, String returnType,
-            String classifierType, String classifierField, List<String> giveUp, List<String> giveUpOnClassifier,
-            List<String> giveUpOnRejected) {
-        List<String> onClassifierFailure = new ArrayList<>();
-        onClassifierFailure.add("r4c$retry.onClassifierFailure(r4c$attempts + 1, r4c$c);");
-        onClassifierFailure.addAll(giveUpOnClassifier == null ? List.of("throw r4c$c;") : giveUpOnClassifier);
+            String classifierType, String classifierField, List<String> giveUp, List<String> onClassifierFailure,
+            boolean classifiedBreaker, List<String> giveUpOnRejected) {
         List<String> lines = new ArrayList<>();
         lines.add("final " + Kind.RETRY.policyType + " r4c$retry = this." + Kind.RETRY.field + index + ";");
         lines.add("final " + classifierType + " r4c$classifier = this." + classifierField + ";");
@@ -1400,6 +1449,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
         }
         lines.add("    try {");
         lines.add("        " + (isVoid ? "" : "r4c$result = ") + call + ";");
+        if (classifiedBreaker) {
+            lines.addAll(innerClassifierFailure(onClassifierFailure));
+        }
         lines.add("    } catch (java.lang.Throwable r4c$e) {");
         lines.addAll(indent(indent(classify("null, r4c$e", onClassifierFailure))));
         lines.add("        final long r4c$delay = r4c$retry.onFailure(++r4c$attempts, r4c$e, r4c$start, r4c$verdict);");
@@ -1456,10 +1508,12 @@ public final class ResilienceProcessor extends AbstractProcessor {
     /**
      * A breaker layer with a classifier: the call's result or exception is recorded as the classifier says
      * (ignoreOn still wins for exceptions). If the classifier throws, the call is recorded as a failure, so
-     * that a half-open probe permit is never lost, and the classifier's exception propagates.
+     * that a half-open probe permit is never lost, and the classifier's exception propagates: wrapped in a
+     * {@code ClassifierFailure} if {@code insideRetry}, so that the retry ends the call with it instead of
+     * classifying it again.
      */
     private static List<String> classifiedCircuitBreaker(int index, String call, boolean isVoid, String returnType,
-            String classifierType, String classifierField) {
+            String classifierType, String classifierField, boolean insideRetry) {
         List<String> lines = new ArrayList<>();
         lines.add("final " + Kind.CIRCUIT_BREAKER.policyType + " r4c$cb = this." + Kind.CIRCUIT_BREAKER.field + index + ";");
         lines.add("final " + classifierType + " r4c$classifier = this." + classifierField + ";");
@@ -1475,7 +1529,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         lines.add("    " + (isVoid ? "" : "r4c$result = ") + call + ";");
         lines.add("} catch (java.lang.Throwable r4c$e) {");
         List<String> recordFailure = List.of("r4c$cb.onResult(r4c$token, r4c$started, " + OUTCOME + ".FAILURE);",
-                "throw r4c$c;");
+                insideRetry ? "throw new dev.resilience4cata.generated.ClassifierFailure(r4c$c);" : "throw r4c$c;");
         lines.addAll(indent(classify("null, r4c$e", recordFailure)));
         lines.add("    r4c$cb.onFailure(r4c$token, r4c$started, r4c$e, r4c$verdict);");
         lines.add("    throw r4c$e;");
@@ -1736,20 +1790,23 @@ public final class ResilienceProcessor extends AbstractProcessor {
      * {@code targets} (sibling methods, most specific exception first) is set; the other is null or empty.
      * {@code checkedThrown} lists the checked exceptions the method declares, which a handler may throw as is.
      * {@code handlerWidens}: for an async method, the handler returns a {@code CompletionStage<? extends T>}.
+     * {@code taken}: the class literals of the siblings' exception types when none of them takes every
+     * failure, passed to the registry so that the policy handles only failures a sibling takes; null otherwise.
      */
     private record FallbackModel(String instanceId, String applyOn, String skipOn, String handler,
             boolean handlerReturnsValue, List<FallbackTarget> targets, List<String> checkedThrown,
-            boolean handlerWidens) {
+            boolean handlerWidens, String taken) {
     }
 
     /**
      * One sibling fallback method. {@code name} is what follows the receiver in the call: the method name,
      * preceded by explicit type arguments for a generic method ({@code <T>load}). {@code exceptionType} is
-     * null when it takes no exception parameter; {@code catchesAll} is true when it takes none or takes
+     * null when it takes no exception parameter, and {@code exceptionClass} is its class literal (erased,
+     * {@code java.io.IOException.class}); {@code catchesAll} is true when it takes none or takes
      * {@code Throwable}. {@code returnsValue}: for an async method, it returns {@code T} rather than a stage;
      * {@code widens}: it returns a {@code CompletionStage<? extends T>}.
      */
-    private record FallbackTarget(String receiver, String name, String exceptionType, boolean catchesAll,
+    private record FallbackTarget(String receiver, String name, String exceptionType, String exceptionClass, boolean catchesAll,
             boolean returnsValue, boolean widens) {
     }
 

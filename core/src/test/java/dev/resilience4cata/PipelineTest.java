@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import dev.resilience4cata.event.FallbackEvent;
+import dev.resilience4cata.event.RetryEvent;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
@@ -183,6 +185,39 @@ class PipelineTest {
 
         handle.reset();
         assertThat(pipeline.execute(() -> "ok")).isEqualTo("ok");
+    }
+
+    @Test
+    void anOpenBreakerStopsTheRetriesWithACustomAbortOn() {
+        List<RetryEvent.GaveUp> gaveUp = new ArrayList<>();
+        ResilienceRegistry registry = ResilienceRegistry.builder()
+                .retryDefaults(r -> r.maxAttempts(10).delay(Duration.ZERO).jitter(RetryConfig.Jitter.NONE)
+                        .abortOn(List.of(IllegalArgumentException.class)))
+                .listen(RetryEvent.GaveUp.class, gaveUp::add)
+                .build();
+        Pipeline<String> pipeline = Pipeline.builder(registry, "breaker-abort-on", String.class)
+                .retry()
+                .circuitBreaker(cb -> cb.windowSize(2).minimumCalls(2).failureRateThreshold(50)
+                        .waitInOpen(Duration.ofHours(1)))
+                .build();
+        AtomicInteger calls = new AtomicInteger();
+
+        assertThatThrownBy(() -> pipeline.execute(failing(calls, 100, new IOException())))
+                .isInstanceOf(CallNotPermittedException.class);
+        assertThat(calls).as("two failures open the breaker").hasValue(2);
+
+        registry.circuitBreaker("breaker-abort-on").reset();
+        CompletableFuture<String> async = pipeline.executeAsync(() -> {
+            calls.incrementAndGet();
+            return CompletableFuture.failedFuture(new IOException());
+        });
+        assertThat(async).failsWithin(5, TimeUnit.SECONDS).withThrowableThat()
+                .havingCause().isInstanceOf(CallNotPermittedException.class);
+        assertThat(calls).hasValue(4);
+        assertThat(gaveUp).as("the third attempt is rejected and not retried, sync and async")
+                .extracting(RetryEvent.GaveUp::attempts, RetryEvent.GaveUp::reason)
+                .containsExactly(tuple(3, RetryEvent.Reason.NOT_RETRYABLE),
+                        tuple(3, RetryEvent.Reason.NOT_RETRYABLE));
     }
 
     @Test

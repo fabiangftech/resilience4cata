@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.resilience4cata.BulkheadConfig;
-import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.CircuitBreakerConfig;
 import dev.resilience4cata.RateLimiterConfig;
 import dev.resilience4cata.ResilienceRegistry;
@@ -133,7 +132,7 @@ class ResilienceConfigTest {
                 """).build().toRegistry();
         assertThat(registry.retryConfig("external").maxAttempts()).isEqualTo(5);
         assertThat(registry.retryConfig("external").delay()).isEqualTo(Duration.ofSeconds(1));
-        assertThat(registry.retryConfig("external").abortOn()).containsExactly(CallNotPermittedException.class);
+        assertThat(registry.retryConfig("external").abortOn()).isEmpty();
     }
 
     @Test

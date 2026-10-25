@@ -167,7 +167,7 @@ breaker.reset();       // back to CLOSED with an empty window
 
 El breaker es la tercera capa: dentro de Retry, alrededor de RateLimiter, Timeout y Bulkhead.
 
-- **Detiene los reintentos.** Cada intento de un `@Retry` pasa por el breaker y queda registrado. Una vez que abre, el siguiente intento recibe `CallNotPermittedException`, que está en el `abortOn` por defecto del retry, así que el retry se detiene sin esperar (ver el [resumen](README.md#un-breaker-abierto-detiene-los-reintentos)).
+- **Detiene los reintentos.** Cada intento de un `@Retry` pasa por el breaker y queda registrado. Una vez que abre, el siguiente intento recibe `CallNotPermittedException`, que un retry nunca reintenta, digan lo que digan su `abortOn`, su `retryOn` o su classifier, así que el retry se detiene sin esperar (ver [Retry](retry.md#atributos) y el [resumen](README.md#un-breaker-abierto-detiene-los-reintentos)).
 - **Registra los rechazos de las políticas internas.** `RateLimitExceededException`, `CallTimeoutException` y `BulkheadFullException` son `Exception`, así que por defecto cuentan como fallas: tu propio rate limiter o bulkhead puede abrir el breaker. Si no quieres eso, ponlas en `ignoreOn`. Los timeouts normalmente sí vale la pena registrarlos.
 - Las llamadas rechazadas nunca llegan al rate limiter, así que no gastan sus permisos.
 - Un `@Fallback` en el método ve `CallNotPermittedException` como cualquier otra falla; un método hermano puede recibirla como parámetro para responder distinto mientras el breaker está abierto.

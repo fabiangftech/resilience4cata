@@ -3,6 +3,7 @@ package dev.resilience4cata.examples.docs.retry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.Pipeline;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
@@ -133,11 +134,38 @@ class RetryPageTest {
         assertThatThrownBy(() -> store.download("c")).isInstanceOf(IllegalStateException.class);
         assertThat(callTimes).hasSize(1);
 
-        // an annotation list replaces the default list: CallNotPermittedException is no longer in abortOn
+        // an annotation list replaces the default list
         RetrySnapshot snapshot = registry.snapshot().retries().getFirst();
         assertThat(snapshot.instance())
                 .isEqualTo("dev.resilience4cata.examples.docs.retry.DocumentStore#download(java.lang.String)");
         assertThat(snapshot.config().abortOn()).containsExactly(FileNotFoundException.class);
+    }
+
+    @Test
+    void anOpenBreakerIsNeverRetried() {
+        ManualClock clock = new ManualClock();
+        List<RetryEvent.GaveUp> gaveUp = new CopyOnWriteArrayList<>();
+        ResilienceRegistry registry = ResilienceTesting.registry(clock)
+                .listen(RetryEvent.GaveUp.class, gaveUp::add)
+                .build();
+        AtomicInteger calls = new AtomicInteger();
+        ReportApi reports = Resilient.of(ReportApi.class, id -> {
+            calls.incrementAndGet();
+            throw new IllegalStateException("reports down");
+        }, registry);
+
+        // two failures open the breaker; the third attempt is rejected, and abortOn does not list the rejection
+        assertThatThrownBy(() -> reports.report("r-1")).isInstanceOf(CallNotPermittedException.class);
+        assertThat(calls).hasValue(2);
+        assertThat(gaveUp.getLast().attempts()).isEqualTo(3);
+        assertThat(gaveUp.getLast().reason()).isEqualTo(RetryEvent.Reason.NOT_RETRYABLE);
+
+        // while it is open, one attempt and no delay
+        Duration before = clock.elapsed();
+        assertThatThrownBy(() -> reports.report("r-2")).isInstanceOf(CallNotPermittedException.class);
+        assertThat(calls).hasValue(2);
+        assertThat(gaveUp.getLast().attempts()).isEqualTo(1);
+        assertThat(clock.elapsed()).isEqualTo(before);
     }
 
     @Test

@@ -171,4 +171,51 @@ class ExhaustedResultAndClassifierFailureTest {
         assertThat(events).hasSize(2).last().isEqualTo(
                 new RetryEvent.GaveUp("retry", now.get(), 2, RetryEvent.Reason.CLASSIFIER_FAILED, BROKEN));
     }
+
+    @Test
+    void anAsyncBreakerInsideARetryWrapsItsClassifiersException() throws Exception {
+        CircuitBreakerPolicy breaker = new CircuitBreakerPolicy("cb", dev.resilience4cata.CircuitBreakerConfig.DEFAULTS,
+                PolicyEnvironment.DEFAULT);
+
+        CompletableFuture<Integer> alone = breaker.executeAsync(() -> CompletableFuture.completedFuture(1), THROWING, false);
+        assertThatThrownBy(() -> alone.get(5, TimeUnit.SECONDS)).hasCause(BROKEN);
+        CompletableFuture<Integer> inside = breaker.executeAsync(() -> CompletableFuture.completedFuture(1), THROWING, true);
+        assertThatThrownBy(() -> inside.get(5, TimeUnit.SECONDS)).cause()
+                .isInstanceOf(ClassifierFailure.class).hasCause(BROKEN);
+        assertThat(breaker.snapshot().failedCalls()).isEqualTo(2);
+    }
+
+    @Test
+    void anAsyncRetryEndsTheCallWithAWrappedClassifierException() throws Exception {
+        RetryPolicy retry = listened(RetryConfig.builder().maxAttempts(3));
+        AtomicInteger calls = new AtomicInteger();
+        Classifier<Integer> retryEverything = (result, failure) -> Classifier.Outcome.FAILURE;
+
+        CompletableFuture<Integer> unclassified = retry.executeAsync(() -> {
+            calls.incrementAndGet();
+            return CompletableFuture.failedFuture(new ClassifierFailure(BROKEN));
+        }, null, null);
+        assertThatThrownBy(() -> unclassified.get(5, TimeUnit.SECONDS)).cause().isSameAs(BROKEN);
+        CompletableFuture<Integer> classified = retry.executeAsync(() -> {
+            calls.incrementAndGet();
+            return CompletableFuture.failedFuture(new ClassifierFailure(BROKEN));
+        }, retryEverything, null, null);
+        assertThatThrownBy(() -> classified.get(5, TimeUnit.SECONDS)).cause().isSameAs(BROKEN);
+
+        assertThat(calls).hasValue(2);
+        RetryEvent.GaveUp expected = new RetryEvent.GaveUp("retry", now.get(), 1, RetryEvent.Reason.CLASSIFIER_FAILED, BROKEN);
+        assertThat(events).containsExactly(expected, expected);
+    }
+
+    @Test
+    void aClassifierFailureHandsBackTheClassifiersException() {
+        ClassifierFailure wrapped = new ClassifierFailure(BROKEN);
+        assertThat(wrapped.failure()).isSameAs(BROKEN);
+        assertThat(wrapped.getStackTrace()).isEmpty();
+
+        AssertionError error = new AssertionError("bug");
+        assertThatThrownBy(() -> new ClassifierFailure(error).failure()).isSameAs(error);
+        IOException checked = new IOException("sneaky");
+        assertThatThrownBy(() -> new ClassifierFailure(checked).failure()).isSameAs(checked);
+    }
 }

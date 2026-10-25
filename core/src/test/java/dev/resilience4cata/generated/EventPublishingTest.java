@@ -331,4 +331,14 @@ class EventPublishingTest {
         assertThat(fallback.handles(new IllegalStateException())).isFalse();
         assertThat(events).containsExactly(new FallbackEvent.Applied("f", now.get(), handled));
     }
+
+    @Test
+    void aFallbackIsNotPublishedForAFailureNoSiblingTakes() {
+        FallbackPolicy fallback = new FallbackPolicy("f", List.of(Throwable.class), List.of(), List.of(IOException.class),
+                listening(FallbackEvent.class));
+        assertThat(fallback.handles(new AssertionError())).isFalse();
+        IOException handled = new IOException();
+        assertThat(fallback.handles(handled)).isTrue();
+        assertThat(events).containsExactly(new FallbackEvent.Applied("f", now.get(), handled));
+    }
 }

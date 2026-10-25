@@ -55,6 +55,30 @@ class AsyncPoliciesTest {
     }
 
     @Test
+    void asyncRetriesStopAtAnOpenBreakerWithACustomAbortOn() {
+        CircuitBreakerPolicy breaker = new CircuitBreakerPolicy("test", CircuitBreakerConfig.builder()
+                .windowSize(2).minimumCalls(2).failureRateThreshold(50).waitInOpen(Duration.ofHours(1)).build(),
+                () -> 0L);
+        RetryPolicy retry = new RetryPolicy(RetryConfig.builder().maxAttempts(10).delay(Duration.ZERO)
+                .jitter(RetryConfig.Jitter.NONE).abortOn(List.of(IllegalArgumentException.class)).build());
+        AtomicInteger attempts = new AtomicInteger();
+        AtomicInteger calls = new AtomicInteger();
+
+        CompletableFuture<String> result = retry.executeAsync(() -> {
+            attempts.incrementAndGet();
+            return breaker.executeAsync(() -> {
+                calls.incrementAndGet();
+                throw new IOException("down");
+            });
+        });
+
+        assertThat(result).failsWithin(5, TimeUnit.SECONDS).withThrowableThat()
+                .havingCause().isInstanceOf(CallNotPermittedException.class);
+        assertThat(calls).as("two failures open the breaker").hasValue(2);
+        assertThat(attempts).as("the third attempt is rejected and not retried").hasValue(3);
+    }
+
+    @Test
     void theBulkheadFreesTheSlotWhetherTheCallThrowsFailsOrSucceeds() {
         BulkheadPolicy bulkhead = new BulkheadPolicy("test", BulkheadConfig.builder().maxConcurrent(1).build());
         assertThat(failureOf(bulkhead.executeAsync(() -> {

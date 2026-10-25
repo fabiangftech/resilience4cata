@@ -155,7 +155,7 @@ flowchart LR
 ```
 
 - **The fallback is outermost**, so it sees the final outcome, including rejections such as an open breaker or a full bulkhead.
-- **Each retry attempt goes through the breaker**, which records it (the example above shows two calls recorded for one retried call), and an open breaker stops the retries: by default `@Retry` aborts on `CallNotPermittedException`.
+- **Each retry attempt goes through the breaker**, which records it (the example above shows two calls recorded for one retried call), and an open breaker stops the retries: `@Retry` never retries a `CallNotPermittedException`.
 - **Calls rejected by the breaker don't use rate-limiter permits.**
 - **The timeout applies to each attempt**; `@Retry(maxDuration = …)` bounds the whole operation.
 - **The bulkhead slot is held only while the method runs**, not during the retry's backoff.

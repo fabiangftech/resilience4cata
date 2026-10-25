@@ -133,7 +133,7 @@ Cada política se convierte en una capa de código lineal: el método público t
 
 ### Un breaker abierto detiene los reintentos
 
-El `abortOn` por defecto del retry es `CallNotPermittedException`, la excepción que lanza un circuit breaker abierto. Así, una vez que el breaker abre, el retry se rinde en el siguiente intento en lugar de esperar todo su backoff, y responde el fallback:
+Un retry nunca reintenta `CallNotPermittedException`, la excepción que lanza un circuit breaker abierto, diga lo que diga su `abortOn`. Así, una vez que el breaker abre, el retry se rinde en el siguiente intento en lugar de esperar todo su backoff, y responde el fallback:
 
 <!-- snippet: policies-open-breaker -->
 ```java
@@ -147,8 +147,6 @@ assertThat(checkout.placeOrder("cart-1")).isEqualTo("queued cart-1");  // the fa
 assertThat(calls).hasValue(0);                  // the breaker rejected the first attempt...
 assertThat(clock.elapsed()).isZero();           // ...and the retry did not wait to try again
 ```
-
-Si defines `abortOn` tú mismo, reemplazas ese valor por defecto: incluye `CallNotPermittedException` en tu lista para conservar este comportamiento.
 
 ### Los rechazos son fallas para las capas externas
 

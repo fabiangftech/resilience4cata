@@ -155,7 +155,7 @@ flowchart LR
 ```
 
 - **El fallback es el más externo**, así que ve el resultado final, incluidos los rechazos como un breaker abierto o un bulkhead lleno.
-- **Cada intento del retry pasa por el breaker**, que lo registra (el ejemplo de arriba muestra dos llamadas registradas para una llamada reintentada), y un breaker abierto detiene los reintentos: por defecto `@Retry` aborta ante `CallNotPermittedException`.
+- **Cada intento del retry pasa por el breaker**, que lo registra (el ejemplo de arriba muestra dos llamadas registradas para una llamada reintentada), y un breaker abierto detiene los reintentos: `@Retry` nunca reintenta una `CallNotPermittedException`.
 - **Las llamadas que rechaza el breaker no consumen permisos del rate limiter.**
 - **El timeout se aplica a cada intento**; `@Retry(maxDuration = …)` limita la operación completa.
 - **El slot del bulkhead se ocupa solo mientras corre el método**, no durante el backoff del retry.

@@ -19,11 +19,11 @@ Cada evento implementa la interfaz sellada `dev.resilience4cata.event.Resilience
 | Circuit breaker | `CircuitBreakerEvent.StateTransition` | `CircuitBreakerState from`, `CircuitBreakerState to` | el estado cambia, exactamente una vez por cambio, incluidos `forceOpen()`, `disable()` y `reset()` |
 | Circuit breaker | `CircuitBreakerEvent.CallNotPermitted` | `CircuitBreakerState state` | una llamada es rechazada (`OPEN`, `FORCED_OPEN`, o `HALF_OPEN` con todas las pruebas tomadas) |
 | Retry | `RetryEvent.Retrying` | `int attempt`, `Duration delay`, `@Nullable Throwable failure` | un intento falló y se ejecutará otro después de `delay`; `failure` es `null` cuando un [classifier](classifiers.md) rechazó un resultado |
-| Retry | `RetryEvent.GaveUp` | `int attempts`, `RetryEvent.Reason reason`, `@Nullable Throwable failure` | el retry se detiene sin un éxito: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (el fallo no está en `retryOn`, o está en `abortOn`, por ejemplo un breaker abierto), `INTERRUPTED`, `CLASSIFIER_FAILED` |
+| Retry | `RetryEvent.GaveUp` | `int attempts`, `RetryEvent.Reason reason`, `@Nullable Throwable failure` | el retry se detiene sin un éxito: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (el fallo no está en `retryOn`, está en `abortOn`, o es la `CallNotPermittedException` de un breaker abierto), `INTERRUPTED`, `CLASSIFIER_FAILED` |
 | Rate limiter | `RateLimiterEvent.Rejected` | ninguno | una llamada es rechazada con `RateLimitExceededException` |
 | Timeout | `TimeoutEvent.TimedOut` | `Duration timeout` | una llamada excede su timeout |
 | Bulkhead | `BulkheadEvent.Rejected` | `int maxConcurrent` | una llamada es rechazada con `BulkheadFullException` |
-| Fallback | `FallbackEvent.Applied` | `Throwable failure` | un fallback está por ejecutarse para `failure` |
+| Fallback | `FallbackEvent.Applied` | `Throwable failure` | un fallback está por ejecutarse para `failure`; no se publica cuando la falla se relanza porque ningún fallback la recibe (`skipOn`, o ningún método hermano acepta su tipo) |
 
 Un retry con `enabled = false` no publica nada. Un primer fallo que no es reintentable publica `GaveUp` con `attempts = 1` y `NOT_RETRYABLE`.
 

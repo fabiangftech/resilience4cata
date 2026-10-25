@@ -79,7 +79,7 @@ Resilience4j builder methods (Spring Boot properties use the same names in kebab
 | `intervalFunction(IntervalFunction.ofExponentialBackoff(…))` | | `backoff = EXPONENTIAL`, `multiplier`, `maxDelay` | ×2, max 10 s |
 | `IntervalFunction.ofRandomized(…)`, `ofExponentialRandomBackoff(…)` | | `jitter = FULL` or `EQUAL` | `FULL` |
 | `retryExceptions` / `retryOnException(predicate)` | all exceptions | `retryOn` or `classifier` | `Exception` |
-| `ignoreExceptions` | none | `abortOn` | `CallNotPermittedException` |
+| `ignoreExceptions` | none | `abortOn` | — (an open breaker is never retried anyway) |
 | `retryOnResult(predicate)` | | `classifier` | — |
 | `failAfterMaxAttempts` | `false` | `onExhaustedResult = THROW` | `RETURN` |
 | no equivalent | | `maxDuration` (time budget for all attempts) | 0 = unlimited |
@@ -109,7 +109,7 @@ Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead �
 
 ### An open breaker stops retries :id=open-breaker
 
-`abortOn` defaults to `CallNotPermittedException`, so once the breaker opens, the retry gives up at once instead of retrying into it. In Resilience4j you add that exception to `ignoreExceptions` yourself.
+A retry never retries `CallNotPermittedException`, whatever its `abortOn` says, so once the breaker opens, the retry gives up at once instead of retrying into it. In Resilience4j you add that exception to `ignoreExceptions` yourself.
 
 ### Errors are not recorded or retried by default :id=errors
 

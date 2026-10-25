@@ -24,6 +24,18 @@ class FallbackPolicyTest {
     }
 
     @Test
+    void withSiblingTypesOnlyTheFailuresASiblingTakesAreHandled() {
+        FallbackPolicy policy = new FallbackPolicy("id", List.of(Throwable.class), List.of(FileNotFoundException.class),
+                List.of(IOException.class, IllegalStateException.class), PolicyEnvironment.DEFAULT);
+
+        assertThat(policy.handles(new IOException())).isTrue();
+        assertThat(policy.handles(new IllegalStateException())).isTrue();
+        assertThat(policy.handles(new FileNotFoundException())).as("skipOn still wins").isFalse();
+        assertThat(policy.handles(new IllegalArgumentException())).as("no sibling takes it").isFalse();
+        assertThat(policy.handles(new AssertionError())).as("no sibling takes it").isFalse();
+    }
+
+    @Test
     void theContextExposesTheCallAndBoxedPrimitiveArguments() {
         FallbackPolicy policy = new FallbackPolicy("demo.Client#find(java.lang.String,int)", List.of(Throwable.class), List.of());
         IOException failure = new IOException("down");
