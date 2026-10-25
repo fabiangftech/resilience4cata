@@ -2,7 +2,7 @@
 junit = "6.0.0"
 # The oldest JUnit the junit module supports: its main code compiles against it, and its tests also run on it.
 junitMinimum = "5.10.5"
-assertj = "3.27.3"
+assertj = "3.27.7"
 jspecify = "1.0.1"
 jmh = "1.37"
 jcstress = "0.16"
