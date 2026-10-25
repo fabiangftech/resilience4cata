@@ -1,0 +1,163 @@
+# How it works
+
+An annotation processor turns your annotations into plain Java at compile time; at runtime a `ResilienceRegistry` gives that code its configuration and its state.
+
+## What the processor generates
+
+For every interface that uses a resilience annotation, the processor writes a class named `<Interface>$Resilient` in the same package. It implements the interface, holds one `final` policy field per protected method, and calls your implementation through the policies as straight-line code: a loop for the retry, a `try` block for the breaker, no lambdas, no proxies, no reflection on the call path.
+
+<!-- compare:start -->
+<!-- snippet: how-it-works-interface -->
+```java
+public interface StockClient {
+
+    @Retry(maxAttempts = 3)
+    @CircuitBreaker
+    int stock(String sku, int warehouse);
+}
+```
+<!-- not-compiled: generated code, abridged (package names shortened) -->
+```java
+public final class StockClient$Resilient implements StockClient {
+
+    private final StockClient delegate;
+    private final RetryPolicy retry0;
+    private final CircuitBreakerPolicy circuitBreaker0;
+
+    public StockClient$Resilient(StockClient delegate, ResilienceRegistry registry) {
+        this.delegate = Objects.requireNonNull(delegate, "delegate");
+        // …
+        this.retry0 = registry.retryPolicy("….StockClient#stock(java.lang.String,int)", "", "", r4c$b -> {
+            r4c$b.maxAttempts(3);
+        });
+        this.circuitBreaker0 = registry.circuitBreakerPolicy("….StockClient#stock(java.lang.String,int)", "", "", null);
+    }
+
+    @Override
+    public int stock(String p0, int p1) {
+        final RetryPolicy r4c$retry = this.retry0;
+        final long r4c$start = r4c$retry.start();
+        int r4c$attempts = 0;
+        while (true) {
+            try {
+                return this.r4c$circuitBreaker0(p0, p1);
+            } catch (Throwable r4c$e) {
+                final long r4c$delay = r4c$retry.onFailure(++r4c$attempts, r4c$e, r4c$start);
+                if (r4c$delay < 0 || !r4c$retry.pause(r4c$delay)) {
+                    throw r4c$e;
+                }
+            }
+        }
+    }
+
+    private int r4c$circuitBreaker0(String p0, int p1) {
+        final CircuitBreakerPolicy r4c$cb = this.circuitBreaker0;
+        final long r4c$token = r4c$cb.acquire();
+        if (r4c$token < 0) {
+            throw r4c$cb.rejection();
+        }
+        final long r4c$started = r4c$cb.startTimer();
+        try {
+            final int r4c$result = this.delegate.stock(p0, p1);
+            r4c$cb.onSuccess(r4c$token, r4c$started);
+            return r4c$result;
+        } catch (Throwable r4c$e) {
+            r4c$cb.onFailure(r4c$token, r4c$started, r4c$e);
+            throw r4c$e;
+        }
+    }
+}
+```
+<!-- compare:end -->
+
+What follows from this design:
+
+- **Mistakes are compile errors.** Unknown attributes, invalid durations, a fallback with the wrong signature, an annotation on a `static` or `private` method: the build fails with a code such as `[R4C-ATR-001]` that has its own section in the [error reference](../errors.md).
+- **The processor is mandatory.** If the generated class is missing, `Resilient.of` fails fast with [`R4C-RT-003`](../errors.md#r4c-rt-003), naming the dependency to add. There is no reflection fallback.
+- **Generated code may only call `core`'s API**, so `core` and `processor` must have the same version ([`R4C-RT-004`](../errors.md#r4c-rt-004) otherwise; the BOM keeps them aligned).
+- **The wrapper is thread-safe.** Create it once and share it, like the registry.
+
+> [!MEASURED]
+> A retry whose first attempt succeeds costs 1.2 ns and allocates nothing, against 22.9 ns for Resilience4j 2.4.0 (AWS Graviton3 `c7g.xlarge`, one thread). [Benchmarks](../benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3)
+
+## Two styles, plus a programmatic API
+
+| Style | You write | You get it with | Self-invocation (`this.other()`) |
+|---|---|---|---|
+| **Annotated interface** | Annotations on an interface; any implementation | `Resilient.of(Type.class, impl, registry)` | Not intercepted: the implementation's calls to itself skip the policies |
+| **[Annotated class](../guides/annotated-classes.md)** | Annotations on a non-final class | `Resilient.create(Type.class, registry, constructorArgs...)` | Intercepted: the generated subclass overrides the method |
+| **[`Pipeline`](../guides/pipeline.md)** | No annotations: a builder | `Pipeline.builder(registry, id, Type.class)…build()` | n/a |
+
+With the interface style only the interface's annotations count. A class that implements an annotated interface but declares no annotation itself is not processed; wrap it with `Resilient.of`. A class that declares annotations is processed in the class style.
+
+## The registry and instance ids
+
+`ResilienceRegistry` holds the configurations (defaults, named configs, per-instance overrides), the event listeners and every stateful policy instance. Build it once with `ResilienceRegistry.builder()…build()`; it is immutable afterwards.
+
+Each protected method gets its own policy instances, under an **instance id**:
+
+- the policy's `name` attribute if it has one (`@CircuitBreaker(name = "prices")` → `prices`); methods, pipelines and wrappers that use the same name share one instance (one breaker window, one set of permits), and must resolve to the same configuration ([`R4C-REG-008`](../errors.md#r4c-reg-008) otherwise);
+- otherwise the derived id `<qualified type>#<method>(<parameter types>)`, with fully qualified, erased parameter types separated by commas without spaces: `com.acme.StockClient#stock(java.lang.String,int)`. Nested types use `.` (`com.acme.Repository.Cache#get(java.lang.String)`). For an annotated class, the type is the class.
+
+`@Timeout` has no `name`: its id is always the derived one. `@Fallback` keeps no state and has no handle or configuration.
+
+The id is how you find an instance at runtime (`registry.circuitBreaker(id)`, `rateLimiter(id)`, `bulkhead(id)`), how events and snapshots name it, and how external configuration retunes it (`instances.<id>.…`). This test wraps `StockClient` and looks its breaker up by the derived id:
+
+<!-- snippet: how-it-works-ids -->
+```java
+AtomicInteger calls = new AtomicInteger();
+StockClient stock = Resilient.of(StockClient.class, (sku, warehouse) -> {
+    if (calls.incrementAndGet() == 1) {
+        throw new IllegalStateException("warehouse busy");
+    }
+    return 7;
+}, registry);
+
+int count = stock.stock("sku-1", 3);   // the first attempt fails, the retry succeeds
+
+CircuitBreakerSnapshot breaker = registry.circuitBreaker(
+        "dev.resilience4cata.examples.docs.howitworks.StockClient#stock(java.lang.String,int)").snapshot();
+// breaker.bufferedCalls() == 2 and breaker.failedCalls() == 1: the breaker saw both attempts
+```
+
+## Where configuration comes from
+
+Every annotation attribute has an "unset" value, so an annotation only overrides what it writes; the real defaults live in the registry. Values resolve in this order, lowest precedence first:
+
+1. Built-in defaults (for `@Retry`: 3 attempts, 200 ms exponential backoff with full jitter; each [policy page](../policies/README.md) lists them).
+2. Registry defaults: `retryDefaults(...)` and friends, or `defaults.<policy>.*` in [external configuration](../guides/configuration.md).
+3. The named config chosen with `config = "…"`: registered in code with `retry("external", ...)`, externally with `configs.external.*`.
+4. The annotations: bundles below direct annotations, the type below the method ([bundles](../guides/bundles.md)).
+5. Per-instance overrides: `retryInstance(id, ...)` and friends, or `instances.<id>.*` externally.
+
+Everything is resolved **once**, when the wrapper, the subclass or the pipeline is created, into immutable records; calls never look configuration up. There is no hot reload: changing a value means building a new registry, in practice restarting the application.
+
+<!-- snippet: how-it-works-registry -->
+```java
+ResilienceRegistry registry = ResilienceRegistry.builder()
+        .retryDefaults(r -> r.delay(Duration.ofMillis(50)))                     // every retry
+        .circuitBreakerInstance(
+                "dev.resilience4cata.examples.docs.howitworks.StockClient#stock(java.lang.String,int)",
+                cb -> cb.minimumCalls(20))                                     // one instance
+        .build();
+StockClient stock = Resilient.of(StockClient.class, (sku, warehouse) -> 7, registry);   // resolved here
+```
+
+An unknown config name fails at that moment ([`R4C-REG-004`](../errors.md#r4c-reg-004)), not on the first call.
+
+## Policy order
+
+Whatever order you write the annotations in, the policies nest in this fixed order, outermost first:
+
+```mermaid
+flowchart LR
+    caller([caller]) --> F[Fallback] --> R[Retry] --> CB[CircuitBreaker] --> RL[RateLimiter] --> T[Timeout] --> B[Bulkhead] --> M([your method])
+```
+
+- **The fallback is outermost**, so it sees the final outcome, including rejections such as an open breaker or a full bulkhead.
+- **Each retry attempt goes through the breaker**, which records it (the example above shows two calls recorded for one retried call), and an open breaker stops the retries: by default `@Retry` aborts on `CallNotPermittedException`.
+- **Calls rejected by the breaker don't use rate-limiter permits.**
+- **The timeout applies to each attempt**; `@Retry(maxDuration = …)` bounds the whole operation.
+- **The bulkhead slot is held only while the method runs**, not during the retry's backoff.
+
+The order is not configurable in 0.1.0. The [policies overview](../policies/README.md) explains how the policies interact.

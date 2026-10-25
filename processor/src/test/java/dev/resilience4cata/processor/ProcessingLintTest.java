@@ -112,6 +112,25 @@ class ProcessingLintTest {
     }
 
     @Test
+    void theModuleDescriptorRegistersTheSameProcessorsInTheSameOrder() throws Exception {
+        // On the processor module path, javac finds processors through module-info, not META-INF/services.
+        Path classes = Path.of(ResilienceProcessor.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        java.lang.module.ModuleDescriptor descriptor;
+        if (java.nio.file.Files.isDirectory(classes)) {
+            try (var in = java.nio.file.Files.newInputStream(classes.resolve("module-info.class"))) {
+                descriptor = java.lang.module.ModuleDescriptor.read(in);
+            }
+        } else {
+            descriptor = java.lang.module.ModuleFinder.of(classes).findAll().iterator().next().descriptor();
+        }
+        assertThat(descriptor.provides()).singleElement().satisfies(provides -> {
+            assertThat(provides.service()).isEqualTo(javax.annotation.processing.Processor.class.getName());
+            assertThat(provides.providers())
+                    .containsExactly(ResilienceProcessor.class.getName(), AnnotationClaimer.class.getName());
+        });
+    }
+
+    @Test
     void itIsAloneOnlyWhenEveryRegisteredProcessorIsItself() {
         String self = ResilienceProcessor.class.getName();
 

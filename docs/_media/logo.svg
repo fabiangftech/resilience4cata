@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 48" role="img" aria-labelledby="t">
+  <title id="t">resilience4cata</title>
+  <!-- Mark: a breaker "handle" (signal-yellow tag) carrying the schematic symbol of an open contact.
+       The lever stands open: the moment a breaker protects the circuit. -->
+  <g transform="translate(4 4)">
+    <rect width="40" height="40" rx="9" fill="#F2B500"/>
+    <g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round">
+      <path d="M4 27h7"/>
+      <path d="M13.6 25.4 L27 13"/>
+      <path d="M31 27h5"/>
+    </g>
+    <circle cx="13" cy="27" r="2.6" fill="#1A1F24"/>
+    <circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/>
+  </g>
+  <!-- Wordmark: Barlow Semi Condensed 600. Convert to outlines before production use. -->
+  <text x="56" y="34" font-family="'Barlow Semi Condensed','Arial Narrow',sans-serif" font-weight="600"
+        font-size="30" letter-spacing="-0.2" fill="#1A1F24">resilience<tspan font-weight="700">4cata</tspan></text>
+</svg>

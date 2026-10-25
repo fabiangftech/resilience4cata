@@ -3,36 +3,151 @@
 <head>
   <meta charset="UTF-8">
   <title>resilience4cata</title>
-  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
-  <meta name="description" content="Annotation-driven resilience library for plain Java 21+">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
-  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4.13.1/lib/themes/vue.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Annotation-driven resilience for plain Java 21+. Retry, circuit breaker, rate limiter, timeout, bulkhead and fallback, generated at compile time by an annotation processor. No proxies, no reflection, no framework.">
+  <link rel="canonical" href="https://resilience4cata.dev/">
+  <meta name="theme-color" content="#F5F6F2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#15191D" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/svg+xml" href="_media/logo-mark.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="_media/favicon-32.png">
+  <link rel="apple-touch-icon" href="_media/apple-touch-icon.png">
+  <!-- Social cards -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="resilience4cata">
+  <meta property="og:title" content="resilience4cata: resilience, compiled">
+  <meta property="og:description" content="Annotate a Java interface with retry, circuit breaker, timeout and friends. An annotation processor writes the plain Java that enforces them.">
+  <meta property="og:url" content="https://resilience4cata.dev/">
+  <meta property="og:image" content="https://resilience4cata.dev/_media/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="resilience4cata: resilience, compiled. Annotation-driven resilience for plain Java 21+.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="resilience4cata: resilience, compiled">
+  <meta name="twitter:description" content="Annotation-driven resilience for plain Java 21+, generated at compile time.">
+  <meta name="twitter:image" content="https://resilience4cata.dev/_media/og.png">
+  <!-- Theme and language before first paint (no flash) -->
+  <script>
+    (function () {
+      var get = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
+      var t = get('r4c-theme');
+      var q = /[?&]theme=(light|dark)\b/.exec(location.search);
+      if (q) t = q[1];
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      var h = location.hash;
+      if (!h || h === '#' || h === '#/' || h === '#/README') {
+        var lang = get('r4c-lang') || ((navigator.languages && navigator.languages[0]) || navigator.language || 'en');
+        location.replace('#/' + (/^es\b/i.test(lang) ? 'es' : 'en') + '/');
+      }
+      var m = /^#\/(en|es)\//.exec(location.hash);
+      if (m) document.documentElement.lang = m[1];
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="_media/theme.css">
 </head>
 <body>
+  <a class="r4c-skip" href="#main">Skip to content</a>
+  <header class="r4c-top">
+    <div class="r4c-top-inner">
+      <button class="r4c-tool r4c-menu" type="button" aria-label="Navigation" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <a class="r4c-brand" href="#/en/" aria-label="resilience4cata home">
+        <svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#F2B500"/><g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round"><path d="M4 27h7"/><path d="M13.6 25.4 L27 13"/><path d="M31 27h5"/></g><circle cx="13" cy="27" r="2.6" fill="#1A1F24"/><circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/></svg>
+        <span>resilience<b>4cata</b></span>
+      </a>
+      <nav class="r4c-nav" aria-label="Main">
+        <a data-nav="docs" href="#/en/start/installation">Docs</a>
+        <a data-nav="policies" href="#/en/policies/">Policies</a>
+        <a data-nav="performance" href="#/en/performance">Performance</a>
+        <a data-nav="errors" href="#/en/errors">Error codes</a>
+      </nav>
+      <div class="r4c-tools">
+        <div class="r4c-search-slot"></div>
+        <span class="r4c-lang" role="group" aria-label="Language">
+          <a data-lang="en" lang="en" hreflang="en" href="#/en/">EN</a><a data-lang="es" lang="es" hreflang="es" href="#/es/">ES</a>
+        </span>
+        <button class="r4c-tool r4c-theme" type="button" aria-label="Color theme: system">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>
+          <span>System</span>
+        </button>
+        <a class="r4c-tool r4c-github" href="https://github.com/fabiangftech/resilience4cata" aria-label="GitHub repository">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg>
+        </a>
+      </div>
+    </div>
+  </header>
   <div id="app"></div>
   <script>
     window.$docsify = {
       name: 'resilience4cata',
-      repo: '',
+      nameLink: { '/es/': '#/es/', '/': '#/en/' },
       loadSidebar: true,
-      loadNavbar: true,
+      loadNavbar: false,
       relativePath: true,
-      subMaxLevel: 2,
+      subMaxLevel: 0,
+      maxLevel: 4,
       auto2top: true,
+      topMargin: 76,
+      alias: {
+        '/en/.*/_sidebar.md': '/en/_sidebar.md',
+        '/es/.*/_sidebar.md': '/es/_sidebar.md'
+      },
+      notFoundPage: {
+        '/': '_404.md',
+        '/en/': 'en/_404.md',
+        '/es/': 'es/_404.md'
+      },
       search: {
         placeholder: { '/es/': 'Buscar', '/': 'Search' },
         noData: { '/es/': 'Sin resultados', '/': 'No results' },
+        depth: 3,
         namespace: 'resilience4cata',
         pathNamespaces: ['/en', '/es']
-      }
-    }
+      },
+      copyCode: {
+        buttonText: { '/es/': 'Copiar', '/': 'Copy' },
+        errorText: { '/es/': 'Error', '/': 'Error' },
+        successText: { '/es/': 'Copiado', '/': 'Copied' }
+      },
+      tabs: {
+        persist: true,
+        sync: true,
+        theme: false,
+        tabComments: true,
+        tabHeadings: true
+      },
+      markdown: {
+        renderer: {
+          code: function (code, lang) {
+            if (lang === 'mermaid') {
+              return window.R4C.mermaidBlock(code);
+            }
+            return this.origin.code.apply(this, arguments);
+          }
+        }
+      },
+      plugins: []
+    };
   </script>
-  <!-- Docsify v4 -->
-  <script src="//cdn.jsdelivr.net/npm/docsify@4.13.1"></script>
-  <script src="//cdn.jsdelivr.net/npm/docsify@4.13.1/lib/plugins/search.min.js"></script>
-  <!-- Mermaid diagrams -->
-  <script src="//cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/docsify-mermaid@2.0.1/dist/docsify-mermaid.js"></script>
-  <script>mermaid.initialize({ startOnLoad: false });</script>
+  <script src="_media/r4c.js"></script>
+  <!-- Docsify 4 and plugins, pinned -->
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/docsify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/plugins/search.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/plugins/zoom-image.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@3.0.2/dist/docsify-copy-code.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify-tabs@1.6.3/dist/docsify-tabs.min.js"></script>
+  <!-- Syntax highlighting for the languages used in the docs -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-groovy.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-properties.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+  <!-- Mermaid diagrams, themed from the site tokens by _media/r4c.js -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.min.js"></script>
 </body>
 </html>

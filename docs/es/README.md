@@ -1,78 +1,292 @@
-# resilience4cata
-
-> **Estado: MVP completo; la versión 0.1.0 está en preparación y todavía no está publicada.** Las seis políticas del MVP funcionan de punta a punta, sincrónicas y async, en interfaces y en clases anotadas, junto con la configuración externa, los classifiers, la API programática, los eventos, los snapshots y el testkit; ver [estado de la implementación](#estado-de-la-implementación). ¿Recién llegas? Empieza por [primeros pasos](getting-started.md). Esta página también resume las decisiones de diseño tomadas antes del primer código (fase 1).
->
-> English version: [en/README.md](../en/README.md)
-
-resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit breaker, retry, timeout, bulkhead, rate limiter y fallback, declarados con **anotaciones** que funcionan **sin Spring, CDI ni AspectJ**, y pensada para tener **menos overhead que Resilience4j**.
-
-## Por qué otra librería de resiliencia
-
-1. **Anotaciones sin framework.** Las anotaciones de Resilience4j solo hacen algo a través de Spring AOP, AspectJ o Micronaut. El modo standalone de SmallRye Fault Tolerance es solo programático. Ninguna librería conocida ofrece resiliencia declarativa en Java puro ([01 §1.3, §4.2](research/01-landscape.md)).
-2. **Rendimiento medible.** Resilience4j asigna memoria en cada llamada (272 B/op para un circuit breaker solo, según su propio JMH), usa un lock en su ventana deslizante por defecto y compone las políticas con lambdas compartidas que el JIT no puede inlinear ([01 §1.7](research/01-landscape.md), [03 §0](research/03-performance-internals.md)). Polly v8 (.NET) demuestra que se puede llegar a casi cero asignaciones.
-3. **Múltiples configuraciones como feature principal**: configuraciones con nombre y herencia, perfiles, anotaciones compuestas propias como `@ExternalCall`, y overrides externos sin recompilar ([04 §6](research/04-api-and-configuration.md)).
-
-## Decisiones tomadas en la fase 1
-
-| Tema | Decisión | Detalle |
-|---|---|---|
-| Versión de Java | Java 21+, probado en 21 y 25 | [arquitectura](architecture.md#build-y-herramientas) |
-| Build | Gradle con un DSL de Groovy mínimo; convention plugins escritos en Java; version catalog. Nada de Kotlin en el proyecto | [arquitectura](architecture.md#build-y-herramientas) |
-| Mecanismo de anotaciones | **Procesador de anotaciones en compilación (APT)** que genera código Java. Sin proxies, generación de bytecode ni agentes en `core` | [arquitectura](architecture.md#mecanismo-de-anotaciones) |
-| Frameworks | Solo Java puro por ahora | — |
-| Módulos | Nombres de una palabra: `annotations`, `core`, `processor`, `config`, `testkit`, `bom` (y `micrometer`, previsto para v1), más los internos `benchmark`, `stress`, `examples` | [arquitectura](architecture.md#módulos) |
-| Dependencias de `core` | Ninguna salvo JSpecify (ver abajo) | [arquitectura](architecture.md#módulos) |
-| Políticas del MVP | `@CircuitBreaker`, `@Retry`, `@Timeout`, `@Bulkhead`, `@RateLimiter`, `@Fallback` | [features](features.md) |
-| Contrato de rendimiento | 0 B/op en el camino exitoso, sin locks en el camino caliente, verificado con JMH en CI | [features](features.md#contrato-de-rendimiento) |
-| Documentación | Markdown en `docs/en` y `docs/es`, servido con Docsify. El inglés es la fuente de verdad | [arquitectura](architecture.md#documentación) |
-| Módulo `annotations` | Separado de `core` | [arquitectura](architecture.md#módulos) |
-| Duraciones | Strings (`"250ms"`, `"2s"`, `"PT2S"`), validados por el procesador | [features](features.md#anotaciones) |
-| Build de convenciones de Gradle | Included build llamado `conventions` (respeta la regla de una palabra) | [arquitectura](architecture.md#build-y-herramientas) |
-| Procesador | **Obligatorio.** Sin fallback con proxies en runtime. Si falta la clase generada, `Resilient.of` falla al arrancar con un mensaje que explica cómo agregar el procesador. El código que no se puede anotar usa la API programática de `core` | [arquitectura](architecture.md#mecanismo-de-anotaciones) |
-| Retención de las anotaciones | `CLASS`: las anotaciones no se cargan en runtime, así `annotations` puede ser una dependencia `compileOnly`. Pasar a `RUNTIME` más adelante es un cambio compatible si algún día se agrega un fallback con proxies | [arquitectura](architecture.md#mecanismo-de-anotaciones) |
-| Anotaciones en la interfaz vs la implementación | Con `Resilient.of(interfaz, impl, registry)` solo cuentan las anotaciones de la interfaz. En el estilo subclase (`Resilient.create(Impl.class, registry)`), al que una clase entra declarando al menos una anotación propia, las anotaciones de la clase **ganan**, atributo por atributo: interfaz < método de la interfaz < clase < método de la clase (un método que sobrescribe uno de una superclase le gana). Los métodos que sobrescriben los de `Object` solo toman las anotaciones escritas en ellos | [arquitectura](architecture.md#anotaciones-en-la-interfaz-vs-la-implementación) |
-| Auto-invocación | **Se intercepta** en el estilo subclase: `this.otro()` pasa por el método generado, así que se aplican sus políticas. No es posible en el estilo wrapper de interfaz, porque las llamadas dentro de la implementación del usuario nunca llegan al wrapper; queda documentado, y quien lo necesite anota una clase no final | [arquitectura](architecture.md#auto-invocación) |
-| Anotaciones de nulabilidad | JSpecify como dependencia real (`api`) de `core`: la única excepción a "cero dependencias". Es un jar de solo anotaciones de pocos KB, y da información de null al IDE, a Kotlin y a NullAway | [arquitectura](architecture.md#módulos) |
-| Recarga en caliente | **Ninguna.** La configuración es inmutable una vez construido el registry; para cambiarla hay que reiniciar la aplicación. Así todos los valores de configuración quedan en campos `final` en el camino caliente | [features](features.md#múltiples-configuraciones) |
-| Coordenadas | Dominio `resilience4cata.dev`: groupId de Maven `dev.resilience4cata`, paquete raíz `dev.resilience4cata` | [arquitectura](architecture.md#módulos) |
-
-## Estado de la implementación
-
-| Pieza | Estado |
-|---|---|
-| `@Retry` | **Terminado de punta a punta**: anotación, validación y generación en el procesador, runtime `RetryPolicy`, registry con valores por defecto y configuraciones con nombre, anotaciones compuestas, combinación entre interfaz y método |
-| `@CircuitBreaker` | **Terminado de punta a punta**: ventanas por cantidad y por tiempo, máquina de estados sin locks, sondeos en half-open con `maxWaitInHalfOpen`, llamadas lentas, `recordOn`/`ignoreOn`, instancias compartidas por `name`, anidado dentro de `@Retry`, y `forceOpen`/`disable`/`reset` desde `registry.circuitBreaker(id)` |
-| `@Timeout` | **Terminado de punta a punta** (async: ver *Métodos async*). Métodos sincrónicos: la llamada sigue en el thread del llamador y un único watchdog compartido la interrumpe cuando se atrasa (resolución: `timeout / 16`, entre 1 y 50 ms, nunca antes de tiempo); la interrupción siempre se limpia después. Se aplica por intento, adentro del circuit breaker |
-| `@Bulkhead` | **Terminado de punta a punta**: límite tipo semáforo con `maxConcurrent`; con `maxWait = "0"` un contador sin locks cuyos rechazos solo leen, si no un `Semaphore` no justo que estaciona virtual threads sin fijarlos; instancias compartidas por `name`; capa más interna, así un slot se ocupa solo mientras corre el método y la espera de uno cuenta para `@Timeout`. Los métodos async con `maxWait > 0` esperan sin bloquear: se encolan en orden FIFO, reciben directamente un slot liberado (la llamada arranca en un thread virtual nuevo) y se rechazan pasado `maxWait`; las llamadas sincrónicas y async comparten los slots, con una equidad aproximada entre ellas |
-| `@RateLimiter` | **Terminado de punta a punta**: `permits` por `period` con GCRA (generic cell rate algorithm) sobre un solo `long`: una ráfaga de hasta `permits` después de un rato sin llamadas, y luego un permiso cada `period / permits`; sin thread de fondo, y un rechazo solo lee. Con `maxWait`, la llamada reserva el próximo permiso y duerme hasta que toca; si la espera se interrumpe, el permiso se devuelve. Instancias compartidas por `name`, inspección con `registry.rateLimiter(id)`. Capa dentro del circuit breaker, así las llamadas que rechaza el breaker no gastan permisos |
-| `@Fallback` | **Terminado de punta a punta** (async: ver *Métodos async*), como capa más externa, así también ve los rechazos (`CallNotPermittedException`, `BulkheadFullException`, `RateLimitExceededException`, `CallTimeoutException`). Dos formas, las dos verificadas al compilar: una clase handler tipada (`FallbackHandler<T>`, con `T` asignable al tipo de retorno, constructor público sin argumentos y una instancia por método) que recibe un `FallbackContext` con la falla, la cantidad de intentos y los argumentos; o métodos hermanos con los parámetros originales más un parámetro de excepción opcional, donde gana el tipo de excepción más específico. Con el wrapper de interfaz, los métodos hermanos tienen que ser métodos `default`, abstractos o `static` de la interfaz, porque la clase generada no puede llamar a los privados. `applyOn`/`skipOn` filtran las fallas (gana `skipOn`). Con `@Retry`, el fallback corre donde el bucle de retry se rinde, así conoce los intentos sin asignar nada en el camino exitoso. Una excepción checked que lanza un handler se relanza si el método la declara; si no, se envuelve en `UndeclaredThrowableException`. Los métodos genéricos están soportados: los métodos hermanos declaran los mismos parámetros de tipo (por posición, con los mismos límites) y se llaman con argumentos de tipo explícitos; una clase handler solo sirve cuando el tipo del resultado no depende de los parámetros de tipo del método |
-| Métodos async | **Terminado** para todas las políticas: un método que devuelve `CompletionStage<T>` o `CompletableFuture<T>` usa el camino async, decidido por el tipo de retorno (sin anotación extra). Una excepción lanzada antes de que el delegado devuelva un stage, o un stage `null`, cuenta como llamada fallida. Los reintentos se programan, nunca duermen: el primer intento corre en el thread del llamador, los siguientes en threads virtuales nuevos. El timeout falla el future con `CallTimeoutException` y cancela el stage atrasado (`Future.cancel`); corre en un timer sin locks (buzones repartidos por thread, un carril por duración, cancelación con un CAS de estado) que nunca dispara antes de tiempo y como mucho unos dos ticks tarde (tick = timeout async más corto / 16, entre 1 y 50 ms), y un stage que ya terminó no usa el timer. El bulkhead ocupa su slot hasta que el stage termina. El `maxWait` del rate limiter reserva el permiso y arranca la llamada cuando toca, sin bloquear. Los fallbacks pueden devolver `T` o un stage de `T`. Un solo thread de timer daemon para la librería; todo lo que dispara corre en un thread virtual. Los stages con comodín (`CompletionStage<? extends X>`, `CompletableFuture<?>`) están soportados: las políticas, los fallbacks y los classifiers trabajan con el límite superior `X`, y los fallbacks también pueden devolver un `CompletionStage<? extends X>`. Límites: sin `? super X` ni tipos de stage propios; cancelar el future devuelto no cancela al delegado |
-| `classifier` en `@Retry` / `@CircuitBreaker` | **Hecho**, sincrónico y async: un `Classifier<T>` decide para resultados y excepciones (`SUCCESS`, `FAILURE`, `IGNORE`), verificado al compilar, una instancia por método. Reemplaza a `retryOn`/`recordOn` (combinarlos es un error de compilación); `abortOn`/`ignoreOn` siguen ganando. Un resultado `FAILURE` se reintenta y, cuando se agotan los intentos, se devuelve tal cual (sin `@Fallback`), o se lanza como `ResultRejectedException`, que pasa por `@Fallback`, con `onExhaustedResult = THROW`. Un classifier que lanza una excepción corta los reintentos con un evento `GaveUp` (`CLASSIFIER_FAILED`). Los métodos sin classifier generan el mismo código que antes ([features](features.md#classifiers-resultados-como-fallas)) |
-| API programática (`Pipeline`) | **Hecho**: un pipeline inmutable construido a partir de un `ResilienceRegistry` para código que no se puede anotar; mismas políticas, orden y semántica que el código generado, sincrónico y async, con fallback y classifiers, `run(...)` para llamadas sin resultado, fallbacks async que devuelven un stage, y `onExhaustedResult`; sin asignar memoria en el camino exitoso sincrónico ([features](features.md#api-programática)) |
-| Eventos y snapshots | **Hecho**: eventos tipados y sellados (transiciones y rechazos del breaker, reintentos, timeouts, rechazos del bulkhead y del rate limiter, fallbacks), registrados en el builder del registry, sin costo cuando nadie escucha; `registry.snapshot()` y `snapshot()` en los handles devuelven records de solo lectura ([features](features.md#eventos-e-inspección-del-estado)) |
-| Soporte de tests (`testkit`) | **Hecho**: `ManualClock` controla reintentos, breakers, rate limiters, timeouts sincrónicos y async, esperas sincrónicas y async del bulkhead, y esperas async a través de `Builder.ticker(...)`; jitter con semilla con `Builder.random(...)` ([features](features.md#tests)) |
-| Clases anotadas (estilo subclase) | **Terminado de punta a punta**, sincrónico y async: una clase no final que declara una anotación de resiliencia obtiene una `<Clase>$Resilient extends <Clase>` generada, que se crea con `Resilient.create(Tipo.class, registry, argumentosDelConstructor...)` o con `new Tipo$Resilient(registry, ...)`. Solo se sobrescriben los métodos con políticas, y cada uno termina con `super.metodo(...)`, así que la auto-invocación (`this.otro()`) se intercepta. Las anotaciones de las interfaces implementadas y de las superclases se combinan atributo por atributo: interfaz < método de la interfaz < clase < método de la clase. Las clases final, sealed, abstractas, internas y privadas, los records, los enums y los métodos final anotados a nivel de método son errores de compilación. Una clase que solo implementa una interfaz anotada no se procesa: recibe las políticas de la interfaz con `Resilient.of` ([features](features.md#clases-anotadas)) |
-| Configuración externa (módulo `config`) | **Hecho (MVP)**: archivos properties, recursos del classpath, variables de entorno (`R4C_…`) y propiedades del sistema (`r4c.…`); valores por defecto, configuraciones con nombre, `extends`, perfiles, overrides por instancia (`instances.<id>.*`, que ganan sobre los valores de las anotaciones); una configuración con nombre definida a la vez por código y externamente toma los valores externos atributo por atributo; validación estricta que informa todos los problemas a la vez con su fuente y un "¿quisiste decir…?" ([features](features.md#cargar-configuración-externa-módulo-config)), y `verifyInstances(registry)` para ids de overrides que no corresponden a ninguna instancia. Pendiente: `locked`, YAML |
-| Registro como procesador incremental de Gradle | **Hecho**: el procesador está registrado como isolating (`META-INF/gradle/incremental.annotation.processors`); cada clase generada tiene como único elemento de origen la interfaz que envuelve, así que editar un archivo no relacionado recompila solo ese archivo, y editar un bundle, un handler o una superinterfaz reprocesa solo las interfaces que lo usan |
-| Benchmarks JMH | Retry (uno y cuatro servicios), circuit breaker (ventanas por cantidad y por tiempo), timeout, bulkhead y rate limiter (1 y 4 threads), métodos async, classifiers y el `Pipeline` programático, vs Resilience4j; corridas completas base contra nueva en paralelo en AWS con `infra/bench.sh` ([benchmarks](benchmarks.md)) |
-| jcstress (módulo `stress`) | **Hecho**: 21 tests jcstress de las políticas sin lock (contador del bulkhead, ráfaga y devolución del rate limiter, transiciones y estado quiet del circuit breaker, protocolo de sellos del timeout/watchdog, eventos de transición del breaker publicados una sola vez), verificados por mutación (17 de 18 mutantes detectados; un CAS solo release en el fin de llamada del timeout queda cubierto por un test, pero no se reprodujo en esta Mac). Se corren con `./gradlew :stress:jcstress -Pjcstress="-m quick"`; `./gradlew build` solo los compila |
-| Códigos de error | **Hecho**: cada diagnóstico del procesador (`R4C-APT/ATR/CMP/ASY/CLS/FB/SUB`), error de envoltura o de pipeline en runtime (`R4C-RT`), error del registry y de configuración de políticas (`R4C-REG`: valores inválidos, configuraciones con nombre desconocidas o duplicadas, instancias compartidas en conflicto, ids de instancia desconocidos, con "¿quisiste decir…?") y problema de configuración (`R4C-CFG`) tiene un código estable y una sección en la [referencia de errores](errors.md), con un ejemplo incorrecto y su corrección; el build compila los ejemplos del procesador |
-| Publicación | Preparada para Maven Central (`r4c.publish`, `bom`, `centralBundle`); la primera versión 0.1.0 espera la verificación del namespace — ver [Publicar una versión](releasing.md) |
-| Guía de usuario | **Hecha**: [primeros pasos](getting-started.md), con cada snippet compilado y ejecutado por `examples/.../GuideTest.java`; `README.md` en la raíz para GitHub |
-| CI (GitHub Actions) | **Hecho, todavía sin correr en GitHub** (no hay remoto): `build` en JDK 21 y 25 (`./gradlew build -PtestJdk=N`), `alloc-gate` en cada PR (`./gradlew :benchmark:allocationCheck`: 35 benchmarks de éxito y de rechazo contra sus presupuestos de B/op en `benchmark/allocation-budgets.properties`), `stress` (jcstress quick) después de cada push a main y cada noche; Dependabot para el catálogo de versiones y las actions, que están fijadas a SHAs de commit |
-
-## Preguntas abiertas
-
-Ninguna abierta. Las preguntas nuevas se agregan aquí.
-
-## Documentos de investigación
-
-| # | Documento | Tema |
-|---|---|---|
-| 01 | [Panorama](research/01-landscape.md) | Resilience4j a fondo, competidores, oportunidades |
-| 02 | [Mecanismos de anotaciones](research/02-annotation-mechanisms.md) | APT vs proxies vs ByteBuddy vs agentes, con un JMH propio |
-| 03 | [Rendimiento interno](research/03-performance-internals.md) | Algoritmos y diseño sin locks por política, metodología de benchmarks |
-| 04 | [API y configuración](research/04-api-and-configuration.md) | Niveles de features, anotaciones, modelo de configuración |
-| 05 | [Arquitectura del proyecto](research/05-project-architecture.md) | Módulos, Gradle, JPMS, herramientas, docs, versionado |
-
-**Sobre la evidencia.** Cada documento de investigación marca sus afirmaciones: verificadas en código o documentación, medidas, o inferidas. El documento 04 se escribió de memoria, sin revisar las fuentes en internet. Hay que verificar sus referencias antes de apoyarse en ellas, sobre todo los nombres de anotaciones de SmallRye y el orden de ejecución de MicroProfile. Una afirmación de rendimiento sobre resilience4cata vale solo si está medida; las mediciones están en [benchmarks](benchmarks.md).
+<div class="r4c-home">
+<section class="hero" aria-labelledby="r4c-hero-title">
+  <div class="wrap">
+    <div class="hero-top">
+      <div>
+        <h1 id="r4c-hero-title">Resiliencia,<br>compilada.</h1>
+        <p class="sub">Anota una interfaz Java con retry, circuit breaker, timeout y compañía. Al compilar, un procesador de anotaciones escribe el Java plano que los aplica. Sin proxies, sin reflexión, sin framework.</p>
+        <div class="ctas">
+          <a class="btn btn-primary" href="#/es/start/quickstart">Empezar</a>
+          <a class="btn btn-quiet" href="#/es/?id=benchmarks">Ver los benchmarks</a>
+        </div>
+        <ul class="facts">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Java 21+</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Funciona sin Spring, CDI ni AspectJ</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Síncrono y <code>CompletionStage</code></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Apache 2.0</li>
+        </ul>
+      </div>
+      <div>
+        <div class="r4c-install">
+          <div class="r4c-install-head">
+            <div role="tablist" aria-label="Herramienta de build">
+              <button role="tab" id="r4c-t-g" data-tab="gradle" aria-controls="r4c-p-g" aria-selected="true">Gradle</button>
+              <button role="tab" id="r4c-t-k" data-tab="gradle (kotlin)" aria-controls="r4c-p-k" aria-selected="false" tabindex="-1">Gradle (Kotlin)</button>
+              <button role="tab" id="r4c-t-m" data-tab="maven" aria-controls="r4c-p-m" aria-selected="false" tabindex="-1">Maven</button>
+            </div>
+            <button class="r4c-copy" type="button">Copiar</button>
+          </div>
+          <div role="tabpanel" id="r4c-p-g" aria-labelledby="r4c-t-g"><pre><span class="k">dependencies</span> {
+    <span class="k">implementation</span> platform(<span class="s">'dev.resilience4cata:resilience4cata-bom:0.1.0'</span>)
+    <span class="k">annotationProcessor</span> platform(<span class="s">'dev.resilience4cata:resilience4cata-bom:0.1.0'</span>)
+    <span class="k">implementation</span> <span class="s">'dev.resilience4cata:resilience4cata-core'</span>
+    <span class="k">compileOnly</span> <span class="s">'dev.resilience4cata:resilience4cata-annotations'</span>
+    <span class="k">annotationProcessor</span> <span class="s">'dev.resilience4cata:resilience4cata-processor'</span>
+}</pre></div>
+          <div role="tabpanel" id="r4c-p-k" aria-labelledby="r4c-t-k" hidden><pre><span class="k">dependencies</span> {
+    <span class="k">val</span> r4cBom = platform(<span class="s">"dev.resilience4cata:resilience4cata-bom:0.1.0"</span>)
+    implementation(r4cBom)
+    annotationProcessor(r4cBom)
+    implementation(<span class="s">"dev.resilience4cata:resilience4cata-core"</span>)
+    compileOnly(<span class="s">"dev.resilience4cata:resilience4cata-annotations"</span>)
+    annotationProcessor(<span class="s">"dev.resilience4cata:resilience4cata-processor"</span>)
+}</pre></div>
+          <div role="tabpanel" id="r4c-p-m" aria-labelledby="r4c-t-m" hidden><pre>&lt;<span class="k">dependencies</span>&gt;
+  &lt;<span class="k">dependency</span>&gt;
+    &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
+    &lt;<span class="k">artifactId</span>&gt;resilience4cata-core&lt;/<span class="k">artifactId</span>&gt;
+    &lt;<span class="k">version</span>&gt;0.1.0&lt;/<span class="k">version</span>&gt;
+  &lt;/<span class="k">dependency</span>&gt;
+  &lt;<span class="k">dependency</span>&gt;
+    &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
+    &lt;<span class="k">artifactId</span>&gt;resilience4cata-annotations&lt;/<span class="k">artifactId</span>&gt;
+    &lt;<span class="k">version</span>&gt;0.1.0&lt;/<span class="k">version</span>&gt;
+    &lt;<span class="k">scope</span>&gt;provided&lt;/<span class="k">scope</span>&gt;
+  &lt;/<span class="k">dependency</span>&gt;
+&lt;/<span class="k">dependencies</span>&gt;
+<span></span>
+<span class="c">&lt;!-- in the maven-compiler-plugin &lt;configuration&gt; --&gt;</span>
+&lt;<span class="k">annotationProcessorPaths</span>&gt;
+  &lt;<span class="k">path</span>&gt;
+    &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
+    &lt;<span class="k">artifactId</span>&gt;resilience4cata-processor&lt;/<span class="k">artifactId</span>&gt;
+    &lt;<span class="k">version</span>&gt;0.1.0&lt;/<span class="k">version</span>&gt;
+  &lt;/<span class="k">path</span>&gt;
+&lt;/<span class="k">annotationProcessorPaths</span>&gt;</pre></div>
+        </div>
+        <p class="install-note">Versión 0.1.0 en Maven Central. El procesador va solo en el path de procesadores de anotaciones; las anotaciones solo hacen falta al compilar. <a href="#/es/start/installation">Guía de instalación</a></p>
+      </div>
+    </div>
+    <div class="r4c-compile" aria-label="Interfaz anotada y la clase que el procesador genera a partir de ella">
+      <div class="r4c-pane r4c-pane-src">
+        <div class="r4c-pane-head"><strong>Tú escribes</strong><code>PaymentClient.java</code></div>
+<pre><span class="k">public interface</span> <span class="t">PaymentClient</span> {
+<span></span>
+    <span class="hot" tabindex="0" data-layer="retry"><span class="a">@Retry</span>(maxAttempts = <span class="n">3</span>, delay = <span class="s">"200ms"</span>)</span>
+    <span class="hot" tabindex="0" data-layer="cb"><span class="a">@CircuitBreaker</span></span>
+    <span class="hot" tabindex="0" data-layer="timeout"><span class="a">@Timeout</span>(<span class="s">"2s"</span>)</span>
+    <span class="t">Receipt</span> charge(<span class="t">Order</span> order);
+}
+<span></span>
+<span class="c">// once, at startup</span>
+<span class="t">ResilienceRegistry</span> registry =
+        <span class="t">ResilienceRegistry</span>.builder().build();
+<span class="t">PaymentClient</span> client = <span class="t">Resilient</span>.of(
+        <span class="t">PaymentClient</span>.<span class="k">class</span>, <span class="k">new</span> <span class="t">HttpPaymentClient</span>(), registry);
+<span></span>
+client.charge(order); <span class="c">// retried, guarded, timed out</span></pre>
+      </div>
+      <div class="r4c-gutter" aria-hidden="true">
+        <svg viewBox="0 0 64 120" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 60h18"/><circle cx="24" cy="60" r="2.5" fill="currentColor"/><path d="M26 58 L40 46"/><circle cx="42" cy="60" r="2.5"/><path d="M45 60h15"/><path d="M54 54l6 6-6 6"/></svg>
+        <span><b>javac</b><br>+ procesador</span>
+      </div>
+      <div class="r4c-pane r4c-pane-gen">
+        <div class="r4c-pane-head"><strong>El procesador escribe</strong><code>PaymentClient$Resilient.java</code></div>
+<pre><span class="c">// Generated by the resilience4cata annotation processor. Do not edit.</span>
+<span class="k">public final class</span> <span class="t">PaymentClient$Resilient</span> <span class="k">implements</span> <span class="t">PaymentClient</span> {
+<span></span>
+    <span class="k">private final</span> <span class="t">PaymentClient</span> delegate;
+    <span class="k">private final</span> <span class="t">RetryPolicy</span> retry0;
+    <span class="k">private final</span> <span class="t">CircuitBreakerPolicy</span> circuitBreaker0;
+    <span class="k">private final</span> <span class="t">TimeoutPolicy</span> timeout0;
+    <span class="c">// … constructor: each policy resolved once from the registry</span>
+<span></span>
+<span class="blk" data-layer="retry">    <span class="a">@Override</span>
+    <span class="k">public</span> <span class="t">Receipt</span> charge(<span class="t">Order</span> p0) {
+        <span class="k">final</span> <span class="t">RetryPolicy</span> r4c$retry = <span class="k">this</span>.retry0;
+        <span class="k">final long</span> r4c$start = r4c$retry.start();
+        <span class="k">int</span> r4c$attempts = <span class="n">0</span>;
+        <span class="k">while</span> (<span class="k">true</span>) {
+            <span class="k">try</span> {
+                <span class="k">return this</span>.r4c$circuitBreaker0(p0);
+            } <span class="k">catch</span> (<span class="t">Throwable</span> r4c$e) {
+                <span class="k">final long</span> r4c$delay = r4c$retry.onFailure(++r4c$attempts, r4c$e, r4c$start);
+                <span class="k">if</span> (r4c$delay &lt; <span class="n">0</span> || !r4c$retry.pause(r4c$delay)) {
+                    <span class="k">throw</span> r4c$e;
+                }
+            }
+        }
+    }
+</span><span class="blk" data-layer="cb">    <span class="k">private</span> <span class="t">Receipt</span> r4c$circuitBreaker0(<span class="t">Order</span> p0) {
+        <span class="k">final</span> <span class="t">CircuitBreakerPolicy</span> r4c$cb = <span class="k">this</span>.circuitBreaker0;
+        <span class="k">final long</span> r4c$token = r4c$cb.acquire();
+        <span class="k">if</span> (r4c$token &lt; <span class="n">0</span>) {
+            <span class="k">throw</span> r4c$cb.rejection();
+        }
+        <span class="k">final long</span> r4c$started = r4c$cb.startTimer();
+        <span class="k">try</span> {
+            <span class="k">final</span> <span class="t">Receipt</span> r4c$result = <span class="k">this</span>.r4c$timeout0(p0);
+            r4c$cb.onSuccess(r4c$token, r4c$started);
+            <span class="k">return</span> r4c$result;
+        } <span class="k">catch</span> (<span class="t">Throwable</span> r4c$e) {
+            r4c$cb.onFailure(r4c$token, r4c$started, r4c$e);
+            <span class="k">throw</span> r4c$e;
+        }
+    }
+</span><span class="blk" data-layer="timeout">    <span class="k">private</span> <span class="t">Receipt</span> r4c$timeout0(<span class="t">Order</span> p0) {
+        <span class="k">final</span> <span class="t">TimeoutPolicy</span> r4c$timeout = <span class="k">this</span>.timeout0;
+        <span class="k">final</span> <span class="t">TimeoutPolicy.Scope</span> r4c$scope = r4c$timeout.enter();
+        <span class="k">final</span> <span class="t">Receipt</span> r4c$result;
+        <span class="k">try</span> {
+            r4c$result = <span class="k">this</span>.delegate.charge(p0);
+        } <span class="k">catch</span> (<span class="t">Throwable</span> r4c$e) {
+            r4c$timeout.failed(r4c$scope, r4c$e);
+            <span class="k">throw</span> r4c$e;
+        }
+        r4c$timeout.succeeded(r4c$scope);
+        <span class="k">return</span> r4c$result;
+    }
+</span>}</pre>
+      </div>
+      <div class="r4c-chain" role="group" aria-label="Resaltar una capa">
+        <span>Cada llamada pasa por</span>
+        <button type="button" data-layer="retry" aria-pressed="false">Retry</button><span class="wire"></span>
+        <button type="button" data-layer="cb" aria-pressed="false">CircuitBreaker</button><span class="wire"></span>
+        <button type="button" data-layer="timeout" aria-pressed="false">Timeout</button><span class="wire"></span>
+        <span><code>HttpPaymentClient.charge</code></span>
+        <span class="note">Abreviado: el archivo real usa nombres completamente calificados.</span>
+      </div>
+    </div>
+  </div>
+</section>
+<section aria-labelledby="why">
+  <div class="wrap">
+    <h2 class="h2" id="why">La protección es código que puedes leer</h2>
+    <p class="lead">Resilience4j y MicroProfile envuelven tus llamadas en decoradores o proxies en tiempo de ejecución. resilience4cata hace ese trabajo en el compilador, así que lo que se ejecuta es Java común y corriente.</p>
+    <div class="why-grid">
+      <div class="why">
+        <h3>Entra con el debugger</h3>
+        <p>El procesador escribe <code>PaymentClient$Resilient</code> junto a tus propias clases. Cada política son unas pocas líneas rectas en un método que puedes abrir, donde puedes poner un breakpoint y que lees en un stack trace.</p>
+<pre>at HttpPaymentClient.charge
+at PaymentClient$Resilient.r4c$timeout0
+at PaymentClient$Resilient.r4c$circuitBreaker0
+at PaymentClient$Resilient.charge
+at CheckoutService.pay</pre>
+      </div>
+      <div class="why">
+        <h3>Nada se asigna cuando las llamadas salen bien</h3>
+        <p>Las llamadas síncronas que salen bien o se rechazan asignan cero bytes. Un gate de allocations ejecuta los benchmarks en cada pull request y hace fallar el build si eso cambia.</p>
+        <div class="gate" role="img" aria-label="Presupuestos de allocations: retry exitoso, circuit breaker exitoso y bulkhead rechazado son 0 bytes por operación">
+          <div><span>Retry, success</span><span class="ok">0 B/op</span></div>
+          <div><span>CircuitBreaker, success</span><span class="ok">0 B/op</span></div>
+          <div><span>Bulkhead, rejected</span><span class="ok">0 B/op</span></div>
+        </div>
+      </div>
+      <div class="why">
+        <h3>Los errores hacen fallar el build</h3>
+        <p>Una duración mal escrita, un fallback con la firma equivocada o una anotación en un método final es un error de compilación con un código estable y una solución, no una sorpresa en producción.</p>
+<pre><span class="err">error:</span> [R4C-ATR-001] @Retry.delay = "2 seconds"
+  is not a valid duration: … Use a number
+  followed by ns, us, ms, s, m, h or d …
+    @Retry(delay = "2 seconds")
+    ^</pre>
+        <p style="margin-top:12px"><a href="#/es/errors?id=r4c-atr-001">Cada código de error, con su solución</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+<section id="benchmarks" aria-labelledby="bench-h">
+  <div class="wrap bench">
+    <div class="bench-meta">
+      <h2 class="h2" id="bench-h">Medido, siempre</h2>
+      <p class="lead" style="font-size:17px">Cada número de este sitio viene de una corrida de JMH en el repositorio, contra Resilience4j con una configuración equivalente. Donde no ganamos, la tabla lo dice.</p>
+      <dl>
+        <dt>Máquina</dt><dd>AWS c7g.xlarge, 4 núcleos Graviton3</dd>
+        <dt>JMH</dt><dd>3 forks × 5 × 1 s, <code>-prof gc</code></dd>
+        <dt>Comparado con</dt><dd>Resilience4j 2.4.0</dd>
+        <dt>Fecha</dt><dd>2026-10-24</dd>
+      </dl>
+      <a href="#/es/benchmarks?id=cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3">Método, todos los resultados y notas de equidad</a>
+    </div>
+    <figure class="r4c-chart">
+      <figcaption class="legend">
+        <span><i style="background:var(--series-r4c)"></i>resilience4cata 0.1.0</span>
+        <span><i style="background:var(--series-r4j)"></i>Resilience4j 2.4.0</span>
+      </figcaption>
+      <div class="row"><div class="row-label">Retry, el primer intento sale bien<small>1 thread</small></div>
+        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 1.2 ns por llamada, 0 B asignados"><i style="width:1.98%"></i><b>1.2 ns</b></span>
+          <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 22.9 ns por llamada, 0 B asignados"><i style="width:34.0%"></i><b>22.9 ns</b></span></div></div>
+      <div class="row"><div class="row-label">Circuit breaker, todas las llamadas salen bien<small>4 threads, un breaker compartido</small></div>
+        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 1.9 ns por llamada, 0 B asignados"><i style="width:6.97%"></i><b>1.9 ns</b></span>
+          <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 832 ns por llamada, 2 B asignados"><i style="width:73.0%"></i><b>832 ns</b></span></div></div>
+      <div class="row"><div class="row-label">Timeout síncrono, la llamada termina a tiempo<small>1 thread</small></div>
+        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 22.2 ns por llamada, 0 B asignados"><i style="width:33.7%"></i><b>22.2 ns</b></span>
+          <span class="bar r4j" tabindex="0" data-tip="Resilience4j TimeLimiter sobre un executor: 8842 ns por llamada, 176 B asignados"><i style="width:98.7%"></i><b>8 842 ns</b></span></div></div>
+      <div class="row"><div class="row-label">Bulkhead con lugares libres<small>1 thread · un empate</small></div>
+        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 20.5 ns por llamada, 0 B asignados"><i style="width:32.8%"></i><b>20.5 ns</b></span>
+          <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 20.4 ns por llamada, 0 B asignados"><i style="width:32.7%"></i><b>20.4 ns</b></span></div></div>
+      <div class="axis"><span></span><div><span>1 ns</span><span>10</span><span>100</span><span>1 000</span><span>10 000</span></div></div>
+      <p class="axis-note">Tiempo por llamada, escala logarítmica. Menos es mejor.</p>
+      <details><summary>Ver como tabla</summary>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Escenario</th><th class="num">Threads</th><th class="num">resilience4cata</th><th class="num">Resilience4j</th></tr></thead>
+          <tbody>
+            <tr><td>Retry, el primer intento sale bien</td><td class="num">1</td><td class="num">1.2 ns, 0 B</td><td class="num">22.9 ns, 0 B</td></tr>
+            <tr><td>Circuit breaker, todas las llamadas salen bien</td><td class="num">4</td><td class="num">1.9 ns, 0 B</td><td class="num">832 ns, 2 B</td></tr>
+            <tr><td>Timeout síncrono</td><td class="num">1</td><td class="num">22.2 ns, 0 B</td><td class="num">8842 ns, 176 B</td></tr>
+            <tr><td>Bulkhead con lugares libres</td><td class="num">1</td><td class="num">20.5 ns, 0 B</td><td class="num">20.4 ns, 0 B</td></tr>
+          </tbody></table></div>
+      </details>
+      <div class="r4c-chart-tip" hidden></div>
+    </figure>
+  </div>
+</section>
+<section id="policies" aria-labelledby="pol-h">
+  <div class="wrap">
+    <h2 class="h2" id="pol-h">Seis políticas, una anotación cada una</h2>
+    <p class="lead">Ponlas en un método o en toda la interfaz. Combínalas como quieras: el procesador siempre las anida en el mismo orden.</p>
+    <div class="panel">
+      <a class="breaker" href="#/es/policies/retry"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4.5V8.5H16"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></span><span><h3>@Retry</h3><p>Vuelve a intentar con backoff exponencial y jitter, dentro de un presupuesto de tiempo opcional.</p><span class="attrs">maxAttempts · delay · backoff · maxDuration</span></span></a>
+      <a class="breaker" href="#/es/policies/circuit-breaker"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4.5"/><circle cx="8" cy="16" r="1.6"/><path d="M9.2 15 L17 7.5"/><circle cx="16.5" cy="16" r="1.6"/><path d="M18 16h4"/></svg></span><span><h3>@CircuitBreaker</h3><p>Deja de llamar a una dependencia que sigue fallando y luego deja pasar algunas llamadas de prueba.</p><span class="attrs">failureRateThreshold · waitInOpen · halfOpenCalls</span></span></a>
+      <a class="breaker" href="#/es/policies/rate-limiter"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16l-5.5 6h-5z"/><path d="M12 10v1.5"/><circle cx="12" cy="15" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="20" r="1.3" fill="currentColor" stroke="none"/></svg></span><span><h3>@RateLimiter</h3><p>Admite un número fijo de llamadas por período y rechaza o hace esperar al resto.</p><span class="attrs">permits · period · maxWait</span></span></a>
+      <a class="breaker" href="#/es/policies/timeout"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V9.5"/><path d="M10 3h4"/><path d="M12 3v3.5"/><path d="M18.2 6.8l1.4-1.4"/></svg></span><span><h3>@Timeout</h3><p>Interrumpe una llamada que se pasa de su presupuesto, en el propio thread de quien llama.</p><span class="attrs">value</span></span></a>
+      <a class="breaker" href="#/es/policies/bulkhead"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18l-1.8 8.4a2 2 0 0 1-2 1.6H6.8a2 2 0 0 1-2-1.6z"/><path d="M9 8v10"/><path d="M15 8v10"/><path d="M12 8V4.5"/></svg></span><span><h3>@Bulkhead</h3><p>Limita cuántas llamadas corren a la vez, para que una dependencia lenta no se quede con todos los threads.</p><span class="attrs">maxConcurrent · maxWait</span></span></a>
+      <a class="breaker" href="#/es/policies/fallback"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h10"/><path d="M15.5 5.5l3 3"/><path d="M18.5 5.5l-3 3"/><path d="M7.5 7c0 6 3 10 8.5 10H21"/><path d="M18 14l3 3-3 3"/></svg></span><span><h3>@Fallback</h3><p>Devuelve una respuesta útil cuando todo lo demás falló, desde un método hermano o una clase handler.</p><span class="attrs">value · method</span></span></a>
+    </div>
+    <p class="order">Orden, de afuera hacia adentro: Fallback, Retry, CircuitBreaker, RateLimiter, Timeout, Bulkhead y luego tu método. <a href="#/es/policies/">Cómo se combinan</a></p>
+  </div>
+</section>
+<section aria-labelledby="qs-h">
+  <div class="wrap">
+    <h2 class="h2" id="qs-h">De la dependencia a la primera llamada protegida</h2>
+    <ol class="steps">
+      <li><h3>Agrega el procesador</h3><p>Core en tiempo de ejecución, las anotaciones solo al compilar y el procesador en el path de procesadores de anotaciones.</p>
+<pre><span class="k">annotationProcessor</span> <span class="s">'dev.resilience4cata:</span>
+<span class="s">    resilience4cata-processor'</span></pre></li>
+      <li><h3>Anota una interfaz</h3><p>Las duraciones son strings como <code>"200ms"</code>, verificadas al compilar.</p>
+<pre><span class="a">@Retry</span>(maxAttempts = <span class="n">3</span>)
+<span class="a">@Timeout</span>(<span class="s">"2s"</span>)
+<span class="t">Receipt</span> charge(<span class="t">Order</span> order);</pre></li>
+      <li><h3>Envuelve tu implementación</h3><p>Un registry por aplicación comparte el estado de breakers y limiters por nombre.</p>
+<pre><span class="t">Resilient</span>.of(<span class="t">PaymentClient</span>.<span class="k">class</span>,
+    <span class="k">new</span> <span class="t">HttpPaymentClient</span>(), registry);</pre></li>
+    </ol>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#/es/start/quickstart">Sigue el inicio rápido</a>
+      <a class="btn btn-quiet" href="#/es/start/how-it-works">Cómo funciona</a>
+    </div>
+  </div>
+</section>
+<div class="foot-wrap">
+  <div class="wrap foot">
+    <div>
+      <a class="r4c-brand" href="#/es/"><svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#F2B500"/><g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round"><path d="M4 27h7"/><path d="M13.6 25.4 L27 13"/><path d="M31 27h5"/></g><circle cx="13" cy="27" r="2.6" fill="#1A1F24"/><circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/></svg><span>resilience<b>4cata</b></span></a>
+      <p>Resiliencia basada en anotaciones para Java 21+ puro. Licencia Apache 2.0.</p>
+      <span class="coord">dev.resilience4cata:resilience4cata-bom:0.1.0</span>
+    </div>
+    <div><h4>Aprende</h4><ul><li><a href="#/es/start/installation">Instalación</a></li><li><a href="#/es/start/quickstart">Inicio rápido</a></li><li><a href="#/es/start/how-it-works">Cómo funciona</a></li><li><a href="#/es/guides/testing">Tests con ManualClock</a></li></ul></div>
+    <div><h4>Referencia</h4><ul><li><a href="#/es/errors">Códigos de error</a></li><li><a href="#/es/reference/configuration">Claves de configuración</a></li><li><a href="#/es/performance">Rendimiento</a></li><li><a href="https://javadoc.io/doc/dev.resilience4cata">Javadoc</a></li></ul></div>
+    <div><h4>Proyecto</h4><ul><li><a href="https://github.com/fabiangftech/resilience4cata">GitHub</a></li><li><a href="https://central.sonatype.com/namespace/dev.resilience4cata">Maven Central</a></li><li><a href="https://github.com/fabiangftech/resilience4cata/releases">Versiones</a></li><li><a href="https://www.apache.org/licenses/LICENSE-2.0">Licencia Apache 2.0</a></li><li><a href="#/en/" lang="en" hreflang="en">Documentation in English</a></li></ul></div>
+  </div>
+</div>
+</div>

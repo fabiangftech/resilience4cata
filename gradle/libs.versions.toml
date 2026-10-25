@@ -5,6 +5,8 @@ jspecify = "1.0.0"
 jmh = "1.37"
 jcstress = "0.16"
 resilience4j = "2.4.0"
+# Test-only, in examples: the user-side metrics recipe of docs/en/guides/observability.md.
+micrometer = "1.17.1"
 
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
@@ -20,3 +22,4 @@ resilience4j-circuitbreaker = { module = "io.github.resilience4j:resilience4j-ci
 resilience4j-timelimiter = { module = "io.github.resilience4j:resilience4j-timelimiter", version.ref = "resilience4j" }
 resilience4j-bulkhead = { module = "io.github.resilience4j:resilience4j-bulkhead", version.ref = "resilience4j" }
 resilience4j-ratelimiter = { module = "io.github.resilience4j:resilience4j-ratelimiter", version.ref = "resilience4j" }
+micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }

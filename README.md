@@ -1,64 +1,51 @@
 # resilience4cata
 
-Annotation-driven resilience for **plain Java 21+**: retry, circuit breaker, rate limiter, timeout, bulkhead and fallback, declared with annotations that work **without Spring, CDI, AspectJ or agents**. A compile-time annotation processor turns them into plain, straight-line Java that calls an allocation-free policy protocol, so the overhead stays in the low nanoseconds and the success path allocates nothing. Sync and async (`CompletionStage`), interfaces and annotated classes, composed annotations, named configurations with external overrides, typed events and snapshots, a programmatic `Pipeline` for code you cannot annotate, and a `testkit` with a manual clock.
+Annotation-driven resilience for **plain Java 21+**: retry, circuit breaker, rate limiter, timeout, bulkhead and fallback, declared with annotations that work **without Spring, CDI, AspectJ or agents**. A compile-time annotation processor turns them into plain, straight-line Java that calls an allocation-free policy protocol, so the overhead stays in the low nanoseconds and the success path allocates nothing.
 
-> **Status: 0.1.0, not yet published.** The MVP is complete and tested; the first release to Maven Central is being prepared. Until then, build from source (`./gradlew build`, Java 21 toolchain).
+Sync and async (`CompletionStage`), interfaces and annotated classes, composed annotations, named configurations with external overrides, typed events and snapshots, a programmatic `Pipeline` for code you cannot annotate, and a `testkit` with a manual clock.
 
-## Performance
+**Documentation: [resilience4cata.dev](https://resilience4cata.dev)** (English and Spanish). Status: 0.1.0, the first release, on Maven Central; names can still change before 1.0.
 
-Measured with JMH against Resilience4j 2.4.0 under equivalent configuration, on AWS `c7g.xlarge` (4 Graviton3 cores, JDK 21), time per call:
+## Install
 
-| Scenario | Threads | resilience4cata | Resilience4j |
-|---|---:|---:|---:|
-| Retry, first attempt succeeds | 1 | **1.2 ns**, 0 B | 22.9 ns, 0 B |
-| Circuit breaker, every call succeeds | 4 | **1.9 ns**, 0 B | 832 ns, 2 B |
-| Sync timeout | 1 | **22.2 ns**, 0 B | 8842 ns, 176 B |
-| Bulkhead with free slots | 1 | 20.5 ns, 0 B | 20.4 ns, 0 B |
+Java 21 or newer. The processor is mandatory and goes only on the annotation processor path; the annotations are compile-only.
 
-Not every case is a win (the free bulkhead is a tie), and most real calls take milliseconds, so the point is near-zero overhead that keeps scaling with threads. Methods, all results (also on an Apple M1), regressions and fairness adjustments are in [docs/en/benchmarks.md](docs/en/benchmarks.md). An allocation gate (`./gradlew :benchmark:allocationCheck`, run in CI on every pull request) fails the build if a sync success or rejection path starts allocating.
-
-## Installation
-
-Coordinates: `dev.resilience4cata`, version `0.1.0`. The processor is mandatory and only goes on the annotation processor path; the annotations are compile-only.
-
-Gradle (Groovy DSL):
+Gradle:
 
 ```groovy
 dependencies {
     implementation platform('dev.resilience4cata:resilience4cata-bom:0.1.0')
     annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.1.0')
+
     implementation 'dev.resilience4cata:resilience4cata-core'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
 }
 ```
 
-Gradle (Kotlin DSL):
-
-```kotlin
-dependencies {
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:0.1.0")
-    implementation(r4cBom)
-    annotationProcessor(r4cBom)
-    implementation("dev.resilience4cata:resilience4cata-core")
-    compileOnly("dev.resilience4cata:resilience4cata-annotations")
-    annotationProcessor("dev.resilience4cata:resilience4cata-processor")
-}
-```
-
 Maven:
 
 ```xml
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>dev.resilience4cata</groupId>
+      <artifactId>resilience4cata-bom</artifactId>
+      <version>0.1.0</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
 <dependencies>
   <dependency>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-core</artifactId>
-    <version>0.1.0</version>
   </dependency>
   <dependency>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-annotations</artifactId>
-    <version>0.1.0</version>
     <scope>provided</scope>
   </dependency>
 </dependencies>
@@ -73,7 +60,7 @@ Maven:
 </annotationProcessorPaths>
 ```
 
-Optional modules: `resilience4cata-config` (properties files, environment variables, system properties) and `resilience4cata-testkit` (manual clock). JPMS, the BOM with Maven and troubleshooting are in [getting started](docs/en/getting-started.md).
+The Gradle Kotlin DSL, the optional `config` and `testkit` modules, IDEs, JPMS and other annotation processors (Lombok, MapStruct) are covered in [installation](docs/en/start/installation.md).
 
 ## Example
 
@@ -90,25 +77,44 @@ public interface PriceClient {
         return BigDecimal.ZERO;
     }
 }
+```
 
+```java
 ResilienceRegistry registry = ResilienceRegistry.builder().build();
 PriceClient prices = Resilient.of(PriceClient.class, new HttpPriceClient(), registry);
 
 BigDecimal price = prices.price("sku-1");   // retried, timed out after 2 s, guarded by the "prices" breaker
 ```
 
-The processor generates `PriceClient$Resilient` at compile time; a wrong attribute or fallback signature is a compile error. Non-final classes can be annotated too (`Resilient.create(...)`), and then calls the object makes to itself are protected as well.
+The processor generates `PriceClient$Resilient` at compile time; a wrong attribute or fallback signature is a compile error. Non-final classes can be annotated too (`Resilient.create(...)`), and then calls the object makes to itself are protected as well. The [quickstart](docs/en/start/quickstart.md) runs this example end to end in five minutes.
+
+## Performance
+
+Measured with JMH against Resilience4j 2.4.0 under equivalent configuration, on AWS `c7g.xlarge` (4 Graviton3 cores, Amazon Corretto 21), time and allocation per call:
+
+| Scenario | Threads | resilience4cata | Resilience4j |
+|---|---:|---:|---:|
+| Retry, first attempt succeeds | 1 | **1.2 ns**, 0 B | 22.9 ns, 0 B |
+| Circuit breaker, every call succeeds | 4 | **1.9 ns**, 0 B | 832 ns, 2 B |
+| Sync timeout | 1 | **22.2 ns**, 0 B | 8842 ns, 176 B |
+| Bulkhead with free slots | 1 | 20.5 ns, 0 B | 20.4 ns, 0 B |
+
+Not every case is a win (the free bulkhead is a tie), and most real calls take milliseconds, so the point is near-zero overhead that keeps scaling with threads. The sync timeout measured 23.7 ns in a later run, a difference still under investigation. Methods, every result (also on an Apple M1), regressions and fairness adjustments are in [benchmarks](docs/en/benchmarks.md). An allocation gate (`./gradlew :benchmark:allocationCheck`, run in CI on every pull request) fails the build if a sync success or rejection path starts allocating.
 
 ## Documentation
 
-The docs are plain Markdown in [`docs/`](docs/), served as a [Docsify](https://docsify.js.org) site (`python3 -m http.server -d docs 3000`, then open http://localhost:3000):
+The site at [resilience4cata.dev](https://resilience4cata.dev) is the Markdown in [`docs/`](docs/) (a [Docsify](https://docsify.js.org) site; preview it with `python3 -m http.server -d docs 3000`). Good places to start:
 
-- [Getting started](docs/en/getting-started.md): dependencies, first interface, annotated classes, `Pipeline`, configuration, events, testing
-- [Features](docs/en/features.md): every annotation, attribute and rule
-- [Architecture](docs/en/architecture.md) and [decisions](docs/en/README.md)
-- [Benchmarks](docs/en/benchmarks.md) and the [error reference](docs/en/errors.md)
+- [Installation](docs/en/start/installation.md), [quickstart](docs/en/start/quickstart.md) and [how it works](docs/en/start/how-it-works.md)
+- [Policies](docs/en/policies/README.md): every annotation, attribute and default
+- [Configuration](docs/en/guides/configuration.md): properties files, environment variables, system properties
+- [Error reference](docs/en/errors.md): every `R4C-…` code with a wrong example and the fix
 
-The documentation is bilingual. English is the source of truth; the Spanish version has the same pages: [documentación en español](docs/es/README.md) ([primeros pasos](docs/es/getting-started.md)).
+The documentation is bilingual. English is the source of truth; the Spanish version has the same pages: [documentación en español](https://resilience4cata.dev/#/es/) ([inicio rápido](docs/es/start/quickstart.md)).
+
+## Building from source
+
+`./gradlew build` compiles, tests and builds the Javadoc of every module (the build runs on JDK 17 or newer and compiles with a Java 21 toolchain). `./gradlew publishToMavenLocal` installs the artifacts in your local Maven repository.
 
 ## License
 

@@ -1,6 +1,6 @@
 # 02 · Annotation mechanisms: turning annotations into behavior without a framework
 
-> **Historical.** This research predates the implementation and is kept as written; for what 0.1.0 actually does, see [features](../features.md), [architecture](../architecture.md) and [benchmarks](../benchmarks.md).
+> **Historical.** This research predates the implementation and is kept as written; for what 0.1.0 actually does, see [features](../policies/README.md), [architecture](../architecture.md) and [benchmarks](../benchmarks.md).
 
 > **Phase 1, research only.** No production code. This document compares the ways a standalone (no Spring, no Quarkus, no CDI) Java 21+ library can turn `@CircuitBreaker`, `@Retry` and similar annotations into running behavior. It ends with a ranked recommendation and a sketch of the user-facing API.
 >

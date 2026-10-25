@@ -8,6 +8,13 @@ dependencies {
     testImplementation project(':core')
     testImplementation project(':testkit')
     testImplementation project(':config')
+    // Only for the Micrometer recipe in docs/en/guides/observability.md; resilience4cata has no Micrometer module.
+    testImplementation libs.micrometer.core
     testCompileOnly project(':annotations')
     testAnnotationProcessor project(':processor')
+}
+
+// DocsTest reads the documentation site and checks its snippets against the examples.
+tasks.named('test') {
+    inputs.dir('../docs').withPropertyName('docs').withPathSensitivity(PathSensitivity.RELATIVE)
 }

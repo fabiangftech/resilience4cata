@@ -821,8 +821,8 @@ public final class ResilienceRegistry {
          * {@code resilience4cata-testkit} module's {@code ManualClock} makes retries with backoff,
          * breaker waits, rate limits and timeouts follow a clock the test moves by hand.
          *
-         * <p>Not supported: the synchronous wait of a bulkhead with {@code maxWait > 0}, which still
-         * waits in real time.
+         * <p>A synchronous bulkhead wait ({@code maxWait > 0}) also ends on the ticker: the waiting caller
+         * gets a slot as soon as one is released, and is rejected once the ticker passes {@code maxWait}.
          *
          * @param ticker the time source
          * @return this builder

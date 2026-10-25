@@ -24,6 +24,11 @@ public interface FallbackContext {
      */
     <A> @org.jspecify.annotations.Nullable A argument(int index, Class<A> type);
 
-    /** Id of the policy instance, for example {@code com.acme.PaymentClient#charge(Order)}. */
+    /**
+     * Id of the policy instance: the derived {@code <type>#<method>(<parameter types>)}, with fully
+     * qualified, erased parameter types, for example
+     * {@code com.acme.PaymentClient#charge(com.acme.Order)} or, for a nested interface,
+     * {@code com.acme.Clients.Payments#charge(java.lang.String,int)}; for a {@link Pipeline}, the pipeline's id.
+     */
     String instanceId();
 }

@@ -127,7 +127,7 @@ Decision: calls from one method to another inside the same object **are intercep
 | Subclass (annotated non-final class, `Resilient.create(InventoryService.class, registry)`) | **Intercepted** | The generated subclass overrides `other()`, so the virtual call goes through it |
 | Wrapper (annotated interface, `Resilient.of(PaymentClient.class, impl, registry)`) | Not intercepted | The user's implementation calls itself directly; the wrapper never sees it |
 
-The difference is documented in the [getting-started guide](getting-started.md#which-style-to-use). Users who need self-invocation in the wrapper style annotate the implementation class instead. A method that calls itself recursively goes through its policies on every call, which is also documented.
+The difference is documented in the [getting-started guide](start/how-it-works.md). Users who need self-invocation in the wrapper style annotate the implementation class instead. A method that calls itself recursively goes through its policies on every call, which is also documented.
 
 ## Policy internals
 
@@ -189,7 +189,7 @@ Rules, enforced by the module descriptors (`module-info.java`) and the Gradle de
 - The split is by dependency boundary, never by pattern. Resilience4j's one-artifact-per-pattern split is a common complaint.
 - There is no module named `test`: it would clash with Gradle's `test` task, so the module is `testkit`.
 
-What a user declares (details, Maven and JPMS in [getting started](getting-started.md#dependencies)):
+What a user declares (details, Maven and JPMS in [getting started](start/installation.md)):
 
 ```groovy
 dependencies {

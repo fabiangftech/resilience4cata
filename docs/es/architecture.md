@@ -127,7 +127,7 @@ Decisión: las llamadas de un método a otro dentro del mismo objeto **se interc
 | Subclase (clase no final anotada, `Resilient.create(InventoryService.class, registry)`) | **Se intercepta** | La subclase generada sobrescribe `otro()`, así que la llamada virtual pasa por ella |
 | Wrapper (interfaz anotada, `Resilient.of(PaymentClient.class, impl, registry)`) | No se intercepta | La implementación del usuario se llama a sí misma directamente; el wrapper nunca lo ve |
 
-La diferencia queda documentada en la [guía de primeros pasos](getting-started.md#qué-estilo-usar). Quien necesite auto-invocación con el estilo wrapper anota la clase de implementación. Un método que se llama a sí mismo de forma recursiva pasa por sus políticas en cada llamada, y eso también queda documentado.
+La diferencia queda documentada en la [guía de primeros pasos](start/how-it-works.md). Quien necesite auto-invocación con el estilo wrapper anota la clase de implementación. Un método que se llama a sí mismo de forma recursiva pasa por sus políticas en cada llamada, y eso también queda documentado.
 
 ## Funcionamiento interno de las políticas
 
@@ -189,7 +189,7 @@ Reglas, que hacen cumplir los descriptores de módulo (`module-info.java`) y las
 - La división es por dependencias, nunca por patrón. La división de Resilience4j en un artefacto por patrón es una queja común.
 - No hay un módulo llamado `test`: chocaría con la tarea `test` de Gradle, así que el módulo se llama `testkit`.
 
-Lo que declara un usuario (detalles, Maven y JPMS en [primeros pasos](getting-started.md#dependencias)):
+Lo que declara un usuario (detalles, Maven y JPMS en [primeros pasos](start/installation.md)):
 
 ```groovy
 dependencies {

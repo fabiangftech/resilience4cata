@@ -61,6 +61,7 @@ Keep secrets in `~/.gradle/gradle.properties` or the environment, never in the r
 3. Upload, if CI did not: `./gradlew centralUpload -x centralBundle`, or in the portal **Publish Component**, choose `build/central-bundle.zip`.
 4. In the portal, open **Deployments**, wait for *Validated*, review the files, then press **Publish** (or **Drop** to discard it). Artifacts reach Maven Central within about 30 minutes.
 5. Bump to the next development version: `version=0.2.0-SNAPSHOT`, commit.
+6. Once the release is visible on Maven Central, update the version written in the docs and the root `README.md` (build snippets on the site, landing pages, changelog): `grep -rn "0\.1\.0" README.md docs/en docs/es`.
 
 To check a bundle without releasing anything, build it with a throwaway key and a release version:
 

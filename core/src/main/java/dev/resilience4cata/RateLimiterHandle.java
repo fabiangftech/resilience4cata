@@ -3,7 +3,10 @@ package dev.resilience4cata;
 /** Inspects one rate limiter. Obtained from {@link ResilienceRegistry#rateLimiter(String)}. */
 public interface RateLimiterHandle {
 
-    /** The rate limiter's id: its {@code name}, or the derived {@code <interface>#<method>(<parameters>)}. */
+    /**
+     * The rate limiter's id: its {@code name}, or the derived
+     * {@code <type>#<method>(<parameter types>)}: the qualified name of the annotated interface or class (nested types joined by {@code .}), then the method name and its erased parameter types, fully qualified and separated by commas without spaces, for example {@code com.acme.PaymentClient#charge(java.lang.String,int)}.
+     */
     String id();
 
     /** The configuration the rate limiter was created from. */
