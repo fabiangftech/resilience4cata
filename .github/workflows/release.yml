@@ -19,6 +19,8 @@ jobs:
   bundle:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # The signing and Central Portal secrets live in this environment, not at repository level.
+    environment: production
     env:
       ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
       ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}

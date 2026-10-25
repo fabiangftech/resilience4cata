@@ -49,7 +49,7 @@ Keep secrets in `~/.gradle/gradle.properties` or the environment, never in the r
    gpg --armor --export-secret-keys <key id>     # value of signingInMemoryKey
    ```
 
-5. For the GitHub workflow, add the repository secrets `SIGNING_KEY`, `SIGNING_KEY_PASSWORD`, and, to upload from CI, `CENTRAL_PORTAL_USERNAME` and `CENTRAL_PORTAL_PASSWORD`.
+5. For the GitHub workflow, create the environment `production` (Settings → Environments; the release job declares it) and add to it the secrets `SIGNING_KEY`, `SIGNING_KEY_PASSWORD`, and, to upload from CI, `CENTRAL_PORTAL_USERNAME` and `CENTRAL_PORTAL_PASSWORD`. Restrict the environment to `v*` tags so only a release tag can read them.
 6. Set `r4c.scmRepository` (and the developer properties) in `gradle.properties` to the real GitHub repository.
 
 ## Release steps
