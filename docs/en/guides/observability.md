@@ -2,13 +2,13 @@
 
 See what the policies do through events, read their state through snapshots and handles, and build metrics, logs and health checks on top of both.
 
-resilience4cata 0.1.0 gives you two building blocks:
+resilience4cata gives you two building blocks:
 
 1. **Events**: a record for each thing a policy does other than letting a call through (a retry, a breaker transition, a rejection, a timeout, a fallback), delivered to listeners you register on the registry builder.
 2. **Snapshots and handles**: the current state of each instance, read when you ask for it.
 
 > [!NOTE]
-> There is no Micrometer, OpenTelemetry or logging module in 0.1.0. The [Micrometer recipe](#micrometer) below is code you put in your application; it is tested in this repository against Micrometer 1.17.1, but it is not a library artifact.
+> There is no Micrometer, OpenTelemetry or logging module yet. The [Micrometer recipe](#micrometer) below is code you put in your application; it is tested in this repository against Micrometer 1.17.1, but it is not a library artifact.
 
 ## Events :id=events
 

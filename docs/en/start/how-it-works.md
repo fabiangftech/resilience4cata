@@ -160,4 +160,4 @@ flowchart LR
 - **The timeout applies to each attempt**; `@Retry(maxDuration = …)` bounds the whole operation.
 - **The bulkhead slot is held only while the method runs**, not during the retry's backoff.
 
-The order is not configurable in 0.1.0. The [policies overview](../policies/README.md) explains how the policies interact.
+The order is not configurable yet. The [policies overview](../policies/README.md) explains how the policies interact.

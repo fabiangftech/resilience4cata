@@ -1,6 +1,6 @@
 # 03 — Internos de rendimiento: algoritmos y concurrencia por política
 
-> **Histórico.** Esta investigación es anterior a la implementación y se conserva tal como se escribió; para lo que hace realmente 0.1.0, ver [features](../policies/README.md), [arquitectura](../architecture.md) y [benchmarks](../benchmarks.md).
+> **Histórico.** Esta investigación es anterior a la implementación y se conserva tal como se escribió; para lo que hace hoy la librería, ver [features](../policies/README.md), [arquitectura](../architecture.md) y [benchmarks](../benchmarks.md).
 
 > Investigación de la fase 1. Sin código de producción. Los fragmentos cortos son solo ilustrativos. Última actualización: 2026-10-23.
 > Alcance: qué algoritmo usar para cada política de resiliencia y cómo construirlo en Java moderno (21+) para que la ruta caliente (*hot path*) sea barata, no asigne memoria y escale bajo contención. Incluye cómo lo hace hoy Resilience4j y qué cuesta, además de una metodología de benchmarking.

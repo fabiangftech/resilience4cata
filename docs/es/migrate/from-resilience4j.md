@@ -4,7 +4,7 @@ Cómo se corresponden los registries, configs, decoradores y anotaciones de Spri
 
 ## ¿Deberías migrar? :id=when
 
-resilience4cata cubre seis políticas (retry, circuit breaker, rate limiter, timeout, bulkhead, fallback) para Java 21+ puro, con código generado en tiempo de compilación. **Quédate en Resilience4j** si necesitas algo de esto, que resilience4cata 0.1.0 no tiene:
+resilience4cata cubre seis políticas (retry, circuit breaker, rate limiter, timeout, bulkhead, fallback) para Java 21+ puro, con código generado en tiempo de compilación. **Quédate en Resilience4j** si necesitas algo de esto, que resilience4cata todavía no tiene:
 
 - autoconfiguración de Spring Boot, endpoints de actuator, binding de `application.yml` o anotaciones de Spring AOP (resilience4cata no tiene integración con Spring, CDI ni AspectJ);
 - operadores de Reactor, RxJava o corrutinas de Kotlin (resilience4cata solo admite `CompletionStage` / `CompletableFuture`);

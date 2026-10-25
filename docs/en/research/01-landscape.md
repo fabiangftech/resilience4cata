@@ -1,6 +1,6 @@
 # 01 — Landscape: Resilience4j and Prior Art
 
-> **Historical.** This research predates the implementation and is kept as written; for what 0.1.0 actually does, see [features](../policies/README.md), [architecture](../architecture.md) and [benchmarks](../benchmarks.md).
+> **Historical.** This research predates the implementation and is kept as written; for what the library does today, see [features](../policies/README.md), [architecture](../architecture.md) and [benchmarks](../benchmarks.md).
 
 > Phase 1 research. No production code. Last updated: 2026-10-23.
 > Scope: what exists, how the baseline (Resilience4j) works internally, where its costs come from, and what a new annotation-driven, plain-Java, Java 21+ library can do better.

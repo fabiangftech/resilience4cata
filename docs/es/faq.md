@@ -66,7 +66,7 @@ Cada método anotado obtiene sus propias instancias de políticas, con el id `<t
 
 ### ¿Cómo obtengo métricas? :id=metrics
 
-A partir de los eventos (contadores) y los snapshots (gauges). No hay módulo de Micrometer en 0.1.0, pero la [guía de observabilidad](guides/observability.md#micrometer) tiene una receta probada que puedes copiar.
+A partir de los eventos (contadores) y los snapshots (gauges). Todavía no hay módulo de Micrometer, pero la [guía de observabilidad](guides/observability.md#micrometer) tiene una receta probada que puedes copiar.
 
 ### ¿Cuenta las llamadas exitosas o mide la latencia? :id=success-metrics
 

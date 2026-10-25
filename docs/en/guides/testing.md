@@ -38,13 +38,13 @@ dependencies {
 <dependency>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-testkit</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <scope>test</scope>
 </dependency>
 ```
 <!-- tabs:end -->
 
-Without the BOM, add the version (`0.1.0`) in Gradle too. If you annotate interfaces under `src/test`, the processor must also run on test sources: `testCompileOnly` the annotations and `testAnnotationProcessor` the processor (see [Installation](../start/installation.md)).
+Without the BOM, add the version (`0.2.0`) in Gradle too. If you annotate interfaces under `src/test`, the processor must also run on test sources: `testCompileOnly` the annotations and `testAnnotationProcessor` the processor (see [Installation](../start/installation.md)).
 
 ## Your first test :id=first-test
 

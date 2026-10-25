@@ -4,7 +4,7 @@ How Resilience4j's registries, configs, decorators and Spring annotations map to
 
 ## Should you migrate? :id=when
 
-resilience4cata covers six policies (retry, circuit breaker, rate limiter, timeout, bulkhead, fallback) for plain Java 21+, with code generated at compile time. **Stay on Resilience4j** if you need any of these, which resilience4cata 0.1.0 does not have:
+resilience4cata covers six policies (retry, circuit breaker, rate limiter, timeout, bulkhead, fallback) for plain Java 21+, with code generated at compile time. **Stay on Resilience4j** if you need any of these, which resilience4cata does not have yet:
 
 - Spring Boot auto-configuration, actuator endpoints, `application.yml` binding, or Spring AOP annotations (resilience4cata has no Spring, CDI or AspectJ integration);
 - Reactor, RxJava or Kotlin coroutine operators (resilience4cata supports `CompletionStage` / `CompletableFuture` only);

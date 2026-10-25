@@ -1,6 +1,6 @@
 # 02 · Mecanismos de anotación: convertir anotaciones en comportamiento sin un framework
 
-> **Histórico.** Esta investigación es anterior a la implementación y se conserva tal como se escribió; para lo que hace realmente 0.1.0, ver [features](../policies/README.md), [arquitectura](../architecture.md) y [benchmarks](../benchmarks.md).
+> **Histórico.** Esta investigación es anterior a la implementación y se conserva tal como se escribió; para lo que hace hoy la librería, ver [features](../policies/README.md), [arquitectura](../architecture.md) y [benchmarks](../benchmarks.md).
 
 > **Fase 1, solo investigación.** Sin código de producción. Este documento compara las formas en que una librería Java 21+ independiente (sin Spring, sin Quarkus, sin CDI) puede convertir `@CircuitBreaker`, `@Retry` y anotaciones similares en comportamiento en ejecución. Termina con una recomendación priorizada y un boceto de la API que vería el usuario.
 >

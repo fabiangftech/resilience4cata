@@ -1,6 +1,6 @@
 # 04 — Conjunto de funcionalidades, API de anotaciones y modelo de configuración
 
-> **Histórico.** Esta investigación es anterior a la implementación y se conserva tal como se escribió; para lo que hace realmente 0.1.0, ver [features](../policies/README.md), [arquitectura](../architecture.md) y [benchmarks](../benchmarks.md).
+> **Histórico.** Esta investigación es anterior a la implementación y se conserva tal como se escribió; para lo que hace hoy la librería, ver [features](../policies/README.md), [arquitectura](../architecture.md) y [benchmarks](../benchmarks.md).
 
 > Investigación de la fase 1. Estado: **propuesta para discusión**. No hay código de producción; cada fragmento Java
 > es un boceto de API.

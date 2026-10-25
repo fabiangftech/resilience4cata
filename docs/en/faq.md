@@ -66,7 +66,7 @@ Each annotated method gets its own policy instances, with the id `<type>#<method
 
 ### How do I get metrics? :id=metrics
 
-From events (counters) and snapshots (gauges). There is no Micrometer module in 0.1.0, but the [observability guide](guides/observability.md#micrometer) has a tested recipe you can copy.
+From events (counters) and snapshots (gauges). There is no Micrometer module yet, but the [observability guide](guides/observability.md#micrometer) has a tested recipe you can copy.
 
 ### Does it count successful calls or measure latency? :id=success-metrics
 

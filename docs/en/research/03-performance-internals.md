@@ -1,6 +1,6 @@
 # 03 — Performance Internals: Algorithms and Concurrency per Policy
 
-> **Historical.** This research predates the implementation and is kept as written; for what 0.1.0 actually does, see [features](../policies/README.md), [architecture](../architecture.md) and [benchmarks](../benchmarks.md).
+> **Historical.** This research predates the implementation and is kept as written; for what the library does today, see [features](../policies/README.md), [architecture](../architecture.md) and [benchmarks](../benchmarks.md).
 
 > Phase 1 research. No production code. Short snippets are illustrative only. Last updated: 2026-10-23.
 > Scope: which algorithm to use for each resilience policy, and how to build it in modern Java (21+) so that the hot path is cheap, allocation-free and scalable under contention. Includes how Resilience4j does it today and what that costs, plus a benchmarking methodology.

@@ -1,6 +1,6 @@
 # Arquitectura
 
-> Síntesis de [02 Mecanismos de anotaciones](research/02-annotation-mechanisms.md), [03 Rendimiento interno](research/03-performance-internals.md) y [05 Arquitectura del proyecto](research/05-project-architecture.md). Describe el diseño tal como está implementado en 0.1.0; los documentos de investigación registran cómo se eligió.
+> Síntesis de [02 Mecanismos de anotaciones](research/02-annotation-mechanisms.md), [03 Rendimiento interno](research/03-performance-internals.md) y [05 Arquitectura del proyecto](research/05-project-architecture.md). Describe el diseño tal como está implementado en 0.2.0; los documentos de investigación registran cómo se eligió.
 
 ## Visión general
 
@@ -154,7 +154,7 @@ Carpetas de una sola palabra. Se publican con el groupId `dev.resilience4cata` (
 | `core` | sí | Todas las políticas, registry, modelo de configuración, `Pipeline`, protocolo para el código generado, eventos y snapshots | — (solo el JDK, más JSpecify) |
 | `processor` | sí | Procesador de anotaciones: validación y generación de código | `annotations` |
 | `config` | sí | Carga archivos properties, recursos del classpath, variables de entorno y propiedades del sistema en el builder del registry | `core` |
-| `micrometer` | previsto (v1) | Puente de métricas; no está en 0.1.0 | `core`, Micrometer |
+| `micrometer` | previsto (v1) | Puente de métricas; todavía no publicado | `core`, Micrometer |
 | `testkit` | sí | Ayudas de test para usuarios: `ManualClock` (reloj, sleeps y timers), jitter con semilla, `elapseWaitInOpen` | `core` |
 | `bom` | sí | Alinea las versiones (`resilience4cata-bom`) | — |
 | `benchmark` | no | JMH contra Resilience4j | `core`, `processor`, Resilience4j |
@@ -193,8 +193,8 @@ Lo que declara un usuario (detalles, Maven y JPMS en [primeros pasos](start/inst
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.1.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.1.0')   // el path del processor no lo hereda
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.2.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.2.0')   // el path del processor no lo hereda
     implementation 'dev.resilience4cata:resilience4cata-core'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'   // retención CLASS: no hace falta en runtime
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor'

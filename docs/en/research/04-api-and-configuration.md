@@ -1,6 +1,6 @@
 # 04 — Feature set, annotation API and configuration model
 
-> **Historical.** This research predates the implementation and is kept as written; for what 0.1.0 actually does, see [features](../policies/README.md), [architecture](../architecture.md) and [benchmarks](../benchmarks.md).
+> **Historical.** This research predates the implementation and is kept as written; for what the library does today, see [features](../policies/README.md), [architecture](../architecture.md) and [benchmarks](../benchmarks.md).
 
 > Phase 1 research. Status: **proposal for discussion**. No production code; every Java snippet below is an API sketch.
 > Scope: what users see and type. How annotations are woven (APT vs. proxies vs. bytecode), concurrency internals,
