@@ -1,6 +1,6 @@
 # Architecture
 
-> Synthesis of [02 Annotation mechanisms](research/02-annotation-mechanisms.md), [03 Performance internals](research/03-performance-internals.md) and [05 Project architecture](research/05-project-architecture.md). It describes the design as implemented in 0.2.0; the research documents record how it was chosen.
+> Synthesis of [02 Annotation mechanisms](research/02-annotation-mechanisms.md), [03 Performance internals](research/03-performance-internals.md) and [05 Project architecture](research/05-project-architecture.md). It describes the design as implemented in 0.3.0; the research documents record how it was chosen.
 
 ## Overview
 
@@ -155,11 +155,13 @@ Single-word directories. Published under the groupId `dev.resilience4cata` (the 
 | `processor` | yes | Annotation processor: validation and code generation | `annotations` |
 | `config` | yes | Loads properties files, classpath resources, environment variables and system properties into the registry builder | `core` |
 | `micrometer` | yes | Micrometer metrics: counters from events, gauges from breaker, bulkhead and rate limiter handles ([guide](guides/micrometer.md)) | `core`, `micrometer-core` |
+| `opentelemetry` | yes | OpenTelemetry metrics, the same as the Micrometer module's ([guide](guides/opentelemetry.md)) | `core`, `opentelemetry-api` |
 | `testkit` | yes | Test helpers for users: `ManualClock` (clock, sleeps and timers), seeded jitter, `elapseWaitInOpen` | `core` |
+| `junit` | yes | JUnit Jupiter extension: a fresh `ManualClock` and registry per test ([testing guide](guides/testing.md#junit)) | `testkit`, `junit-jupiter-api` |
 | `bom` | yes | Version alignment (`resilience4cata-bom`) | — |
 | `benchmark` | no | JMH against Resilience4j | `core`, `processor`, Resilience4j |
 | `stress` | no | jcstress for lock-free structures | `core` |
-| `examples` | no | Runnable samples, also end-to-end tests of the generated code | `annotations`, `core`, `config`, `testkit`, `micrometer`, `processor` |
+| `examples` | no | Runnable samples, also end-to-end tests of the generated code | `annotations`, `core`, `config`, `testkit`, `junit`, `micrometer`, `opentelemetry`, `processor` |
 | `docs` | no | Documentation. Not a Gradle project | — |
 
 ```mermaid
@@ -193,8 +195,8 @@ What a user declares (details, Maven and JPMS in [getting started](start/install
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.2.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.2.0')   // the processor path does not inherit it
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.3.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.3.0')   // the processor path does not inherit it
     implementation 'dev.resilience4cata:resilience4cata-core'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'   // CLASS retention: not needed at runtime
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor'

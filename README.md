@@ -4,7 +4,7 @@ Annotation-driven resilience for **plain Java 21+**: retry, circuit breaker, rat
 
 Sync and async (`CompletionStage`), interfaces and annotated classes, composed annotations, named configurations with external overrides, typed events and snapshots, a programmatic `Pipeline` for code you cannot annotate, and a `testkit` with a manual clock.
 
-**Documentation: [resilience4cata.dev](https://resilience4cata.dev)** (English and Spanish). Status: 0.2.0 on Maven Central; names can still change before 1.0.
+**Documentation: [resilience4cata.dev](https://resilience4cata.dev)** (English and Spanish). Status: 0.3.0 on Maven Central; names can still change before 1.0.
 
 ## Install
 
@@ -14,8 +14,8 @@ Gradle:
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.2.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.2.0')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.3.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.3.0')
 
     implementation 'dev.resilience4cata:resilience4cata-core'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
@@ -31,7 +31,7 @@ Maven:
     <dependency>
       <groupId>dev.resilience4cata</groupId>
       <artifactId>resilience4cata-bom</artifactId>
-      <version>0.2.0</version>
+      <version>0.3.0</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>
@@ -55,7 +55,7 @@ Maven:
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
   </path>
 </annotationProcessorPaths>
 ```

@@ -1,6 +1,6 @@
 # Arquitectura
 
-> Síntesis de [02 Mecanismos de anotaciones](research/02-annotation-mechanisms.md), [03 Rendimiento interno](research/03-performance-internals.md) y [05 Arquitectura del proyecto](research/05-project-architecture.md). Describe el diseño tal como está implementado en 0.2.0; los documentos de investigación registran cómo se eligió.
+> Síntesis de [02 Mecanismos de anotaciones](research/02-annotation-mechanisms.md), [03 Rendimiento interno](research/03-performance-internals.md) y [05 Arquitectura del proyecto](research/05-project-architecture.md). Describe el diseño tal como está implementado en 0.3.0; los documentos de investigación registran cómo se eligió.
 
 ## Visión general
 
@@ -155,11 +155,13 @@ Carpetas de una sola palabra. Se publican con el groupId `dev.resilience4cata` (
 | `processor` | sí | Procesador de anotaciones: validación y generación de código | `annotations` |
 | `config` | sí | Carga archivos properties, recursos del classpath, variables de entorno y propiedades del sistema en el builder del registry | `core` |
 | `micrometer` | sí | Métricas de Micrometer: counters a partir de eventos, gauges a partir de los handles de breakers, bulkheads y rate limiters ([guía](guides/micrometer.md)) | `core`, `micrometer-core` |
+| `opentelemetry` | sí | Métricas de OpenTelemetry, las mismas que las del módulo de Micrometer ([guía](guides/opentelemetry.md)) | `core`, `opentelemetry-api` |
 | `testkit` | sí | Ayudas de test para usuarios: `ManualClock` (reloj, sleeps y timers), jitter con semilla, `elapseWaitInOpen` | `core` |
+| `junit` | sí | Extensión de JUnit Jupiter: un `ManualClock` y un registry nuevos por prueba ([guía de pruebas](guides/testing.md#junit)) | `testkit`, `junit-jupiter-api` |
 | `bom` | sí | Alinea las versiones (`resilience4cata-bom`) | — |
 | `benchmark` | no | JMH contra Resilience4j | `core`, `processor`, Resilience4j |
 | `stress` | no | jcstress para las estructuras sin locks | `core` |
-| `examples` | no | Ejemplos ejecutables, que también son tests de punta a punta del código generado | `annotations`, `core`, `config`, `testkit`, `micrometer`, `processor` |
+| `examples` | no | Ejemplos ejecutables, que también son tests de punta a punta del código generado | `annotations`, `core`, `config`, `testkit`, `junit`, `micrometer`, `opentelemetry`, `processor` |
 | `docs` | no | Documentación. No es un proyecto de Gradle | — |
 
 ```mermaid
@@ -193,8 +195,8 @@ Lo que declara un usuario (detalles, Maven y JPMS en [primeros pasos](start/inst
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.2.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.2.0')   // el path del processor no lo hereda
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.3.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.3.0')   // el path del processor no lo hereda
     implementation 'dev.resilience4cata:resilience4cata-core'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'   // retención CLASS: no hace falta en runtime
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
