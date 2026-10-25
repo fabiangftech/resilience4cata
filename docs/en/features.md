@@ -314,12 +314,12 @@ Targets to verify with JMH from the first release ([01 §4.1](research/01-landsc
 
 | Target | How it is checked |
 |---|---|
-| **0 B/op** on the success path of every policy and of a full stack | JMH `-prof gc`, as a CI gate |
+| **0 B/op** on the success path of every policy and of a full stack | JMH `-prof gc` in CI: `./gradlew :benchmark:allocationCheck` fails a PR if a listed benchmark reaches its budget + 1 B/op (0 for every sync path; measured values for async futures) ([benchmarks](benchmarks.md#allocation-gate)) |
 | No locks and no `synchronized` on hot paths | Code review, ArchUnit, JMH contention scenarios |
 | Monomorphic, straight-line generated code per method; no shared lambda chains | JMH with a polluted JIT profile, `-XX:+PrintInlining` |
 | One clock-read pair per call, whatever the number of policies | Code review |
-| Preallocated, stackless rejection exceptions; events allocated only if someone listens | JMH rejection scenarios |
-| Correct lock-free structures | jcstress |
+| Preallocated, stackless rejection exceptions; events allocated only if someone listens | JMH rejection scenarios (open breaker, full bulkhead, exhausted rate limiter), gated at 0 B/op in CI |
+| Correct lock-free structures | jcstress, in CI after every push to main and nightly |
 | Published, reproducible comparison against Resilience4j 2.4.0 | 11 JMH scenarios ([03 §9](research/03-performance-internals.md)) |
 
 Current measurements are in [benchmarks](benchmarks.md). Most real calls are I/O-bound (milliseconds), so the pitch is "near-zero overhead that scales with threads, plus annotations without a framework", not raw speed alone.

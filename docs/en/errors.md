@@ -1,0 +1,2318 @@
+# Error reference
+
+Every error that resilience4cata reports starts with a stable code in brackets, for example:
+
+```text
+error: [R4C-FB-002] @Fallback(method = "findFallbak") on find: no method named findFallbak in UserClient. Did you mean findFallback? Expected a default or static method java.lang.String findFallbak(java.lang.String, <a Throwable type> e), where the exception parameter is optional.
+```
+
+The code tells you which section of this page explains the error. The rest of the message says where (the
+compiler points at the annotated element; class, method and attribute are named in the text), what is wrong
+and how to fix it.
+
+| Prefix | Reported by | When |
+|---|---|---|
+| `R4C-APT` | annotation processor | placement of the annotations, general problems |
+| `R4C-ATR` | annotation processor | attribute values |
+| `R4C-CMP` | annotation processor | composed annotations (`@ResiliencePolicy` bundles) |
+| `R4C-ASY` | annotation processor | asynchronous methods |
+| `R4C-CLS` | annotation processor | `classifier` classes and `onExhaustedResult` |
+| `R4C-FB` | annotation processor | `@Fallback` |
+| `R4C-SUB` | annotation processor | annotated classes (generated subclasses) |
+| `R4C-RT` | `resilience4cata-core` at run time | `Resilient.of`, `Resilient.create`, `Pipeline.Builder` |
+| `R4C-CFG` | `resilience4cata-config` at run time | external configuration (`ResilienceConfig`) |
+
+Codes are stable: a code is never renumbered or given a new meaning. A new error gets the next free number of
+its area; an error that is no longer reported keeps its code, marked as retired below.
+
+The wrong and fixed Java examples of the annotation processor's codes are compiled by the build
+(`ErrorCodeTest` in the `processor` module): each wrong example reports its code and each fix compiles
+without warnings.
+
+## Annotation processor: placement (R4C-APT)
+
+### R4C-APT-001
+
+**Trigger:** a resilience annotation on an enum or a record, or on one of its methods. The interface-wrapper
+style needs an interface, and the subclass style must extend the type, but enums and records are final.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public record PriceClient(String baseUrl) {
+    @Retry
+    public String price(String sku) {
+        return "1";
+    }
+}
+```
+
+**Fix:** declare the methods in an interface, implement it with the record, and wrap the implementation with
+`Resilient.of(PriceClient.class, implementation, registry)`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry
+    String price(String sku);
+}
+```
+
+### R4C-APT-002
+
+**Trigger:** a resilience annotation on a static or private method. Calls to such methods cannot be
+intercepted by a wrapper or a subclass.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry
+    static String price(String sku) {
+        return "1";
+    }
+}
+```
+
+**Fix:** annotate a non-private instance method (abstract or default in an interface; overridable in a
+class).
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry
+    String price(String sku);
+}
+```
+
+### R4C-APT-003
+
+**Trigger:** the annotated interface is private (a private member of a class). The generated class
+`<Interface>$Resilient` is a top-level class and must implement it.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public final class Clients {
+    private interface PriceClient {
+        @Retry
+        String price(String sku);
+    }
+}
+```
+
+**Fix:** make the interface package-private or public.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public final class Clients {
+    interface PriceClient {
+        @Retry
+        String price(String sku);
+    }
+}
+```
+
+### R4C-APT-004
+
+**Trigger:** an annotation has an attribute that the processor does not know, for example
+`Unknown attribute @Retry.hedges`. This happens when `resilience4cata-annotations` is newer than
+`resilience4cata-processor`.
+
+**Fix:** use the same version for every resilience4cata artifact, ideally through the BOM:
+
+```groovy
+dependencies {
+    implementation platform('dev.resilience4cata:resilience4cata-bom:<version>')
+    compileOnly 'dev.resilience4cata:resilience4cata-annotations'
+    implementation 'dev.resilience4cata:resilience4cata-core'
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:<version>')
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
+}
+```
+
+### R4C-APT-005
+
+**Trigger:** the processor could not write a generated source file: the compiler's `Filer` failed, for
+example because the generated-sources directory is not writable, or because another processor or a source
+file already defines `<Interface>$Resilient`.
+
+**Fix:** check the build's generated-sources directory (with Gradle,
+`build/generated/sources/annotationProcessor`), make sure no hand-written class is named
+`<Interface>$Resilient`, and rebuild after `./gradlew clean`.
+
+## Annotation processor: attribute values (R4C-ATR)
+
+### R4C-ATR-001
+
+**Trigger:** a duration attribute (`delay`, `maxDelay`, `maxDuration`, `slowCallDuration`, `waitInOpen`,
+`maxWaitInHalfOpen`, `maxWait`, `period`, or the value of `@Timeout`) is not a valid duration.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(delay = "2 seconds")
+    String price(String sku);
+}
+```
+
+**Fix:** use a number followed by `ns`, `us`, `ms`, `s`, `m`, `h` or `d` (`"250ms"`, `"2s"`), an ISO-8601
+duration (`"PT2S"`), or `"0"`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(delay = "2s")
+    String price(String sku);
+}
+```
+
+### R4C-ATR-002
+
+**Trigger:** a duration that must be greater than zero is `"0"`: the value of `@Timeout`, or
+`@RateLimiter.period`.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Timeout;
+
+public interface PriceClient {
+    @Timeout("0")
+    String price(String sku);
+}
+```
+
+**Fix:** set a positive duration. To switch the policy off, use `enabled = "false"` (or configuration)
+instead.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Timeout;
+
+public interface PriceClient {
+    @Timeout("2s")
+    String price(String sku);
+}
+```
+
+### R4C-ATR-003
+
+**Trigger:** a count is less than 1: `maxAttempts`, `windowSize`, `minimumCalls`, `halfOpenCalls`,
+`maxConcurrent` or `permits`.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(maxAttempts = 0)
+    String price(String sku);
+}
+```
+
+**Fix:** set it to 1 or more (`maxAttempts` counts the first call), or leave it out to use the configured
+value.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(maxAttempts = 3)
+    String price(String sku);
+}
+```
+
+### R4C-ATR-004
+
+**Trigger:** `@Retry.multiplier` is less than 1, infinite or NaN.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(multiplier = 0.5)
+    String price(String sku);
+}
+```
+
+**Fix:** use a finite number of at least 1 (1 keeps the delay constant).
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(multiplier = 2.0)
+    String price(String sku);
+}
+```
+
+### R4C-ATR-005
+
+**Trigger:** `@CircuitBreaker.failureRateThreshold` or `slowCallRateThreshold` is not a percentage greater
+than 0 and at most 100.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.CircuitBreaker;
+
+public interface PriceClient {
+    @CircuitBreaker(failureRateThreshold = 150)
+    String price(String sku);
+}
+```
+
+**Fix:** use a value in (0, 100].
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.CircuitBreaker;
+
+public interface PriceClient {
+    @CircuitBreaker(failureRateThreshold = 50)
+    String price(String sku);
+}
+```
+
+### R4C-ATR-006
+
+**Trigger:** `enabled` is neither `""` (not set), `"true"` nor `"false"`.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(enabled = "yes")
+    String price(String sku);
+}
+```
+
+**Fix:** use `"true"` or `"false"`, or leave it out.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(enabled = "false")
+    String price(String sku);
+}
+```
+
+## Annotation processor: composed annotations (R4C-CMP)
+
+### R4C-CMP-001
+
+**Trigger:** an annotation type carries a resilience annotation but is not marked with `@ResiliencePolicy`,
+so the processor would ignore its policies wherever it is used.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Retry(maxAttempts = 5)
+@Retention(RetentionPolicy.CLASS)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface Patient {
+}
+```
+
+**Fix:** add `@ResiliencePolicy`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.ResiliencePolicy;
+import dev.resilience4cata.annotation.Retry;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@ResiliencePolicy
+@Retry(maxAttempts = 5)
+@Retention(RetentionPolicy.CLASS)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface Patient {
+}
+```
+
+### R4C-CMP-002
+
+**Trigger:** two composed annotations on the same element set the same attribute to different values, so
+neither can win.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.ResiliencePolicy;
+import dev.resilience4cata.annotation.Retry;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+
+public interface PriceClient {
+    @Fast
+    @Patient
+    String price(String sku);
+}
+
+@ResiliencePolicy
+@Retry(maxAttempts = 2)
+@Retention(RetentionPolicy.CLASS)
+@interface Fast {
+}
+
+@ResiliencePolicy
+@Retry(maxAttempts = 5)
+@Retention(RetentionPolicy.CLASS)
+@interface Patient {
+}
+```
+
+**Fix:** keep only one of the bundles, or make them agree, or set the attribute directly on the element,
+which wins over every bundle.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.ResiliencePolicy;
+import dev.resilience4cata.annotation.Retry;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+
+public interface PriceClient {
+    @Patient
+    String price(String sku);
+}
+
+@ResiliencePolicy
+@Retry(maxAttempts = 2)
+@Retention(RetentionPolicy.CLASS)
+@interface Fast {
+}
+
+@ResiliencePolicy
+@Retry(maxAttempts = 5)
+@Retention(RetentionPolicy.CLASS)
+@interface Patient {
+}
+```
+
+## Annotation processor: asynchronous methods (R4C-ASY)
+
+### R4C-ASY-001
+
+**Trigger:** an annotated method returns a `CompletionStage` type that is not supported: a raw type, a
+`? super X` argument, or a `CompletionStage` subtype other than `CompletableFuture`.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+import java.util.concurrent.CompletionStage;
+
+public interface PriceClient {
+    @Retry
+    CompletionStage<? super Integer> price(String sku);
+}
+```
+
+**Fix:** return `CompletionStage<T>` or `CompletableFuture<T>`, where `T` may also be `?` or `? extends X`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+import java.util.concurrent.CompletionStage;
+
+public interface PriceClient {
+    @Retry
+    CompletionStage<Integer> price(String sku);
+}
+```
+
+## Annotation processor: classifiers (R4C-CLS)
+
+The generated class creates one instance of each `classifier` class per method, so the class must be a
+concrete, non-generic class with an accessible no-argument constructor, implementing `Classifier<T>` for the
+method's result type.
+
+### R4C-CLS-001
+
+**Trigger:** `classifier` is set, but `dev.resilience4cata.Classifier` is not on the compile classpath.
+
+**Wrong:** compiling this without `resilience4cata-core` on the classpath:
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+**Fix:** add the core dependency:
+
+```groovy
+dependencies {
+    implementation 'dev.resilience4cata:resilience4cata-core:<version>'
+}
+```
+
+### R4C-CLS-002
+
+**Trigger:** `classifier` names an interface, an annotation or an enum instead of a class.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Classifier.class)
+    String price(String sku);
+}
+```
+
+**Fix:** name a class that implements `Classifier<T>`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+### R4C-CLS-003
+
+**Trigger:** the classifier class is abstract, so it cannot be instantiated.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    abstract class Retryable implements Classifier<String> {
+    }
+}
+```
+
+**Fix:** use a concrete class.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+### R4C-CLS-004
+
+**Trigger:** the classifier class declares type parameters; the generated code could only create it with an
+unchecked raw type.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable<T> implements Classifier<T> {
+        @Override
+        public Outcome classify(T result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+**Fix:** implement `Classifier<T>` with a concrete `T` (or a supertype, such as `Classifier<Object>`).
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable implements Classifier<Object> {
+        @Override
+        public Outcome classify(Object result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+### R4C-CLS-005
+
+**Trigger:** the classifier class (or a class it is nested in) is private, or package-private in another
+package, so the generated class, in the interface's package, cannot create it.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public final class Clients {
+    interface PriceClient {
+        @Retry(classifier = Retryable.class)
+        String price(String sku);
+    }
+
+    private static final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+**Fix:** make it public, or package-private in the interface's package.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public final class Clients {
+    interface PriceClient {
+        @Retry(classifier = Retryable.class)
+        String price(String sku);
+    }
+
+    static final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+### R4C-CLS-006
+
+**Trigger:** the classifier is an inner (non-static nested) class, which needs an instance of its enclosing
+class.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public final class Clients {
+    interface PriceClient {
+        @Retry(classifier = Retryable.class)
+        String price(String sku);
+    }
+
+    final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+**Fix:** make it `static`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public final class Clients {
+    interface PriceClient {
+        @Retry(classifier = Retryable.class)
+        String price(String sku);
+    }
+
+    static final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+### R4C-CLS-007
+
+**Trigger:** the classifier has no no-argument constructor that the generated class can call.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable implements Classifier<String> {
+        private Retryable() {
+        }
+
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+**Fix:** add a public (or, in the interface's package, package-private) no-argument constructor, or remove
+the private one.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+### R4C-CLS-008
+
+**Trigger:** the classifier class does not implement `dev.resilience4cata.Classifier`.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = String.class)
+    String price(String sku);
+}
+```
+
+**Fix:** name a class that implements `Classifier<T>`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+### R4C-CLS-009
+
+**Trigger:** the classifier implements the raw type `Classifier`, so its result type cannot be checked.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable implements Classifier {
+        @Override
+        public Outcome classify(Object result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+**Fix:** implement `Classifier<T>` with the method's result type, as the message suggests.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+### R4C-CLS-010
+
+**Trigger:** the classifier implements `Classifier<X>`, but the method's result (the value of the stage, for
+an asynchronous method) is not assignable to `X`.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable implements Classifier<Integer> {
+        @Override
+        public Outcome classify(Integer result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+**Fix:** implement `Classifier` for the method's result type or a supertype of it.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku);
+
+    final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+### R4C-CLS-011
+
+**Trigger:** `@Retry` sets both `classifier` and `retryOn`, or `@CircuitBreaker` sets both `classifier` and
+`recordOn`. The classifier decides which exceptions are failures, so the list would be ignored.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+import java.io.IOException;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class, retryOn = IOException.class)
+    String price(String sku) throws IOException;
+
+    final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure == null ? Outcome.SUCCESS : Outcome.FAILURE;
+        }
+    }
+}
+```
+
+**Fix:** remove `retryOn` (or `recordOn`) and return `Outcome.FAILURE` for those exceptions from the
+classifier. `abortOn` and `ignoreOn` still apply before the classifier.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.Retry;
+import java.io.IOException;
+
+public interface PriceClient {
+    @Retry(classifier = Retryable.class)
+    String price(String sku) throws IOException;
+
+    final class Retryable implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure instanceof IOException ? Outcome.FAILURE : Outcome.SUCCESS;
+        }
+    }
+}
+```
+
+### R4C-CLS-012
+
+**Trigger:** `@Retry` sets `onExhaustedResult` without a `classifier`. Only a classifier can reject a
+result, so the setting would never apply.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.ExhaustedResult;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(onExhaustedResult = ExhaustedResult.THROW)
+    String price(String sku);
+}
+```
+
+**Fix:** add a classifier that rejects the results to retry, or remove `onExhaustedResult`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.annotation.ExhaustedResult;
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(classifier = NotEmpty.class, onExhaustedResult = ExhaustedResult.THROW)
+    String price(String sku);
+
+    final class NotEmpty implements Classifier<String> {
+        @Override
+        public Outcome classify(String result, Throwable failure) {
+            return failure != null || result == null || result.isEmpty() ? Outcome.FAILURE : Outcome.SUCCESS;
+        }
+    }
+}
+```
+
+## Annotation processor: fallbacks (R4C-FB)
+
+A `@Fallback` names either a handler class, `@Fallback(MyHandler.class)`, or sibling methods,
+`@Fallback(method = "name")`. A handler class must meet the same rules as a classifier: concrete,
+non-generic, accessible, with a no-argument constructor, implementing `FallbackHandler<T>` for the method's
+result type.
+
+### R4C-FB-001
+
+**Trigger:** `@Fallback` sets neither a handler class nor a method name, or sets both.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback
+    String find(String id);
+}
+```
+
+**Fix:** set exactly one of them.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(method = "findFallback")
+    String find(String id);
+
+    default String findFallback(String id, Exception e) {
+        return "unknown";
+    }
+}
+```
+
+### R4C-FB-002
+
+**Trigger:** `@Fallback(method = "...")` names a method that does not exist in the interface (or class).
+The message suggests the closest existing name.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(method = "findFallbak")
+    String find(String id);
+
+    default String findFallback(String id, Exception e) {
+        return "unknown";
+    }
+}
+```
+
+**Fix:** correct the name, or add the method. It takes the same parameters as the annotated method,
+optionally followed by the exception, and returns the same type.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(method = "findFallback")
+    String find(String id);
+
+    default String findFallback(String id, Exception e) {
+        return "unknown";
+    }
+}
+```
+
+### R4C-FB-003
+
+**Trigger:** methods with the fallback's name exist, but none can be used. The message lists each candidate
+and why it was rejected: private (the generated class cannot call it), wrong return type, a checked
+exception the annotated method does not declare, different type parameters, or an exception parameter that
+is not a class. Candidates with other parameters are not listed.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(method = "findFallback")
+    String find(String id);
+
+    private String findFallback(String id, Exception e) {
+        return "unknown";
+    }
+}
+```
+
+**Fix:** in an interface, use a default or static method; in a class, a non-private one. Match the
+signature that the message shows.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(method = "findFallback")
+    String find(String id);
+
+    default String findFallback(String id, Exception e) {
+        return "unknown";
+    }
+}
+```
+
+### R4C-FB-004
+
+**Trigger:** `@Fallback` names a handler class, but `dev.resilience4cata.FallbackHandler` is not on the
+compile classpath.
+
+**Wrong:** compiling this without `resilience4cata-core` on the classpath:
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+**Fix:** add the core dependency:
+
+```groovy
+dependencies {
+    implementation 'dev.resilience4cata:resilience4cata-core:<version>'
+}
+```
+
+### R4C-FB-005
+
+**Trigger:** the handler named by `@Fallback` is an interface, an annotation or an enum instead of a class.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(FallbackHandler.class)
+    String find(String id);
+}
+```
+
+**Fix:** name a class that implements `FallbackHandler<T>`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+### R4C-FB-006
+
+**Trigger:** the handler class is abstract.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    abstract class Unknown implements FallbackHandler<String> {
+    }
+}
+```
+
+**Fix:** use a concrete class.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+### R4C-FB-007
+
+**Trigger:** the handler class declares type parameters.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown<T> implements FallbackHandler<T> {
+        @Override
+        public T apply(FallbackContext context) {
+            return null;
+        }
+    }
+}
+```
+
+**Fix:** implement `FallbackHandler<T>` with a concrete `T`. For a generic method, use a sibling method
+instead (see [R4C-FB-014](#r4c-fb-014)).
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+### R4C-FB-008
+
+**Trigger:** the handler class (or a class it is nested in) is private, or package-private in another
+package, so the generated class cannot create it.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public final class Clients {
+    interface UserClient {
+        @Fallback(Unknown.class)
+        String find(String id);
+    }
+
+    private static final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+**Fix:** make it public, or package-private in the interface's package.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public final class Clients {
+    interface UserClient {
+        @Fallback(Unknown.class)
+        String find(String id);
+    }
+
+    static final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+### R4C-FB-009
+
+**Trigger:** the handler is an inner (non-static nested) class.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public final class Clients {
+    interface UserClient {
+        @Fallback(Unknown.class)
+        String find(String id);
+    }
+
+    final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+**Fix:** make it `static`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public final class Clients {
+    interface UserClient {
+        @Fallback(Unknown.class)
+        String find(String id);
+    }
+
+    static final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+### R4C-FB-010
+
+**Trigger:** the handler has no no-argument constructor that the generated class can call.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown implements FallbackHandler<String> {
+        private Unknown() {
+        }
+
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+**Fix:** add a public (or, in the interface's package, package-private) no-argument constructor, or remove
+the private one.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+### R4C-FB-011
+
+**Trigger:** the handler class does not implement `dev.resilience4cata.FallbackHandler`.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(String.class)
+    String find(String id);
+}
+```
+
+**Fix:** name a class that implements `FallbackHandler<T>`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+### R4C-FB-012
+
+**Trigger:** the handler implements the raw type `FallbackHandler`.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown implements FallbackHandler {
+        @Override
+        public Object apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+**Fix:** implement `FallbackHandler<T>` with the method's result type, as the message suggests.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+### R4C-FB-013
+
+**Trigger:** the handler implements `FallbackHandler<X>`, but `X` is not assignable to the method's return
+type. For an asynchronous method returning a stage of `T`, `X` may be `T` or `CompletionStage<T>`.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown implements FallbackHandler<Integer> {
+        @Override
+        public Integer apply(FallbackContext context) {
+            return 0;
+        }
+    }
+}
+```
+
+**Fix:** implement `FallbackHandler` for the method's return type (boxed, for a primitive).
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface UserClient {
+    @Fallback(Unknown.class)
+    String find(String id);
+
+    final class Unknown implements FallbackHandler<String> {
+        @Override
+        public String apply(FallbackContext context) {
+            return "unknown";
+        }
+    }
+}
+```
+
+### R4C-FB-014
+
+**Trigger:** a handler class on a generic method whose return type depends on the method's type parameters.
+A handler implements `FallbackHandler<X>` for one `X`, which cannot fit every instantiation without an
+unchecked cast.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.FallbackContext;
+import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.Fallback;
+
+public interface Repository {
+    @Fallback(Nothing.class)
+    <T> T load(Class<T> type, String id);
+
+    final class Nothing implements FallbackHandler<Object> {
+        @Override
+        public Object apply(FallbackContext context) {
+            return null;
+        }
+    }
+}
+```
+
+**Fix:** use a sibling fallback method that declares the same type parameters.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Fallback;
+
+public interface Repository {
+    @Fallback(method = "loadFallback")
+    <T> T load(Class<T> type, String id);
+
+    default <T> T loadFallback(Class<T> type, String id, Exception e) {
+        return null;
+    }
+}
+```
+
+## Annotation processor: annotated classes (R4C-SUB)
+
+An annotated class gets a generated subclass, `<Class>$Resilient`, which overrides the annotated methods
+and is created with `Resilient.create(...)`. The class must therefore be extensible, and the annotated
+methods overridable.
+
+### R4C-SUB-001
+
+**Trigger:** the annotated class is final.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public final class PriceService {
+    @Retry
+    public String price(String sku) {
+        return "1";
+    }
+}
+```
+
+**Fix:** remove `final`, or move the annotations to an interface and wrap the implementation with
+`Resilient.of(...)`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class PriceService {
+    @Retry
+    public String price(String sku) {
+        return "1";
+    }
+}
+```
+
+### R4C-SUB-002
+
+**Trigger:** the annotated class is sealed, so the generated subclass is not a permitted subclass.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public sealed class PriceService permits CachedPriceService {
+    @Retry
+    public String price(String sku) {
+        return "1";
+    }
+}
+
+final class CachedPriceService extends PriceService {
+}
+```
+
+**Fix:** make it non-sealed (or a regular class), or use an interface and `Resilient.of(...)`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class PriceService {
+    @Retry
+    public String price(String sku) {
+        return "1";
+    }
+}
+
+final class CachedPriceService extends PriceService {
+}
+```
+
+### R4C-SUB-003
+
+**Trigger:** the annotated class is abstract. The generated subclass must be instantiable and calls
+`super` for each method.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public abstract class PriceService {
+    @Retry
+    public String price(String sku) {
+        return "1";
+    }
+}
+```
+
+**Fix:** annotate a concrete subclass, or an interface.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class PriceService {
+    @Retry
+    public String price(String sku) {
+        return "1";
+    }
+}
+```
+
+### R4C-SUB-004
+
+**Trigger:** the annotated class, or a class it is nested in, is private.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public final class Services {
+    private static class PriceService {
+        @Retry
+        public String price(String sku) {
+            return "1";
+        }
+    }
+}
+```
+
+**Fix:** make it package-private, protected or public.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public final class Services {
+    static class PriceService {
+        @Retry
+        public String price(String sku) {
+            return "1";
+        }
+    }
+}
+```
+
+### R4C-SUB-005
+
+**Trigger:** the annotated class is an inner (non-static nested) class: its generated subclass would need an
+instance of the enclosing class.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class Services {
+    class PriceService {
+        @Retry
+        public String price(String sku) {
+            return "1";
+        }
+    }
+}
+```
+
+**Fix:** make it a static nested class.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class Services {
+    static class PriceService {
+        @Retry
+        public String price(String sku) {
+            return "1";
+        }
+    }
+}
+```
+
+### R4C-SUB-006
+
+**Trigger:** every constructor of the annotated class is private, so the generated subclass cannot call any.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class PriceService {
+    private PriceService() {
+    }
+
+    @Retry
+    public String price(String sku) {
+        return "1";
+    }
+}
+```
+
+**Fix:** make at least one constructor package-private, protected or public.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class PriceService {
+    protected PriceService() {
+    }
+
+    @Retry
+    public String price(String sku) {
+        return "1";
+    }
+}
+```
+
+### R4C-SUB-007
+
+**Trigger:** an annotated method (in the class, a superclass or an interface it implements) is final, so the
+subclass cannot override it and its annotations would be ignored.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class PriceService {
+    @Retry
+    public final String price(String sku) {
+        return "1";
+    }
+}
+```
+
+**Fix:** remove `final`, or remove the annotations.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class PriceService {
+    @Retry
+    public String price(String sku) {
+        return "1";
+    }
+}
+```
+
+### R4C-SUB-008
+
+**Trigger:** an annotated method is package-private in a superclass from another package. The generated
+subclass, in the annotated class's package, cannot override it, so its annotations would be ignored.
+
+**Wrong:**
+
+```java
+// com/acme/base/BaseService.java
+package com.acme.base;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class BaseService {
+    @Retry
+    String price(String sku) {
+        return "1";
+    }
+}
+
+// com/acme/PriceService.java
+package com.acme;
+
+import com.acme.base.BaseService;
+import dev.resilience4cata.annotation.Retry;
+
+public class PriceService extends BaseService {
+    @Retry
+    public String name() {
+        return "prices";
+    }
+}
+```
+
+**Fix:** make the method protected or public.
+
+```java
+// com/acme/base/BaseService.java
+package com.acme.base;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class BaseService {
+    @Retry
+    protected String price(String sku) {
+        return "1";
+    }
+}
+
+// com/acme/PriceService.java
+package com.acme;
+
+import com.acme.base.BaseService;
+import dev.resilience4cata.annotation.Retry;
+
+public class PriceService extends BaseService {
+    @Retry
+    public String name() {
+        return "prices";
+    }
+}
+```
+
+## Runtime: Resilient and Pipeline (R4C-RT)
+
+These are thrown by `resilience4cata-core` when a service is wrapped or a pipeline is built. The exception
+types are documented on each method; the code is at the start of the message.
+
+### R4C-RT-001
+
+**Trigger:** `Resilient.of(type, ...)` with a `type` that is a class, not an interface
+(`IllegalArgumentException`).
+
+**Wrong:** `Resilient.of(PriceService.class, new PriceService(), registry)` where `PriceService` is an
+annotated class.
+
+**Fix:** for an annotated class, use `Resilient.create(PriceService.class, registry)`; `Resilient.of` takes
+the annotated interface.
+
+### R4C-RT-002
+
+**Trigger:** the object passed to `Resilient.of` does not implement the interface
+(`IllegalArgumentException`). It can only happen through raw types or unchecked casts.
+
+**Fix:** pass an implementation of the interface.
+
+### R4C-RT-003
+
+**Trigger:** the generated class `<type>$Resilient` was not found (`IllegalStateException`): the type has no
+resilience annotation, or the annotation processor did not run when it was compiled.
+
+**Wrong:** a build that only adds the annotations:
+
+```groovy
+dependencies {
+    compileOnly 'dev.resilience4cata:resilience4cata-annotations:<version>'
+    implementation 'dev.resilience4cata:resilience4cata-core:<version>'
+}
+```
+
+**Fix:** add the processor, which is mandatory (there is no reflection fallback):
+
+```groovy
+dependencies {
+    compileOnly 'dev.resilience4cata:resilience4cata-annotations:<version>'
+    implementation 'dev.resilience4cata:resilience4cata-core:<version>'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'
+}
+```
+
+### R4C-RT-004
+
+**Trigger:** the generated class does not have the constructor that this version of `resilience4cata-core`
+expects, or a generated subclass does not extend the annotated class (`IllegalStateException`). It was
+generated by an incompatible version of the processor.
+
+**Fix:** use the same version for `resilience4cata-core` and `resilience4cata-processor` (the BOM keeps them
+aligned), then rebuild from clean.
+
+### R4C-RT-005
+
+**Trigger:** `resilience4cata-core` cannot access the generated class (`IllegalStateException`), usually
+because the application is a named module that does not export the package to core.
+
+**Fix:** add to the application's `module-info.java`:
+
+```java
+exports com.acme to dev.resilience4cata.core;
+```
+
+### R4C-RT-006
+
+**Trigger:** the generated class's constructor failed with a checked exception, or could not be instantiated
+(`IllegalStateException`, with the failure as its cause). Unchecked exceptions from the constructor, such as
+an invalid configuration, are rethrown as they are.
+
+**Fix:** look at the cause; it usually comes from a classifier or fallback handler constructor.
+
+### R4C-RT-007
+
+**Trigger:** `Resilient.create(type, ...)` with an interface (`IllegalArgumentException`).
+
+**Fix:** wrap an implementation instead: `Resilient.of(PriceClient.class, implementation, registry)`.
+
+### R4C-RT-008
+
+**Trigger:** `Resilient.create(type, ...)` with a type that cannot have a generated subclass: final,
+abstract, local, anonymous, an enum, a record, an array or a primitive (`IllegalArgumentException`). The
+processor reports most of these at compile time ([R4C-SUB-001](#r4c-sub-001) and following).
+
+**Fix:** annotate a top-level or static nested class that is neither final nor abstract, or an interface
+and use `Resilient.of(...)`.
+
+### R4C-RT-009
+
+**Trigger:** no constructor of the annotated class accepts the arguments passed to `Resilient.create`
+(`IllegalArgumentException`). The message lists the constructors.
+
+**Fix:** pass arguments that match one constructor, or call the generated constructor directly, which the
+compiler checks: `new PriceService$Resilient(registry, ...)`.
+
+### R4C-RT-010
+
+**Trigger:** more than one constructor accepts the arguments passed to `Resilient.create`, for example a
+single `null` (`IllegalArgumentException`).
+
+**Fix:** call the generated constructor directly, with a cast to pick the overload:
+`new PriceService$Resilient(registry, (String) null)`.
+
+### R4C-RT-011
+
+**Trigger:** `Pipeline.builder(registry, id)` with a blank id (`IllegalArgumentException`).
+
+**Fix:** pass the id that names the pipeline's policy instances, for example `"payments"`.
+
+### R4C-RT-012
+
+**Trigger:** a `Pipeline.Builder` part is set twice: a policy, a classifier, `onExhaustedResult` or a
+fallback (`IllegalStateException`).
+
+**Wrong:** `Pipeline.builder(registry, "payments").retry().retry("five")`
+
+**Fix:** set each part once per builder; pass the overrides to the one call:
+`retry("five", b -> b.maxAttempts(3))`.
+
+### R4C-RT-013
+
+**Trigger:** `fallbackApplyOn` or `fallbackSkipOn` is set, but the pipeline has no fallback
+(`IllegalStateException` from `build()`).
+
+**Fix:** add a fallback (`fallback`, `fallbackHandler`, `fallbackAsync`), or remove the selection.
+
+### R4C-RT-014
+
+**Trigger:** `classifier(...)` is set, but the pipeline has neither a retry nor a circuit breaker
+(`IllegalStateException` from `build()`).
+
+**Fix:** add the policy the classifier is meant for, or remove the classifier.
+
+### R4C-RT-015
+
+**Trigger:** `retryClassifier(...)` is set, but the pipeline has no retry (`IllegalStateException` from
+`build()`).
+
+**Fix:** add a retry, or remove the retry classifier.
+
+### R4C-RT-016
+
+**Trigger:** `onExhaustedResult(...)` is set, but the pipeline has no retry with a classifier
+(`IllegalStateException` from `build()`). Only a classifier can reject a result. The annotation equivalent
+is [R4C-CLS-012](#r4c-cls-012).
+
+**Fix:** add a retry and a classifier (`classifier` or `retryClassifier`), or remove `onExhaustedResult`.
+
+### R4C-RT-017
+
+**Trigger:** `circuitBreakerClassifier(...)` is set, but the pipeline has no circuit breaker
+(`IllegalStateException` from `build()`).
+
+**Fix:** add a circuit breaker, or remove the circuit breaker classifier.
+
+## Runtime: external configuration (R4C-CFG)
+
+`ResilienceConfig.build()` reports every problem at once in one `ConfigException`; each line starts with its
+code and names the key and its source (file and line, environment variable or system property).
+
+### R4C-CFG-001
+
+**Trigger:** an unknown, malformed or incomplete key: unknown policy or attribute, empty segment, a key that
+stops early. The message suggests the closest valid key.
+
+**Wrong:**
+
+```properties
+configs.external.circuit-breaker.wait-in-opne=10s
+```
+
+**Fix:** use one of the key forms the message lists: `defaults.<policy>.<attribute>`,
+`configs.<name>.<policy>.<attribute>`, `configs.<name>.extends`, `instances.<id>.<policy>.<attribute>`,
+`profiles.<profile>.…` or `profiles.active`.
+
+```properties
+configs.external.circuit-breaker.wait-in-open=10s
+```
+
+### R4C-CFG-002
+
+**Trigger:** a value that cannot be parsed for its attribute: a number, boolean, enum constant or duration.
+
+**Wrong:**
+
+```properties
+defaults.retry.delay=fast
+```
+
+**Fix:** use a value of the attribute's type; durations use the same grammar as annotations (`"250ms"`,
+`"2s"`, `"PT2S"`, `"0"`).
+
+```properties
+defaults.retry.delay=250ms
+```
+
+### R4C-CFG-003
+
+**Trigger:** an exception list (`retry-on`, `abort-on`, `record-on`, `ignore-on`) names a class the class
+loader cannot find, or a class that is not a `Throwable`.
+
+**Wrong:**
+
+```properties
+defaults.retry.retry-on=java.io.IOExeption
+```
+
+**Fix:** use fully qualified names of exception classes visible to the application's class loader.
+
+```properties
+defaults.retry.retry-on=java.io.IOException
+```
+
+### R4C-CFG-004
+
+**Trigger:** an invalid config or profile name, or a reserved one (`default` for a config, `active` for a
+profile). Names use lowercase letters and digits separated by single hyphens, so that they map to
+environment variables.
+
+**Wrong:**
+
+```properties
+profiles.active=Test
+```
+
+**Fix:** rename it, for example `test`.
+
+```properties
+profiles.active=test
+```
+
+### R4C-CFG-005
+
+**Trigger:** the same key is set twice in one source (for example twice in one file, or under two spellings
+such as `max-attempts` and `maxAttempts`).
+
+**Fix:** keep one of them. Different sources may set the same key; the precedence order decides.
+
+### R4C-CFG-006
+
+**Trigger:** the values are valid one by one but not together, for example a `max-delay` shorter than the
+`delay`, or `max-attempts=0` (the config builder rejected them). The message names the keys involved.
+
+**Wrong:**
+
+```properties
+configs.slow.retry.delay=2s
+configs.slow.retry.max-delay=1s
+```
+
+**Fix:** make the values consistent, as the message describes.
+
+```properties
+configs.slow.retry.delay=1s
+configs.slow.retry.max-delay=2s
+```
+
+### R4C-CFG-007
+
+**Trigger:** `configs.<name>.extends` names a config that is not defined in external configuration, or
+configs extend each other in a cycle.
+
+**Wrong:**
+
+```properties
+configs.batch.extends=slwo
+```
+
+**Fix:** extend an existing config (the message suggests the closest name and lists the known ones) and
+break any cycle.
+
+### R4C-CFG-008
+
+**Trigger:** reserved; not reported by the current version.
+
+### R4C-CFG-009
+
+**Trigger:** a configuration source cannot be read: a classpath resource or file that does not exist, or an
+I/O error.
+
+**Fix:** check the path, or do not add the source when it is optional.
+
+### R4C-CFG-010
+
+**Trigger:** an environment variable matches more than one key, because `_` stands for both `.` and `-`.
+
+**Fix:** set that key in a properties file or as a system property instead.
+
+### R4C-CFG-011
+
+**Trigger:** retired; no longer reported. A named config set both in code and externally is now merged, the
+external values winning.
+
+### R4C-CFG-012
+
+**Trigger:** a malformed instance id in an `instances.` key: an id that contains `.` but is not quoted, an
+empty id, an unclosed or misplaced `"`, quotes around anything but the id, or an id that starts or ends with
+whitespace.
+
+**Wrong:**
+
+```properties
+instances.com.acme.Api#get(java.lang.String).retry.max-attempts=5
+```
+
+**Fix:** quote the instance id.
+
+```properties
+instances."com.acme.Api#get(java.lang.String)".retry.max-attempts=5
+```
+
+### R4C-CFG-013
+
+**Trigger:** `config.verifyInstances(registry)` found an `instances.` override that matches no instance of
+that policy in the registry (reported by `verifyInstances`, not `build()`, because instances exist only once
+services are wrapped). The message suggests the closest id.
+
+**Fix:** use an existing instance id: the policy's `name`, or `<interface>#<method>(<parameter types>)` when
+it has none.

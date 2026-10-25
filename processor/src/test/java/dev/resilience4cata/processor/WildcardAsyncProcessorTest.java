@@ -133,6 +133,8 @@ class WildcardAsyncProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder(
+                "R4C-FB-003", "R4C-FB-003", "R4C-CLS-010", "R4C-ASY-001");
         assertThat(result.errors()).hasSize(4)
                 .anySatisfy(e -> assertThat(e).contains("text() returns java.lang.String, which is neither java.lang.Number"
                         + " nor a CompletionStage of it"))

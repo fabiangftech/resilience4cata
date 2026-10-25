@@ -84,10 +84,10 @@ final class PolicyAttributes {
                 for (Map.Entry<String, AnnotationValue> entry : bundle.get().entrySet()) {
                     AnnotationValue previous = composed.putIfAbsent(entry.getKey(), entry.getValue());
                     if (previous != null && !previous.toString().equals(entry.getValue().toString())) {
-                        String message = "@" + simpleName + "." + entry.getKey()
+                        String message = ProcessorError.BUNDLE_CONFLICT.message("@" + simpleName + "." + entry.getKey()
                                 + " is set to " + previous + " by @" + composedSource.get(entry.getKey())
                                 + " and to " + entry.getValue() + " by @" + type.getSimpleName()
-                                + ". Set it directly on the element to resolve the conflict.";
+                                + ". Set it directly on the element to resolve the conflict.");
                         if (reported.add(reportOn + "|" + message)) {
                             messager.printMessage(Diagnostic.Kind.ERROR, message, reportOn);
                         }

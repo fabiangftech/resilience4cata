@@ -564,7 +564,9 @@ public final class Pipeline<T> {
             this.registry = Objects.requireNonNull(registry, "registry");
             this.id = Objects.requireNonNull(id, "id");
             if (id.isBlank()) {
-                throw new IllegalArgumentException("The pipeline id must not be blank");
+                throw new IllegalArgumentException(ErrorCode.BLANK_PIPELINE_ID.message(
+                        "The pipeline id must not be blank. Pass the id that names the pipeline's policy instances,"
+                        + " for example \"payments\"."));
             }
         }
 
@@ -791,7 +793,7 @@ public final class Pipeline<T> {
          */
         public Builder<T> classifier(Classifier<? super T> classifier) {
             if (this.classifier != null) {
-                throw new IllegalStateException("The classifier of pipeline '" + id + "' is set twice");
+                throw setTwice("The classifier");
             }
             this.classifier = Objects.requireNonNull(classifier, "classifier");
             return this;
@@ -809,7 +811,7 @@ public final class Pipeline<T> {
          */
         public Builder<T> retryClassifier(Classifier<? super T> classifier) {
             if (retryClassifier != null) {
-                throw new IllegalStateException("The retry classifier of pipeline '" + id + "' is set twice");
+                throw setTwice("The retry classifier");
             }
             retryClassifier = Objects.requireNonNull(classifier, "classifier");
             return this;
@@ -826,7 +828,7 @@ public final class Pipeline<T> {
          */
         public Builder<T> onExhaustedResult(ExhaustedResult onExhaustedResult) {
             if (this.onExhaustedResult != null) {
-                throw new IllegalStateException("onExhaustedResult of pipeline '" + id + "' is set twice");
+                throw setTwice("onExhaustedResult");
             }
             this.onExhaustedResult = Objects.requireNonNull(onExhaustedResult, "onExhaustedResult");
             return this;
@@ -842,7 +844,7 @@ public final class Pipeline<T> {
          */
         public Builder<T> circuitBreakerClassifier(Classifier<? super T> classifier) {
             if (circuitBreakerClassifier != null) {
-                throw new IllegalStateException("The circuit breaker classifier of pipeline '" + id + "' is set twice");
+                throw setTwice("The circuit breaker classifier");
             }
             circuitBreakerClassifier = Objects.requireNonNull(classifier, "classifier");
             return this;
@@ -873,7 +875,7 @@ public final class Pipeline<T> {
          */
         public Builder<T> fallbackHandler(FallbackHandler<? extends T> handler) {
             if (fallbackHandler != null) {
-                throw new IllegalStateException("The fallback of pipeline '" + id + "' is set twice");
+                throw setTwice("The fallback");
             }
             fallbackHandler = Objects.requireNonNull(handler, "handler");
             return this;
@@ -908,7 +910,7 @@ public final class Pipeline<T> {
          */
         public Builder<T> fallbackAsyncHandler(FallbackHandler<? extends CompletionStage<T>> handler) {
             if (asyncFallbackHandler != null) {
-                throw new IllegalStateException("The asynchronous fallback of pipeline '" + id + "' is set twice");
+                throw setTwice("The asynchronous fallback");
             }
             asyncFallbackHandler = Objects.requireNonNull(handler, "handler");
             return this;
@@ -937,9 +939,14 @@ public final class Pipeline<T> {
             return this;
         }
 
+        private IllegalStateException setTwice(String what) {
+            return new IllegalStateException(ErrorCode.SET_TWICE.message(what + " of pipeline '" + id
+                    + "' is set twice. Set it once per builder."));
+        }
+
         private void once(@Nullable Step<?> step, String kind) {
             if (step != null) {
-                throw new IllegalStateException("The " + kind + " of pipeline '" + id + "' is set twice");
+                throw setTwice("The " + kind);
             }
         }
 
@@ -954,20 +961,27 @@ public final class Pipeline<T> {
         public Pipeline<T> build() {
             if ((fallbackApplyOn.size() != 1 || fallbackApplyOn.get(0) != Throwable.class || !fallbackSkipOn.isEmpty())
                     && fallbackHandler == null && asyncFallbackHandler == null) {
-                throw new IllegalStateException("Pipeline '" + id + "' selects fallback failures but has no fallback");
+                throw new IllegalStateException(ErrorCode.FALLBACK_FILTER_WITHOUT_FALLBACK.message("Pipeline '" + id
+                        + "' selects fallback failures but has no fallback. Add a fallback, or remove fallbackApplyOn and"
+                        + " fallbackSkipOn."));
             }
             if (classifier != null && retry == null && circuitBreaker == null) {
-                throw new IllegalStateException("Pipeline '" + id + "' has a classifier but no retry or circuit breaker");
+                throw new IllegalStateException(ErrorCode.CLASSIFIER_WITHOUT_POLICY.message("Pipeline '" + id
+                        + "' has a classifier but no retry or circuit breaker. Add one of them, or remove the classifier."));
             }
             if (retryClassifier != null && retry == null) {
-                throw new IllegalStateException("Pipeline '" + id + "' has a retry classifier but no retry");
+                throw new IllegalStateException(ErrorCode.RETRY_CLASSIFIER_WITHOUT_RETRY.message("Pipeline '" + id
+                        + "' has a retry classifier but no retry. Add a retry, or remove the retry classifier."));
             }
             if (onExhaustedResult != null && (retry == null || (retryClassifier == null && classifier == null))) {
-                throw new IllegalStateException("Pipeline '" + id + "' sets onExhaustedResult but has no retry with a"
-                        + " classifier: only a classifier can reject a result");
+                throw new IllegalStateException(ErrorCode.EXHAUSTED_RESULT_WITHOUT_CLASSIFIER.message("Pipeline '" + id
+                        + "' sets onExhaustedResult but has no retry with a classifier: only a classifier can reject a"
+                        + " result. Add a retry and a classifier, or remove onExhaustedResult."));
             }
             if (circuitBreakerClassifier != null && circuitBreaker == null) {
-                throw new IllegalStateException("Pipeline '" + id + "' has a circuit breaker classifier but no circuit breaker");
+                throw new IllegalStateException(ErrorCode.CIRCUIT_BREAKER_CLASSIFIER_WITHOUT_CIRCUIT_BREAKER.message(
+                        "Pipeline '" + id + "' has a circuit breaker classifier but no circuit breaker. Add a circuit breaker, or"
+                        + " remove the circuit breaker classifier."));
             }
             return new Pipeline<>(this);
         }

@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Messager;
@@ -149,7 +150,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 for (PolicyAttributes policy : attributes.values()) {
                     if (PolicyAttributes.hasAnnotation(type, policy.annotation())
                             && !PolicyAttributes.hasAnnotation(type, PolicyAttributes.POLICY)) {
-                        error(type, "@" + type.getSimpleName() + " uses @" + policy.simpleName()
+                        error(type, ProcessorError.BUNDLE_NOT_MARKED, "@" + type.getSimpleName() + " uses @" + policy.simpleName()
                                 + " but is not marked with @ResiliencePolicy, so its policies would be ignored."
                                 + " Add @ResiliencePolicy to it.");
                     }
@@ -169,7 +170,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             }
             default -> {
                 if (usesAnyPolicy(type)) {
-                    error(type, "Resilience annotations cannot be used on " + (type.getKind() == ElementKind.ENUM
+                    error(type, ProcessorError.ENUM_OR_RECORD, "Resilience annotations cannot be used on " + (type.getKind() == ElementKind.ENUM
                             ? "enums" : "records") + ": the generated subclass must extend the type, and "
                             + (type.getKind() == ElementKind.ENUM ? "enums" : "records") + " are final. Declare the"
                             + " methods in an interface and wrap the implementation with Resilient.of(...).");
@@ -232,7 +233,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             boolean annotated = !policies.isEmpty() || fallback != null || effective(Kind.FALLBACK, iface,
                     typeLevel.get(Kind.FALLBACK), method).isPresent();
             if (annotated && asyncResult != null && asyncResult.getKind() == TypeKind.NONE) {
-                error(method, "An asynchronous method must return CompletionStage<T> or CompletableFuture<T>, where T"
+                error(method, ProcessorError.UNSUPPORTED_ASYNC_TYPE, "An asynchronous method must return CompletionStage<T> or CompletableFuture<T>, where T"
                         + " may also be ? or ? extends X (not ? super X), to use resilience annotations; it returns "
                         + TypePrinter.print(type.getReturnType()) + ".");
                 valid = false;
@@ -246,7 +247,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
             return;
         }
         if (iface.getModifiers().contains(Modifier.PRIVATE)) {
-            error(iface, "Resilience annotations need a non-private interface: the generated class must implement it.");
+            error(iface, ProcessorError.PRIVATE_INTERFACE, "Resilience annotations need a non-private interface: the generated class must implement it."
+                    + " Make " + iface.getSimpleName() + " package-private or public.");
             return;
         }
         write(iface, binaryName, methods);
@@ -258,8 +260,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
         for (ExecutableElement method : ElementFilter.methodsIn(iface.getEnclosedElements())) {
             Set<Modifier> modifiers = method.getModifiers();
             if ((modifiers.contains(Modifier.STATIC) || modifiers.contains(Modifier.PRIVATE)) && usesAnyPolicy(method)) {
-                error(method, "Resilience annotations cannot be used on static or private methods:"
-                        + " calls to them cannot be intercepted.");
+                error(method, ProcessorError.STATIC_OR_PRIVATE_METHOD, "Resilience annotations cannot be used on static or private methods:"
+                        + " calls to them cannot be intercepted. Annotate a non-private instance method instead.");
                 valid = false;
             }
         }
@@ -372,12 +374,12 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     try {
                         long nanos = Durations.parseNanos((String) value);
                         if (nanos == 0) {
-                            valid = invalid(method, annotation + " must be positive, was \"" + value + "\"");
+                            valid = invalid(method, ProcessorError.DURATION_NOT_POSITIVE, annotation + " must be positive, was \"" + value + "\"");
                         } else {
                             overrides.add("timeout(java.time.Duration.ofNanos(" + nanos + "L))");
                         }
                     } catch (IllegalArgumentException e) {
-                        valid = invalid(method, annotation + "(\"" + value + "\") is not a valid duration: "
+                        valid = invalid(method, ProcessorError.INVALID_DURATION, annotation + "(\"" + value + "\") is not a valid duration: "
                                 + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
                     }
                 }
@@ -386,7 +388,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     if (value.equals("true") || value.equals("false")) {
                         overrides.add("enabled(" + value + ")");
                     } else {
-                        valid = invalid(method, label + " must be \"\", \"true\" or \"false\", was \"" + value + "\"");
+                        valid = invalid(method, ProcessorError.INVALID_ENABLED, label + " must be \"\", \"true\" or \"false\", was \"" + value + "\"");
                     }
                 }
                 case "classifier" -> {
@@ -403,7 +405,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 case "maxAttempts", "windowSize", "minimumCalls", "halfOpenCalls", "maxConcurrent", "permits" -> {
                     int number = (Integer) value;
                     if (number < 1) {
-                        valid = invalid(method, label + " must be at least 1, was " + number);
+                        valid = invalid(method, ProcessorError.COUNT_BELOW_ONE, label + " must be at least 1, was " + number);
                     } else {
                         overrides.add(attribute + "(" + number + ")");
                     }
@@ -413,7 +415,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         long nanos = Durations.parseNanos((String) value);
                         overrides.add(attribute + "(java.time.Duration.ofNanos(" + nanos + "L))");
                     } catch (IllegalArgumentException e) {
-                        valid = invalid(method, label + " = \"" + value + "\" is not a valid duration: "
+                        valid = invalid(method, ProcessorError.INVALID_DURATION, label + " = \"" + value + "\" is not a valid duration: "
                                 + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
                     }
                 }
@@ -421,19 +423,19 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     try {
                         long nanos = Durations.parseNanos((String) value);
                         if (nanos == 0) {
-                            valid = invalid(method, label + " must be positive, was \"" + value + "\"");
+                            valid = invalid(method, ProcessorError.DURATION_NOT_POSITIVE, label + " must be positive, was \"" + value + "\"");
                         } else {
                             overrides.add("period(java.time.Duration.ofNanos(" + nanos + "L))");
                         }
                     } catch (IllegalArgumentException e) {
-                        valid = invalid(method, label + " = \"" + value + "\" is not a valid duration: "
+                        valid = invalid(method, ProcessorError.INVALID_DURATION, label + " = \"" + value + "\" is not a valid duration: "
                                 + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
                     }
                 }
                 case "multiplier" -> {
                     double multiplier = (Double) value;
                     if (!(multiplier >= 1) || Double.isInfinite(multiplier)) {
-                        valid = invalid(method, label + " must be a finite number >= 1, was " + multiplier);
+                        valid = invalid(method, ProcessorError.INVALID_MULTIPLIER, label + " must be a finite number >= 1, was " + multiplier);
                     } else {
                         overrides.add("multiplier(" + multiplier + ")");
                     }
@@ -441,7 +443,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 case "failureRateThreshold", "slowCallRateThreshold" -> {
                     float rate = (Float) value;
                     if (!(rate > 0 && rate <= 100)) {
-                        valid = invalid(method, label + " must be a percentage > 0 and <= 100, was " + rate);
+                        valid = invalid(method, ProcessorError.INVALID_PERCENTAGE, label + " must be a percentage > 0 and <= 100, was " + rate);
                     } else {
                         overrides.add(attribute + "(" + rate + "f)");
                     }
@@ -449,21 +451,21 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 case "backoff" -> overrides.add("backoff(" + kind.configType + ".Backoff." + constant(value) + ")");
                 case "jitter" -> overrides.add("jitter(" + kind.configType + ".Jitter." + constant(value) + ")");
                 case "windowType" -> overrides.add("windowType(" + kind.configType + ".WindowType." + constant(value) + ")");
-                default -> valid = invalid(method, "Unknown attribute " + label
+                default -> valid = invalid(method, ProcessorError.UNKNOWN_ATTRIBUTE, "Unknown attribute " + label
                         + ". The processor and the annotations jar have different versions.");
             }
         }
         if (classifier != null) {
             String replaced = kind == Kind.RETRY ? "retryOn" : "recordOn";
             if (values.containsKey(replaced)) {
-                valid = invalid(method, annotation + "." + replaced + " cannot be combined with " + annotation
+                valid = invalid(method, ProcessorError.CLASSIFIER_WITH_FILTER, annotation + "." + replaced + " cannot be combined with " + annotation
                         + ".classifier: the classifier decides which exceptions count as failures. Remove "
                         + replaced + ", or return Outcome.FAILURE for those exceptions from the classifier. ("
                         + (kind == Kind.RETRY ? "abortOn" : "ignoreOn") + " still applies before the classifier.)");
             }
         }
         if (values.containsKey("onExhaustedResult") && !values.containsKey("classifier")) {
-            valid = invalid(method, annotation + ".onExhaustedResult needs " + annotation + ".classifier: only a"
+            valid = invalid(method, ProcessorError.EXHAUSTED_WITHOUT_CLASSIFIER, annotation + ".onExhaustedResult needs " + annotation + ".classifier: only a"
                     + " classifier can reject a result. Add a classifier, or remove onExhaustedResult.");
         }
         if (!valid) {
@@ -484,32 +486,32 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String label = attribute + " = " + TypePrinter.print(classifier) + ".class";
         TypeElement classifierType = elements.getTypeElement("dev.resilience4cata.Classifier");
         if (classifierType == null) {
-            return invalidClassifier(method, label + ": dev.resilience4cata.Classifier is not on the classpath. Add the"
+            return invalidClassifier(method, ProcessorError.CLASSIFIER_MISSING_CORE, label + ": dev.resilience4cata.Classifier is not on the classpath. Add the"
                     + " resilience4cata-core dependency.");
         }
         if (classifier.getKind() != TypeKind.DECLARED
                 || ((DeclaredType) classifier).asElement().getKind() != ElementKind.CLASS) {
-            return invalidClassifier(method, label + ": the classifier must be a class that implements"
+            return invalidClassifier(method, ProcessorError.CLASSIFIER_NOT_CLASS, label + ": the classifier must be a class that implements"
                     + " dev.resilience4cata.Classifier<T>.");
         }
         TypeElement classifierClass = (TypeElement) ((DeclaredType) classifier).asElement();
         if (classifierClass.getModifiers().contains(Modifier.ABSTRACT)) {
-            return invalidClassifier(method, label + ": the classifier must not be abstract, because one instance is"
+            return invalidClassifier(method, ProcessorError.CLASSIFIER_ABSTRACT, label + ": the classifier must not be abstract, because one instance is"
                     + " created per method.");
         }
         if (!classifierClass.getTypeParameters().isEmpty()) {
-            return invalidClassifier(method, label + ": generic classifier classes are not supported. Implement"
+            return invalidClassifier(method, ProcessorError.CLASSIFIER_GENERIC, label + ": generic classifier classes are not supported. Implement"
                     + " Classifier<T> with a concrete T.");
         }
         String samePackage = elements.getPackageOf(iface).getQualifiedName().toString();
         for (Element e = classifierClass; e instanceof TypeElement t; e = t.getEnclosingElement()) {
             if (!accessible(t, samePackage)) {
-                return invalidClassifier(method, label + ": " + t.getSimpleName() + " must be public, or package-private"
+                return invalidClassifier(method, ProcessorError.CLASSIFIER_INACCESSIBLE, label + ": " + t.getSimpleName() + " must be public, or package-private"
                         + " in package " + samePackage + ", for the generated class to create the classifier.");
             }
         }
         if (classifierClass.getNestingKind().isNested() && !classifierClass.getModifiers().contains(Modifier.STATIC)) {
-            return invalidClassifier(method, label + ": a nested classifier class must be static.");
+            return invalidClassifier(method, ProcessorError.CLASSIFIER_INNER, label + ": a nested classifier class must be static.");
         }
         boolean constructor = false;
         for (ExecutableElement c : ElementFilter.constructorsIn(classifierClass.getEnclosedElements())) {
@@ -518,21 +520,21 @@ public final class ResilienceProcessor extends AbstractProcessor {
             }
         }
         if (!constructor) {
-            return invalidClassifier(method, label + ": the classifier needs a public no-argument constructor.");
+            return invalidClassifier(method, ProcessorError.CLASSIFIER_NO_CONSTRUCTOR, label + ": the classifier needs a public no-argument constructor.");
         }
         List<? extends TypeMirror> arguments = supertypeArguments(classifier, types.erasure(classifierType.asType()));
         if (arguments == null) {
-            return invalidClassifier(method, label + ": " + classifierClass.getSimpleName()
+            return invalidClassifier(method, ProcessorError.CLASSIFIER_NOT_CLASSIFIER, label + ": " + classifierClass.getSimpleName()
                     + " does not implement dev.resilience4cata.Classifier<T>.");
         }
         TypeMirror value = asyncResult != null ? asyncResult : boxed(type.getReturnType());
         if (arguments.isEmpty()) {
-            return invalidClassifier(method, label + ": " + classifierClass.getSimpleName() + " implements the raw type"
+            return invalidClassifier(method, ProcessorError.CLASSIFIER_RAW, label + ": " + classifierClass.getSimpleName() + " implements the raw type"
                     + " Classifier. Implement Classifier<" + TypePrinter.print(value) + "> instead.");
         }
         TypeMirror classified = arguments.get(0);
         if (value.getKind() != TypeKind.NONE && !types.isAssignable(value, classified)) {
-            return invalidClassifier(method, label + ": " + classifierClass.getSimpleName() + " implements Classifier<"
+            return invalidClassifier(method, ProcessorError.CLASSIFIER_WRONG_TYPE, label + ": " + classifierClass.getSimpleName() + " implements Classifier<"
                     + TypePrinter.print(classified) + ">, but " + method.getSimpleName() + " "
                     + (asyncResult != null ? "completes with " : "returns ") + TypePrinter.print(value)
                     + ". Implement Classifier<" + TypePrinter.print(value) + "> or a supertype of it.");
@@ -540,8 +542,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return classifierClass.getQualifiedName().toString();
     }
 
-    private String invalidClassifier(Element element, String message) {
-        error(element, message);
+    private String invalidClassifier(Element element, ProcessorError error, String message) {
+        error(element, error, message);
         return null;
     }
 
@@ -561,12 +563,12 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 case "method" -> methodName = (String) value;
                 case "applyOn" -> applyOn = classList(value);
                 case "skipOn" -> skipOn = classList(value);
-                default -> valid = invalid(method, "Unknown attribute @Fallback." + entry.getKey()
+                default -> valid = invalid(method, ProcessorError.UNKNOWN_ATTRIBUTE, "Unknown attribute @Fallback." + entry.getKey()
                         + ". The processor and the annotations jar have different versions.");
             }
         }
         if ((handler == null) == methodName.isEmpty()) {
-            return invalidModel(method, "@Fallback needs exactly one of a handler class, @Fallback(MyFallback.class),"
+            return invalidModel(method, ProcessorError.FALLBACK_TARGET, "@Fallback needs exactly one of a handler class, @Fallback(MyFallback.class),"
                     + " or a sibling method, @Fallback(method = \"name\").");
         }
         if (!valid) {
@@ -602,29 +604,29 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String label = "@Fallback(" + TypePrinter.print(handler) + ".class)";
         TypeElement fallbackType = elements.getTypeElement("dev.resilience4cata.FallbackHandler");
         if (fallbackType == null) {
-            return invalidHandler(method, label + ": dev.resilience4cata.FallbackHandler is not on the classpath. Add the"
+            return invalidHandler(method, ProcessorError.HANDLER_MISSING_CORE, label + ": dev.resilience4cata.FallbackHandler is not on the classpath. Add the"
                     + " resilience4cata-core dependency.");
         }
         if (handler.getKind() != TypeKind.DECLARED
                 || ((DeclaredType) handler).asElement().getKind() != ElementKind.CLASS) {
-            return invalidHandler(method, label + ": the handler must be a class that implements FallbackHandler<T>.");
+            return invalidHandler(method, ProcessorError.HANDLER_NOT_CLASS, label + ": the handler must be a class that implements FallbackHandler<T>.");
         }
         TypeElement handlerClass = (TypeElement) ((DeclaredType) handler).asElement();
         if (handlerClass.getModifiers().contains(Modifier.ABSTRACT)) {
-            return invalidHandler(method, label + ": the handler must not be abstract, because one instance is created per method.");
+            return invalidHandler(method, ProcessorError.HANDLER_ABSTRACT, label + ": the handler must not be abstract, because one instance is created per method.");
         }
         if (!handlerClass.getTypeParameters().isEmpty()) {
-            return invalidHandler(method, label + ": generic handler classes are not supported. Implement FallbackHandler<T> with a concrete T.");
+            return invalidHandler(method, ProcessorError.HANDLER_GENERIC, label + ": generic handler classes are not supported. Implement FallbackHandler<T> with a concrete T.");
         }
         String samePackage = elements.getPackageOf(iface).getQualifiedName().toString();
         for (Element e = handlerClass; e instanceof TypeElement t; e = t.getEnclosingElement()) {
             if (!accessible(t, samePackage)) {
-                return invalidHandler(method, label + ": " + t.getSimpleName() + " must be public, or package-private in"
+                return invalidHandler(method, ProcessorError.HANDLER_INACCESSIBLE, label + ": " + t.getSimpleName() + " must be public, or package-private in"
                         + " package " + samePackage + ", for the generated class to create the handler.");
             }
         }
         if (handlerClass.getNestingKind().isNested() && !handlerClass.getModifiers().contains(Modifier.STATIC)) {
-            return invalidHandler(method, label + ": a nested handler class must be static.");
+            return invalidHandler(method, ProcessorError.HANDLER_INNER, label + ": a nested handler class must be static.");
         }
         boolean constructor = false;
         for (ExecutableElement c : ElementFilter.constructorsIn(handlerClass.getEnclosedElements())) {
@@ -633,14 +635,14 @@ public final class ResilienceProcessor extends AbstractProcessor {
             }
         }
         if (!constructor) {
-            return invalidHandler(method, label + ": the handler needs a public no-argument constructor.");
+            return invalidHandler(method, ProcessorError.HANDLER_NO_CONSTRUCTOR, label + ": the handler needs a public no-argument constructor.");
         }
         List<? extends TypeMirror> arguments = supertypeArguments(handler, types.erasure(fallbackType.asType()));
         if (arguments == null) {
-            return invalidHandler(method, label + ": " + handlerClass.getSimpleName() + " does not implement dev.resilience4cata.FallbackHandler<T>.");
+            return invalidHandler(method, ProcessorError.HANDLER_NOT_HANDLER, label + ": " + handlerClass.getSimpleName() + " does not implement dev.resilience4cata.FallbackHandler<T>.");
         }
         if (arguments.isEmpty()) {
-            return invalidHandler(method, label + ": " + handlerClass.getSimpleName() + " implements the raw type Fallback."
+            return invalidHandler(method, ProcessorError.HANDLER_RAW, label + ": " + handlerClass.getSimpleName() + " implements the raw type Fallback."
                     + " Implement FallbackHandler<" + TypePrinter.print(boxed(type.getReturnType())) + "> instead.");
         }
         TypeMirror result = arguments.get(0);
@@ -657,19 +659,19 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 return new Handler(name, true, false);
             }
             if (mentions(asyncResult, type.getTypeVariables())) {
-                return invalidHandler(method, genericHandler(label, handlerClass, result, method, returnType));
+                return invalidHandler(method, ProcessorError.HANDLER_ON_GENERIC_METHOD, genericHandler(label, handlerClass, result, method, returnType));
             }
-            return invalidHandler(method, label + ": " + handlerClass.getSimpleName() + " implements FallbackHandler<"
+            return invalidHandler(method, ProcessorError.HANDLER_WRONG_TYPE, label + ": " + handlerClass.getSimpleName() + " implements FallbackHandler<"
                     + TypePrinter.print(result) + ">, but " + method.getSimpleName() + " returns "
                     + TypePrinter.print(returnType) + ". Implement FallbackHandler<" + TypePrinter.print(asyncResult)
                     + "> or FallbackHandler<java.util.concurrent.CompletionStage<" + TypePrinter.print(asyncResult) + ">>.");
         }
         if (returnType.getKind() != TypeKind.VOID && !types.isAssignable(result, returnType)
                 && mentions(returnType, type.getTypeVariables())) {
-            return invalidHandler(method, genericHandler(label, handlerClass, result, method, returnType));
+            return invalidHandler(method, ProcessorError.HANDLER_ON_GENERIC_METHOD, genericHandler(label, handlerClass, result, method, returnType));
         }
         if (returnType.getKind() != TypeKind.VOID && !types.isAssignable(result, returnType)) {
-            return invalidHandler(method, label + ": " + handlerClass.getSimpleName() + " implements FallbackHandler<"
+            return invalidHandler(method, ProcessorError.HANDLER_WRONG_TYPE, label + ": " + handlerClass.getSimpleName() + " implements FallbackHandler<"
                     + TypePrinter.print(result) + ">, but " + method.getSimpleName() + " returns "
                     + TypePrinter.print(returnType) + ". Implement FallbackHandler<" + TypePrinter.print(boxed(returnType)) + ">.");
         }
@@ -762,12 +764,18 @@ public final class ResilienceProcessor extends AbstractProcessor {
         List<FallbackTarget> targets = new ArrayList<>();
         Map<FallbackTarget, TypeMirror> exceptionTypes = new LinkedHashMap<>();
         List<String> problems = new ArrayList<>();
+        Set<String> names = new TreeSet<>(); // every method that could be a fallback, for "did you mean"
+        boolean named = false;
         for (ExecutableElement candidate : ElementFilter.methodsIn(elements.getAllMembers(iface))) {
-            if (!candidate.getSimpleName().contentEquals(name) || candidate.equals(method)
-                    || (candidate.getEnclosingElement().getKind() != ElementKind.INTERFACE
-                            && (iface.getKind() != ElementKind.CLASS || isObject(candidate.getEnclosingElement())))) {
+            if (candidate.equals(method) || (candidate.getEnclosingElement().getKind() != ElementKind.INTERFACE
+                    && (iface.getKind() != ElementKind.CLASS || isObject(candidate.getEnclosingElement())))) {
                 continue;
             }
+            names.add(candidate.getSimpleName().toString());
+            if (!candidate.getSimpleName().contentEquals(name)) {
+                continue;
+            }
+            named = true;
             ExecutableType candidateType = (ExecutableType) types.asMemberOf((DeclaredType) iface.asType(), candidate);
             List<? extends TypeMirror> candidateParameters = candidateType.getParameterTypes();
             int n = parameters.size();
@@ -862,14 +870,21 @@ public final class ResilienceProcessor extends AbstractProcessor {
             String expected = (type.getTypeVariables().isEmpty() ? "" : methodTypeVariables(type.getTypeVariables()) + " ")
                     + (returnType.getKind() == TypeKind.VOID ? "void" : TypePrinter.print(returnType)) + " "
                     + name + "(" + parameterList + (parameterList.isEmpty() ? "" : ", ") + "<a Throwable type> e)";
+            String expectation = "Expected a " + (iface.getKind() == ElementKind.CLASS ? "non-private" : "default or static")
+                    + " method " + expected + ", where the exception parameter is optional.";
+            if (!named) {
+                String closest = Suggestions.closest(name, names);
+                error(method, ProcessorError.FALLBACK_METHOD_NOT_FOUND, "@Fallback(method = \"" + name + "\") on "
+                        + method.getSimpleName() + ": no method named " + name + " in " + iface.getSimpleName() + "."
+                        + (closest == null ? "" : " Did you mean " + closest + "?") + " " + expectation);
+                return null;
+            }
             StringBuilder message = new StringBuilder("@Fallback(method = \"" + name + "\"): no usable method " + name
-                    + " in " + iface.getSimpleName() + ". Expected a "
-                    + (iface.getKind() == ElementKind.CLASS ? "non-private" : "default or static") + " method " + expected
-                    + ", where the exception parameter is optional.");
+                    + " in " + iface.getSimpleName() + ". " + expectation);
             for (String problem : problems) {
                 message.append("\n  ").append(problem);
             }
-            error(method, message.toString());
+            error(method, ProcessorError.FALLBACK_METHOD_UNUSABLE, message.toString());
             return null;
         }
         // Most specific first: a subtype is always deeper in the hierarchy. Methods without an exception parameter go last.
@@ -956,13 +971,13 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 && !types.isAssignable(thrown, elements.getTypeElement("java.lang.Error").asType());
     }
 
-    private FallbackModel invalidModel(Element element, String message) {
-        error(element, message);
+    private FallbackModel invalidModel(Element element, ProcessorError error, String message) {
+        error(element, error, message);
         return null;
     }
 
-    private Handler invalidHandler(Element element, String message) {
-        error(element, message);
+    private Handler invalidHandler(Element element, ProcessorError error, String message) {
+        error(element, error, message);
         return null;
     }
 
@@ -1058,7 +1073,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 writer.write(out.toString());
             }
         } catch (IOException e) {
-            error(iface, "Could not write " + qualifiedName + ": " + e.getMessage());
+            error(iface, ProcessorError.WRITE_FAILED, "Could not write " + qualifiedName + ": " + e.getMessage()
+                    + ". Check that the generated-sources directory is writable and that no other processor or source"
+                    + " file defines " + qualifiedName + ".");
         }
     }
 
@@ -1655,13 +1672,14 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return out.append('"').toString();
     }
 
-    private boolean invalid(Element element, String message) {
-        error(element, message);
+    private boolean invalid(Element element, ProcessorError error, String message) {
+        error(element, error, message);
         return false;
     }
 
-    private void error(Element element, String message) {
-        messager.printMessage(Diagnostic.Kind.ERROR, message, element);
+    /** Reports {@code error} on {@code element}; {@code message} says where, what and how to fix it. */
+    private void error(Element element, ProcessorError error, String message) {
+        messager.printMessage(Diagnostic.Kind.ERROR, error.message(message), element);
     }
 
     /**

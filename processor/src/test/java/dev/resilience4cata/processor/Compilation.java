@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.ZipFile;
 import javax.annotation.processing.Processor;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
@@ -34,6 +35,32 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
      * classpath, so classes compiled earlier can stand in for sources that are not recompiled.
      */
     static Compilation compile(Path workDir, Map<String, String> sources, Processor processor, List<Path> classpath) {
+        String path = Stream.concat(classpath.stream().map(Path::toString),
+                Stream.of(System.getProperty("java.class.path"))).collect(Collectors.joining(File.pathSeparator));
+        return compile(workDir, sources, processor, path);
+    }
+
+    /** Compiles {@code sources} with the processor, on the test classpath without resilience4cata-core. */
+    static Compilation compileWithoutCore(Path workDir, Map<String, String> sources) {
+        String path = Stream.of(System.getProperty("java.class.path").split(File.pathSeparator))
+                .filter(entry -> !containsCore(Path.of(entry)))
+                .collect(Collectors.joining(File.pathSeparator));
+        return compile(workDir, sources, new ResilienceProcessor(), path);
+    }
+
+    private static boolean containsCore(Path entry) {
+        String classifier = "dev/resilience4cata/Classifier.class";
+        if (Files.isDirectory(entry)) {
+            return Files.exists(entry.resolve(classifier));
+        }
+        try (ZipFile jar = new ZipFile(entry.toFile())) {
+            return jar.getEntry(classifier) != null;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static Compilation compile(Path workDir, Map<String, String> sources, Processor processor, String path) {
         try {
             Path sourceDir = Files.createDirectories(workDir.resolve("src"));
             Path classes = Files.createDirectories(workDir.resolve("classes"));
@@ -50,8 +77,6 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
             try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
                 fileManager.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, List.of(classes));
                 fileManager.setLocationFromPaths(StandardLocation.SOURCE_OUTPUT, List.of(generated));
-                String path = Stream.concat(classpath.stream().map(Path::toString),
-                        Stream.of(System.getProperty("java.class.path"))).collect(Collectors.joining(File.pathSeparator));
                 List<String> options = List.of("-classpath", path,
                         "-Xlint:all", "-Xlint:-processing", "-Werror");
                 JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnostics, options, null,
@@ -69,6 +94,13 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
         return diagnostics.stream()
                 .filter(d -> d.getKind() == Diagnostic.Kind.ERROR)
                 .map(d -> d.getMessage(Locale.ROOT))
+                .collect(Collectors.toList());
+    }
+
+    /** The code of each error, in order: {@code R4C-FB-002} for {@code [R4C-FB-002] @Fallback(...)}. */
+    List<String> errorCodes() {
+        return errors().stream()
+                .map(e -> e.startsWith("[R4C-") && e.indexOf(']') > 0 ? e.substring(1, e.indexOf(']')) : "(no code) " + e)
                 .collect(Collectors.toList());
     }
 

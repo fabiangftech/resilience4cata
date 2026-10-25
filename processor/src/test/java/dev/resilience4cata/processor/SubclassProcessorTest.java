@@ -228,6 +228,8 @@ class SubclassProcessorTest {
                         }
                         """));
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder(
+                "R4C-SUB-005", "R4C-SUB-004", "R4C-SUB-003", "R4C-SUB-002", "R4C-SUB-001", "R4C-APT-001", "R4C-APT-001", "R4C-SUB-006");
         assertThat(result.errors())
                 .anySatisfy(e -> assertThat(e).contains("Final is final, so the generated subclass cannot extend it"))
                 .anySatisfy(e -> assertThat(e).contains("Abstract is abstract"))
@@ -262,6 +264,8 @@ class SubclassProcessorTest {
                         }
                         """));
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder(
+                "R4C-SUB-007", "R4C-SUB-007", "R4C-SUB-008", "R4C-APT-002", "R4C-APT-002");
         assertThat(result.errors())
                 .anySatisfy(e -> assertThat(e).contains("sealedMethod() is final, so the generated subclass cannot override it"))
                 .anySatisfy(e -> assertThat(e).contains("api() is final"))
@@ -297,6 +301,7 @@ class SubclassProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-FB-003");
         assertThat(result.errors()).singleElement().asString()
                 .contains("no usable method recover in Service. Expected a non-private method")
                 .contains("recover(java.lang.Exception) is private, so the generated class cannot call it. Make it"

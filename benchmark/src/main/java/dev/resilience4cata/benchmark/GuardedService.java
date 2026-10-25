@@ -17,6 +17,10 @@ public interface GuardedService {
     @CircuitBreaker(config = "bench-time")
     String maybeFailTime(boolean fail);
 
+    /** Forced open by {@link CircuitBreakerBenchmark}, so every call is rejected. */
+    @CircuitBreaker(name = "bench-open", config = "bench")
+    String callOpen();
+
     /** Thread-safe implementation with trivial work. */
     final class Impl implements GuardedService {
         private final String value = "ok";
@@ -36,6 +40,11 @@ public interface GuardedService {
 
         @Override
         public String callTime() {
+            return value;
+        }
+
+        @Override
+        public String callOpen() {
             return value;
         }
 

@@ -314,12 +314,12 @@ Objetivos a verificar con JMH desde la primera versión ([01 §4.1](research/01-
 
 | Objetivo | Cómo se verifica |
 |---|---|
-| **0 B/op** en el camino exitoso de cada política y de una cadena completa | JMH `-prof gc`, como control en CI |
+| **0 B/op** en el camino exitoso de cada política y de una cadena completa | JMH `-prof gc` en CI: `./gradlew :benchmark:allocationCheck` hace fallar un PR si un benchmark de la lista alcanza su presupuesto + 1 B/op (0 en todo camino sincrónico; valores medidos para los futures async) ([benchmarks](benchmarks.md#gate-de-allocations)) |
 | Sin locks ni `synchronized` en el camino caliente | Revisión de código, ArchUnit, escenarios JMH con contención |
 | Código generado lineal y monomórfico por método; sin cadenas de lambdas compartidas | JMH con perfil de JIT contaminado, `-XX:+PrintInlining` |
 | Un par de lecturas de reloj por llamada, sin importar cuántas políticas haya | Revisión de código |
-| Excepciones de rechazo preasignadas y sin stack trace; eventos creados solo si alguien escucha | Escenarios JMH de rechazo |
-| Estructuras sin locks correctas | jcstress |
+| Excepciones de rechazo preasignadas y sin stack trace; eventos creados solo si alguien escucha | Escenarios JMH de rechazo (breaker abierto, bulkhead lleno, rate limiter agotado), con gate de 0 B/op en CI |
+| Estructuras sin locks correctas | jcstress, en CI después de cada push a main y cada noche |
 | Comparación publicada y reproducible contra Resilience4j 2.4.0 | 11 escenarios JMH ([03 §9](research/03-performance-internals.md)) |
 
 Las mediciones actuales están en [benchmarks](benchmarks.md). La mayoría de las llamadas reales dependen de I/O (milisegundos), así que la propuesta es "overhead casi nulo que escala con los threads, más anotaciones sin framework", no solo velocidad bruta.

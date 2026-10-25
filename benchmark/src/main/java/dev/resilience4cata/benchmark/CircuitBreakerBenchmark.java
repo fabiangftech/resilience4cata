@@ -33,6 +33,10 @@ import org.openjdk.jmh.annotations.Warmup;
  *   <li>{@code *Success}: every call succeeds.</li>
  *   <li>{@code *Mixed}: one call in ten fails. The rate stays under the threshold, so the breaker
  *       stays closed while its window records failures.</li>
+ *   <li>{@code *Open}: the breaker is forced open in the setup, so every call is rejected. Both
+ *       libraries throw without filling a stack trace (Resilience4j:
+ *       {@code writableStackTraceEnabled(false)}, which is fair to it: resilience4cata's rejection
+ *       exception is preallocated and stackless).</li>
  * </ul>
  *
  * <p>{@code *Time*} benchmarks use a time-based window of 10 seconds instead (Resilience4j:
@@ -57,6 +61,7 @@ public class CircuitBreakerBenchmark {
     private Function<Boolean, String> lockFreeMixed;
     private Supplier<String> timeSuccess;
     private Function<Boolean, String> timeMixed;
+    private Supplier<String> open;
 
     /** Per-thread call counter, used to fail one call in ten. */
     @State(Scope.Thread)
@@ -80,6 +85,7 @@ public class CircuitBreakerBenchmark {
                         .windowSize(10).minimumCalls(100).failureRateThreshold(50).waitInOpen(Duration.ofSeconds(60)))
                 .build();
         resilience4cata = Resilient.of(GuardedService.class, new GuardedService.Impl(), registry);
+        registry.circuitBreaker("bench-open").forceOpen();
 
         GuardedService.Impl impl = new GuardedService.Impl();
         synchronizedSuccess = CircuitBreaker.decorateSupplier(breaker("sync-success", SlidingWindowSynchronizationStrategy.SYNCHRONIZED), impl::call);
@@ -88,6 +94,14 @@ public class CircuitBreakerBenchmark {
         lockFreeMixed = CircuitBreaker.decorateFunction(breaker("lockfree-mixed", SlidingWindowSynchronizationStrategy.LOCK_FREE), impl::maybeFail);
         timeSuccess = CircuitBreaker.decorateSupplier(timeBreaker("time-success"), impl::call);
         timeMixed = CircuitBreaker.decorateFunction(timeBreaker("time-mixed"), impl::maybeFail);
+        CircuitBreaker forcedOpen = CircuitBreaker.of("open", CircuitBreakerConfig.custom()
+                .slidingWindow(100, 100, SlidingWindowType.COUNT_BASED, SlidingWindowSynchronizationStrategy.SYNCHRONIZED)
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofSeconds(60))
+                .writableStackTraceEnabled(false)
+                .build());
+        forcedOpen.transitionToForcedOpenState();
+        open = CircuitBreaker.decorateSupplier(forcedOpen, impl::call);
     }
 
     private static CircuitBreaker timeBreaker(String name) {
@@ -187,6 +201,24 @@ public class CircuitBreakerBenchmark {
             return timeMixed.apply(calls.nextFails());
         } catch (RuntimeException e) {
             return "failed";
+        }
+    }
+
+    @Benchmark
+    public String resilience4cataOpen() {
+        try {
+            return resilience4cata.callOpen();
+        } catch (dev.resilience4cata.CallNotPermittedException e) {
+            return "rejected";
+        }
+    }
+
+    @Benchmark
+    public String resilience4jOpen() {
+        try {
+            return open.get();
+        } catch (io.github.resilience4j.circuitbreaker.CallNotPermittedException e) {
+            return "rejected";
         }
     }
 }

@@ -146,6 +146,7 @@ class ExhaustedResultProcessorTest {
 
                 """ + CLASSIFIERS);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-CLS-012", "R4C-CLS-012");
         assertThat(result.errors()).hasSize(2).allSatisfy(e -> assertThat(e).contains(
                 "@Retry.onExhaustedResult needs @Retry.classifier: only a classifier can reject a result."));
     }

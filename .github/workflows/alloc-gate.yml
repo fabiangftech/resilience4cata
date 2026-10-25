@@ -1,0 +1,57 @@
+# Allocation gate: the bytes allocated per operation (JMH -prof gc) of every benchmark listed in
+# benchmark/allocation-budgets.properties must stay within budget (0 B/op on sync success and
+# rejection paths). Timing on shared runners is noise; bytes per operation are not, so only they gate.
+# Locally: ./gradlew :benchmark:allocationCheck
+name: alloc-gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  alloc-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Allocation check
+        run: ./gradlew :benchmark:allocationCheck -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f benchmark/build/jmh/allocation-report.md ]; then
+            cat benchmark/build/jmh/allocation-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: allocation-results
+          path: |
+            benchmark/build/jmh/allocation.json
+            benchmark/build/jmh/allocation-report.md
+          if-no-files-found: ignore
+          retention-days: 30

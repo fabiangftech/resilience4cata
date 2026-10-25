@@ -13,9 +13,17 @@ import org.gradle.api.tasks.compile.JavaCompile;
 import org.gradle.api.tasks.javadoc.Javadoc;
 import org.gradle.api.tasks.testing.Test;
 import org.gradle.external.javadoc.StandardJavadocDocletOptions;
+import org.gradle.api.provider.Provider;
 import org.gradle.jvm.toolchain.JavaLanguageVersion;
+import org.gradle.jvm.toolchain.JavaLauncher;
+import org.gradle.jvm.toolchain.JavaToolchainService;
 
-/** Shared setup for every Java module: Java 21, strict compiler, JUnit tests. */
+/**
+ * Shared setup for every Java module: Java 21, strict compiler, JUnit tests.
+ *
+ * <p>Tests run on the Java 21 toolchain; {@code -PtestJdk=25} runs them on another JDK (the code is
+ * still compiled with {@code --release 21}), which is how CI tests on 21 and 25.
+ */
 public final class JavaLibraryConventionPlugin implements Plugin<Project> {
 
     private static final int JAVA_VERSION = 21;
@@ -41,7 +49,16 @@ public final class JavaLibraryConventionPlugin implements Plugin<Project> {
         project.getTasks().withType(Javadoc.class).configureEach(task ->
                 ((StandardJavadocDocletOptions) task.getOptions()).addBooleanOption("Xdoclint:all,-missing", true));
 
-        project.getTasks().withType(Test.class).configureEach(Test::useJUnitPlatform);
+        JavaToolchainService toolchains = project.getExtensions().getByType(JavaToolchainService.class);
+        Provider<JavaLauncher> testLauncher = project.getProviders().gradleProperty("testJdk")
+                .map(Integer::parseInt)
+                .flatMap(version -> toolchains.launcherFor(spec -> spec.getLanguageVersion().set(JavaLanguageVersion.of(version))));
+        project.getTasks().withType(Test.class).configureEach(task -> {
+            task.useJUnitPlatform();
+            if (testLauncher.isPresent()) {
+                task.getJavaLauncher().set(testLauncher);
+            }
+        });
 
         addTestDependencies(project);
     }

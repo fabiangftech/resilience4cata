@@ -72,25 +72,25 @@ final class SubclassWriter {
         String alternative = " Move the annotations to an interface and wrap the implementation with Resilient.of(...),"
                 + " or annotate a class that can be extended.";
         if (modifiers.contains(Modifier.FINAL)) {
-            return invalid(type, name + " is final, so the generated subclass cannot extend it. Remove final." + alternative);
+            return invalid(type, ProcessorError.SUBCLASS_FINAL, name + " is final, so the generated subclass cannot extend it. Remove final." + alternative);
         }
         if (modifiers.contains(Modifier.SEALED)) {
-            return invalid(type, name + " is sealed, so the generated subclass cannot extend it. Make it non-sealed or"
+            return invalid(type, ProcessorError.SUBCLASS_SEALED, name + " is sealed, so the generated subclass cannot extend it. Make it non-sealed or"
                     + " a regular class." + alternative);
         }
         if (modifiers.contains(Modifier.ABSTRACT)) {
-            return invalid(type, name + " is abstract: the generated subclass must be instantiable and calls super for"
+            return invalid(type, ProcessorError.SUBCLASS_ABSTRACT, name + " is abstract: the generated subclass must be instantiable and calls super for"
                     + " each method. Annotate a concrete subclass of " + name + " instead, or an interface.");
         }
         for (Element e = type; e instanceof TypeElement t; e = t.getEnclosingElement()) {
             if (t.getModifiers().contains(Modifier.PRIVATE)) {
-                return invalid(type, "Resilience annotations need a non-private class: " + t.getSimpleName()
+                return invalid(type, ProcessorError.SUBCLASS_PRIVATE, "Resilience annotations need a non-private class: " + t.getSimpleName()
                         + " is private, so the generated subclass cannot extend " + name + ".");
             }
         }
         if (type.getNestingKind() == NestingKind.MEMBER && !modifiers.contains(Modifier.STATIC)
                 && !type.getEnclosingElement().getKind().isInterface()) {
-            return invalid(type, name + " is an inner class: the generated subclass would need an instance of "
+            return invalid(type, ProcessorError.SUBCLASS_INNER, name + " is an inner class: the generated subclass would need an instance of "
                     + type.getEnclosingElement().getSimpleName() + ". Make it a static nested class.");
         }
         boolean constructor = false;
@@ -98,7 +98,7 @@ final class SubclassWriter {
             constructor |= !c.getModifiers().contains(Modifier.PRIVATE);
         }
         if (!constructor) {
-            return invalid(type, name + " has only private constructors, so the generated subclass cannot call any of"
+            return invalid(type, ProcessorError.SUBCLASS_PRIVATE_CONSTRUCTORS, name + " has only private constructors, so the generated subclass cannot call any of"
                     + " them. Make at least one constructor package-private, protected or public.");
         }
         boolean valid = true;
@@ -114,10 +114,10 @@ final class SubclassWriter {
             String where = reportOn == method ? "" : " (inherited from "
                     + ((TypeElement) method.getEnclosingElement()).getQualifiedName() + ")";
             if (isFinal) {
-                valid = invalid(reportOn, signature + where + " is final, so the generated subclass cannot override it"
+                valid = invalid(reportOn, ProcessorError.SUBCLASS_FINAL_METHOD, signature + where + " is final, so the generated subclass cannot override it"
                         + " and its resilience annotations would be ignored. Remove final, or remove the annotations.");
             } else {
-                valid = invalid(reportOn, signature + where + " is package-private in another package, so the generated"
+                valid = invalid(reportOn, ProcessorError.SUBCLASS_HIDDEN_METHOD, signature + where + " is package-private in another package, so the generated"
                         + " subclass cannot override it and its resilience annotations would be ignored. Make it"
                         + " protected or public.");
             }
@@ -131,7 +131,7 @@ final class SubclassWriter {
                 if (!methodModifiers.contains(Modifier.PUBLIC) && !methodModifiers.contains(Modifier.PROTECTED)
                         && !methodModifiers.contains(Modifier.PRIVATE) && !methodModifiers.contains(Modifier.STATIC)
                         && annotated.test(method)) {
-                    valid = invalid(type, method.getSimpleName() + "(" + TypePrinter.join(member(type, method)
+                    valid = invalid(type, ProcessorError.SUBCLASS_HIDDEN_METHOD, method.getSimpleName() + "(" + TypePrinter.join(member(type, method)
                             .getParameterTypes(), ", ") + ") (inherited from " + c.getQualifiedName() + ") is"
                             + " package-private in another package, so the generated subclass cannot override it and"
                             + " its resilience annotations would be ignored. Make it protected or public.");
@@ -369,8 +369,8 @@ final class SubclassWriter {
         return "<" + String.join(", ", declarations) + "> ";
     }
 
-    private boolean invalid(Element element, String message) {
-        messager.printMessage(Diagnostic.Kind.ERROR, message, element);
+    private boolean invalid(Element element, ProcessorError error, String message) {
+        messager.printMessage(Diagnostic.Kind.ERROR, error.message(message), element);
         return false;
     }
 }

@@ -1,0 +1,62 @@
+# Compile, test and javadoc every module on JDK 21 and 25.
+# Every step is one command you can run locally: ./gradlew build -PtestJdk=<21|25>
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Cancel superseded runs on branches and PRs; keep one result per commit on main.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build:
+    name: build (JDK ${{ matrix.java }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [21, 25]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # JDK 21 is always needed: it is the compile toolchain (--release 21). The matrix JDK is listed
+      # last, so it becomes JAVA_HOME (Gradle itself runs on it) and runs the tests (-PtestJdk).
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: |
+            ${{ matrix.java == 21 && '25' || '21' }}
+            ${{ matrix.java }}
+
+      # Caches dependencies and Gradle's build cache (written on main only, read on PRs) and
+      # validates the wrapper. The configuration cache is enabled in gradle.properties; it is saved
+      # between runs only if the GRADLE_ENCRYPTION_KEY secret is set.
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Build
+        run: >-
+          ./gradlew build -PtestJdk=${{ matrix.java }}
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports-jdk${{ matrix.java }}
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 14

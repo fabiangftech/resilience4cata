@@ -1,0 +1,23 @@
+# Version updates for the Gradle version catalog (gradle/libs.versions.toml), the Gradle wrapper and
+# the GitHub Actions above (pinned to commit SHAs; Dependabot updates the SHA and the version comment).
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      junit:
+        patterns: ['org.junit*']
+      resilience4j:
+        patterns: ['io.github.resilience4j:*']
+      openjdk-harnesses:
+        patterns: ['org.openjdk.jmh:*', 'org.openjdk.jcstress:*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

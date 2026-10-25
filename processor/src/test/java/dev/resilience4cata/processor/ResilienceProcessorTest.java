@@ -61,6 +61,7 @@ class ResilienceProcessorTest {
                 """);
 
         assertThat(result.success()).isFalse();
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-ATR-001");
         assertThat(result.errors()).singleElement().asString()
                 .contains("@Retry.delay = \"2 seconds\" is not a valid duration")
                 .contains("\"250ms\"");
@@ -77,6 +78,7 @@ class ResilienceProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-ATR-003", "R4C-ATR-004");
         assertThat(result.errors()).hasSize(2)
                 .anySatisfy(e -> assertThat(e).contains("maxAttempts must be at least 1"))
                 .anySatisfy(e -> assertThat(e).contains("multiplier must be a finite number >= 1"));
@@ -93,6 +95,7 @@ class ResilienceProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-ATR-006");
         assertThat(result.errors()).singleElement().asString().contains("@Retry.enabled must be");
     }
 
@@ -107,7 +110,33 @@ class ResilienceProcessorTest {
                 }
                 """);
 
-        assertThat(result.errors()).singleElement().asString().contains("static or private methods");
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-APT-002");
+        assertThat(result.errors()).containsExactly("[R4C-APT-002] Resilience annotations cannot be used on static or"
+                + " private methods: calls to them cannot be intercepted. Annotate a non-private instance method instead.");
+    }
+
+    @Test
+    void suggestsTheClosestNameForAMissingFallbackMethod() {
+        Compilation result = compile("demo.UserClient", """
+                package demo;
+                import dev.resilience4cata.annotation.Fallback;
+                public interface UserClient {
+                    @Fallback(method = "findFallbak")
+                    String find(String id);
+                    @Fallback(method = "unrelated")
+                    String other(String id);
+
+                    default String findFallback(String id, Exception e) { return ""; }
+                }
+                """);
+
+        assertThat(result.errors()).containsExactly(
+                "[R4C-FB-002] @Fallback(method = \"findFallbak\") on find: no method named findFallbak in UserClient."
+                        + " Did you mean findFallback? Expected a default or static method java.lang.String"
+                        + " findFallbak(java.lang.String, <a Throwable type> e), where the exception parameter is optional.",
+                "[R4C-FB-002] @Fallback(method = \"unrelated\") on other: no method named unrelated in UserClient."
+                        + " Expected a default or static method java.lang.String unrelated(java.lang.String, <a Throwable"
+                        + " type> e), where the exception parameter is optional.");
     }
 
     @Test
@@ -301,6 +330,8 @@ class ResilienceProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder(
+                "R4C-CLS-008", "R4C-CLS-010", "R4C-CLS-010", "R4C-CLS-003", "R4C-CLS-007", "R4C-CLS-004", "R4C-CLS-009", "R4C-CLS-011", "R4C-CLS-011");
         assertThat(result.errors()).hasSize(9)
                 .anySatisfy(e -> assertThat(e).contains("@Retry.classifier = java.lang.String.class: String does not implement"
                         + " dev.resilience4cata.Classifier<T>."))
@@ -339,6 +370,7 @@ class ResilienceProcessorTest {
                 }
                 """));
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-CLS-006");
         assertThat(result.errors()).singleElement().asString().contains("a nested classifier class must be static");
     }
 
@@ -351,6 +383,7 @@ class ResilienceProcessorTest {
                 public @interface Bundle {}
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-CMP-001");
         assertThat(result.errors()).singleElement().asString().contains("not marked with @ResiliencePolicy");
     }
 
@@ -367,6 +400,7 @@ class ResilienceProcessorTest {
                         }
                         """));
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-CMP-002");
         assertThat(result.errors()).singleElement().asString()
                 .contains("@Retry.maxAttempts is set to 2 by @Fast and to 5 by @Slow");
     }
@@ -449,6 +483,7 @@ class ResilienceProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-ATR-003", "R4C-ATR-005", "R4C-ATR-001");
         assertThat(result.errors()).hasSize(3)
                 .anySatisfy(e -> assertThat(e).contains("@CircuitBreaker.windowSize must be at least 1"))
                 .anySatisfy(e -> assertThat(e).contains("@CircuitBreaker.failureRateThreshold must be a percentage"))
@@ -512,6 +547,7 @@ class ResilienceProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-ATR-002", "R4C-ATR-001");
         assertThat(result.errors()).hasSize(2)
                 .anySatisfy(e -> assertThat(e).contains("@Timeout must be positive"))
                 .anySatisfy(e -> assertThat(e).contains("@Timeout(\"soon\") is not a valid duration"));
@@ -552,6 +588,7 @@ class ResilienceProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-ATR-003", "R4C-ATR-001");
         assertThat(result.errors()).hasSize(2)
                 .anySatisfy(e -> assertThat(e).contains("@Bulkhead.maxConcurrent must be at least 1"))
                 .anySatisfy(e -> assertThat(e).contains("@Bulkhead.maxWait = \"forever\" is not a valid duration"));
@@ -597,6 +634,7 @@ class ResilienceProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-ATR-003", "R4C-ATR-002", "R4C-ATR-001");
         assertThat(result.errors()).hasSize(3)
                 .anySatisfy(e -> assertThat(e).contains("@RateLimiter.permits must be at least 1"))
                 .anySatisfy(e -> assertThat(e).contains("@RateLimiter.period must be positive"))
@@ -745,6 +783,8 @@ class ResilienceProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder(
+                "R4C-FB-001", "R4C-FB-001", "R4C-FB-013", "R4C-FB-010", "R4C-FB-003", "R4C-FB-014");
         assertThat(result.errors()).hasSize(6)
                 .anySatisfy(e -> assertThat(e).contains("@Fallback needs exactly one of"))
                 .anySatisfy(e -> assertThat(e).contains("implements FallbackHandler<java.lang.String>, but wrongType returns int."
@@ -784,6 +824,7 @@ class ResilienceProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-FB-006", "R4C-FB-009");
         assertThat(result.errors()).hasSize(2)
                 .anySatisfy(e -> assertThat(e).contains("the handler must not be abstract"))
                 .anySatisfy(e -> assertThat(e).contains("a nested handler class must be static"));
@@ -852,6 +893,8 @@ class ResilienceProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder(
+                "R4C-ASY-001", "R4C-ASY-001", "R4C-FB-003", "R4C-FB-013");
         assertThat(result.errors()).hasSize(4)
                 .anySatisfy(e -> assertThat(e).contains("must return CompletionStage<T> or CompletableFuture<T>")
                         .contains("not ? super X")

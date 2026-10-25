@@ -160,6 +160,8 @@ class GenericFallbackProcessorTest {
                 }
                 """);
 
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder(
+                "R4C-FB-003", "R4C-FB-003", "R4C-FB-003", "R4C-FB-003", "R4C-FB-003", "R4C-FB-014", "R4C-FB-014");
         assertThat(result.errors()).hasSize(7)
                 .anySatisfy(e -> assertThat(e).contains("no usable method count")
                         .contains("Expected a default or static method <T> T count(java.lang.Class<T>, <a Throwable type> e)")
