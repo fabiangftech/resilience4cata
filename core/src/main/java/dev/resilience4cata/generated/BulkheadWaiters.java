@@ -87,7 +87,8 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
         @SuppressWarnings("unused") // accessed through STATE
         private volatile int state;
 
-        @SuppressWarnings("unused") // accessed through TIMER
+        @SuppressWarnings({"unused", "java:S3077"}) // accessed through TIMER
+        // java:S3077: read and compare-and-set only through the TIMER VarHandle; Future itself is thread-safe
         private volatile @Nullable Future<?> timer;
 
         Waiter(AsyncCall<T> call, BulkheadWaiters owner, BulkheadPolicy policy) {

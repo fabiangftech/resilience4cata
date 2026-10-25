@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Entry point: applies the policies declared by annotations, in one of two styles.
@@ -163,6 +164,7 @@ public final class Resilient {
     }
 
     /** A constructor of a generated subclass and the arguments to call it with, the registry first. */
+    @SuppressWarnings("java:S6218") // a private holder, never compared or printed
     private record Call(Constructor<?> constructor, Object[] arguments) {
     }
 
@@ -236,7 +238,7 @@ public final class Resilient {
     }
 
     /** True if {@code arguments[1..count)} fit {@code parameters[1..count)}; index 0 is the registry. */
-    private static boolean accepts(Class<?>[] parameters, Object[] arguments, int count) {
+    private static boolean accepts(Class<?>[] parameters, @Nullable Object[] arguments, int count) {
         for (int i = 1; i < count; i++) {
             if (!accepts(parameters[i], arguments[i])) {
                 return false;
@@ -245,7 +247,7 @@ public final class Resilient {
         return true;
     }
 
-    private static boolean accepts(Class<?> parameter, Object argument) {
+    private static boolean accepts(Class<?> parameter, @Nullable Object argument) {
         return argument == null ? !parameter.isPrimitive() : wrapper(parameter).isInstance(argument);
     }
 

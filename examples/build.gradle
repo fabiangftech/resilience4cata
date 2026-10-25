@@ -1,5 +1,7 @@
 plugins {
     id 'r4c.java-library'
+    // One coverage report over every module, for SonarCloud: much of core is only exercised end to end here.
+    id 'jacoco-report-aggregation'
 }
 
 description = 'Runnable examples. Not published: their tests check the generated code end to end.'
@@ -24,4 +26,16 @@ dependencies {
 // DocsTest reads the documentation site and checks its snippets against the examples.
 tasks.named('test') {
     inputs.dir('../docs').withPropertyName('docs').withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// The modules whose own tests and sources join the aggregated report (testCodeCoverageReport, with -Pcoverage).
+dependencies {
+    jacocoAggregation project(':annotations')
+    jacocoAggregation project(':core')
+    jacocoAggregation project(':processor')
+    jacocoAggregation project(':config')
+    jacocoAggregation project(':testkit')
+    jacocoAggregation project(':junit')
+    jacocoAggregation project(':micrometer')
+    jacocoAggregation project(':opentelemetry')
 }

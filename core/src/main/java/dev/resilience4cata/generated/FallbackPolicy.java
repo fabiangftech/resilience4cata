@@ -160,6 +160,7 @@ public final class FallbackPolicy {
         }
     }
 
+    @SuppressWarnings("java:S6218") // one per failure, handed to a fallback; never compared or used as a key
     private record Context(String instanceId, Throwable failure, int attempts, @Nullable Object[] arguments)
             implements FallbackContext {
 
@@ -222,12 +223,14 @@ public final class FallbackPolicy {
     }
 
     /** Completes {@code result} with the recovery's outcome if this policy handles the failure, else with the failure. */
+    // java:S2583: user code can return null despite the contract; this check turns it into a clear failure
+    @SuppressWarnings("java:S2583")
     <T> void recoverOrFail(Throwable failure, int attempts, Recovery<T> recovery, CompletableFuture<T> result) {
         if (!handles(failure)) {
             result.completeExceptionally(failure);
             return;
         }
-        CompletionStage<T> stage;
+        @Nullable CompletionStage<T> stage; // user code may return null: checked below
         try {
             stage = recovery.recover(failure, attempts);
         } catch (Throwable fallbackFailure) {

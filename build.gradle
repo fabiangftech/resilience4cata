@@ -1,4 +1,25 @@
 plugins {
     // centralBundle / centralUpload: see docs/en/releasing.md
     id 'r4c.central'
+    // SonarCloud analysis (the official SonarSource plugin, the one exception to "no third-party Gradle plugins"):
+    //   ./gradlew build -Pcoverage :examples:testCodeCoverageReport sonar --no-configuration-cache
+    // needs SONAR_TOKEN in the environment; CI runs it in .github/workflows/sonar.yml.
+    id 'org.sonarqube' version '7.5.0.8588'
+}
+
+sonar {
+    properties {
+        property 'sonar.projectKey', 'fabiangftech_resilience4cata'
+        property 'sonar.organization', 'fabiangftech'
+        property 'sonar.host.url', 'https://sonarcloud.io'
+        property 'sonar.coverage.jacoco.xmlReportPaths',
+                "${rootDir}/examples/build/reports/jacoco/testCodeCoverageReport/testCodeCoverageReport.xml"
+        // Annotation types are declarations only: nothing in them runs.
+        property 'sonar.coverage.exclusions', '**/dev/resilience4cata/annotation/**'
+    }
+}
+
+// Benchmarks and jcstress tests are measurement harnesses, not library code.
+['benchmark', 'stress'].each { name ->
+    project(":${name}").sonar { skipProject = true }
 }

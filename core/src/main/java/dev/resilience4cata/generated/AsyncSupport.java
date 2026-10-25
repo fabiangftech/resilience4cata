@@ -41,8 +41,10 @@ final class AsyncSupport {
      * Calls the next layer. A delegate that throws instead of returning a failed stage, or that returns
      * {@code null}, is treated as a failed call.
      */
+    // java:S2583: user code can return null despite the contract; this check turns it into a clear failure
+    @SuppressWarnings("java:S2583")
     static <T> CompletionStage<T> call(AsyncCall<T> call) {
-        CompletionStage<T> stage;
+        @Nullable CompletionStage<T> stage; // user code may return null: checked below
         try {
             stage = call.call();
         } catch (Throwable failure) {

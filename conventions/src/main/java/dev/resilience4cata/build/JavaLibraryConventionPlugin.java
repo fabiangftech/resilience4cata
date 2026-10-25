@@ -1,5 +1,7 @@
 package dev.resilience4cata.build;
 
+import org.gradle.testing.jacoco.plugins.JacocoPlugin;
+import org.gradle.testing.jacoco.plugins.JacocoTaskExtension;
 import java.util.List;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
@@ -20,6 +22,8 @@ import org.gradle.jvm.toolchain.JavaToolchainService;
 
 /**
  * Shared setup for every Java module: Java 21, strict compiler, JUnit tests.
+ *
+ * <p>JaCoCo is applied but its agent only runs with {@code -Pcoverage}.
  *
  * <p>Tests run on the Java 21 toolchain; {@code -PtestJdk=25} runs them on another JDK (the code is
  * still compiled with {@code --release 21}), which is how CI tests on 21 and 25.
@@ -59,6 +63,13 @@ public final class JavaLibraryConventionPlugin implements Plugin<Project> {
                 task.getJavaLauncher().set(testLauncher);
             }
         });
+
+        // Coverage only on request (-Pcoverage, used by the SonarCloud analysis): the JaCoCo agent stays off
+        // in ordinary builds, so tests that measure allocations or timing run on uninstrumented code.
+        project.getPluginManager().apply(JacocoPlugin.class);
+        boolean coverage = project.getProviders().gradleProperty("coverage").isPresent();
+        project.getTasks().withType(Test.class).configureEach(task ->
+                task.getExtensions().getByType(JacocoTaskExtension.class).setEnabled(coverage));
 
         addTestDependencies(project);
     }

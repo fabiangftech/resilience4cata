@@ -289,7 +289,7 @@ public final class RetryPolicy {
         if (!exponential) {
             return delayNanos;
         }
-        double delay = delayNanos * Math.pow(multiplier, attempts - 1);
+        double delay = delayNanos * Math.pow(multiplier, attempts - 1.0);
         return delay >= maxDelayNanos ? maxDelayNanos : (long) delay;
     }
 
@@ -458,7 +458,7 @@ public final class RetryPolicy {
         }
 
         @Override
-        public void accept(T value, Throwable failure) {
+        public void accept(@Nullable T value, @Nullable Throwable failure) {
             Classifier<? super T> classifier = this.classifier;
             if (failure == null) {
                 if (classifier == null) {

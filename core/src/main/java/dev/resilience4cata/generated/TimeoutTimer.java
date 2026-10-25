@@ -49,6 +49,7 @@ final class TimeoutTimer {
     private final AtomicLong tick = new AtomicLong(MAX_TICK);
     private final Consumer<Runnable> launcher;
     private final @Nullable AtomicBoolean started;
+    @SuppressWarnings("java:S3077") // the reference is swapped whole; Thread itself is thread-safe
     private volatile @Nullable Thread thread;
 
     // Owned by the timer thread (or by the test calling tick).
@@ -131,6 +132,7 @@ final class TimeoutTimer {
         return tick.get();
     }
 
+    @SuppressWarnings("java:S2189") // the daemon timer thread runs for the life of the JVM
     private void run() {
         while (true) {
             try {
@@ -295,9 +297,11 @@ final class TimeoutTimer {
             }
         }
 
-        @SuppressWarnings("unused") // accessed through INBOX
+        // java:S3077: both are lock-free stack heads, pushed and taken only by compare-and-set through their
+        // VarHandles; a TimerEntry's own state is a volatile, CASed field too.
+        @SuppressWarnings({"unused", "java:S3077"}) // accessed through INBOX
         volatile @Nullable TimerEntry inbox;
-        @SuppressWarnings("unused") // accessed through CANCELLED
+        @SuppressWarnings({"unused", "java:S3077"}) // accessed through CANCELLED
         volatile @Nullable TimerEntry cancelled;
     }
 

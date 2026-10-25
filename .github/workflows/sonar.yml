@@ -1,0 +1,51 @@
+# SonarCloud analysis with coverage (https://sonarcloud.io/project/overview?id=fabiangftech_resilience4cata).
+# One command, the same as locally (with SONAR_TOKEN in the environment):
+#   ./gradlew build -Pcoverage :examples:testCodeCoverageReport sonar --no-configuration-cache
+# SONAR_TOKEN is a repository secret. Pull requests from forks do not get it, so they skip the analysis.
+name: sonar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  sonar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.SONAR_TOKEN != ''
+        with:
+          persist-credentials: false
+          # Full history, so SonarCloud can attribute new issues to the commits that introduced them.
+          fetch-depth: 0
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        if: env.SONAR_TOKEN != ''
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        if: env.SONAR_TOKEN != ''
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Build, measure coverage and analyse
+        if: env.SONAR_TOKEN != ''
+        run: ./gradlew build -Pcoverage :examples:testCodeCoverageReport sonar --no-configuration-cache
+
+      - name: Skipped
+        if: env.SONAR_TOKEN == ''
+        run: echo "::notice::No SONAR_TOKEN (a pull request from a fork?): SonarCloud analysis skipped."

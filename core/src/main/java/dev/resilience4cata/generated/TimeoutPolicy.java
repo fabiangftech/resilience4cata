@@ -60,7 +60,7 @@ public final class TimeoutPolicy {
     private final TimeoutConfig config;
     private final boolean enabled;
     private final long timeoutNanos;
-    private final Watchdog watchdog;
+    private final @Nullable Watchdog watchdog; // null when the timeout is disabled
     private final TimeoutTimer.@Nullable Lane lane;
     /** A manual ticker that schedules async deadlines instead of {@link #lane}; {@code null} in production. */
     private final @Nullable Ticker manual;
@@ -348,7 +348,7 @@ public final class TimeoutPolicy {
 
         /** The stage completed. */
         @Override
-        public void accept(T value, Throwable failure) {
+        public void accept(@Nullable T value, @Nullable Throwable failure) {
             cancel();
             if (failure == null) {
                 result.complete(value);

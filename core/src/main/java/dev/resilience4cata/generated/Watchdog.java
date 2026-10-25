@@ -44,6 +44,9 @@ final class Watchdog {
     }
 
     private final ConcurrentLinkedQueue<ThreadScopes> threads = new ConcurrentLinkedQueue<>();
+    // java:S5164: a thread keeps its scopes for its whole life, so that timed calls allocate nothing; the entry
+    // goes with the thread, and tick() unlinks the scopes of threads that are no longer alive.
+    @SuppressWarnings("java:S5164")
     private final ThreadLocal<ThreadScopes> local = ThreadLocal.withInitial(this::register);
     private final AtomicLong tick;
     @SuppressWarnings("unused") // accessed through NOW
@@ -114,6 +117,7 @@ final class Watchdog {
         return scopes;
     }
 
+    @SuppressWarnings("java:S2189") // the daemon watchdog thread runs for the life of the JVM
     private void run() {
         while (true) {
             try {
@@ -164,6 +168,9 @@ final class Watchdog {
     /** The scopes of one thread, as a stack because timed calls can be nested. Only the owner pushes and pops. */
     static final class ThreadScopes {
         final Thread thread;
+        // java:S3077: only the owner thread writes; a grown array is published whole through this field, and each
+        // Scope keeps its own state in a volatile, CASed field that the watchdog reads.
+        @SuppressWarnings("java:S3077")
         private volatile TimeoutPolicy.Scope[] stack = new TimeoutPolicy.Scope[2];
         private int depth;
 

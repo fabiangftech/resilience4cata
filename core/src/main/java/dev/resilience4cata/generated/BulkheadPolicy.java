@@ -168,8 +168,8 @@ public final class BulkheadPolicy implements BulkheadHandle {
         try {
             waiting.acquire();
             acquired = true;
-        } catch (InterruptedException e) {
-            acquired = false;
+        } catch (@SuppressWarnings("java:S2142") InterruptedException e) {
+            acquired = false; // afterTickerWait sets the interrupt flag again unless the deadline sent it
         }
         return afterTickerWait(wait, deadline, acquired);
     }

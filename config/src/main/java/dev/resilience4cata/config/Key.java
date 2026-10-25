@@ -35,7 +35,7 @@ record Key(@Nullable String profile, Section section, @Nullable String config, @
     /** Instance ids written without quotes in canonical keys; any other id is quoted. */
     private static final Pattern PLAIN_ID = Pattern.compile("[A-Za-z0-9_-]+");
 
-    static final Pattern NAME = Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
+    static final Pattern NAME = Pattern.compile("[a-z0-9]++(?:-[a-z0-9]++)*+");
     private static final List<String> TOP_LEVEL = List.of("defaults", "configs", "instances", "profiles");
     private static final String FORMS = "expected defaults.<policy>.<attribute>, configs.<name>.<policy>.<attribute>,"
             + " configs.<name>.extends, instances.<id>.<policy>.<attribute>, profiles.<profile>.<one of those> or"
@@ -267,7 +267,7 @@ record Key(@Nullable String profile, Section section, @Nullable String config, @
             return name;
         }
         String suggestion = Suggestions.kebab(name).replace('_', '-').toLowerCase(java.util.Locale.ROOT)
-                .replaceAll("-+", "-").replaceAll("^-|-$", "");
+                .replaceAll("-+", "-").replaceAll("(?:^-)|(?:-$)", "");
         throw new ProblemException(ProblemException.INVALID_NAME, "invalid " + what + " name '" + name + "' in "
                 + origin + ": names use lowercase letters and digits separated by single hyphens, so that they map"
                 + " to environment variables"

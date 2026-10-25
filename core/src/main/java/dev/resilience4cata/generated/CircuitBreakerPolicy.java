@@ -89,7 +89,8 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
     private final @Nullable EventSink<CircuitBreakerEvent.StateTransition> transitions;
     private final @Nullable EventSink<CircuitBreakerEvent.CallNotPermitted> notPermitted;
 
-    @SuppressWarnings("unused") // accessed through PHASE
+    // java:S3077: Phase objects are immutable, swapped whole by compare-and-set through the PHASE VarHandle.
+    @SuppressWarnings({"unused", "java:S3077"}) // accessed through PHASE
     private volatile Phase phase;
     @SuppressWarnings("unused") // accessed through QUIET
     private volatile long quiet = NOT_QUIET;
@@ -115,6 +116,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @param config the configuration
      * @param environment the clock to use
      */
+    @SuppressWarnings("java:S2637") // phase is set, last: initialPhase reads the fields set before it
     public CircuitBreakerPolicy(String id, CircuitBreakerConfig config, PolicyEnvironment environment) {
         this.id = id;
         this.config = config;

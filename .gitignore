@@ -24,3 +24,6 @@ infra/*.tfvars
 # OS and tooling noise
 .DS_Store
 __pycache__/
+
+# SonarCloud scanner cache (./gradlew sonar)
+.sonar/

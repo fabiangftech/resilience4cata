@@ -126,9 +126,11 @@ public final class Pipeline<T> {
     }
 
     /** A synchronous call with only an asynchronous fallback waits (not interruptibly) for the fallback's stage. */
+    // java:S2583: user code can return null despite the contract; this check turns it into a clear failure
+    @SuppressWarnings("java:S2583")
     private static <T> T await(FallbackHandler<? extends CompletionStage<T>> handler, FallbackContext context)
             throws Throwable {
-        CompletionStage<T> stage = handler.apply(context);
+        @Nullable CompletionStage<T> stage = handler.apply(context); // user code may return null
         if (stage == null) {
             throw new NullPointerException("The asynchronous fallback of pipeline '" + context.instanceId()
                     + "' returned null instead of a CompletionStage");
@@ -485,9 +487,10 @@ public final class Pipeline<T> {
     }
 
     /** Starts the outermost layer when no retry or fallback does it. */
-    @SuppressWarnings("unchecked")
+    // java:S2583: user code can return null despite the contract; this check turns it into a clear failure
+    @SuppressWarnings({"unchecked", "java:S2583"})
     private static <T> CompletableFuture<T> start(AsyncCall<T> call) {
-        CompletionStage<T> stage;
+        @Nullable CompletionStage<T> stage; // user code may return null: checked below
         try {
             stage = call.call();
         } catch (Throwable failure) {
