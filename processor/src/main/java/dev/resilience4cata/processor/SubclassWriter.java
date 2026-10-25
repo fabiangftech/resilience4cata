@@ -15,7 +15,6 @@ import java.util.stream.Collectors;
 import javax.annotation.processing.Messager;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.NestingKind;
@@ -46,6 +45,8 @@ import javax.tools.Diagnostic;
  */
 final class SubclassWriter {
 
+    private static final String OBJECT = "java.lang.Object";
+
     private final Elements elements;
     private final Types types;
     private final Messager messager;
@@ -67,6 +68,16 @@ final class SubclassWriter {
      * Returns true if there was no error.
      */
     boolean check(TypeElement type, Predicate<Element> annotated) {
+        if (!extendable(type)) {
+            return false;
+        }
+        boolean valid = checkOverridable(type, annotated);
+        valid &= checkInheritedPackagePrivate(type, annotated);
+        return valid;
+    }
+
+    /** Reports the first reason why the generated subclass cannot extend {@code type}; true if there is none. */
+    private boolean extendable(TypeElement type) {
         String name = type.getSimpleName().toString();
         Set<Modifier> modifiers = type.getModifiers();
         String alternative = " Move the annotations to an interface and wrap the implementation with Resilient.of(...),"
@@ -101,6 +112,11 @@ final class SubclassWriter {
             return invalid(type, ProcessorError.SUBCLASS_PRIVATE_CONSTRUCTORS, name + " has only private constructors, so the generated subclass cannot call any of"
                     + " them. Make at least one constructor package-private, protected or public.");
         }
+        return true;
+    }
+
+    /** Reports every final or hidden method annotated at method level; true if there is none. */
+    private boolean checkOverridable(TypeElement type, Predicate<Element> annotated) {
         boolean valid = true;
         for (ExecutableElement method : candidates(type).values()) {
             Set<Modifier> methodModifiers = method.getModifiers();
@@ -122,6 +138,12 @@ final class SubclassWriter {
                         + " protected or public.");
             }
         }
+        return valid;
+    }
+
+    /** Reports every annotated package-private method of a superclass in another package; true if there is none. */
+    private boolean checkInheritedPackagePrivate(TypeElement type, Predicate<Element> annotated) {
+        boolean valid = true;
         for (TypeElement c = superclass(type); c != null; c = superclass(c)) {
             if (elements.getPackageOf(c).equals(elements.getPackageOf(type))) {
                 continue;
@@ -232,7 +254,7 @@ final class SubclassWriter {
             Set<Modifier> modifiers = method.getModifiers();
             TypeElement declaring = (TypeElement) method.getEnclosingElement();
             if (modifiers.contains(Modifier.STATIC) || modifiers.contains(Modifier.PRIVATE)
-                    || declaring.getQualifiedName().contentEquals("java.lang.Object")) {
+                    || declaring.getQualifiedName().contentEquals(OBJECT)) {
                 continue;
             }
             String key = method.getSimpleName() + "(" + member(type, method).getParameterTypes().stream()
@@ -300,7 +322,7 @@ final class SubclassWriter {
     }
 
     private boolean overridesObjectMethod(TypeElement type, ExecutableElement method) {
-        TypeElement object = elements.getTypeElement("java.lang.Object");
+        TypeElement object = elements.getTypeElement(OBJECT);
         for (ExecutableElement candidate : ElementFilter.methodsIn(object.getEnclosedElements())) {
             Set<Modifier> modifiers = candidate.getModifiers();
             if (!modifiers.contains(Modifier.STATIC) && !modifiers.contains(Modifier.PRIVATE)
@@ -330,7 +352,7 @@ final class SubclassWriter {
             return null;
         }
         TypeElement element = (TypeElement) ((DeclaredType) superclass).asElement();
-        return element.getQualifiedName().contentEquals("java.lang.Object") ? null : element;
+        return element.getQualifiedName().contentEquals(OBJECT) ? null : element;
     }
 
     /** Every interface {@code type} implements, directly or through superclasses and superinterfaces. */
@@ -343,7 +365,7 @@ final class SubclassWriter {
                 continue;
             }
             TypeElement element = (TypeElement) ((DeclaredType) next).asElement();
-            if (element.getKind().isInterface() ? found.add(element) : true) {
+            if (!element.getKind().isInterface() || found.add(element)) {
                 pending.addAll(types.directSupertypes(next));
             }
         }
@@ -363,7 +385,7 @@ final class SubclassWriter {
             TypeMirror bound = variable.getUpperBound();
             List<? extends TypeMirror> bounds = bound.getKind() == TypeKind.INTERSECTION
                     ? ((IntersectionType) bound).getBounds() : List.of(bound);
-            boolean plain = bounds.size() == 1 && TypePrinter.print(bounds.get(0)).equals("java.lang.Object");
+            boolean plain = bounds.size() == 1 && TypePrinter.print(bounds.get(0)).equals(OBJECT);
             declarations.add(variable.asElement().getSimpleName() + (plain ? "" : " extends " + TypePrinter.join(bounds, " & ")));
         }
         return "<" + String.join(", ", declarations) + "> ";

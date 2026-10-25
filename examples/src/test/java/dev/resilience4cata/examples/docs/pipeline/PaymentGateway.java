@@ -7,6 +7,8 @@ import java.util.concurrent.CompletionStage;
 /** A third-party payment API, written as a plain class to show that nothing has to be annotated. */
 public class PaymentGateway {
 
+    // java:S1130: a remote API declares IOException; the guide shows the pipeline keeping it checked
+    @SuppressWarnings("java:S1130")
     public Receipt charge(String order) throws IOException {
         return new Receipt(order, "charged");
     }

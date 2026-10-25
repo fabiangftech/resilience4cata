@@ -37,6 +37,8 @@ class BundlesTest {
         }
     }
 
+    // java:S1488: the local variable is part of a documentation snippet, which shows a registry being declared
+    @SuppressWarnings("java:S1488")
     static ResilienceRegistry registry() {
         // tag::bundles-registry[]
         ResilienceRegistry registry = ResilienceRegistry.builder()

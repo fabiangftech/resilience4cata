@@ -31,6 +31,7 @@ public final class EventSink<E extends ResilienceEvent> {
      *
      * @param event the event
      */
+    @SuppressWarnings("java:S1181") // a listener's failure of any kind must not break the call
     public void publish(E event) {
         for (EventListener<? super E> listener : listeners) {
             try {
@@ -43,6 +44,7 @@ public final class EventSink<E extends ResilienceEvent> {
         }
     }
 
+    @SuppressWarnings("java:S1181") // a failing uncaught exception handler must not break the call either
     private static void report(Throwable failure) {
         Thread thread = Thread.currentThread();
         try {

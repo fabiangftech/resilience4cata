@@ -75,7 +75,7 @@ class ClassifiersPageTest {
         assertThatThrownBy(() -> orders.get("o-1")).isInstanceOf(IllegalArgumentException.class);
         assertThat(calls).hasValue(2);
         CircuitBreakerHandle breaker = registry.circuitBreaker("orders");
-        assertThat(breaker.snapshot().bufferedCalls()).isEqualTo(0); // 404 and the IGNOREd exception: not recorded
+        assertThat(breaker.snapshot().bufferedCalls()).isZero(); // 404 and the IGNOREd exception: not recorded
     }
 
     @Test
@@ -111,15 +111,13 @@ class ClassifiersPageTest {
             }
 
             @Override
-            public Response record(String id) {
-                runs.incrementAndGet();
-                return new Response(200, null);
+            public Response recorded(String id) {
+                return get(id);
             }
 
             @Override
             public Response withFallback(String id) {
-                runs.incrementAndGet();
-                return new Response(200, null);
+                return get(id);
             }
         }, registry);
 
@@ -127,7 +125,7 @@ class ClassifiersPageTest {
         assertThat(runs).hasValue(1); // not retried
         assertThat(gaveUp.getLast().reason()).isEqualTo(RetryEvent.Reason.CLASSIFIER_FAILED);
 
-        assertThatThrownBy(() -> fragile.record("x")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> fragile.recorded("x")).isInstanceOf(IllegalStateException.class);
         assertThat(registry.circuitBreaker("fragile").state()).isEqualTo(CircuitBreakerState.OPEN); // recorded as a failure
 
         assertThat(fragile.withFallback("y").body()).isEqualTo("recovered from classifier bug");

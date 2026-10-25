@@ -21,6 +21,7 @@ public final class AnnotationClaimer extends AbstractProcessor {
 
     /** Creates the processor. Called by the compiler through {@link java.util.ServiceLoader}. */
     public AnnotationClaimer() {
+        // Nothing to set up: the processor keeps no state.
     }
 
     @Override

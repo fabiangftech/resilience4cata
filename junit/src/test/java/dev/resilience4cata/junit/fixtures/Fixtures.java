@@ -1,6 +1,6 @@
 package dev.resilience4cata.junit.fixtures;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.junit.ConfigureRegistry;
@@ -21,6 +21,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * Test classes that {@code ResilienceExtensionTest} runs through EngineTestKit; the build never runs them
  * directly. They write what they see to {@link #SEEN}.
  */
+// java:S2699: the fixtures record what they see; ResilienceExtensionTest asserts on it
+// java:S4144: several fixtures record the same things on purpose, from different lifecycle methods
+@SuppressWarnings({"java:S2699", "java:S4144"})
 public final class Fixtures {
 
     /** What the fixtures saw, in order; cleared by each test of the extension. */
@@ -141,16 +144,19 @@ public final class Fixtures {
 
         @Test
         void test(ResilienceRegistry registry) {
+            // empty: the extension must reject this before the test runs
         }
     }
 
     @ResilienceTest
     public static class ConstructorInjection {
         ConstructorInjection(ManualClock clock) {
+            // empty: the extension must reject the injection before the instance is created
         }
 
         @Test
         void test() {
+            // empty: the extension must reject this before the test runs
         }
     }
 
@@ -158,10 +164,12 @@ public final class Fixtures {
     public static class BeforeAllInjection {
         @BeforeAll
         static void beforeAll(ManualClock clock) {
+            // empty: the extension must reject the injection before this runs
         }
 
         @Test
         void test() {
+            // empty: the extension must reject this before the test runs
         }
     }
 
@@ -186,7 +194,7 @@ public final class Fixtures {
         @Test
         void failsOnItsOwn(ManualClock clock) {
             clock.schedule(Duration.ofSeconds(1).toNanos(), () -> { });
-            assertThat(1).as("the test's own failure").isEqualTo(2);
+            fail("the test's own failure");
         }
     }
 

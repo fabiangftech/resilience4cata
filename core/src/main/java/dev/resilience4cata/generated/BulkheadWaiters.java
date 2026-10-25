@@ -19,7 +19,14 @@ import org.jspecify.annotations.Nullable;
 final class BulkheadWaiters extends BulkheadWaitersCount {
 
     /** Superclass fields are laid out first, so the counter sits between two blocks of padding. */
-    long q0, q1, q2, q3, q4, q5, q6, q7;
+    long q0;
+    long q1;
+    long q2;
+    long q3;
+    long q4;
+    long q5;
+    long q6;
+    long q7;
 
     private final ConcurrentLinkedQueue<Waiter<?>> queue = new ConcurrentLinkedQueue<>();
 
@@ -27,6 +34,7 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
     private int turn;
 
     /** Number of unclaimed waiters. A volatile read: see {@link BulkheadPolicy#exit()} for why. */
+    @SuppressWarnings("java:S1845") // the accessor of the inherited count field, read through its VarHandle COUNT
     int count() {
         return (int) COUNT.getVolatile(this);
     }
@@ -38,6 +46,8 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
     }
 
     /** Removes and claims the oldest waiter that is still unclaimed and whose future is not done; {@code null} if none. */
+    // java:S1452: waiters of every result type share one queue; the caller only hands the slot over.
+    @SuppressWarnings("java:S1452")
     @Nullable Waiter<?> claimOldest() {
         Waiter<?> waiter;
         while ((waiter = queue.poll()) != null) {
@@ -84,11 +94,13 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
         private final BulkheadWaiters owner;
         private final BulkheadPolicy policy;
 
-        @SuppressWarnings("unused") // accessed through STATE
+        // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
+        @SuppressWarnings({"unused", "java:S1845"}) // accessed through STATE
         private volatile int state;
 
-        @SuppressWarnings({"unused", "java:S3077"}) // accessed through TIMER
         // java:S3077: read and compare-and-set only through the TIMER VarHandle; Future itself is thread-safe
+        // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
+        @SuppressWarnings({"unused", "java:S3077", "java:S1845"}) // accessed through TIMER
         private volatile @Nullable Future<?> timer;
 
         Waiter(AsyncCall<T> call, BulkheadWaiters owner, BulkheadPolicy policy) {
@@ -143,7 +155,14 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
 /** Padding before the counter, so that it does not share a cache line with what precedes it in memory. */
 @SuppressWarnings("unused")
 abstract class BulkheadWaitersPad {
-    long p0, p1, p2, p3, p4, p5, p6, p7;
+    long p0;
+    long p1;
+    long p2;
+    long p3;
+    long p4;
+    long p5;
+    long p6;
+    long p7;
 }
 
 abstract class BulkheadWaitersCount extends BulkheadWaitersPad {
@@ -157,6 +176,7 @@ abstract class BulkheadWaitersCount extends BulkheadWaitersPad {
         }
     }
 
-    @SuppressWarnings("unused") // accessed through COUNT
+    // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
+    @SuppressWarnings({"unused", "java:S1845"}) // accessed through COUNT
     volatile int count;
 }

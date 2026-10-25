@@ -206,7 +206,7 @@ class MicrometerMetricsTest {
     }
 
     @Test
-    void severalMeterRegistriesAndSeveralResilienceRegistries() throws Exception {
+    void severalMeterRegistriesAndSeveralResilienceRegistries() {
         SimpleMeterRegistry other = new SimpleMeterRegistry();
         MicrometerMetrics otherMetrics = MicrometerMetrics.create(other);
         ResilienceRegistry shared = otherMetrics.register(metrics.register(ResilienceRegistry.builder())).build();
@@ -265,7 +265,7 @@ class MicrometerMetricsTest {
     }
 
     @Test
-    void closeRemovesEveryMeterAndStopsCountingAndDiscovering() throws Exception {
+    void closeRemovesEveryMeterAndStopsCountingAndDiscovering() {
         metrics.bindTo(registry);
         Pipeline<String> pipeline = Pipeline.builder(registry, "closing", String.class)
                 .retry(r -> r.maxAttempts(2)).circuitBreaker().build();
@@ -287,6 +287,8 @@ class MicrometerMetricsTest {
         assertThat(metrics.counterCacheForTest()).isEmpty();
     }
 
+    // java:S2925: gives the real garbage collector time to clear the weak reference
+    @SuppressWarnings("java:S2925")
     @Test
     void meterRegistriesDoNotKeepTheResilienceRegistryAlive() throws Exception {
         MeterRegistry longLived = new SimpleMeterRegistry();

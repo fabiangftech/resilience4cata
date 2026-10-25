@@ -42,7 +42,7 @@ class ExhaustedResultAndClassifierFailureTest {
     };
 
     private RetryPolicy listened(RetryConfig.Builder config) {
-        PolicyEnvironment environment = PolicyEnvironment.forTest(now::get, nanos -> now.addAndGet(nanos),
+        PolicyEnvironment environment = PolicyEnvironment.forTest(now::get, now::addAndGet,
                 EventDispatcher.of(List.of(new EventDispatcher.Subscription(RetryEvent.class, null,
                         (EventListener<ResilienceEvent>) events::add))));
         return new RetryPolicy("retry", config.delay(Duration.ZERO).jitter(RetryConfig.Jitter.NONE).build(), environment);
@@ -84,7 +84,7 @@ class ExhaustedResultAndClassifierFailureTest {
     }
 
     @Test
-    void asyncThrowOnExhaustedResultFailsWithTheLastResult() throws Exception {
+    void asyncThrowOnExhaustedResultFailsWithTheLastResult() {
         RetryPolicy retry = listened(RetryConfig.builder().maxAttempts(3));
         AtomicInteger calls = new AtomicInteger();
 
@@ -139,7 +139,7 @@ class ExhaustedResultAndClassifierFailureTest {
     }
 
     @Test
-    void anAsyncClassifierThatThrowsPublishesGaveUpForResultsAndFailures() throws Exception {
+    void anAsyncClassifierThatThrowsPublishesGaveUpForResultsAndFailures() {
         RetryPolicy retry = listened(RetryConfig.builder().maxAttempts(3));
 
         CompletableFuture<Integer> onResult = retry.executeAsync(() -> CompletableFuture.completedFuture(1), THROWING,
@@ -154,7 +154,7 @@ class ExhaustedResultAndClassifierFailureTest {
     }
 
     @Test
-    void anAsyncClassifierThatThrowsAfterARetryCountsTheAttempt() throws Exception {
+    void anAsyncClassifierThatThrowsAfterARetryCountsTheAttempt() {
         RetryPolicy retry = listened(RetryConfig.builder().maxAttempts(5));
         AtomicInteger calls = new AtomicInteger();
         Classifier<Integer> second = (result, failure) -> {
@@ -173,7 +173,7 @@ class ExhaustedResultAndClassifierFailureTest {
     }
 
     @Test
-    void anAsyncBreakerInsideARetryWrapsItsClassifiersException() throws Exception {
+    void anAsyncBreakerInsideARetryWrapsItsClassifiersException() {
         CircuitBreakerPolicy breaker = new CircuitBreakerPolicy("cb", dev.resilience4cata.CircuitBreakerConfig.DEFAULTS,
                 PolicyEnvironment.DEFAULT);
 
@@ -186,7 +186,7 @@ class ExhaustedResultAndClassifierFailureTest {
     }
 
     @Test
-    void anAsyncRetryEndsTheCallWithAWrappedClassifierException() throws Exception {
+    void anAsyncRetryEndsTheCallWithAWrappedClassifierException() {
         RetryPolicy retry = listened(RetryConfig.builder().maxAttempts(3));
         AtomicInteger calls = new AtomicInteger();
         Classifier<Integer> retryEverything = (result, failure) -> Classifier.Outcome.FAILURE;

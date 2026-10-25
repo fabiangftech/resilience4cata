@@ -35,8 +35,12 @@ record Key(@Nullable String profile, Section section, @Nullable String config, @
     /** Instance ids written without quotes in canonical keys; any other id is quoted. */
     private static final Pattern PLAIN_ID = Pattern.compile("[A-Za-z0-9_-]+");
 
-    static final Pattern NAME = Pattern.compile("[a-z0-9]++(?:-[a-z0-9]++)*+");
-    private static final List<String> TOP_LEVEL = List.of("defaults", "configs", "instances", "profiles");
+    static final Pattern NAME_PATTERN = Pattern.compile("[a-z0-9]++(?:-[a-z0-9]++)*+");
+    private static final String INSTANCES = "instances";
+    private static final String PROFILES = "profiles";
+    private static final String PROFILES_PREFIX = "profiles.";
+    private static final String DID_YOU_MEAN = ". Did you mean '";
+    private static final List<String> TOP_LEVEL = List.of("defaults", "configs", INSTANCES, PROFILES);
     private static final String FORMS = "expected defaults.<policy>.<attribute>, configs.<name>.<policy>.<attribute>,"
             + " configs.<name>.extends, instances.<id>.<policy>.<attribute>, profiles.<profile>.<one of those> or"
             + " profiles.active";
@@ -44,7 +48,7 @@ record Key(@Nullable String profile, Section section, @Nullable String config, @
             + " name, or its derived id in double quotes: instances.\"com.acme.Api#get(java.lang.String)\".retry.maxAttempts";
 
     String canonical() {
-        String prefix = profile == null ? "" : "profiles." + profile + ".";
+        String prefix = profile == null ? "" : PROFILES_PREFIX + profile + ".";
         return switch (section) {
             case ACTIVE_PROFILES -> "profiles.active";
             case DEFAULTS -> prefix + "defaults." + policy + "." + attribute;
@@ -73,6 +77,34 @@ record Key(@Nullable String profile, Section section, @Nullable String config, @
      */
     static Key parse(String key, String written, String origin) {
         String[] s = segments(key, origin);
+        checkSegments(s, origin);
+        String profile = null;
+        int i = 0;
+        if (is(s[0], PROFILES)) {
+            if (s.length == 2 && is(s[1], "active")) {
+                return new Key(null, Section.ACTIVE_PROFILES, null, null, null, null);
+            }
+            profile = profile(s, origin);
+            i = 2;
+        }
+        String head = s[i];
+        if (is(head, "defaults")) {
+            return defaults(profile, s, i, written, origin);
+        }
+        if (is(head, "configs")) {
+            return configs(profile, s, i, written, origin);
+        }
+        if (is(head, INSTANCES)) {
+            return instance(profile, s, i, written, origin);
+        }
+        List<String> candidates = profile == null ? TOP_LEVEL : TOP_LEVEL.subList(0, 3);
+        String closest = Suggestions.closest(head, candidates);
+        throw new ProblemException(ProblemException.UNKNOWN_KEY, "unknown key " + origin + ": " + FORMS
+                + (closest == null ? "" : DID_YOU_MEAN + replace(written, s, i, closest) + "'?"));
+    }
+
+    /** Rejects empty segments, and quotes anywhere but on an instance id. */
+    private static void checkSegments(String[] s, String origin) {
         for (String segment : s) {
             if (segment.isEmpty()) {
                 throw new ProblemException(ProblemException.UNKNOWN_KEY, "malformed key " + origin
@@ -80,66 +112,57 @@ record Key(@Nullable String profile, Section section, @Nullable String config, @
             }
         }
         for (int j = 0; j < s.length; j++) {
-            boolean idPosition = j >= 1 && is(s[j - 1], "instances") && (j == 1 || j == 3 && is(s[0], "profiles"));
+            boolean idPosition = j >= 1 && is(s[j - 1], INSTANCES) && (j == 1 || j == 3 && is(s[0], PROFILES));
             if (s[j].startsWith("\"") && !idPosition) {
                 throw new ProblemException(ProblemException.INVALID_INSTANCE_ID, "malformed key " + origin
                         + ": only an instance id may be quoted (" + INSTANCE_FORM + ")");
             }
         }
-        String profile = null;
-        int i = 0;
-        if (is(s[0], "profiles")) {
-            if (s.length == 2 && is(s[1], "active")) {
-                return new Key(null, Section.ACTIVE_PROFILES, null, null, null, null);
-            }
-            if (s.length < 3) {
-                throw new ProblemException(ProblemException.UNKNOWN_KEY, "incomplete key " + origin + ": " + FORMS);
-            }
-            profile = name(s[1], "profile", origin);
-            if (profile.equals("active")) {
-                throw new ProblemException(ProblemException.INVALID_NAME, "invalid key " + origin
-                        + ": 'active' is reserved (profiles.active lists the active profiles)");
-            }
-            i = 2;
+    }
+
+    /** The profile of a {@code profiles.<profile>.…} key other than {@code profiles.active}. */
+    private static String profile(String[] s, String origin) {
+        if (s.length < 3) {
+            throw new ProblemException(ProblemException.UNKNOWN_KEY, "incomplete key " + origin + ": " + FORMS);
         }
-        String head = s[i];
-        if (is(head, "defaults")) {
-            if (s.length - i != 3) {
-                throw new ProblemException(ProblemException.UNKNOWN_KEY, "incomplete key " + origin
-                        + ": expected " + (profile == null ? "" : "profiles." + profile + ".")
-                        + "defaults.<policy>.<attribute>");
-            }
-            PolicyType<?, ?> policy = policy(s, i + 1, written, origin);
-            return new Key(profile, Section.DEFAULTS, null, null, policy, attribute(policy, s, i + 2, written, origin));
+        String profile = name(s[1], "profile", origin);
+        if (profile.equals("active")) {
+            throw new ProblemException(ProblemException.INVALID_NAME, "invalid key " + origin
+                    + ": 'active' is reserved (profiles.active lists the active profiles)");
         }
-        if (is(head, "configs")) {
-            if (s.length - i == 3 && is(s[i + 2], "extends")) {
-                return new Key(profile, Section.EXTENDS, config(s[i + 1], origin), null, null, null);
-            }
-            if (s.length - i != 4) {
-                throw new ProblemException(ProblemException.UNKNOWN_KEY, "incomplete key " + origin
-                        + ": expected configs.<name>.<policy>.<attribute> or configs.<name>.extends");
-            }
-            String config = config(s[i + 1], origin);
-            PolicyType<?, ?> policy = policy(s, i + 2, written, origin);
-            return new Key(profile, Section.CONFIG, config, null, policy, attribute(policy, s, i + 3, written, origin));
+        return profile;
+    }
+
+    private static Key defaults(@Nullable String profile, String[] s, int i, String written, String origin) {
+        if (s.length - i != 3) {
+            throw new ProblemException(ProblemException.UNKNOWN_KEY, "incomplete key " + origin
+                    + ": expected " + (profile == null ? "" : PROFILES_PREFIX + profile + ".")
+                    + "defaults.<policy>.<attribute>");
         }
-        if (is(head, "instances")) {
-            return instance(profile, s, i, written, origin);
+        PolicyType<?, ?> policy = policy(s, i + 1, written, origin);
+        return new Key(profile, Section.DEFAULTS, null, null, policy, attribute(policy, s, i + 2, written, origin));
+    }
+
+    private static Key configs(@Nullable String profile, String[] s, int i, String written, String origin) {
+        if (s.length - i == 3 && is(s[i + 2], "extends")) {
+            return new Key(profile, Section.EXTENDS, config(s[i + 1], origin), null, null, null);
         }
-        List<String> candidates = profile == null ? TOP_LEVEL : TOP_LEVEL.subList(0, 3);
-        String closest = Suggestions.closest(head, candidates);
-        throw new ProblemException(ProblemException.UNKNOWN_KEY, "unknown key " + origin + ": " + FORMS
-                + (closest == null ? "" : ". Did you mean '" + replace(written, s, i, closest) + "'?"));
+        if (s.length - i != 4) {
+            throw new ProblemException(ProblemException.UNKNOWN_KEY, "incomplete key " + origin
+                    + ": expected configs.<name>.<policy>.<attribute> or configs.<name>.extends");
+        }
+        String config = config(s[i + 1], origin);
+        PolicyType<?, ?> policy = policy(s, i + 2, written, origin);
+        return new Key(profile, Section.CONFIG, config, null, policy, attribute(policy, s, i + 3, written, origin));
     }
 
     private static Key instance(@Nullable String profile, String[] s, int i, String written, String origin) {
         if (s.length - i > 4 && !s[i + 1].startsWith("\"") && PolicyType.find(s[s.length - 2]) != null) {
             // An unquoted derived id: com.acme.Api#get(java.lang.String) was split at its dots.
             String id = String.join(".", List.of(s).subList(i + 1, s.length - 2));
-            String prefix = profile == null ? "" : "profiles." + profile + ".";
+            String prefix = profile == null ? "" : PROFILES_PREFIX + profile + ".";
             throw new ProblemException(ProblemException.INVALID_INSTANCE_ID, "malformed key " + origin
-                    + ": an instance id that contains '.' must be quoted. Did you mean '" + prefix + "instances.\""
+                    + ": an instance id that contains '.' must be quoted" + DID_YOU_MEAN + prefix + "instances.\""
                     + id + "\"." + s[s.length - 2] + "." + s[s.length - 1] + "'?");
         }
         if (s.length - i != 4) {
@@ -216,7 +239,7 @@ record Key(@Nullable String profile, Section section, @Nullable String config, @
             hint = ". Fallbacks have no external configuration";
         } else {
             String closest = Suggestions.closest(s[i], PolicyType.names());
-            hint = closest == null ? "" : ". Did you mean '" + replace(written, s, i, styled(closest, s[i])) + "'?";
+            hint = closest == null ? "" : DID_YOU_MEAN + replace(written, s, i, styled(closest, s[i])) + "'?";
         }
         throw new ProblemException(ProblemException.UNKNOWN_KEY, "unknown policy '" + s[i] + "' in key " + origin
                 + hint + ". Policies: " + String.join(", ", PolicyType.names()));
@@ -230,7 +253,7 @@ record Key(@Nullable String profile, Section section, @Nullable String config, @
         List<String> names = List.copyOf(policy.attributes.keySet());
         String closest = Suggestions.closest(s[i], names);
         throw new ProblemException(ProblemException.UNKNOWN_KEY, "unknown key " + origin
-                + (closest == null ? "" : ". Did you mean '" + replace(written, s, i, styled(closest, s[i])) + "'?")
+                + (closest == null ? "" : DID_YOU_MEAN + replace(written, s, i, styled(closest, s[i])) + "'?")
                 + " Attributes of " + policy.name + ": " + String.join(", ", names));
     }
 
@@ -257,20 +280,27 @@ record Key(@Nullable String profile, Section section, @Nullable String config, @
         return config;
     }
 
+    /** Drops one leading and one trailing hyphen (runs of hyphens are already single). */
+    private static String trimHyphens(String text) {
+        int start = text.startsWith("-") ? 1 : 0;
+        int end = text.endsWith("-") && text.length() > start ? text.length() - 1 : text.length();
+        return text.substring(start, end);
+    }
+
     /**
      * Validates a config or profile name.
      *
      * @throws ProblemException if the name is not lowercase letters and digits separated by single hyphens
      */
     static String name(String name, String what, String origin) {
-        if (NAME.matcher(name).matches()) {
+        if (NAME_PATTERN.matcher(name).matches()) {
             return name;
         }
-        String suggestion = Suggestions.kebab(name).replace('_', '-').toLowerCase(java.util.Locale.ROOT)
-                .replaceAll("-+", "-").replaceAll("(?:^-)|(?:-$)", "");
+        String suggestion = trimHyphens(Suggestions.kebab(name).replace('_', '-').toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("-+", "-"));
         throw new ProblemException(ProblemException.INVALID_NAME, "invalid " + what + " name '" + name + "' in "
                 + origin + ": names use lowercase letters and digits separated by single hyphens, so that they map"
                 + " to environment variables"
-                + (NAME.matcher(suggestion).matches() ? " (for example '" + suggestion + "')" : ""));
+                + (NAME_PATTERN.matcher(suggestion).matches() ? " (for example '" + suggestion + "')" : ""));
     }
 }

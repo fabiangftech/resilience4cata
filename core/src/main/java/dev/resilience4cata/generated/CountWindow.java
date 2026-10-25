@@ -48,13 +48,14 @@ final class CountWindow implements SlidingWindow {
     private final AtomicIntegerArray slots;
     private final AtomicLong cursor = new AtomicLong();
 
-    @SuppressWarnings("unused") // accessed through the VarHandles above
+    // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
+    @SuppressWarnings({"unused", "java:S1845"}) // accessed through the VarHandles above
     private int calls;
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "java:S1845"})
     private int failures;
     @SuppressWarnings("unused")
     private int slowCalls;
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "java:S1845"})
     private int completed;
 
     /**
@@ -68,6 +69,7 @@ final class CountWindow implements SlidingWindow {
     }
 
     @Override
+    @SuppressWarnings("java:S6213") // record is only a contextual keyword; renaming would touch every window caller
     public int record(int outcome, long now) {
         int index = (int) (cursor.getAndIncrement() % size);
         int value = outcome | FILLED;

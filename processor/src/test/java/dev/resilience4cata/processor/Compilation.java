@@ -107,14 +107,14 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
         return diagnostics.stream()
                 .filter(d -> d.getKind() == Diagnostic.Kind.ERROR)
                 .map(d -> d.getMessage(Locale.ROOT))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /** The code of each error, in order: {@code R4C-FB-002} for {@code [R4C-FB-002] @Fallback(...)}. */
     List<String> errorCodes() {
         return errors().stream()
                 .map(e -> e.startsWith("[R4C-") && e.indexOf(']') > 0 ? e.substring(1, e.indexOf(']')) : "(no code) " + e)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     String generatedSource(String qualifiedName) {

@@ -46,6 +46,8 @@ public interface Ticker {
      * @param task what to run; it must not block for long
      * @return a future whose {@link Future#cancel(boolean) cancel} stops the task from running
      */
+    // java:S1452: the future carries no result, only cancel(); the signature is published API
+    @SuppressWarnings("java:S1452")
     Future<?> schedule(long delayNanos, Runnable task);
 
     /**

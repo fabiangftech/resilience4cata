@@ -142,8 +142,8 @@ public final class FallbackPolicy {
                     return false;
                 }
             }
-            for (Class<? extends Throwable> applied : applyOn) {
-                if (applied.isAssignableFrom(type)) {
+            for (Class<? extends Throwable> applies : applyOn) {
+                if (applies.isAssignableFrom(type)) {
                     return taken == null || takes(type);
                 }
             }

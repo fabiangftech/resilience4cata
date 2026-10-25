@@ -9,6 +9,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 /** Sibling fallbacks picked by exception type, filters, and the async form. */
+// java:S1172: a fallback mirrors the method's parameters, then takes the failure that selects it by type
+// (suppressed on the interface because the fallbacks are documentation snippets)
+@SuppressWarnings("java:S1172")
 public interface CatalogApi {
 
     // tag::fallback-overloads[]

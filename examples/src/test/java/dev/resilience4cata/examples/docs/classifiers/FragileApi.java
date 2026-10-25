@@ -11,7 +11,7 @@ public interface FragileApi {
     Response get(String id);
 
     @CircuitBreaker(name = "fragile", windowSize = 1, minimumCalls = 1, classifier = ThrowingClassifier.class)
-    Response record(String id);
+    Response recorded(String id);
 
     @Retry(maxAttempts = 3, delay = "0", classifier = ThrowingClassifier.class)
     @Fallback(method = "recover")

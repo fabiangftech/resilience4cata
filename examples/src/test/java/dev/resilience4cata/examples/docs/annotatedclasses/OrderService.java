@@ -5,6 +5,9 @@ import dev.resilience4cata.annotation.Retry;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /** The class level of the precedence example: its annotations win attribute by attribute. */
+// java:S1172: a fallback mirrors the method's parameters, then takes the failure that selects it by type
+// (suppressed on the class because the whole class is a documentation snippet)
+@SuppressWarnings("java:S1172")
 // tag::annotated-classes-order-service[]
 public class OrderService implements OrderApi {
     final AtomicInteger calls = new AtomicInteger();

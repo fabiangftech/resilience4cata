@@ -20,6 +20,7 @@ interface SlidingWindow {
      * @param now the current time in nanoseconds; only read by time-based windows
      * @return {@link #EVALUATE} and/or {@link #MAYBE_QUIET} bits, or 0
      */
+    @SuppressWarnings("java:S6213") // record is only a contextual keyword; renaming would touch every window caller
     int record(int outcome, long now);
 
     /** True if at least {@code minimumCalls} are recorded and a rate reaches its threshold. */

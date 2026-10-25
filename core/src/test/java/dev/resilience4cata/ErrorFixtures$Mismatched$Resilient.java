@@ -5,5 +5,6 @@ public final class ErrorFixtures$Mismatched$Resilient implements ErrorFixtures.M
 
     /** Not the {@code (Mismatched, ResilienceRegistry)} constructor that {@link Resilient#of} looks for. */
     public ErrorFixtures$Mismatched$Resilient() {
+        // empty: only the constructor's signature matters to the test
     }
 }

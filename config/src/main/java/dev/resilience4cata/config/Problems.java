@@ -6,19 +6,19 @@ import java.util.List;
 /** Collects every problem found, so that one {@link ConfigException} reports them all. */
 final class Problems {
 
-    private final List<ProblemException> problems = new ArrayList<>();
+    private final List<ProblemException> collected = new ArrayList<>();
 
     void add(ProblemException problem) {
-        problems.add(problem);
+        collected.add(problem);
     }
 
     boolean isEmpty() {
-        return problems.isEmpty();
+        return collected.isEmpty();
     }
 
     void throwIfAny() {
-        if (!problems.isEmpty()) {
-            throw new ConfigException(problems.stream().map(ProblemException::render).toList());
+        if (!collected.isEmpty()) {
+            throw new ConfigException(collected.stream().map(ProblemException::render).toList());
         }
     }
 }

@@ -31,7 +31,8 @@ abstract class TimerEntry implements Runnable {
         }
     }
 
-    @SuppressWarnings("unused") // accessed through STATE
+    // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
+    @SuppressWarnings({"unused", "java:S1845"}) // accessed through STATE
     private volatile int state = NEW;
 
     /** Written before the entry is pushed (published by the push), final afterwards. */
@@ -61,8 +62,8 @@ abstract class TimerEntry implements Runnable {
         if (witness == NEW) {
             return true;
         }
-        // Acquire: the timer cleared stackNext before moving the entry to SCHEDULED (a volatile CAS);
-        // our write of stackNext in cancelled(...) must come after that clear.
+        // Acquire: the timer cleared stackNext before moving the entry to SCHEDULED (a volatile CAS), and
+        // the write of stackNext that the timer's cancelled method makes for us must come after that clear.
         if (witness == SCHEDULED
                 && (int) STATE.compareAndExchangeAcquire(this, SCHEDULED, CANCELLED) == SCHEDULED) {
             TimeoutTimer.Lane owner = lane;
@@ -75,6 +76,7 @@ abstract class TimerEntry implements Runnable {
     }
 
     /** The current state; used by the timer and by tests. */
+    @SuppressWarnings("java:S1845") // the accessor of the state field, read through its VarHandle STATE
     final int state() {
         return (int) STATE.getVolatile(this);
     }

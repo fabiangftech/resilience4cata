@@ -108,7 +108,11 @@ class BulkheadPolicyTest {
         assertThat(bulkhead.tryEnter()).isTrue();
         AtomicBoolean entered = new AtomicBoolean();
         Thread waiter = Thread.ofPlatform().start(() -> entered.set(bulkhead.tryEnter()));
-        TimeUnit.MILLISECONDS.sleep(50);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (bulkhead.waitingCalls() == 0 && System.nanoTime() < deadline) {
+            Thread.onSpinWait();
+        }
+        assertThat(bulkhead.waitingCalls()).as("the waiter is queued").isEqualTo(1);
         bulkhead.exit();
         waiter.join(5_000);
         assertThat(entered).isTrue();

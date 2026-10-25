@@ -70,29 +70,13 @@ final class PolicyAttributes {
             if (name.equals(annotation)) {
                 direct = explicitValues(mirror);
                 present = true;
-            } else if (hasAnnotation(type, POLICY)) {
-                if (path.contains(name)) {
-                    continue;
-                }
+            } else if (hasAnnotation(type, POLICY) && !path.contains(name)) {
                 path.push(name);
                 Optional<Map<String, AnnotationValue>> bundle = collect(type, reportOn, path);
                 path.pop();
-                if (bundle.isEmpty()) {
-                    continue;
-                }
-                present = true;
-                for (Map.Entry<String, AnnotationValue> entry : bundle.get().entrySet()) {
-                    AnnotationValue previous = composed.putIfAbsent(entry.getKey(), entry.getValue());
-                    if (previous != null && !previous.toString().equals(entry.getValue().toString())) {
-                        String message = ProcessorError.BUNDLE_CONFLICT.message("@" + simpleName + "." + entry.getKey()
-                                + " is set to " + previous + " by @" + composedSource.get(entry.getKey())
-                                + " and to " + entry.getValue() + " by @" + type.getSimpleName()
-                                + ". Set it directly on the element to resolve the conflict.");
-                        if (reported.add(reportOn + "|" + message)) {
-                            messager.printMessage(Diagnostic.Kind.ERROR, message, reportOn);
-                        }
-                    }
-                    composedSource.putIfAbsent(entry.getKey(), type.getSimpleName().toString());
+                if (bundle.isPresent()) {
+                    present = true;
+                    merge(bundle.get(), type, composed, composedSource, reportOn);
                 }
             }
         }
@@ -104,6 +88,24 @@ final class PolicyAttributes {
             result.putAll(direct);
         }
         return Optional.of(result);
+    }
+
+    /** Adds a bundle's values to {@code composed}, reporting values that another bundle set differently. */
+    private void merge(Map<String, AnnotationValue> bundle, TypeElement type, Map<String, AnnotationValue> composed,
+            Map<String, String> composedSource, Element reportOn) {
+        for (Map.Entry<String, AnnotationValue> entry : bundle.entrySet()) {
+            AnnotationValue previous = composed.putIfAbsent(entry.getKey(), entry.getValue());
+            if (previous != null && !previous.toString().equals(entry.getValue().toString())) {
+                String message = ProcessorError.BUNDLE_CONFLICT.message("@" + simpleName + "." + entry.getKey()
+                        + " is set to " + previous + " by @" + composedSource.get(entry.getKey())
+                        + " and to " + entry.getValue() + " by @" + type.getSimpleName()
+                        + ". Set it directly on the element to resolve the conflict.");
+                if (reported.add(reportOn + "|" + message)) {
+                    messager.printMessage(Diagnostic.Kind.ERROR, message, reportOn);
+                }
+            }
+            composedSource.putIfAbsent(entry.getKey(), type.getSimpleName().toString());
+        }
     }
 
     static boolean hasAnnotation(Element element, String annotation) {

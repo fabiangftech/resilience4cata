@@ -11,6 +11,9 @@ final class Hidden$Resilient implements Hidden {
      * @param delegate unused
      * @param registry unused
      */
+    // java:S1172: Resilient.of looks this constructor up by its (interface, registry) signature
+    @SuppressWarnings("java:S1172")
     public Hidden$Resilient(Hidden delegate, ResilienceRegistry registry) {
+        // empty: only the signature and the class's access matter to the test
     }
 }

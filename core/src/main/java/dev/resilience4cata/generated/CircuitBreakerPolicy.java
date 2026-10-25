@@ -11,7 +11,6 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongSupplier;
 import org.jspecify.annotations.Nullable;
@@ -90,9 +89,11 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
     private final @Nullable EventSink<CircuitBreakerEvent.CallNotPermitted> notPermitted;
 
     // java:S3077: Phase objects are immutable, swapped whole by compare-and-set through the PHASE VarHandle.
-    @SuppressWarnings({"unused", "java:S3077"}) // accessed through PHASE
+    // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
+    @SuppressWarnings({"unused", "java:S3077", "java:S1845"}) // accessed through PHASE
     private volatile Phase phase;
-    @SuppressWarnings("unused") // accessed through QUIET
+    // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
+    @SuppressWarnings({"unused", "java:S1845"}) // accessed through QUIET
     private volatile long quiet = NOT_QUIET;
 
     /**
@@ -158,15 +159,19 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         Phase current = phase();
         int[] counts;
         int minimum;
-        if (current instanceof Closed closed) {
-            counts = closed.window.counts(timeWindow ? ticker.getAsLong() : 0L);
-            minimum = minimumCalls;
-        } else if (current instanceof HalfOpen halfOpen) {
-            counts = halfOpen.window.counts(0L);
-            minimum = halfOpenCalls;
-        } else {
-            counts = new int[3];
-            minimum = 1;
+        switch (current) {
+            case Closed closed -> {
+                counts = closed.window.counts(timeWindow ? ticker.getAsLong() : 0L);
+                minimum = minimumCalls;
+            }
+            case HalfOpen halfOpen -> {
+                counts = halfOpen.window.counts(0L);
+                minimum = halfOpenCalls;
+            }
+            default -> {
+                counts = new int[3];
+                minimum = 1;
+            }
         }
         int calls = counts[0];
         boolean evaluated = calls > 0 && calls >= minimum;
@@ -182,12 +187,12 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
 
     @Override
     public void forceOpen() {
-        transitionFromAny(generation -> new ForcedOpen(generation));
+        transitionFromAny(ForcedOpen::new);
     }
 
     @Override
     public void disable() {
-        transitionFromAny(generation -> new Disabled(generation));
+        transitionFromAny(Disabled::new);
     }
 
     @Override
@@ -212,6 +217,8 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         return acquireSlow(current);
     }
 
+    // java:S3776: one loop over the phase transitions, kept whole on the rejection/half-open call path.
+    @SuppressWarnings("java:S3776")
     private long acquireSlow(Phase current) {
         while (true) {
             if (current instanceof Open open) {
@@ -262,7 +269,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
     private long rejected(CircuitBreakerState state, long now) {
         EventSink<CircuitBreakerEvent.CallNotPermitted> sink = notPermitted;
         if (sink != null) {
-            sink.publish(new CircuitBreakerEvent.CallNotPermitted(id, now != 0L ? now : ticker.getAsLong(), state));
+            sink.publish(new CircuitBreakerEvent.CallNotPermitted(id, now == 0L ? ticker.getAsLong() : now, state));
         }
         return REJECTED;
     }
@@ -341,6 +348,9 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         return timed && ticker.getAsLong() - start >= slowCallNanos ? SlidingWindow.SLOW : 0;
     }
 
+    // java:S3776: per-call method kept in one piece for JIT inlining (see CLAUDE.md on per-call methods).
+    // java:S6213: record is only a contextual keyword; it is the natural verb and harmless as a method name.
+    @SuppressWarnings({"java:S3776", "java:S6213"})
     private void record(long token, int outcome) {
         Phase current = phase();
         if (current.generation != token) {
@@ -459,7 +469,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
 
     private enum Outcome { SUCCESS, FAILURE, IGNORED }
 
-    private abstract static sealed class Phase permits Closed, Open, HalfOpen, ForcedOpen, Disabled {
+    private abstract static sealed class Phase {
         static final int CLOSED = 0;
         static final int OPEN = 1;
         static final int HALF_OPEN = 2;
@@ -562,8 +572,8 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
                     return Outcome.IGNORED;
                 }
             }
-            for (Class<? extends Throwable> record : recordOn) {
-                if (record.isAssignableFrom(type)) {
+            for (Class<? extends Throwable> recorded : recordOn) {
+                if (recorded.isAssignableFrom(type)) {
                     return Outcome.FAILURE;
                 }
             }
@@ -624,6 +634,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @param <T> the result type
      * @return a future that completes with the call's outcome
      */
+    @SuppressWarnings("java:S1181") // a classifier failure of any kind must fail the call's future, not escape
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
             boolean insideRetry) {
         long token = acquire();

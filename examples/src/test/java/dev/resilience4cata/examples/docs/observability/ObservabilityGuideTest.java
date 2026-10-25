@@ -36,6 +36,8 @@ class ObservabilityGuideTest {
         return "charged " + order;
     };
 
+    // java:S108: the empty default branch is part of a documentation snippet (the switch must be exhaustive)
+    @SuppressWarnings("java:S108")
     @Test
     void listenersReceiveEventsByTypeAndByInstance() {
         List<String> log = new CopyOnWriteArrayList<>();
@@ -62,8 +64,8 @@ class ObservabilityGuideTest {
         }
 
         assertThat(log).contains("payments: CLOSED -> OPEN", "gave up after 3: MAX_ATTEMPTS",
-                "gave up after 2: NOT_RETRYABLE"); // the open breaker's rejection is not retried
-        assertThat(log).anyMatch(line -> line.startsWith("Retrying[instance=payments, "));
+                        "gave up after 2: NOT_RETRYABLE") // the open breaker's rejection is not retried
+                .anyMatch(line -> line.startsWith("Retrying[instance=payments, "));
     }
 
     @Test

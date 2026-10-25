@@ -258,7 +258,7 @@ public final class MicrometerMetrics implements AutoCloseable {
     }
 
     /** For tests: the counters' cache. */
-    Map<String, ?> counterCacheForTest() {
+    Map<String, Object> counterCacheForTest() {
         return counters.cacheForTest();
     }
 }

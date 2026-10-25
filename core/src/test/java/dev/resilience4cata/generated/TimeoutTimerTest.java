@@ -172,7 +172,9 @@ class TimeoutTimerTest {
     @Test
     void aLaneBelongsToOneTimer() {
         TimeoutTimer other = new TimeoutTimer(task -> { });
-        assertThatThrownBy(() -> timer.schedule(new Counting(), other.lane(MS)))
+        TimeoutTimer.Lane foreign = other.lane(MS);
+        Counting entry = new Counting();
+        assertThatThrownBy(() -> timer.schedule(entry, foreign))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -187,9 +189,8 @@ class TimeoutTimerTest {
         AtomicBoolean done = new AtomicBoolean();
         CountDownLatch finished = new CountDownLatch(threads);
         Thread ticker = Thread.ofPlatform().start(() -> {
-            long now = 0;
-            while (!done.get()) {
-                concurrent.tick(now += MS);
+            for (long now = MS; !done.get(); now += MS) {
+                concurrent.tick(now);
             }
         });
         for (int t = 0; t < threads; t++) {

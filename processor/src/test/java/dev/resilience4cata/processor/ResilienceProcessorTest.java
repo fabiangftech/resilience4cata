@@ -284,15 +284,19 @@ class ResilienceProcessorTest {
                 .hasSize(1 + 3 * 2);
         assertThat(generated.split("catch \\(dev.resilience4cata.generated.ClassifierFailure r4c\\$w\\)", -1)).hasSize(1 + 3);
         assertThat(generated)
-                .contains("            } catch (dev.resilience4cata.generated.ClassifierFailure r4c$w) {\n"
-                        + "                try {\n"
-                        + "                    throw r4c$w.failure();\n"
-                        + "                } catch (java.lang.Throwable r4c$c) {\n"
-                        + "                    r4c$retry.onClassifierFailure(r4c$attempts + 1, r4c$c);\n"
-                        + "                    if (!this.fallback8.handles(r4c$c)) {\n")
-                .contains("        } catch (java.lang.Throwable r4c$c) {\n"
-                        + "            r4c$cb.onResult(r4c$token, r4c$started, dev.resilience4cata.Classifier.Outcome.FAILURE);\n"
-                        + "            throw r4c$c;\n");
+                .contains("""
+                                    } catch (dev.resilience4cata.generated.ClassifierFailure r4c$w) {
+                                        try {
+                                            throw r4c$w.failure();
+                                        } catch (java.lang.Throwable r4c$c) {
+                                            r4c$retry.onClassifierFailure(r4c$attempts + 1, r4c$c);
+                                            if (!this.fallback8.handles(r4c$c)) {
+                        """)
+                .contains("""
+                                } catch (java.lang.Throwable r4c$c) {
+                                    r4c$cb.onResult(r4c$token, r4c$started, dev.resilience4cata.Classifier.Outcome.FAILURE);
+                                    throw r4c$c;
+                        """);
     }
 
     @Test

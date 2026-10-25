@@ -197,6 +197,8 @@ class ConfigurationTest {
                 .isEqualTo(Duration.ofMillis(200));
     }
 
+    // java:S5778: the lambda is a documentation snippet that shows building from a broken file in one expression
+    @SuppressWarnings("java:S5778")
     @Test
     void everyProblemIsReportedAtOnce() {
         // tag::configuration-errors[]

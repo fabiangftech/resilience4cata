@@ -14,11 +14,14 @@ public record TimeoutConfig(boolean enabled, Duration timeout) {
     /** Built-in defaults: 1 second, as in Resilience4j and MicroProfile Fault Tolerance. */
     public static final TimeoutConfig DEFAULTS = new TimeoutConfig(true, Duration.ofSeconds(1));
 
+    /** The policy name in validation messages. */
+    private static final String POLICY = "timeout";
+
     /** Validates the values. */
     public TimeoutConfig {
-        Objects.requireNonNull(timeout, "timeout");
+        Objects.requireNonNull(timeout, POLICY); // the component has the policy's name
         if (timeout.isNegative() || timeout.isZero()) {
-            throw ErrorCode.invalidValue("timeout", "timeout must be positive, was " + timeout);
+            throw ErrorCode.invalidValue(POLICY, "timeout must be positive, was " + timeout);
         }
     }
 
@@ -50,7 +53,7 @@ public record TimeoutConfig(boolean enabled, Duration timeout) {
 
         /** @param timeout how long one attempt may take @return this builder */
         public Builder timeout(Duration timeout) {
-            this.timeout = Objects.requireNonNull(timeout, "timeout");
+            this.timeout = Objects.requireNonNull(timeout, POLICY);
             return this;
         }
 

@@ -112,6 +112,8 @@ class AsyncPoliciesTest {
                 .isInstanceOf(RateLimitExceededException.class);
     }
 
+    // java:S2925: the shared timer runs on its own real thread, which the test has to let work
+    @SuppressWarnings("java:S2925")
     @Test
     void aStageThatCompletesInTimeCancelsItsTimer() throws Exception {
         TimeoutPolicy timeout = new TimeoutPolicy("test", TimeoutConfig.builder().timeout(Duration.ofHours(1)).build());
@@ -131,6 +133,8 @@ class AsyncPoliciesTest {
      * fired: unchanged over several ticks. Taken as the base right away, a timer that fires during this test
      * would move the count and fail it on a slow machine.
      */
+    // java:S2925: polls the shared timer's real thread
+    @SuppressWarnings("java:S2925")
     private static int settledQueuedTimers() throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         int count = AsyncSupport.queuedTimers();
@@ -145,6 +149,8 @@ class AsyncPoliciesTest {
     }
 
     /** The shared timer thread works in ticks, so the count settles within a few milliseconds. */
+    // java:S2925: polls the shared timer's real thread
+    @SuppressWarnings("java:S2925")
     private static void awaitQueuedTimers(int expected) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (AsyncSupport.queuedTimers() != expected && System.nanoTime() < deadline) {
@@ -154,7 +160,7 @@ class AsyncPoliciesTest {
     }
 
     @Test
-    void aStageThatCompletesAfterTheTimeoutDoesNotChangeTheResult() throws Exception {
+    void aStageThatCompletesAfterTheTimeoutDoesNotChangeTheResult() {
         TimeoutPolicy timeout = new TimeoutPolicy("test", TimeoutConfig.builder().timeout(Duration.ofMillis(20)).build());
         CompletableFuture<String> pending = new CompletableFuture<>();
         CompletableFuture<String> result = timeout.executeAsync(() -> pending);
@@ -166,7 +172,7 @@ class AsyncPoliciesTest {
     }
 
     @Test
-    void retriesUntilTheLastAttemptAndKeepsItsFailure() throws Exception {
+    void retriesUntilTheLastAttemptAndKeepsItsFailure() {
         RetryPolicy retry = new RetryPolicy(RetryConfig.builder().maxAttempts(3).delay(Duration.ZERO).build());
         AtomicInteger calls = new AtomicInteger();
         CompletableFuture<String> result = retry.executeAsync(() ->
@@ -176,7 +182,7 @@ class AsyncPoliciesTest {
     }
 
     @Test
-    void anAsyncMethodThatReturnsNullFails() throws Exception {
+    void anAsyncMethodThatReturnsNullFails() {
         RetryPolicy retry = new RetryPolicy(RetryConfig.builder().maxAttempts(1).build());
         CompletableFuture<String> result = retry.executeAsync(() -> null);
         assertThatThrownBy(() -> result.get(5, TimeUnit.SECONDS)).cause()

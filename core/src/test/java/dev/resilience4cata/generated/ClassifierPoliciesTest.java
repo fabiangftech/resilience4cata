@@ -144,7 +144,7 @@ class ClassifierPoliciesTest {
     }
 
     @Test
-    void asyncRetriesFailuresTheClassifierRejectsOnly() throws Exception {
+    void asyncRetriesFailuresTheClassifierRejectsOnly() {
         RetryPolicy retry = new RetryPolicy(RetryConfig.builder().maxAttempts(3).delay(Duration.ZERO).build());
         AtomicInteger calls = new AtomicInteger();
 

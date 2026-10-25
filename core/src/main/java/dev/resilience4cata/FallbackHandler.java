@@ -20,5 +20,7 @@ public interface FallbackHandler<T> {
      * @return the alternative result
      * @throws Throwable to fail the call instead
      */
+    // java:S112: a handler may rethrow any failure, checked ones included, and the signature is published API
+    @SuppressWarnings("java:S112")
     T apply(FallbackContext context) throws Throwable;
 }

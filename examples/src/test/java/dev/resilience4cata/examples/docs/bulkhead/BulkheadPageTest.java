@@ -123,6 +123,8 @@ class BulkheadPageTest {
         assertThat(snapshot.availableSlots()).isEqualTo(4);
     }
 
+    // java:S1117: the documentation snippet below calls its renderer "backend", like the other pages
+    @SuppressWarnings("java:S1117")
     @Test
     void pipeline() {
         ReportRenderer backend = id -> "rendered " + id;
@@ -137,6 +139,8 @@ class BulkheadPageTest {
         assertThat(registry.bulkhead("renderer").config().maxConcurrent()).isEqualTo(10);
     }
 
+    // java:S2925: polls calls running on real threads, which a manual clock cannot drive
+    @SuppressWarnings("java:S2925")
     private static void awaitConcurrent(BulkheadHandle bulkhead, int calls) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (bulkhead.concurrentCalls() != calls && System.nanoTime() - deadline < 0) {

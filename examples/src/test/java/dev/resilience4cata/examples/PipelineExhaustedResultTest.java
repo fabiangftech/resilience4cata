@@ -27,9 +27,9 @@ class PipelineExhaustedResultTest {
     private final ResilienceRegistry registry = ResilienceRegistry.builder().listen(RetryEvent.class, events::add).build();
 
     private static Reply rejected(Throwable failure) {
-        return failure instanceof ResultRejectedException e && e.result() instanceof Reply last
-                ? new Reply(200, "rejected " + last.status() + " after " + e.attempts())
-                : new Reply(200, "fallback: " + failure.getMessage());
+        return new Reply(200, failure instanceof ResultRejectedException e && e.result() instanceof Reply last
+                ? "rejected " + last.status() + " after " + e.attempts()
+                : "fallback: " + failure.getMessage());
     }
 
     private Pipeline<Reply> pipeline(String id) {

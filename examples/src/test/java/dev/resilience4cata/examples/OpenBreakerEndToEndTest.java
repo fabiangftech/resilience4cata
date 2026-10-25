@@ -45,8 +45,7 @@ class OpenBreakerEndToEndTest {
 
         @Override
         public String classified(String id) {
-            calls.incrementAndGet();
-            throw new IllegalStateException("down");
+            return sync(id);
         }
     }, registry);
 

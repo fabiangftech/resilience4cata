@@ -71,7 +71,7 @@ class PipelineGuideTest {
     }
 
     @Test
-    void theIdNamesTheInstances() throws IOException {
+    void theIdNamesTheInstances() {
         ResilienceRegistry registry = ResilienceRegistry.builder().build();
         // tag::pipeline-handle[]
         Pipeline<String> search = Pipeline.builder(registry, "search", String.class)
@@ -116,7 +116,7 @@ class PipelineGuideTest {
     }
 
     @Test
-    void annotationsAndExternalConfigurationReachPipelineInstances() throws IOException {
+    void annotationsAndExternalConfigurationReachPipelineInstances() {
         java.util.Properties props = new java.util.Properties();
         props.setProperty("instances.search.circuitBreaker.minimumCalls", "7");
         ResilienceRegistry registry = dev.resilience4cata.config.ResilienceConfig.builder().properties(props).build()

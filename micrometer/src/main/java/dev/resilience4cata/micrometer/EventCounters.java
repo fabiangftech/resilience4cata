@@ -38,6 +38,8 @@ final class EventCounters implements EventListener<ResilienceEvent> {
     private static final int TRANSITIONS = GAVE_UP + REASONS.length;
     private static final int SLOTS = TRANSITIONS + STATES.length * STATES.length;
 
+    private static final String CALLS_REJECTED = "r4c.calls.rejected";
+
     private final MeterRegistry meters;
     private final ConcurrentHashMap<String, Instance> instances = new ConcurrentHashMap<>();
     private volatile boolean closed;
@@ -54,9 +56,9 @@ final class EventCounters implements EventListener<ResilienceEvent> {
         switch (event) {
             case CircuitBreakerEvent.StateTransition t -> transition(t);
             case CircuitBreakerEvent.CallNotPermitted r ->
-                    count(r, REJECTED_CIRCUIT_BREAKER, "r4c.calls.rejected", "kind", "circuitbreaker");
-            case RateLimiterEvent.Rejected r -> count(r, REJECTED_RATE_LIMITER, "r4c.calls.rejected", "kind", "ratelimiter");
-            case BulkheadEvent.Rejected r -> count(r, REJECTED_BULKHEAD, "r4c.calls.rejected", "kind", "bulkhead");
+                    count(r, REJECTED_CIRCUIT_BREAKER, CALLS_REJECTED, "kind", "circuitbreaker");
+            case RateLimiterEvent.Rejected r -> count(r, REJECTED_RATE_LIMITER, CALLS_REJECTED, "kind", "ratelimiter");
+            case BulkheadEvent.Rejected r -> count(r, REJECTED_BULKHEAD, CALLS_REJECTED, "kind", "bulkhead");
             case RetryEvent.Retrying r -> count(r, RETRIES, "r4c.retry.retries");
             case RetryEvent.GaveUp g -> gaveUp(g);
             case TimeoutEvent.TimedOut t -> count(t, TIMED_OUT, "r4c.timeout.timed.out");
@@ -128,12 +130,12 @@ final class EventCounters implements EventListener<ResilienceEvent> {
         instances.clear();
     }
 
-    Map<String, ?> cacheForTest() {
+    Map<String, Object> cacheForTest() {
         return Map.copyOf(instances);
     }
 
     private static final Map<String, String> DESCRIPTIONS = Map.of(
-            "r4c.calls.rejected", "Calls rejected by a circuit breaker, rate limiter or bulkhead",
+            CALLS_REJECTED, "Calls rejected by a circuit breaker, rate limiter or bulkhead",
             "r4c.circuitbreaker.transitions", "Circuit breaker state changes",
             "r4c.retry.retries", "Attempts that failed and will be retried",
             "r4c.retry.gave.up", "Retries that stopped without a success, by reason",

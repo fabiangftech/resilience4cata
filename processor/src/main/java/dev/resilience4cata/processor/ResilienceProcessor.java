@@ -57,10 +57,17 @@ import javax.tools.JavaFileObject;
  * retries, the fallback runs where the retry loop gives up, so that it knows the number of attempts. The public method holds the outermost layer; every inner layer is a private method
  * of the generated class, which the JIT inlines like any statically bound call.
  */
+// java:S1192: the remaining duplicates are fragments of the generated source (braces, keywords, indentation,
+// the r4c$ local names) and of error messages, which read better in place than as constants.
+@SuppressWarnings("java:S1192")
 public final class ResilienceProcessor extends AbstractProcessor {
 
     private static final String SUFFIX = "$Resilient";
     private static final String REGISTRY_TYPE = "dev.resilience4cata.ResilienceRegistry";
+    private static final String DELEGATE = "this.delegate";
+    private static final String OBJECT = "java.lang.Object";
+    private static final String COMPLETION_STAGE = "java.util.concurrent.CompletionStage";
+    private static final String EXECUTE_ASYNC = ".executeAsync(() -> ";
 
     /** Supported policies, in nesting order: outermost first. */
     private enum Kind {
@@ -98,7 +105,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private final Set<String> processed = new HashSet<>();
     private SubclassWriter subclasses;
     /** What generated methods call: the wrapped instance for an interface, {@code super} for a class. */
-    private String delegateReceiver = "this.delegate";
+    private String delegateReceiver = DELEGATE;
 
     /**
      * Whether {@link #process} claims the annotations it sees. javac's {@code -Xlint:processing} warns about
@@ -187,16 +194,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
     private void inspect(TypeElement type) {
         switch (type.getKind()) {
-            case ANNOTATION_TYPE -> {
-                for (PolicyAttributes policy : attributes.values()) {
-                    if (PolicyAttributes.hasAnnotation(type, policy.annotation())
-                            && !PolicyAttributes.hasAnnotation(type, PolicyAttributes.POLICY)) {
-                        error(type, ProcessorError.BUNDLE_NOT_MARKED, "@" + type.getSimpleName() + " uses @" + policy.simpleName()
-                                + " but is not marked with @ResiliencePolicy, so its policies would be ignored."
-                                + " Add @ResiliencePolicy to it.");
-                    }
-                }
-            }
+            case ANNOTATION_TYPE -> checkBundle(type);
             case INTERFACE -> generateIfNeeded(type);
             case CLASS -> {
                 // A class opts in by declaring an annotation itself; interfaces and superclasses then add theirs.
@@ -211,11 +209,23 @@ public final class ResilienceProcessor extends AbstractProcessor {
             }
             default -> {
                 if (usesAnyPolicy(type)) {
-                    error(type, ProcessorError.ENUM_OR_RECORD, "Resilience annotations cannot be used on " + (type.getKind() == ElementKind.ENUM
-                            ? "enums" : "records") + ": the generated subclass must extend the type, and "
-                            + (type.getKind() == ElementKind.ENUM ? "enums" : "records") + " are final. Declare the"
+                    String kinds = type.getKind() == ElementKind.ENUM ? "enums" : "records";
+                    error(type, ProcessorError.ENUM_OR_RECORD, "Resilience annotations cannot be used on " + kinds
+                            + ": the generated subclass must extend the type, and " + kinds + " are final. Declare the"
                             + " methods in an interface and wrap the implementation with Resilient.of(...).");
                 }
+            }
+        }
+    }
+
+    /** An annotation type that uses a policy annotation must be a {@code @ResiliencePolicy} bundle. */
+    private void checkBundle(TypeElement type) {
+        for (PolicyAttributes policy : attributes.values()) {
+            if (PolicyAttributes.hasAnnotation(type, policy.annotation())
+                    && !PolicyAttributes.hasAnnotation(type, PolicyAttributes.POLICY)) {
+                error(type, ProcessorError.BUNDLE_NOT_MARKED, "@" + type.getSimpleName() + " uses @" + policy.simpleName()
+                        + " but is not marked with @ResiliencePolicy, so its policies would be ignored."
+                        + " Add @ResiliencePolicy to it.");
             }
         }
     }
@@ -236,6 +246,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return false;
     }
 
+    @SuppressWarnings("java:S3776") // java:S3776: one pass over the methods that collects every error first
     private void generateIfNeeded(TypeElement iface) {
         String binaryName = elements.getBinaryName(iface).toString();
         if (!processed.add(binaryName)) {
@@ -262,13 +273,13 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     fallback = asyncResult != null && asyncResult.getKind() == TypeKind.NONE ? null
                             : fallbackModel(iface, method, type, asyncResult, effective.get());
                     valid &= fallback != null;
-                    continue;
-                }
-                PolicyModel model = policyModel(kind, iface, method, type, asyncResult, effective.get());
-                if (model == null) {
-                    valid = false;
                 } else {
-                    policies.put(kind, model);
+                    PolicyModel model = policyModel(kind, iface, method, type, asyncResult, effective.get());
+                    if (model == null) {
+                        valid = false;
+                    } else {
+                        policies.put(kind, model);
+                    }
                 }
             }
             boolean annotated = !policies.isEmpty() || fallback != null || effective(Kind.FALLBACK, iface,
@@ -357,7 +368,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
      */
     private TypeMirror asyncResult(ExecutableType type) {
         TypeMirror returnType = type.getReturnType();
-        TypeElement completionStage = elements.getTypeElement("java.util.concurrent.CompletionStage");
+        TypeElement completionStage = elements.getTypeElement(COMPLETION_STAGE);
         if (returnType.getKind() != TypeKind.DECLARED
                 || !types.isAssignable(types.erasure(returnType), types.erasure(completionStage.asType()))) {
             return null;
@@ -365,7 +376,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         TypeElement declared = (TypeElement) ((DeclaredType) returnType).asElement();
         List<? extends TypeMirror> arguments = ((DeclaredType) returnType).getTypeArguments();
         String name = declared.getQualifiedName().toString();
-        if ((name.equals("java.util.concurrent.CompletionStage") || name.equals("java.util.concurrent.CompletableFuture"))
+        if ((name.equals(COMPLETION_STAGE) || name.equals("java.util.concurrent.CompletableFuture"))
                 && arguments.size() == 1) {
             if (arguments.get(0).getKind() != TypeKind.WILDCARD) {
                 return arguments.get(0);
@@ -373,7 +384,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             javax.lang.model.type.WildcardType wildcard = (javax.lang.model.type.WildcardType) arguments.get(0);
             if (wildcard.getSuperBound() == null) {
                 return wildcard.getExtendsBound() != null ? wildcard.getExtendsBound()
-                        : elements.getTypeElement("java.lang.Object").asType();
+                        : elements.getTypeElement(OBJECT).asType();
             }
         }
         return types.getNoType(TypeKind.NONE);
@@ -387,15 +398,16 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
     /** {@code CompletionStage<? extends result>}: what a stage-returning fallback of a wildcard method may return. */
     private TypeMirror wildcardStageOf(TypeMirror result) {
-        return types.getDeclaredType(elements.getTypeElement("java.util.concurrent.CompletionStage"),
+        return types.getDeclaredType(elements.getTypeElement(COMPLETION_STAGE),
                 types.getWildcardType(result, null));
     }
 
     private TypeMirror stageOf(TypeMirror result) {
-        return types.getDeclaredType(elements.getTypeElement("java.util.concurrent.CompletionStage"), result);
+        return types.getDeclaredType(elements.getTypeElement(COMPLETION_STAGE), result);
     }
 
     /** Validates the attributes and turns them into builder calls. Returns null after reporting errors. */
+    @SuppressWarnings("java:S3776") // java:S3776: one flat switch with a case per annotation attribute
     private PolicyModel policyModel(Kind kind, TypeElement iface, ExecutableElement method, ExecutableType type,
             TypeMirror asyncResult, Map<String, AnnotationValue> values) {
         String annotation = "@" + kind.annotation.getSimpleName();
@@ -412,16 +424,13 @@ public final class ResilienceProcessor extends AbstractProcessor {
             switch (attribute) {
                 case "name" -> name = (String) value;
                 case "value" -> { // @Timeout("2s")
-                    try {
-                        long nanos = Durations.parseNanos((String) value);
-                        if (nanos == 0) {
-                            valid = invalid(method, ProcessorError.DURATION_NOT_POSITIVE, annotation + " must be positive, was \"" + value + "\"");
-                        } else {
-                            overrides.add("timeout(java.time.Duration.ofNanos(" + nanos + "L))");
-                        }
-                    } catch (IllegalArgumentException e) {
-                        valid = invalid(method, ProcessorError.INVALID_DURATION, annotation + "(\"" + value + "\") is not a valid duration: "
-                                + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
+                    long nanos = durationNanos(method, annotation + "(\"" + value + "\")", value);
+                    if (nanos < 0) {
+                        valid = false;
+                    } else if (nanos == 0) {
+                        valid = invalid(method, ProcessorError.DURATION_NOT_POSITIVE, annotation + " must be positive, was \"" + value + "\"");
+                    } else {
+                        overrides.add("timeout(java.time.Duration.ofNanos(" + nanos + "L))");
                     }
                 }
                 case "config" -> config = (String) value;
@@ -452,30 +461,26 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     }
                 }
                 case "delay", "maxDelay", "maxDuration", "slowCallDuration", "waitInOpen", "maxWaitInHalfOpen", "maxWait" -> {
-                    try {
-                        long nanos = Durations.parseNanos((String) value);
+                    long nanos = durationNanos(method, label + " = \"" + value + "\"", value);
+                    if (nanos < 0) {
+                        valid = false;
+                    } else {
                         overrides.add(attribute + "(java.time.Duration.ofNanos(" + nanos + "L))");
-                    } catch (IllegalArgumentException e) {
-                        valid = invalid(method, ProcessorError.INVALID_DURATION, label + " = \"" + value + "\" is not a valid duration: "
-                                + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
                     }
                 }
                 case "period" -> {
-                    try {
-                        long nanos = Durations.parseNanos((String) value);
-                        if (nanos == 0) {
-                            valid = invalid(method, ProcessorError.DURATION_NOT_POSITIVE, label + " must be positive, was \"" + value + "\"");
-                        } else {
-                            overrides.add("period(java.time.Duration.ofNanos(" + nanos + "L))");
-                        }
-                    } catch (IllegalArgumentException e) {
-                        valid = invalid(method, ProcessorError.INVALID_DURATION, label + " = \"" + value + "\" is not a valid duration: "
-                                + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
+                    long nanos = durationNanos(method, label + " = \"" + value + "\"", value);
+                    if (nanos < 0) {
+                        valid = false;
+                    } else if (nanos == 0) {
+                        valid = invalid(method, ProcessorError.DURATION_NOT_POSITIVE, label + " must be positive, was \"" + value + "\"");
+                    } else {
+                        overrides.add("period(java.time.Duration.ofNanos(" + nanos + "L))");
                     }
                 }
                 case "multiplier" -> {
                     double multiplier = (Double) value;
-                    if (!(multiplier >= 1) || Double.isInfinite(multiplier)) {
+                    if (!Double.isFinite(multiplier) || multiplier < 1) {
                         valid = invalid(method, ProcessorError.INVALID_MULTIPLIER, label + " must be a finite number >= 1, was " + multiplier);
                     } else {
                         overrides.add("multiplier(" + multiplier + ")");
@@ -483,7 +488,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 }
                 case "budgetPercent" -> {
                     double percent = (Double) value;
-                    if (!(percent >= 0) || Double.isInfinite(percent)) {
+                    if (!Double.isFinite(percent) || percent < 0) {
                         valid = invalid(method, ProcessorError.INVALID_BUDGET, label + " must be a finite number >= 0, was " + percent);
                     } else {
                         overrides.add("budgetPercent(" + percent + ")");
@@ -498,16 +503,13 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     }
                 }
                 case "budgetWindow" -> {
-                    try {
-                        long nanos = Durations.parseNanos((String) value);
-                        if (nanos < 1_000_000_000L || nanos > 3_600_000_000_000L) {
-                            valid = invalid(method, ProcessorError.INVALID_BUDGET, label + " must be between 1s and 1h, was \"" + value + "\"");
-                        } else {
-                            overrides.add("budgetWindow(java.time.Duration.ofNanos(" + nanos + "L))");
-                        }
-                    } catch (IllegalArgumentException e) {
-                        valid = invalid(method, ProcessorError.INVALID_DURATION, label + " = \"" + value + "\" is not a valid duration: "
-                                + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
+                    long nanos = durationNanos(method, label + " = \"" + value + "\"", value);
+                    if (nanos < 0) {
+                        valid = false;
+                    } else if (nanos < 1_000_000_000L || nanos > 3_600_000_000_000L) {
+                        valid = invalid(method, ProcessorError.INVALID_BUDGET, label + " must be between 1s and 1h, was \"" + value + "\"");
+                    } else {
+                        overrides.add("budgetWindow(java.time.Duration.ofNanos(" + nanos + "L))");
                     }
                 }
                 case "failureRateThreshold", "slowCallRateThreshold" -> {
@@ -546,6 +548,20 @@ public final class ResilienceProcessor extends AbstractProcessor {
     }
 
     /**
+     * Parses the duration of an attribute written as {@code written}. Returns its nanoseconds, or -1 after
+     * reporting an invalid duration.
+     */
+    private long durationNanos(ExecutableElement method, String written, Object value) {
+        try {
+            return Durations.parseNanos((String) value);
+        } catch (IllegalArgumentException e) {
+            error(method, ProcessorError.INVALID_DURATION, written + " is not a valid duration: " + e.getMessage()
+                    + ". Use " + Durations.GRAMMAR + ".");
+            return -1;
+        }
+    }
+
+    /**
      * Checks a {@code classifier} class: a concrete, non-generic class with an accessible no-argument
      * constructor that implements {@code Classifier<X>}, where the method's value type is assignable to
      * {@code X}. {@code asyncResult} is the {@code T} of an asynchronous method, or null. Returns the
@@ -556,55 +572,47 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String label = attribute + " = " + TypePrinter.print(classifier) + ".class";
         TypeElement classifierType = elements.getTypeElement("dev.resilience4cata.Classifier");
         if (classifierType == null) {
-            return invalidClassifier(method, ProcessorError.CLASSIFIER_MISSING_CORE, label + ": dev.resilience4cata.Classifier is not on the classpath. Add the"
+            return invalidNull(method, ProcessorError.CLASSIFIER_MISSING_CORE, label + ": dev.resilience4cata.Classifier is not on the classpath. Add the"
                     + " resilience4cata-core dependency.");
         }
-        if (classifier.getKind() != TypeKind.DECLARED
-                || ((DeclaredType) classifier).asElement().getKind() != ElementKind.CLASS) {
-            return invalidClassifier(method, ProcessorError.CLASSIFIER_NOT_CLASS, label + ": the classifier must be a class that implements"
+        if (!isClass(classifier)) {
+            return invalidNull(method, ProcessorError.CLASSIFIER_NOT_CLASS, label + ": the classifier must be a class that implements"
                     + " dev.resilience4cata.Classifier<T>.");
         }
         TypeElement classifierClass = (TypeElement) ((DeclaredType) classifier).asElement();
         if (classifierClass.getModifiers().contains(Modifier.ABSTRACT)) {
-            return invalidClassifier(method, ProcessorError.CLASSIFIER_ABSTRACT, label + ": the classifier must not be abstract, because one instance is"
+            return invalidNull(method, ProcessorError.CLASSIFIER_ABSTRACT, label + ": the classifier must not be abstract, because one instance is"
                     + " created per method.");
         }
         if (!classifierClass.getTypeParameters().isEmpty()) {
-            return invalidClassifier(method, ProcessorError.CLASSIFIER_GENERIC, label + ": generic classifier classes are not supported. Implement"
+            return invalidNull(method, ProcessorError.CLASSIFIER_GENERIC, label + ": generic classifier classes are not supported. Implement"
                     + " Classifier<T> with a concrete T.");
         }
         String samePackage = elements.getPackageOf(iface).getQualifiedName().toString();
-        for (Element e = classifierClass; e instanceof TypeElement t; e = t.getEnclosingElement()) {
-            if (!accessible(t, samePackage)) {
-                return invalidClassifier(method, ProcessorError.CLASSIFIER_INACCESSIBLE, label + ": " + t.getSimpleName() + " must be public, or package-private"
-                        + " in package " + samePackage + ", for the generated class to create the classifier.");
-            }
+        TypeElement inaccessible = firstInaccessible(classifierClass, samePackage);
+        if (inaccessible != null) {
+            return invalidNull(method, ProcessorError.CLASSIFIER_INACCESSIBLE, label + ": " + inaccessible.getSimpleName() + " must be public, or package-private"
+                    + " in package " + samePackage + ", for the generated class to create the classifier.");
         }
         if (classifierClass.getNestingKind().isNested() && !classifierClass.getModifiers().contains(Modifier.STATIC)) {
-            return invalidClassifier(method, ProcessorError.CLASSIFIER_INNER, label + ": a nested classifier class must be static.");
+            return invalidNull(method, ProcessorError.CLASSIFIER_INNER, label + ": a nested classifier class must be static.");
         }
-        boolean constructor = false;
-        for (ExecutableElement c : ElementFilter.constructorsIn(classifierClass.getEnclosedElements())) {
-            if (c.getParameters().isEmpty() && accessible(c, classifierClass, samePackage)) {
-                constructor = true;
-            }
-        }
-        if (!constructor) {
-            return invalidClassifier(method, ProcessorError.CLASSIFIER_NO_CONSTRUCTOR, label + ": the classifier needs a public no-argument constructor.");
+        if (!hasNoArgConstructor(classifierClass, samePackage)) {
+            return invalidNull(method, ProcessorError.CLASSIFIER_NO_CONSTRUCTOR, label + ": the classifier needs a public no-argument constructor.");
         }
         List<? extends TypeMirror> arguments = supertypeArguments(classifier, types.erasure(classifierType.asType()));
         if (arguments == null) {
-            return invalidClassifier(method, ProcessorError.CLASSIFIER_NOT_CLASSIFIER, label + ": " + classifierClass.getSimpleName()
+            return invalidNull(method, ProcessorError.CLASSIFIER_NOT_CLASSIFIER, label + ": " + classifierClass.getSimpleName()
                     + " does not implement dev.resilience4cata.Classifier<T>.");
         }
         TypeMirror value = asyncResult != null ? asyncResult : boxed(type.getReturnType());
         if (arguments.isEmpty()) {
-            return invalidClassifier(method, ProcessorError.CLASSIFIER_RAW, label + ": " + classifierClass.getSimpleName() + " implements the raw type"
+            return invalidNull(method, ProcessorError.CLASSIFIER_RAW, label + ": " + classifierClass.getSimpleName() + " implements the raw type"
                     + " Classifier. Implement Classifier<" + TypePrinter.print(value) + "> instead.");
         }
         TypeMirror classified = arguments.get(0);
         if (value.getKind() != TypeKind.NONE && !types.isAssignable(value, classified)) {
-            return invalidClassifier(method, ProcessorError.CLASSIFIER_WRONG_TYPE, label + ": " + classifierClass.getSimpleName() + " implements Classifier<"
+            return invalidNull(method, ProcessorError.CLASSIFIER_WRONG_TYPE, label + ": " + classifierClass.getSimpleName() + " implements Classifier<"
                     + TypePrinter.print(classified) + ">, but " + method.getSimpleName() + " "
                     + (asyncResult != null ? "completes with " : "returns ") + TypePrinter.print(value)
                     + ". Implement Classifier<" + TypePrinter.print(value) + "> or a supertype of it.");
@@ -612,13 +620,16 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return classifierClass.getQualifiedName().toString();
     }
 
-    private String invalidClassifier(Element element, ProcessorError error, String message) {
+    /** Reports an error and returns null, for the validations that return null after reporting errors. */
+    private <T> T invalidNull(Element element, ProcessorError error, String message) {
         error(element, error, message);
         return null;
     }
 
-    /** Validates a {@code @Fallback}. Returns null after reporting errors. */
-    /** {@code asyncResult} is the {@code T} of an asynchronous method, or null for a synchronous one. */
+    /**
+     * Validates a {@code @Fallback}. Returns null after reporting errors. {@code asyncResult} is the {@code T}
+     * of an asynchronous method, or null for a synchronous one.
+     */
     private FallbackModel fallbackModel(TypeElement iface, ExecutableElement method, ExecutableType type,
             TypeMirror asyncResult, Map<String, AnnotationValue> values) {
         boolean valid = true;
@@ -638,7 +649,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             }
         }
         if ((handler == null) == methodName.isEmpty()) {
-            return invalidModel(method, ProcessorError.FALLBACK_TARGET, "@Fallback needs exactly one of a handler class, @Fallback(MyFallback.class),"
+            return invalidNull(method, ProcessorError.FALLBACK_TARGET, "@Fallback needs exactly one of a handler class, @Fallback(MyFallback.class),"
                     + " or a sibling method, @Fallback(method = \"name\").");
         }
         if (!valid) {
@@ -657,7 +668,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     checked.returnsValue(), List.of(), checkedThrown, checked.widens(), null);
         }
         List<FallbackTarget> targets = fallbackTargets(iface, method, type, asyncResult, methodName);
-        if (targets == null) {
+        if (targets.isEmpty()) {
             return null;
         }
         // Without a sibling that takes everything, the failures none of them takes are rethrown: the
@@ -680,78 +691,103 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String label = "@Fallback(" + TypePrinter.print(handler) + ".class)";
         TypeElement fallbackType = elements.getTypeElement("dev.resilience4cata.FallbackHandler");
         if (fallbackType == null) {
-            return invalidHandler(method, ProcessorError.HANDLER_MISSING_CORE, label + ": dev.resilience4cata.FallbackHandler is not on the classpath. Add the"
+            return invalidNull(method, ProcessorError.HANDLER_MISSING_CORE, label + ": dev.resilience4cata.FallbackHandler is not on the classpath. Add the"
                     + " resilience4cata-core dependency.");
         }
-        if (handler.getKind() != TypeKind.DECLARED
-                || ((DeclaredType) handler).asElement().getKind() != ElementKind.CLASS) {
-            return invalidHandler(method, ProcessorError.HANDLER_NOT_CLASS, label + ": the handler must be a class that implements FallbackHandler<T>.");
+        if (!isClass(handler)) {
+            return invalidNull(method, ProcessorError.HANDLER_NOT_CLASS, label + ": the handler must be a class that implements FallbackHandler<T>.");
         }
         TypeElement handlerClass = (TypeElement) ((DeclaredType) handler).asElement();
         if (handlerClass.getModifiers().contains(Modifier.ABSTRACT)) {
-            return invalidHandler(method, ProcessorError.HANDLER_ABSTRACT, label + ": the handler must not be abstract, because one instance is created per method.");
+            return invalidNull(method, ProcessorError.HANDLER_ABSTRACT, label + ": the handler must not be abstract, because one instance is created per method.");
         }
         if (!handlerClass.getTypeParameters().isEmpty()) {
-            return invalidHandler(method, ProcessorError.HANDLER_GENERIC, label + ": generic handler classes are not supported. Implement FallbackHandler<T> with a concrete T.");
+            return invalidNull(method, ProcessorError.HANDLER_GENERIC, label + ": generic handler classes are not supported. Implement FallbackHandler<T> with a concrete T.");
         }
         String samePackage = elements.getPackageOf(iface).getQualifiedName().toString();
-        for (Element e = handlerClass; e instanceof TypeElement t; e = t.getEnclosingElement()) {
-            if (!accessible(t, samePackage)) {
-                return invalidHandler(method, ProcessorError.HANDLER_INACCESSIBLE, label + ": " + t.getSimpleName() + " must be public, or package-private in"
-                        + " package " + samePackage + ", for the generated class to create the handler.");
-            }
+        TypeElement inaccessible = firstInaccessible(handlerClass, samePackage);
+        if (inaccessible != null) {
+            return invalidNull(method, ProcessorError.HANDLER_INACCESSIBLE, label + ": " + inaccessible.getSimpleName() + " must be public, or package-private in"
+                    + " package " + samePackage + ", for the generated class to create the handler.");
         }
         if (handlerClass.getNestingKind().isNested() && !handlerClass.getModifiers().contains(Modifier.STATIC)) {
-            return invalidHandler(method, ProcessorError.HANDLER_INNER, label + ": a nested handler class must be static.");
+            return invalidNull(method, ProcessorError.HANDLER_INNER, label + ": a nested handler class must be static.");
         }
-        boolean constructor = false;
-        for (ExecutableElement c : ElementFilter.constructorsIn(handlerClass.getEnclosedElements())) {
-            if (c.getParameters().isEmpty() && accessible(c, handlerClass, samePackage)) {
-                constructor = true;
-            }
-        }
-        if (!constructor) {
-            return invalidHandler(method, ProcessorError.HANDLER_NO_CONSTRUCTOR, label + ": the handler needs a public no-argument constructor.");
+        if (!hasNoArgConstructor(handlerClass, samePackage)) {
+            return invalidNull(method, ProcessorError.HANDLER_NO_CONSTRUCTOR, label + ": the handler needs a public no-argument constructor.");
         }
         List<? extends TypeMirror> arguments = supertypeArguments(handler, types.erasure(fallbackType.asType()));
         if (arguments == null) {
-            return invalidHandler(method, ProcessorError.HANDLER_NOT_HANDLER, label + ": " + handlerClass.getSimpleName() + " does not implement dev.resilience4cata.FallbackHandler<T>.");
+            return invalidNull(method, ProcessorError.HANDLER_NOT_HANDLER, label + ": " + handlerClass.getSimpleName() + " does not implement dev.resilience4cata.FallbackHandler<T>.");
         }
         if (arguments.isEmpty()) {
-            return invalidHandler(method, ProcessorError.HANDLER_RAW, label + ": " + handlerClass.getSimpleName() + " implements the raw type Fallback."
+            return invalidNull(method, ProcessorError.HANDLER_RAW, label + ": " + handlerClass.getSimpleName() + " implements the raw type Fallback."
                     + " Implement FallbackHandler<" + TypePrinter.print(boxed(type.getReturnType())) + "> instead.");
         }
         TypeMirror result = arguments.get(0);
         TypeMirror returnType = type.getReturnType();
         String name = handlerClass.getQualifiedName().toString();
         if (asyncResult != null) {
-            if (types.isAssignable(result, stageOf(asyncResult))) {
-                return new Handler(name, false, false);
-            }
-            if (types.isAssignable(result, wildcardStageOf(asyncResult))) {
-                return new Handler(name, false, true);
-            }
-            if (types.isAssignable(result, asyncResult)) {
-                return new Handler(name, true, false);
-            }
-            if (mentions(asyncResult, type.getTypeVariables())) {
-                return invalidHandler(method, ProcessorError.HANDLER_ON_GENERIC_METHOD, genericHandler(label, handlerClass, result, method, returnType));
-            }
-            return invalidHandler(method, ProcessorError.HANDLER_WRONG_TYPE, label + ": " + handlerClass.getSimpleName() + " implements FallbackHandler<"
-                    + TypePrinter.print(result) + ">, but " + method.getSimpleName() + " returns "
-                    + TypePrinter.print(returnType) + ". Implement FallbackHandler<" + TypePrinter.print(asyncResult)
-                    + "> or FallbackHandler<java.util.concurrent.CompletionStage<" + TypePrinter.print(asyncResult) + ">>.");
+            return asyncHandler(method, type, asyncResult, label, handlerClass, result);
         }
-        if (returnType.getKind() != TypeKind.VOID && !types.isAssignable(result, returnType)
-                && mentions(returnType, type.getTypeVariables())) {
-            return invalidHandler(method, ProcessorError.HANDLER_ON_GENERIC_METHOD, genericHandler(label, handlerClass, result, method, returnType));
+        boolean fits = returnType.getKind() == TypeKind.VOID || types.isAssignable(result, returnType);
+        if (!fits && mentions(returnType, type.getTypeVariables())) {
+            return invalidNull(method, ProcessorError.HANDLER_ON_GENERIC_METHOD, genericHandler(label, handlerClass, result, method, returnType));
         }
-        if (returnType.getKind() != TypeKind.VOID && !types.isAssignable(result, returnType)) {
-            return invalidHandler(method, ProcessorError.HANDLER_WRONG_TYPE, label + ": " + handlerClass.getSimpleName() + " implements FallbackHandler<"
+        if (!fits) {
+            return invalidNull(method, ProcessorError.HANDLER_WRONG_TYPE, label + ": " + handlerClass.getSimpleName() + " implements FallbackHandler<"
                     + TypePrinter.print(result) + ">, but " + method.getSimpleName() + " returns "
                     + TypePrinter.print(returnType) + ". Implement FallbackHandler<" + TypePrinter.print(boxed(returnType)) + ">.");
         }
         return new Handler(name, true, false);
+    }
+
+    /** Checks the type of a handler of an asynchronous method: {@code T}, or a stage of it. */
+    private Handler asyncHandler(ExecutableElement method, ExecutableType type, TypeMirror asyncResult, String label,
+            TypeElement handlerClass, TypeMirror result) {
+        String name = handlerClass.getQualifiedName().toString();
+        if (types.isAssignable(result, stageOf(asyncResult))) {
+            return new Handler(name, false, false);
+        }
+        if (types.isAssignable(result, wildcardStageOf(asyncResult))) {
+            return new Handler(name, false, true);
+        }
+        if (types.isAssignable(result, asyncResult)) {
+            return new Handler(name, true, false);
+        }
+        TypeMirror returnType = type.getReturnType();
+        if (mentions(asyncResult, type.getTypeVariables())) {
+            return invalidNull(method, ProcessorError.HANDLER_ON_GENERIC_METHOD, genericHandler(label, handlerClass, result, method, returnType));
+        }
+        return invalidNull(method, ProcessorError.HANDLER_WRONG_TYPE, label + ": " + handlerClass.getSimpleName() + " implements FallbackHandler<"
+                + TypePrinter.print(result) + ">, but " + method.getSimpleName() + " returns "
+                + TypePrinter.print(returnType) + ". Implement FallbackHandler<" + TypePrinter.print(asyncResult)
+                + "> or FallbackHandler<java.util.concurrent.CompletionStage<" + TypePrinter.print(asyncResult) + ">>.");
+    }
+
+    /** True if {@code type} is a class (not an interface, enum, record or annotation type). */
+    private static boolean isClass(TypeMirror type) {
+        return type.getKind() == TypeKind.DECLARED && ((DeclaredType) type).asElement().getKind() == ElementKind.CLASS;
+    }
+
+    /** The first of {@code type} and its enclosing types that the generated class cannot access, or null. */
+    private static TypeElement firstInaccessible(TypeElement type, String samePackage) {
+        for (Element e = type; e instanceof TypeElement t; e = t.getEnclosingElement()) {
+            if (!accessible(t, samePackage)) {
+                return t;
+            }
+        }
+        return null;
+    }
+
+    /** True if the generated class can call a no-argument constructor of {@code type}. */
+    private static boolean hasNoArgConstructor(TypeElement type, String samePackage) {
+        for (ExecutableElement c : ElementFilter.constructorsIn(type.getEnclosedElements())) {
+            if (c.getParameters().isEmpty() && accessible(c, type, samePackage)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -818,6 +854,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
      * Type arguments with which {@code type} implements {@code erasedTarget}: null if it does not,
      * empty if it implements the raw type.
      */
+    @SuppressWarnings("java:S1168") // java:S1168: null (not a subtype) and empty (raw subtype) mean different things
     private List<? extends TypeMirror> supertypeArguments(TypeMirror type, TypeMirror erasedTarget) {
         for (TypeMirror supertype : types.directSupertypes(type)) {
             if (types.isSameType(types.erasure(supertype), erasedTarget)) {
@@ -831,139 +868,30 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return null;
     }
 
-    /** Finds the sibling fallback methods, most specific exception first. Returns null after reporting an error. */
+    /** Finds the sibling fallback methods, most specific exception first. Returns none after reporting an error. */
     private List<FallbackTarget> fallbackTargets(TypeElement iface, ExecutableElement method, ExecutableType type,
             TypeMirror asyncResult, String name) {
-        List<? extends TypeMirror> parameters = type.getParameterTypes();
-        TypeMirror throwable = elements.getTypeElement("java.lang.Throwable").asType();
-        TypeMirror returnType = type.getReturnType();
         List<FallbackTarget> targets = new ArrayList<>();
         Map<FallbackTarget, TypeMirror> exceptionTypes = new LinkedHashMap<>();
         List<String> problems = new ArrayList<>();
         Set<String> names = new TreeSet<>(); // every method that could be a fallback, for "did you mean"
         boolean named = false;
         for (ExecutableElement candidate : ElementFilter.methodsIn(elements.getAllMembers(iface))) {
-            if (candidate.equals(method) || (candidate.getEnclosingElement().getKind() != ElementKind.INTERFACE
-                    && (iface.getKind() != ElementKind.CLASS || isObject(candidate.getEnclosingElement())))) {
-                continue;
-            }
-            names.add(candidate.getSimpleName().toString());
-            if (!candidate.getSimpleName().contentEquals(name)) {
-                continue;
-            }
-            named = true;
-            ExecutableType candidateType = (ExecutableType) types.asMemberOf((DeclaredType) iface.asType(), candidate);
-            List<? extends TypeMirror> candidateParameters = candidateType.getParameterTypes();
-            int n = parameters.size();
-            if (candidateParameters.size() != n && candidateParameters.size() != n + 1) {
-                continue;
-            }
-            String signature = methodTypeVariables(candidateType.getTypeVariables(), "") + name + "("
-                    + TypePrinter.join(candidateParameters, ", ") + ")";
-            // A generic method's fallback declares the same type parameters, in the same order (names may differ).
-            Map<Element, TypeMirror> renaming = typeParameterRenaming(type, candidateType);
-            if (renaming == null) {
-                if (!type.getTypeVariables().isEmpty() || !candidateType.getTypeVariables().isEmpty()) {
-                    problems.add(signature + " does not declare the same type parameters as " + method.getSimpleName()
-                            + ": " + (type.getTypeVariables().isEmpty() ? "none" : methodTypeVariables(type.getTypeVariables()))
-                            + ".");
-                }
-                continue;
-            }
-            boolean sameParameters = true;
-            for (int i = 0; i < n; i++) {
-                sameParameters &= types.isSameType(substitute(candidateParameters.get(i), renaming), parameters.get(i));
-            }
-            TypeMirror exception = candidateParameters.size() == n + 1 ? substitute(candidateParameters.get(n), renaming) : null;
-            if (!sameParameters || (exception != null && !types.isAssignable(exception, throwable))) {
-                continue;
-            }
-            if (exception != null && exception.getKind() != TypeKind.DECLARED) {
-                problems.add(signature + " takes a " + TypePrinter.print(exception) + " as its exception parameter, which"
-                        + " is not a class: the generated code cannot test a failure against it.");
-                continue;
-            }
-            Set<Modifier> modifiers = candidate.getModifiers();
-            if (modifiers.contains(Modifier.PRIVATE)) {
-                problems.add(signature + " is private, so the generated class cannot call it. Make it "
-                        + (iface.getKind() == ElementKind.CLASS ? "package-private, protected or public." : "a default"
-                        + " or static method."));
-                continue;
-            }
-            if (iface.getKind() == ElementKind.CLASS && !modifiers.contains(Modifier.PUBLIC)
-                    && !modifiers.contains(Modifier.PROTECTED) && !packageOf(candidate).equals(packageOf(iface))) {
-                problems.add(signature + " is package-private in another package, so the generated class cannot call"
-                        + " it. Make it protected or public.");
-                continue;
-            }
-            TypeMirror candidateReturn = substitute(candidateType.getReturnType(), renaming);
-            boolean returnsValue = true;
-            boolean widens = false;
-            if (asyncResult != null) {
-                // An async fallback may return the value or a stage of it; it may throw anything, which fails the future.
-                returnsValue = !types.isAssignable(candidateReturn, stageOf(asyncResult));
-                if (returnsValue && types.isAssignable(candidateReturn, wildcardStageOf(asyncResult))) {
-                    returnsValue = false;
-                    widens = true;
-                }
-                if (returnsValue && !types.isAssignable(candidateReturn, asyncResult)) {
-                    problems.add(signature + " returns " + TypePrinter.print(candidateReturn) + ", which is neither "
-                            + TypePrinter.print(asyncResult) + " nor a CompletionStage of it.");
-                    continue;
-                }
-            } else if (returnType.getKind() == TypeKind.VOID ? candidateReturn.getKind() != TypeKind.VOID
-                    : !types.isAssignable(candidateReturn, returnType)) {
-                problems.add(signature + " returns " + TypePrinter.print(candidateReturn) + ", which is not "
-                        + (returnType.getKind() == TypeKind.VOID ? "void" : "assignable to " + TypePrinter.print(returnType)) + ".");
-                continue;
-            }
-            List<String> undeclared = new ArrayList<>();
-            for (TypeMirror candidateThrown : candidateType.getThrownTypes()) {
-                TypeMirror thrown = substitute(candidateThrown, renaming);
-                if (asyncResult == null && isChecked(thrown) && type.getThrownTypes().stream().noneMatch(t -> types.isAssignable(thrown, t))) {
-                    undeclared.add(TypePrinter.print(thrown));
+            if (mayBeFallback(iface, method, candidate)) {
+                names.add(candidate.getSimpleName().toString());
+                if (candidate.getSimpleName().contentEquals(name)) {
+                    named = true;
+                    TypedTarget found = fallbackTarget(iface, method, type, asyncResult, candidate, problems);
+                    if (found != null) {
+                        targets.add(found.target());
+                        exceptionTypes.put(found.target(), found.exception());
+                    }
                 }
             }
-            if (!undeclared.isEmpty()) {
-                problems.add(signature + " throws " + String.join(", ", undeclared) + ", which "
-                        + method.getSimpleName() + " does not declare.");
-                continue;
-            }
-            String receiver = modifiers.contains(Modifier.STATIC)
-                    ? ((TypeElement) candidate.getEnclosingElement()).getQualifiedName().toString()
-                    : iface.getKind() == ElementKind.CLASS ? "this" : "this.delegate";
-            boolean catchesAll = exception == null || types.isSameType(exception, throwable);
-            // Explicit type arguments, so that the call does not depend on inference.
-            String typeArguments = type.getTypeVariables().isEmpty() ? ""
-                    : "<" + TypePrinter.join(type.getTypeVariables(), ", ") + ">";
-            FallbackTarget target = new FallbackTarget(receiver, typeArguments + name,
-                    exception == null ? null : TypePrinter.print(exception),
-                    exception == null ? null : TypePrinter.print(types.erasure(exception)) + ".class",
-                    catchesAll, returnsValue, widens);
-            targets.add(target);
-            exceptionTypes.put(target, exception);
         }
         if (targets.isEmpty()) {
-            String parameterList = TypePrinter.join(parameters, ", ");
-            String expected = (type.getTypeVariables().isEmpty() ? "" : methodTypeVariables(type.getTypeVariables()) + " ")
-                    + (returnType.getKind() == TypeKind.VOID ? "void" : TypePrinter.print(returnType)) + " "
-                    + name + "(" + parameterList + (parameterList.isEmpty() ? "" : ", ") + "<a Throwable type> e)";
-            String expectation = "Expected a " + (iface.getKind() == ElementKind.CLASS ? "non-private" : "default or static")
-                    + " method " + expected + ", where the exception parameter is optional.";
-            if (!named) {
-                String closest = Suggestions.closest(name, names);
-                error(method, ProcessorError.FALLBACK_METHOD_NOT_FOUND, "@Fallback(method = \"" + name + "\") on "
-                        + method.getSimpleName() + ": no method named " + name + " in " + iface.getSimpleName() + "."
-                        + (closest == null ? "" : " Did you mean " + closest + "?") + " " + expectation);
-                return null;
-            }
-            StringBuilder message = new StringBuilder("@Fallback(method = \"" + name + "\"): no usable method " + name
-                    + " in " + iface.getSimpleName() + ". " + expectation);
-            for (String problem : problems) {
-                message.append("\n  ").append(problem);
-            }
-            error(method, ProcessorError.FALLBACK_METHOD_UNUSABLE, message.toString());
-            return null;
+            reportNoFallbackTarget(iface, method, type, name, named, problems, names);
+            return targets;
         }
         // Most specific first: a subtype is always deeper in the hierarchy. Methods without an exception parameter go last.
         targets.sort(Comparator.comparingInt((FallbackTarget t) -> t.exceptionType() == null ? Integer.MIN_VALUE
@@ -971,10 +899,156 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return targets;
     }
 
+    /** A usable sibling fallback method, and the type of its exception parameter (null without one). */
+    private record TypedTarget(FallbackTarget target, TypeMirror exception) {
+    }
+
+    /** True if {@code candidate}, a member of {@code iface}, is a method other than {@code method} that may be its fallback. */
+    private static boolean mayBeFallback(TypeElement iface, ExecutableElement method, ExecutableElement candidate) {
+        return !candidate.equals(method) && (candidate.getEnclosingElement().getKind() == ElementKind.INTERFACE
+                || (iface.getKind() == ElementKind.CLASS && !isObject(candidate.getEnclosingElement())));
+    }
+
+    /**
+     * Checks a sibling method with the fallback's name. Returns null if it is not usable, after adding the
+     * reason to {@code problems} when it matches closely enough for the reason to help.
+     */
+    @SuppressWarnings("java:S3776") // java:S3776: one candidate's checks, in the order their problems are reported
+    private TypedTarget fallbackTarget(TypeElement iface, ExecutableElement method, ExecutableType type,
+            TypeMirror asyncResult, ExecutableElement candidate, List<String> problems) {
+        List<? extends TypeMirror> parameters = type.getParameterTypes();
+        TypeMirror throwable = elements.getTypeElement("java.lang.Throwable").asType();
+        TypeMirror returnType = type.getReturnType();
+        String name = candidate.getSimpleName().toString();
+        ExecutableType candidateType = (ExecutableType) types.asMemberOf((DeclaredType) iface.asType(), candidate);
+        List<? extends TypeMirror> candidateParameters = candidateType.getParameterTypes();
+        int n = parameters.size();
+        if (candidateParameters.size() != n && candidateParameters.size() != n + 1) {
+            return null;
+        }
+        String signature = methodTypeVariables(candidateType.getTypeVariables(), "") + name + "("
+                + TypePrinter.join(candidateParameters, ", ") + ")";
+        // A generic method's fallback declares the same type parameters, in the same order (names may differ).
+        Map<Element, TypeMirror> renaming = typeParameterRenaming(type, candidateType);
+        if (renaming == null) {
+            if (!type.getTypeVariables().isEmpty() || !candidateType.getTypeVariables().isEmpty()) {
+                problems.add(signature + " does not declare the same type parameters as " + method.getSimpleName()
+                        + ": " + (type.getTypeVariables().isEmpty() ? "none" : methodTypeVariables(type.getTypeVariables()))
+                        + ".");
+            }
+            return null;
+        }
+        boolean sameParameters = true;
+        for (int i = 0; i < n; i++) {
+            sameParameters &= types.isSameType(substitute(candidateParameters.get(i), renaming), parameters.get(i));
+        }
+        TypeMirror exception = candidateParameters.size() == n + 1 ? substitute(candidateParameters.get(n), renaming) : null;
+        if (!sameParameters || (exception != null && !types.isAssignable(exception, throwable))) {
+            return null;
+        }
+        if (exception != null && exception.getKind() != TypeKind.DECLARED) {
+            problems.add(signature + " takes a " + TypePrinter.print(exception) + " as its exception parameter, which"
+                    + " is not a class: the generated code cannot test a failure against it.");
+            return null;
+        }
+        Set<Modifier> modifiers = candidate.getModifiers();
+        if (modifiers.contains(Modifier.PRIVATE)) {
+            problems.add(signature + " is private, so the generated class cannot call it. Make it "
+                    + (iface.getKind() == ElementKind.CLASS ? "package-private, protected or public." : "a default"
+                    + " or static method."));
+            return null;
+        }
+        if (iface.getKind() == ElementKind.CLASS && !modifiers.contains(Modifier.PUBLIC)
+                && !modifiers.contains(Modifier.PROTECTED) && !packageOf(candidate).equals(packageOf(iface))) {
+            problems.add(signature + " is package-private in another package, so the generated class cannot call"
+                    + " it. Make it protected or public.");
+            return null;
+        }
+        TypeMirror candidateReturn = substitute(candidateType.getReturnType(), renaming);
+        boolean returnsValue = true;
+        boolean widens = false;
+        if (asyncResult != null) {
+            // An async fallback may return the value or a stage of it; it may throw anything, which fails the future.
+            returnsValue = !types.isAssignable(candidateReturn, stageOf(asyncResult));
+            if (returnsValue && types.isAssignable(candidateReturn, wildcardStageOf(asyncResult))) {
+                returnsValue = false;
+                widens = true;
+            }
+            if (returnsValue && !types.isAssignable(candidateReturn, asyncResult)) {
+                problems.add(signature + " returns " + TypePrinter.print(candidateReturn) + ", which is neither "
+                        + TypePrinter.print(asyncResult) + " nor a CompletionStage of it.");
+                return null;
+            }
+        } else if (returnType.getKind() == TypeKind.VOID ? candidateReturn.getKind() != TypeKind.VOID
+                : !types.isAssignable(candidateReturn, returnType)) {
+            problems.add(signature + " returns " + TypePrinter.print(candidateReturn) + ", which is not "
+                    + (returnType.getKind() == TypeKind.VOID ? "void" : "assignable to " + TypePrinter.print(returnType)) + ".");
+            return null;
+        }
+        List<String> undeclared = new ArrayList<>();
+        for (TypeMirror candidateThrown : candidateType.getThrownTypes()) {
+            TypeMirror thrown = substitute(candidateThrown, renaming);
+            if (asyncResult == null && isChecked(thrown) && type.getThrownTypes().stream().noneMatch(t -> types.isAssignable(thrown, t))) {
+                undeclared.add(TypePrinter.print(thrown));
+            }
+        }
+        if (!undeclared.isEmpty()) {
+            problems.add(signature + " throws " + String.join(", ", undeclared) + ", which "
+                    + method.getSimpleName() + " does not declare.");
+            return null;
+        }
+        boolean catchesAll = exception == null || types.isSameType(exception, throwable);
+        // Explicit type arguments, so that the call does not depend on inference.
+        String typeArguments = type.getTypeVariables().isEmpty() ? ""
+                : "<" + TypePrinter.join(type.getTypeVariables(), ", ") + ">";
+        FallbackTarget target = new FallbackTarget(fallbackReceiver(iface, candidate), typeArguments + name,
+                exception == null ? null : TypePrinter.print(exception),
+                exception == null ? null : TypePrinter.print(types.erasure(exception)) + ".class",
+                catchesAll, returnsValue, widens);
+        return new TypedTarget(target, exception);
+    }
+
+    /** What the generated code calls a sibling fallback method on. */
+    private static String fallbackReceiver(TypeElement iface, ExecutableElement candidate) {
+        if (candidate.getModifiers().contains(Modifier.STATIC)) {
+            return ((TypeElement) candidate.getEnclosingElement()).getQualifiedName().toString();
+        }
+        return iface.getKind() == ElementKind.CLASS ? "this" : DELEGATE;
+    }
+
+    /**
+     * Reports that no sibling method can be the fallback: none has its name (not {@code named}), or none of
+     * those is usable, for the reasons in {@code problems}.
+     */
+    private void reportNoFallbackTarget(TypeElement iface, ExecutableElement method, ExecutableType type, String name,
+            boolean named, List<String> problems, Set<String> names) {
+        TypeMirror returnType = type.getReturnType();
+        String parameterList = TypePrinter.join(type.getParameterTypes(), ", ");
+        String expected = (type.getTypeVariables().isEmpty() ? "" : methodTypeVariables(type.getTypeVariables()) + " ")
+                + (returnType.getKind() == TypeKind.VOID ? "void" : TypePrinter.print(returnType)) + " "
+                + name + "(" + parameterList + (parameterList.isEmpty() ? "" : ", ") + "<a Throwable type> e)";
+        String expectation = "Expected a " + (iface.getKind() == ElementKind.CLASS ? "non-private" : "default or static")
+                + " method " + expected + ", where the exception parameter is optional.";
+        if (!named) {
+            String closest = Suggestions.closest(name, names);
+            error(method, ProcessorError.FALLBACK_METHOD_NOT_FOUND, "@Fallback(method = \"" + name + "\") on "
+                    + method.getSimpleName() + ": no method named " + name + " in " + iface.getSimpleName() + "."
+                    + (closest == null ? "" : " Did you mean " + closest + "?") + " " + expectation);
+            return;
+        }
+        StringBuilder message = new StringBuilder("@Fallback(method = \"" + name + "\"): no usable method " + name
+                + " in " + iface.getSimpleName() + ". " + expectation);
+        for (String problem : problems) {
+            message.append("\n  ").append(problem);
+        }
+        error(method, ProcessorError.FALLBACK_METHOD_UNUSABLE, message.toString());
+    }
+
     /**
      * Maps the candidate's method type variables to the method's, by position, if both declare the same number
      * with the same bounds after renaming. Returns null if they do not; an empty map for two non-generic methods.
      */
+    @SuppressWarnings("java:S1168") // java:S1168: null (no match) and empty (two non-generic methods) differ
     private Map<Element, TypeMirror> typeParameterRenaming(ExecutableType method, ExecutableType candidate) {
         List<? extends TypeVariable> expected = method.getTypeVariables();
         List<? extends TypeVariable> actual = candidate.getTypeVariables();
@@ -1049,15 +1123,6 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 && !types.isAssignable(thrown, elements.getTypeElement("java.lang.Error").asType());
     }
 
-    private FallbackModel invalidModel(Element element, ProcessorError error, String message) {
-        error(element, error, message);
-        return null;
-    }
-
-    private Handler invalidHandler(Element element, ProcessorError error, String message) {
-        error(element, error, message);
-        return null;
-    }
 
     private void write(TypeElement iface, String binaryName, List<MethodModel> methods) {
         String packageName = elements.getPackageOf(iface).getQualifiedName().toString();
@@ -1073,7 +1138,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             out.append("package ").append(packageName).append(";\n\n");
         }
         boolean subclass = iface.getKind() == ElementKind.CLASS;
-        delegateReceiver = subclass ? "super" : "this.delegate";
+        delegateReceiver = subclass ? "super" : DELEGATE;
         if (subclass) {
             out.append("@SuppressWarnings({\"deprecation\", \"removal\", \"serial\"})\n");
             out.append("public final class ").append(simpleName).append(typeParameters(iface.getTypeParameters()))
@@ -1082,24 +1147,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
             out.append("@SuppressWarnings({\"deprecation\", \"removal\"})\n");
             out.append("public final class ").append(simpleName).append(typeParameters(iface.getTypeParameters()))
                     .append(" implements ").append(ifaceType).append(" {\n\n");
-            out.append("    private final ").append(ifaceType).append(" delegate;\n");
+            appendField(out, ifaceType, "delegate");
         }
-        for (int i = 0; i < methods.size(); i++) {
-            FallbackModel fallback = methods.get(i).fallback();
-            if (fallback != null) {
-                out.append("    private final ").append(Kind.FALLBACK.policyType).append(" fallback").append(i).append(";\n");
-                if (fallback.handler() != null) {
-                    out.append("    private final ").append(fallback.handler()).append(" fallbackHandler").append(i).append(";\n");
-                }
-            }
-            for (Kind kind : methods.get(i).policies().keySet()) {
-                out.append("    private final ").append(kind.policyType).append(' ').append(kind.field).append(i).append(";\n");
-                if (ownsClassifier(methods.get(i), kind, i)) {
-                    out.append("    private final ").append(methods.get(i).policies().get(kind).classifier()).append(' ')
-                            .append(classifierField(methods.get(i), kind, i)).append(";\n");
-                }
-            }
-        }
+        appendFields(out, methods);
         List<SubclassWriter.Constructor> constructors = subclass ? subclasses.constructors(iface) : List.of();
         if (subclass) {
             appendConstructorStart(out, simpleName, constructors.get(0));
@@ -1109,6 +1159,47 @@ public final class ResilienceProcessor extends AbstractProcessor {
             out.append("        this.delegate = java.util.Objects.requireNonNull(delegate, \"delegate\");\n");
         }
         int initStart = out.length();
+        appendFieldInits(out, methods);
+        out.append("    }\n");
+        String init = out.substring(initStart);
+        for (int c = 1; c < constructors.size(); c++) { // the subclass mirrors every constructor of the class
+            appendConstructorStart(out, simpleName, constructors.get(c));
+            out.append(init);
+        }
+        for (int i = 0; i < methods.size(); i++) {
+            writeMethod(out, methods.get(i), i);
+        }
+        out.append("}\n");
+
+        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
+        writeSource(iface, qualifiedName, out.toString());
+    }
+
+    /** The {@code final} fields of the generated class: per method, its fallback, handler, policies and classifiers. */
+    private static void appendFields(StringBuilder out, List<MethodModel> methods) {
+        for (int i = 0; i < methods.size(); i++) {
+            FallbackModel fallback = methods.get(i).fallback();
+            if (fallback != null) {
+                appendField(out, Kind.FALLBACK.policyType, "fallback" + i);
+                if (fallback.handler() != null) {
+                    appendField(out, fallback.handler(), "fallbackHandler" + i);
+                }
+            }
+            for (Kind kind : methods.get(i).policies().keySet()) {
+                appendField(out, kind.policyType, kind.field + i);
+                if (ownsClassifier(methods.get(i), kind, i)) {
+                    appendField(out, methods.get(i).policies().get(kind).classifier(), classifierField(methods.get(i), kind, i));
+                }
+            }
+        }
+    }
+
+    private static void appendField(StringBuilder out, String type, String name) {
+        out.append("    private final ").append(type).append(' ').append(name).append(";\n");
+    }
+
+    /** The constructor statements that set the fields written by {@link #appendFields}. */
+    private static void appendFieldInits(StringBuilder out, List<MethodModel> methods) {
         out.append("        java.util.Objects.requireNonNull(registry, \"registry\");\n");
         for (int i = 0; i < methods.size(); i++) {
             FallbackModel fallback = methods.get(i).fallback();
@@ -1135,22 +1226,14 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 }
             }
         }
-        out.append("    }\n");
-        String init = out.substring(initStart);
-        for (int c = 1; c < constructors.size(); c++) { // the subclass mirrors every constructor of the class
-            appendConstructorStart(out, simpleName, constructors.get(c));
-            out.append(init);
-        }
-        for (int i = 0; i < methods.size(); i++) {
-            writeMethod(out, methods.get(i), i);
-        }
-        out.append("}\n");
+    }
 
-        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
+    /** Writes the generated class, with {@code iface} as its only originating element. */
+    private void writeSource(TypeElement iface, String qualifiedName, String source) {
         try {
             JavaFileObject file = processingEnv.getFiler().createSourceFile(qualifiedName, iface);
             try (Writer writer = file.openWriter()) {
-                writer.write(out.toString());
+                writer.write(source);
             }
         } catch (IOException e) {
             error(iface, ProcessorError.WRITE_FAILED, "Could not write " + qualifiedName + ": " + e.getMessage()
@@ -1168,7 +1251,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
     }
 
     private static boolean isObject(Element type) {
-        return ((TypeElement) type).getQualifiedName().contentEquals("java.lang.Object");
+        return ((TypeElement) type).getQualifiedName().contentEquals(OBJECT);
     }
 
     private void writeMethod(StringBuilder out, MethodModel model, int index) {
@@ -1177,14 +1260,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         List<? extends TypeMirror> parameterTypes = type.getParameterTypes();
         List<String> parameters = new ArrayList<>();
         List<String> arguments = new ArrayList<>();
-        for (int i = 0; i < parameterTypes.size(); i++) {
-            String parameterType = TypePrinter.print(parameterTypes.get(i));
-            if (method.isVarArgs() && i == parameterTypes.size() - 1) {
-                parameterType = parameterType.substring(0, parameterType.length() - 2) + "...";
-            }
-            parameters.add(parameterType + " p" + i);
-            arguments.add("p" + i);
-        }
+        addParameters(method, parameterTypes, parameters, arguments);
         String returnType = TypePrinter.print(type.getReturnType());
         boolean isVoid = type.getReturnType().getKind() == TypeKind.VOID;
         String typeVariables = type.getTypeVariables().isEmpty() ? "" : methodTypeVariables(type.getTypeVariables()) + " ";
@@ -1223,6 +1299,19 @@ public final class ResilienceProcessor extends AbstractProcessor {
         }
     }
 
+    /** Adds the declarations {@code T p0, U p1, ...} and the arguments {@code p0, p1, ...} of a generated method. */
+    private static void addParameters(ExecutableElement method, List<? extends TypeMirror> parameterTypes,
+            List<String> parameters, List<String> arguments) {
+        for (int i = 0; i < parameterTypes.size(); i++) {
+            String parameterType = TypePrinter.print(parameterTypes.get(i));
+            if (method.isVarArgs() && i == parameterTypes.size() - 1) {
+                parameterType = parameterType.substring(0, parameterType.length() - 2) + "...";
+            }
+            parameters.add(parameterType + " p" + i);
+            arguments.add("p" + i);
+        }
+    }
+
     /**
      * An asynchronous method is one expression: each policy's {@code executeAsync} gets the next layer
      * as a lambda, innermost first. A fallback becomes a private {@code r4c$recover<index>} method that
@@ -1230,6 +1319,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
      * For a method that returns a stage of {@code ? extends X} (or {@code ?}), the policies work with
      * {@code X}: the delegate's stage is widened with {@code AsyncCall.widen}.
      */
+    @SuppressWarnings("java:S107") // java:S107: the parts of the signature that writeMethod already computed
     private static void writeAsyncMethod(StringBuilder out, MethodModel model, int index, String typeVariables,
             String returnType, String signature, String parameters, List<String> arguments, String delegateCall) {
         FallbackModel fallback = model.fallback();
@@ -1239,28 +1329,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 : "<" + TypePrinter.join(model.type().getTypeVariables(), ", ") + ">";
         String recovery = "(r4c$e, r4c$attempts) -> this." + recoverTypeArguments + "r4c$recover" + index
                 + "(r4c$e, r4c$attempts" + (args.isEmpty() ? "" : ", " + args) + ")";
-        List<Kind> layers = new ArrayList<>(model.policies().keySet());
-        String expression = isWildcardStage(model.type()) ? widen(delegateCall, result) : delegateCall;
-        for (int i = layers.size() - 1; i >= 0; i--) {
-            Kind kind = layers.get(i);
-            String policy = "this." + kind.field + index;
-            String classifier = classifierField(model, kind, index);
-            if (classifier != null && kind == Kind.RETRY) {
-                expression = policy + ".executeAsync(() -> " + expression + ", this." + classifier + ", "
-                        + (model.policies().get(kind).throwOnExhaustedResult() ? "true, " : "")
-                        + (fallback != null ? "this.fallback" + index + ", " + recovery : "null, null") + ")";
-            } else if (classifier != null) {
-                expression = policy + ".executeAsync(() -> " + expression + ", this." + classifier
-                        + (layers.contains(Kind.RETRY) ? ", true" : "") + ")";
-            } else if (kind == Kind.RETRY && fallback != null) {
-                expression = policy + ".executeAsync(() -> " + expression + ", this.fallback" + index + ", " + recovery + ")";
-            } else {
-                expression = policy + ".executeAsync(() -> " + expression + ")";
-            }
-        }
-        if (fallback != null && !layers.contains(Kind.RETRY)) {
-            expression = "this.fallback" + index + ".executeAsync(() -> " + expression + ", " + recovery + ")";
-        }
+        String expression = asyncExpression(model, index,
+                isWildcardStage(model.type()) ? widen(delegateCall, result) : delegateCall, recovery);
         out.append("\n    @Override\n    public ").append(typeVariables).append(returnType).append(' ').append(signature)
                 .append(" {\n");
         appendLines(out, List.of("return " + expression + ";"));
@@ -1268,12 +1338,47 @@ public final class ResilienceProcessor extends AbstractProcessor {
         if (fallback == null) {
             return;
         }
-        String stage = "java.util.concurrent.CompletionStage<" + result + ">";
+        String stage = COMPLETION_STAGE + "<" + result + ">";
         out.append("\n    private ").append(typeVariables).append(stage).append(" r4c$recover").append(index)
                 .append("(java.lang.Throwable r4c$e, int r4c$attempts").append(parameters.isEmpty() ? "" : ", " + parameters)
                 .append(") throws java.lang.Throwable {\n");
         appendLines(out, asyncFallbackLines(fallback, index, arguments, result));
         out.append("    }\n");
+    }
+
+    /**
+     * Wraps the delegate's call in each policy's {@code executeAsync}, innermost first, and in the fallback's
+     * if there is no retry to run it.
+     */
+    private static String asyncExpression(MethodModel model, int index, String delegateCall, String recovery) {
+        List<Kind> layers = new ArrayList<>(model.policies().keySet());
+        StringBuilder expression = new StringBuilder(delegateCall);
+        for (int i = layers.size() - 1; i >= 0; i--) {
+            Kind kind = layers.get(i);
+            expression.insert(0, "this." + kind.field + index + EXECUTE_ASYNC)
+                    .append(asyncArguments(model, kind, index, recovery)).append(')');
+        }
+        if (model.fallback() != null && !layers.contains(Kind.RETRY)) {
+            expression.insert(0, "this.fallback" + index + EXECUTE_ASYNC).append(", ").append(recovery).append(')');
+        }
+        return expression.toString();
+    }
+
+    /** The arguments after the call lambda of {@code kind}'s {@code executeAsync}, each preceded by a comma. */
+    private static String asyncArguments(MethodModel model, Kind kind, int index, String recovery) {
+        String classifier = classifierField(model, kind, index);
+        boolean fallback = model.fallback() != null;
+        if (classifier != null && kind == Kind.RETRY) {
+            return ", this." + classifier + ", " + (model.policies().get(kind).throwOnExhaustedResult() ? "true, " : "")
+                    + (fallback ? "this.fallback" + index + ", " + recovery : "null, null");
+        }
+        if (classifier != null) {
+            return ", this." + classifier + (model.policies().containsKey(Kind.RETRY) ? ", true" : "");
+        }
+        if (kind == Kind.RETRY && fallback) {
+            return ", this.fallback" + index + ", " + recovery;
+        }
+        return "";
     }
 
     /**
@@ -1339,18 +1444,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             String returnType, List<String> arguments) {
         return switch (kind) {
             case FALLBACK -> fallback(model.fallback(), index, call, isVoid, arguments);
-            case RETRY -> classifierField(model, kind, index) == null
-                    ? retry(index, call, isVoid, giveUp(model, index, "r4c$e", "r4c$attempts", isVoid, arguments),
-                            classifierField(model, Kind.CIRCUIT_BREAKER, index) == null ? null
-                                    : onClassifierFailure(giveUp(model, index, "r4c$c", "r4c$attempts + 1", isVoid, arguments)))
-                    : classifiedRetry(index, call, isVoid, returnType, model.policies().get(kind).classifier(),
-                            classifierField(model, kind, index),
-                            giveUp(model, index, "r4c$e", "r4c$attempts", isVoid, arguments),
-                            onClassifierFailure(giveUp(model, index, "r4c$c", "r4c$attempts + 1", isVoid, arguments)),
-                            classifierField(model, Kind.CIRCUIT_BREAKER, index) != null,
-                            !model.policies().get(kind).throwOnExhaustedResult() ? null
-                                    : model.fallback() == null ? List.of()
-                                    : giveUp(model, index, "r4c$r", "r4c$attempts", isVoid, arguments));
+            case RETRY -> retryLayer(model, index, call, isVoid, returnType, arguments);
             case CIRCUIT_BREAKER -> classifierField(model, kind, index) == null
                     ? circuitBreaker(index, call, isVoid, returnType)
                     : classifiedCircuitBreaker(index, call, isVoid, returnType, model.policies().get(kind).classifier(),
@@ -1359,6 +1453,30 @@ public final class ResilienceProcessor extends AbstractProcessor {
             case TIMEOUT -> timeout(index, call, isVoid, returnType);
             case BULKHEAD -> bulkhead(index, call, isVoid);
         };
+    }
+
+    /** The retry layer, with the fallback fused into its give-up branches. */
+    private static List<String> retryLayer(MethodModel model, int index, String call, boolean isVoid, String returnType,
+            List<String> arguments) {
+        String classifier = classifierField(model, Kind.RETRY, index);
+        boolean classifiedBreaker = classifierField(model, Kind.CIRCUIT_BREAKER, index) != null;
+        List<String> giveUp = giveUp(model, index, "r4c$e", "r4c$attempts", isVoid, arguments);
+        List<String> onClassifierFailure =
+                onClassifierFailure(giveUp(model, index, "r4c$c", "r4c$attempts + 1", isVoid, arguments));
+        if (classifier == null) {
+            return retry(index, call, isVoid, giveUp, classifiedBreaker ? onClassifierFailure : null);
+        }
+        PolicyModel retry = model.policies().get(Kind.RETRY);
+        List<String> giveUpOnRejected;
+        if (!retry.throwOnExhaustedResult()) {
+            giveUpOnRejected = null;
+        } else if (model.fallback() == null) {
+            giveUpOnRejected = List.of();
+        } else {
+            giveUpOnRejected = giveUp(model, index, "r4c$r", "r4c$attempts", isVoid, arguments);
+        }
+        return classifiedRetry(index, call, isVoid, returnType, retry.classifier(), classifier, giveUp,
+                onClassifierFailure, classifiedBreaker, giveUpOnRejected);
     }
 
     /**
@@ -1413,15 +1531,19 @@ public final class ResilienceProcessor extends AbstractProcessor {
         }
         PolicyModel retry = model.policies().get(Kind.RETRY);
         if (kind == Kind.CIRCUIT_BREAKER && retry != null && policy.classifier().equals(retry.classifier())) {
-            return Kind.RETRY.field + "Classifier" + index;
+            return ownClassifierField(Kind.RETRY, index);
         }
-        return kind.field + "Classifier" + index;
+        return ownClassifierField(kind, index);
     }
 
     /** True if {@code kind}'s layer has a classifier field of its own (one that it does not share). */
     private static boolean ownsClassifier(MethodModel model, Kind kind, int index) {
         String field = classifierField(model, kind, index);
-        return field != null && field.equals(kind.field + "Classifier" + index);
+        return field != null && field.equals(ownClassifierField(kind, index));
+    }
+
+    private static String ownClassifierField(Kind kind, int index) {
+        return kind.field + "Classifier" + index;
     }
 
     private static final String OUTCOME = "dev.resilience4cata.Classifier.Outcome";
@@ -1464,6 +1586,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
      * {@code giveUpOnRejected} is null for {@code onExhaustedResult = RETURN}; for {@code THROW}, the fallback
      * statements that read the {@code ResultRejectedException} from {@code r4c$r}, or empty without a fallback.
      */
+    @SuppressWarnings("java:S107") // java:S107: the parts of the layer that retryLayer prepares
     private static List<String> classifiedRetry(int index, String call, boolean isVoid, String returnType,
             String classifierType, String classifierField, List<String> giveUp, List<String> onClassifierFailure,
             boolean classifiedBreaker, List<String> giveUpOnRejected) {
@@ -1740,7 +1863,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
     }
 
     private static String bounds(List<? extends TypeMirror> bounds) {
-        if (bounds.isEmpty() || (bounds.size() == 1 && TypePrinter.print(bounds.get(0)).equals("java.lang.Object"))) {
+        if (bounds.isEmpty() || (bounds.size() == 1 && TypePrinter.print(bounds.get(0)).equals(OBJECT))) {
             return "";
         }
         return " extends " + TypePrinter.join(bounds, " & ");

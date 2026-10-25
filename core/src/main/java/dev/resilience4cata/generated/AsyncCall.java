@@ -17,6 +17,8 @@ public interface AsyncCall<T> {
      * @return the call's stage
      * @throws Throwable if the call fails before returning a stage
      */
+    // java:S112: public API used by generated code; it wraps a delegate method that may throw anything.
+    @SuppressWarnings("java:S112")
     CompletionStage<T> call() throws Throwable;
 
     /**

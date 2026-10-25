@@ -9,6 +9,8 @@ public final class ErrorFixtures$Failing$Resilient implements ErrorFixtures.Fail
      * @param delegate unused
      * @param registry unused
      */
+    // java:S1172: Resilient.of looks this constructor up by its (interface, registry) signature
+    @SuppressWarnings("java:S1172")
     public ErrorFixtures$Failing$Resilient(ErrorFixtures.Failing delegate, ResilienceRegistry registry) {
         ErrorFixtures$Failing$Resilient.<RuntimeException>sneakyThrow(new Exception("checked"));
     }

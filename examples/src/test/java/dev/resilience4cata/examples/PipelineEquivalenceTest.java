@@ -147,7 +147,7 @@ class PipelineEquivalenceTest {
     }
 
     @Test
-    void theFallbackSeesTheSameAttemptsSyncAndAsync() throws Exception {
+    void theFallbackSeesTheSameAttemptsSyncAndAsync() {
         IntPredicate script = call -> call <= 4; // the first call gives up after three attempts, the second succeeds
         PipelineLegacyGateway forGenerated = new PipelineLegacyGateway(script);
         PipelineLegacyGateway forPipeline = new PipelineLegacyGateway(script);

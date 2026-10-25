@@ -38,6 +38,8 @@ class TimeoutEndToEndTest {
             return slow("report");
         }
 
+        // java:S2925: the call must really block so that the timeout interrupts it
+        @SuppressWarnings("java:S2925")
         private String slow(String query) {
             calls.incrementAndGet();
             try {

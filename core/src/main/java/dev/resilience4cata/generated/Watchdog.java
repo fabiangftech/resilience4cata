@@ -49,7 +49,8 @@ final class Watchdog {
     @SuppressWarnings("java:S5164")
     private final ThreadLocal<ThreadScopes> local = ThreadLocal.withInitial(this::register);
     private final AtomicLong tick;
-    @SuppressWarnings("unused") // accessed through NOW
+    // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
+    @SuppressWarnings({"unused", "java:S1845"}) // accessed through NOW
     private volatile long now;
     // Owned by the watchdog thread: the last real clock reading, and the coarse clock built from it.
     private long lastReal;
@@ -92,7 +93,7 @@ final class Watchdog {
 
     /** Makes the tick short enough for a timeout of this length. */
     void requireTimeout(long timeoutNanos) {
-        long wanted = Math.max(MIN_TICK, Math.min(MAX_TICK, timeoutNanos / 16));
+        long wanted = Math.clamp(timeoutNanos / 16, MIN_TICK, MAX_TICK);
         tick.accumulateAndGet(wanted, Math::min);
     }
 
@@ -117,7 +118,9 @@ final class Watchdog {
         return scopes;
     }
 
-    @SuppressWarnings("java:S2189") // the daemon watchdog thread runs for the life of the JVM
+    // java:S2189: the daemon watchdog thread runs for the life of the JVM.
+    // java:S1181: nothing may stop the watchdog thread, or timed calls would never be interrupted.
+    @SuppressWarnings({"java:S2189", "java:S1181"})
     private void run() {
         while (true) {
             try {
@@ -139,7 +142,7 @@ final class Watchdog {
     long advance(long realNanos) {
         long elapsed = realNanos - lastReal;
         lastReal = realNanos;
-        coarse += Math.max(0, Math.min(elapsed, tick.get()));
+        coarse += Math.clamp(elapsed, 0L, tick.get());
         return coarse;
     }
 

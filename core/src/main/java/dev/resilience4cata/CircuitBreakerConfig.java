@@ -56,6 +56,9 @@ public record CircuitBreakerConfig(
         TIME
     }
 
+    /** The policy name in validation messages. */
+    private static final String POLICY = "circuitBreaker";
+
     /** Validates every value and copies the exception lists. */
     public CircuitBreakerConfig {
         Objects.requireNonNull(windowType, "windowType");
@@ -65,30 +68,30 @@ public record CircuitBreakerConfig(
         recordOn = List.copyOf(recordOn);
         ignoreOn = List.copyOf(ignoreOn);
         if (windowSize < 1) {
-            throw ErrorCode.invalidValue("circuitBreaker", "windowSize must be at least 1, was " + windowSize);
+            throw ErrorCode.invalidValue(POLICY, "windowSize must be at least 1, was " + windowSize);
         }
         if (minimumCalls < 1) {
-            throw ErrorCode.invalidValue("circuitBreaker", "minimumCalls must be at least 1, was " + minimumCalls);
+            throw ErrorCode.invalidValue(POLICY, "minimumCalls must be at least 1, was " + minimumCalls);
         }
         checkRate("failureRateThreshold", failureRateThreshold);
         checkRate("slowCallRateThreshold", slowCallRateThreshold);
         if (slowCallDuration.isNegative()) {
-            throw ErrorCode.invalidValue("circuitBreaker", "slowCallDuration must not be negative, was " + slowCallDuration);
+            throw ErrorCode.invalidValue(POLICY, "slowCallDuration must not be negative, was " + slowCallDuration);
         }
         if (waitInOpen.isNegative()) {
-            throw ErrorCode.invalidValue("circuitBreaker", "waitInOpen must not be negative, was " + waitInOpen);
+            throw ErrorCode.invalidValue(POLICY, "waitInOpen must not be negative, was " + waitInOpen);
         }
         if (halfOpenCalls < 1) {
-            throw ErrorCode.invalidValue("circuitBreaker", "halfOpenCalls must be at least 1, was " + halfOpenCalls);
+            throw ErrorCode.invalidValue(POLICY, "halfOpenCalls must be at least 1, was " + halfOpenCalls);
         }
         if (maxWaitInHalfOpen.isNegative()) {
-            throw ErrorCode.invalidValue("circuitBreaker", "maxWaitInHalfOpen must not be negative, was " + maxWaitInHalfOpen);
+            throw ErrorCode.invalidValue(POLICY, "maxWaitInHalfOpen must not be negative, was " + maxWaitInHalfOpen);
         }
     }
 
     private static void checkRate(String name, float rate) {
         if (!(rate > 0 && rate <= 100)) {
-            throw ErrorCode.invalidValue("circuitBreaker", name + " must be a percentage > 0 and <= 100, was " + rate);
+            throw ErrorCode.invalidValue(POLICY, name + " must be a percentage > 0 and <= 100, was " + rate);
         }
     }
 

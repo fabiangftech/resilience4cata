@@ -31,6 +31,8 @@ public interface CatalogClient {
     @CircuitBreaker
     int stock(String sku);
 
+    // java:S1172: a fallback mirrors the protected method's parameters, then takes the failure, which selects it by type
+    @SuppressWarnings("java:S1172")
     static int stockFallback(String sku, CallNotPermittedException e) {
         return -1;
     }

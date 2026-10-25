@@ -1,6 +1,7 @@
 package dev.resilience4cata.examples;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -34,8 +35,8 @@ class DocsTest {
     /** Pages whose {@code java} blocks must all be compiled; the landing page is {@code README.md}. */
     private static final List<String> CHECKED_DIRECTORIES = List.of("start", "policies", "guides", "observability", "testing", "migrate");
 
-    private static final Pattern MARKER = Pattern.compile("^<!-- (snippet|not-compiled):\\s*(.+?)\\s*-->$");
-    private static final Pattern FENCE = Pattern.compile("^(`{3,}|~{3,})(\\w*).*$");
+    private static final Pattern MARKER = Pattern.compile("^<!-- (snippet|not-compiled):(.+)-->$");
+    private static final Pattern FENCE = Pattern.compile("^(`{3,}+|~{3,}+)(\\w*+).*$");
     private static final Pattern REGION = Pattern.compile("^\\s*(?://|#|<!--)\\s*(tag|end)::([\\w.-]+)\\[]");
 
     @Test
@@ -105,7 +106,7 @@ class DocsTest {
 
     @Test
     void everyRegionIdIsDefinedOnce() {
-        regions(); // throws on duplicates and unclosed regions
+        assertThatCode(DocsTest::regions).as("no duplicate or unclosed region").doesNotThrowAnyException();
     }
 
     private record Block(String where, String kind, String id, String language, String code) {
@@ -140,7 +141,7 @@ class DocsTest {
                 Matcher marker = MARKER.matcher(lines.get(above).strip());
                 if (marker.matches()) {
                     kind = marker.group(1);
-                    id = marker.group(2);
+                    id = marker.group(2).strip();
                 }
             }
             blocks.add(new Block(page + ":" + (start + 1), kind, id, open.group(2), String.join("\n", code)));

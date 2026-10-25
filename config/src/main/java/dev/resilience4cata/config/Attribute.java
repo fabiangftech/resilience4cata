@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.BiConsumer;
+import java.util.function.ObjDoubleConsumer;
+import java.util.function.ObjIntConsumer;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
@@ -58,7 +60,7 @@ final class Attribute<B> {
         return new Attribute<>(name, name, Kind.BOOLEAN, null, (b, v) -> setter.accept(b, (Boolean) v));
     }
 
-    static <B> Attribute<B> integer(String name, BiConsumer<B, Integer> setter) {
+    static <B> Attribute<B> integer(String name, ObjIntConsumer<B> setter) {
         return new Attribute<>(name, name, Kind.INT, null, (b, v) -> setter.accept(b, (Integer) v));
     }
 
@@ -66,7 +68,7 @@ final class Attribute<B> {
         return new Attribute<>(name, name, Kind.FLOAT, null, (b, v) -> setter.accept(b, (Float) v));
     }
 
-    static <B> Attribute<B> real(String name, BiConsumer<B, Double> setter) {
+    static <B> Attribute<B> real(String name, ObjDoubleConsumer<B> setter) {
         return new Attribute<>(name, name, Kind.DOUBLE, null, (b, v) -> setter.accept(b, (Double) v));
     }
 
@@ -102,66 +104,74 @@ final class Attribute<B> {
      * @throws ProblemException if the value is invalid
      */
     Object parse(String text, String origin, ClassLoader loader) {
-        switch (kind) {
-            case BOOLEAN -> {
-                if (text.equalsIgnoreCase("true")) {
-                    return Boolean.TRUE;
-                }
-                if (text.equalsIgnoreCase("false")) {
-                    return Boolean.FALSE;
-                }
-                throw invalid(text, origin, "expected true or false");
-            }
-            case INT -> {
-                try {
-                    return Integer.parseInt(text);
-                } catch (NumberFormatException e) {
-                    throw invalid(text, origin, "expected an integer");
-                }
-            }
-            case FLOAT, DOUBLE -> {
-                if (!DECIMAL.matcher(text).matches()) {
-                    throw invalid(text, origin, "expected a decimal number such as 50 or 2.5");
-                }
-                if (kind == Kind.FLOAT) {
-                    float value = Float.parseFloat(text);
-                    if (Float.isInfinite(value)) {
-                        throw invalid(text, origin, "too large");
-                    }
-                    return value;
-                }
-                double value = Double.parseDouble(text);
-                if (Double.isInfinite(value)) {
-                    throw invalid(text, origin, "too large");
-                }
-                return value;
-            }
-            case DURATION -> {
-                try {
-                    return Durations.parse(text);
-                } catch (IllegalArgumentException e) {
-                    throw new ProblemException(ProblemException.INVALID_VALUE, origin + " = \"" + text
-                            + "\" is not a valid duration: " + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
-                }
-            }
-            case ENUM -> {
-                Class<? extends Enum<?>> type = enumType;
-                assert type != null;
-                List<String> names = new ArrayList<>();
-                for (Enum<?> constant : type.getEnumConstants()) {
-                    if (Suggestions.normalize(constant.name()).equals(Suggestions.normalize(text))) {
-                        return constant;
-                    }
-                    names.add(constant.name().toLowerCase(Locale.ROOT));
-                }
-                String closest = Suggestions.closest(text, names);
-                throw invalid(text, origin, "expected one of " + String.join(", ", names)
-                        + (closest == null ? "" : ". Did you mean '" + closest + "'?"));
-            }
-            default -> {
-                return parseClasses(text, origin, loader);
-            }
+        return switch (kind) {
+            case BOOLEAN -> parseBoolean(text, origin);
+            case INT -> parseInt(text, origin);
+            case FLOAT, DOUBLE -> parseDecimal(text, origin);
+            case DURATION -> parseDuration(text, origin);
+            case ENUM -> parseEnum(text, origin);
+            default -> parseClasses(text, origin, loader);
+        };
+    }
+
+    private static Boolean parseBoolean(String text, String origin) {
+        if (text.equalsIgnoreCase("true")) {
+            return Boolean.TRUE;
         }
+        if (text.equalsIgnoreCase("false")) {
+            return Boolean.FALSE;
+        }
+        throw invalid(text, origin, "expected true or false");
+    }
+
+    private static Integer parseInt(String text, String origin) {
+        try {
+            return Integer.parseInt(text);
+        } catch (NumberFormatException e) {
+            throw invalid(text, origin, "expected an integer");
+        }
+    }
+
+    private Object parseDecimal(String text, String origin) {
+        if (!DECIMAL.matcher(text).matches()) {
+            throw invalid(text, origin, "expected a decimal number such as 50 or 2.5");
+        }
+        if (kind == Kind.FLOAT) {
+            float value = Float.parseFloat(text);
+            if (Float.isInfinite(value)) {
+                throw invalid(text, origin, "too large");
+            }
+            return value;
+        }
+        double value = Double.parseDouble(text);
+        if (Double.isInfinite(value)) {
+            throw invalid(text, origin, "too large");
+        }
+        return value;
+    }
+
+    private static Duration parseDuration(String text, String origin) {
+        try {
+            return Durations.parse(text);
+        } catch (IllegalArgumentException e) {
+            throw new ProblemException(ProblemException.INVALID_VALUE, origin + " = \"" + text
+                    + "\" is not a valid duration: " + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
+        }
+    }
+
+    private Enum<?> parseEnum(String text, String origin) {
+        Class<? extends Enum<?>> type = enumType;
+        assert type != null;
+        List<String> names = new ArrayList<>();
+        for (Enum<?> constant : type.getEnumConstants()) {
+            if (Suggestions.normalize(constant.name()).equals(Suggestions.normalize(text))) {
+                return constant;
+            }
+            names.add(constant.name().toLowerCase(Locale.ROOT));
+        }
+        String closest = Suggestions.closest(text, names);
+        throw invalid(text, origin, "expected one of " + String.join(", ", names)
+                + (closest == null ? "" : ". Did you mean '" + closest + "'?"));
     }
 
     private List<Class<? extends Throwable>> parseClasses(String text, String origin, ClassLoader loader) {
@@ -176,21 +186,8 @@ final class Attribute<B> {
             }
             Class<?> type = load(className, loader);
             if (type == null) {
-                String hint = "";
-                if (className.indexOf('.') < 0) {
-                    for (String pkg : COMMON_PACKAGES) {
-                        Class<?> candidate = load(pkg + className, loader);
-                        if (candidate != null && Throwable.class.isAssignableFrom(candidate)) {
-                            hint = " Did you mean '" + candidate.getName() + "'?";
-                            break;
-                        }
-                    }
-                    if (hint.isEmpty()) {
-                        hint = " Use the fully qualified name, for example 'java.io.IOException'.";
-                    }
-                }
                 throw new ProblemException(ProblemException.UNKNOWN_CLASS, origin + ": class '" + className
-                        + "' not found by the class loader " + loader + "." + hint);
+                        + "' not found by the class loader " + loader + "." + unknownClassHint(className, loader));
             }
             if (!Throwable.class.isAssignableFrom(type)) {
                 throw new ProblemException(ProblemException.UNKNOWN_CLASS, origin + ": '" + type.getName()
@@ -199,6 +196,20 @@ final class Attribute<B> {
             classes.add(type.asSubclass(Throwable.class));
         }
         return List.copyOf(classes);
+    }
+
+    /** Suggests a fully qualified name for a simple class name that was not found. */
+    private static String unknownClassHint(String className, ClassLoader loader) {
+        if (className.indexOf('.') >= 0) {
+            return "";
+        }
+        for (String pkg : COMMON_PACKAGES) {
+            Class<?> candidate = load(pkg + className, loader);
+            if (candidate != null && Throwable.class.isAssignableFrom(candidate)) {
+                return " Did you mean '" + candidate.getName() + "'?";
+            }
+        }
+        return " Use the fully qualified name, for example 'java.io.IOException'.";
     }
 
     /** Loads a class by binary name, also accepting canonical names of nested classes ({@code a.B.C}). */

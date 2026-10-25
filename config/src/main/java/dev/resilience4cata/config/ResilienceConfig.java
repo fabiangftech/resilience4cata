@@ -97,6 +97,7 @@ public final class ResilienceConfig {
     /** The classpath resource that {@link #load()} reads if present: {@value}. */
     public static final String DEFAULT_RESOURCE = "resilience4cata.properties";
 
+    private static final String PROFILE = "profile";
     private static final System.Logger LOGGER = System.getLogger(ResilienceConfig.class.getName());
 
     private final List<String> activeProfiles;
@@ -337,7 +338,7 @@ public final class ResilienceConfig {
 
         private Builder classpath(String resource, boolean optional) {
             Objects.requireNonNull(resource, "resource");
-            sources.add(Sources.text("classpath:" + resource, Sources.CLASSPATH,
+            sources.add(Sources.text("classpath:" + resource, Sources.CLASSPATH_PRIORITY,
                     loader -> Sources.readResource(loader, resource), optional));
             return this;
         }
@@ -365,7 +366,7 @@ public final class ResilienceConfig {
         private Builder file(Path file, boolean optional) {
             Objects.requireNonNull(file, "file");
             Path absolute = file.toAbsolutePath();
-            sources.add(Sources.text("file " + absolute, Sources.FILE, loader -> Sources.readFile(absolute), optional));
+            sources.add(Sources.text("file " + absolute, Sources.FILE_PRIORITY, loader -> Sources.readFile(absolute), optional));
             return this;
         }
 
@@ -395,7 +396,7 @@ public final class ResilienceConfig {
 
         /** Adds properties text, for tests: ranks like a file. */
         Builder text(String description, String text) {
-            sources.add(Sources.text(description, Sources.FILE, loader -> text, false));
+            sources.add(Sources.text(description, Sources.FILE_PRIORITY, loader -> text, false));
             return this;
         }
 
@@ -471,50 +472,9 @@ public final class ResilienceConfig {
                     : Objects.requireNonNullElseGet(Thread.currentThread().getContextClassLoader(),
                             ResilienceConfig.class::getClassLoader);
             Problems problems = new Problems();
-            List<Sources.Source> ordered = new ArrayList<>(sources);
-            ordered.sort(Comparator.comparingInt(Sources.Source::priority));
-
-            Map<String, Setting> merged = new LinkedHashMap<>();
-            for (Sources.Source source : ordered) {
-                Map<String, Setting> own = new LinkedHashMap<>();
-                for (Sources.Raw raw : source.read(loader, problems)) {
-                    try {
-                        Key key = Key.parse(raw.key(), raw.written(), raw.origin());
-                        Setting setting = new Setting(key, value(key, raw, loader), raw.value(), raw.origin());
-                        Setting previous = own.putIfAbsent(key.canonical(), setting);
-                        if (previous != null) {
-                            problems.add(new ProblemException(ProblemException.DUPLICATE_KEY, "'" + key.canonical()
-                                    + "' is set twice in " + source.description() + ": by " + previous.origin()
-                                    + " and by " + raw.origin()));
-                        }
-                    } catch (ProblemException e) {
-                        problems.add(e);
-                    }
-                }
-                merged.putAll(own);
-            }
-
+            Map<String, Setting> merged = merge(loader, problems);
             List<String> active = activeProfiles(merged, problems);
-
-            Map<String, Setting> effective = new LinkedHashMap<>();
-            for (Setting s : merged.values()) {
-                if (s.key().profile() == null && s.key().section() != Key.Section.ACTIVE_PROFILES) {
-                    effective.put(s.key().canonical(), s);
-                }
-            }
-            for (String profile : active) {
-                boolean found = false;
-                for (Setting s : merged.values()) {
-                    if (profile.equals(s.key().profile())) {
-                        found = true;
-                        effective.put(s.key().withoutProfile().canonical(), s);
-                    }
-                }
-                if (!found) {
-                    LOGGER.log(System.Logger.Level.WARNING, "resilience4cata profile ''{0}'' is active but no key"
-                            + " sets anything for it (profiles.{0}.*)", profile);
-                }
-            }
+            Map<String, Setting> effective = effective(merged, active);
 
             Map<PolicyType<?, ?>, Map<String, Setting>> defaults = new HashMap<>();
             Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> own = new HashMap<>();
@@ -534,10 +494,78 @@ public final class ResilienceConfig {
                             .computeIfAbsent(Objects.requireNonNull(key.policy()), p -> new LinkedHashMap<>())
                             .put(Objects.requireNonNull(key.attribute()), s);
                     default -> {
+                        // ACTIVE_PROFILES: never effective, already read by activeProfiles.
                     }
                 }
             }
 
+            Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> configs = flatten(own, parents, problems);
+            if (problems.isEmpty()) {
+                validate(defaults, configs, instances, problems);
+            }
+            problems.throwIfAny();
+            return new ResilienceConfig(active, defaults, configs, instances);
+        }
+
+        /** Reads every source, lowest priority first, so that later sources override earlier ones. */
+        private Map<String, Setting> merge(ClassLoader loader, Problems problems) {
+            List<Sources.Source> ordered = new ArrayList<>(sources);
+            ordered.sort(Comparator.comparingInt(Sources.Source::priority));
+            Map<String, Setting> merged = new LinkedHashMap<>();
+            for (Sources.Source source : ordered) {
+                Map<String, Setting> own = new LinkedHashMap<>();
+                for (Sources.Raw raw : source.read(loader, problems)) {
+                    try {
+                        read(source, raw, own, loader, problems);
+                    } catch (ProblemException e) {
+                        problems.add(e);
+                    }
+                }
+                merged.putAll(own);
+            }
+            return merged;
+        }
+
+        private static void read(Sources.Source source, Sources.Raw raw, Map<String, Setting> own, ClassLoader loader,
+                Problems problems) {
+            Key key = Key.parse(raw.key(), raw.written(), raw.origin());
+            Setting setting = new Setting(key, value(key, raw, loader), raw.value(), raw.origin());
+            Setting previous = own.putIfAbsent(key.canonical(), setting);
+            if (previous != null) {
+                problems.add(new ProblemException(ProblemException.DUPLICATE_KEY, "'" + key.canonical()
+                        + "' is set twice in " + source.description() + ": by " + previous.origin()
+                        + " and by " + raw.origin()));
+            }
+        }
+
+        /** The settings without a profile, overridden by those of each active profile in order. */
+        private static Map<String, Setting> effective(Map<String, Setting> merged, List<String> active) {
+            Map<String, Setting> effective = new LinkedHashMap<>();
+            for (Setting s : merged.values()) {
+                if (s.key().profile() == null && s.key().section() != Key.Section.ACTIVE_PROFILES) {
+                    effective.put(s.key().canonical(), s);
+                }
+            }
+            for (String profile : active) {
+                boolean found = false;
+                for (Setting s : merged.values()) {
+                    if (profile.equals(s.key().profile())) {
+                        found = true;
+                        effective.put(s.key().withoutProfile().canonical(), s);
+                    }
+                }
+                if (!found) {
+                    LOGGER.log(System.Logger.Level.WARNING, "resilience4cata profile ''{0}'' is active but no key"
+                            + " sets anything for it (profiles.{0}.*)", profile);
+                }
+            }
+            return effective;
+        }
+
+        /** Each named config with the settings it inherits through {@code extends} merged in. */
+        private static Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> flatten(
+                Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> own, Map<String, Setting> parents,
+                Problems problems) {
             Set<String> names = new TreeSet<>(own.keySet());
             names.addAll(parents.keySet());
             Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> configs = new TreeMap<>();
@@ -551,29 +579,31 @@ public final class ResilienceConfig {
                 }
                 configs.put(name, flat);
             }
+            return configs;
+        }
 
-            if (problems.isEmpty()) {
-                for (PolicyType<?, ?> policy : PolicyType.ALL) {
-                    Map<String, Map<String, Setting>> named = new TreeMap<>();
-                    configs.forEach((name, policies) -> {
-                        Map<String, Setting> settings = policies.get(policy);
-                        if (settings != null) {
-                            named.put(name, settings);
-                        }
-                    });
-                    policy.validate(defaults.getOrDefault(policy, Map.of()), named, problems);
-                    Map<String, Map<String, Setting>> overrides = new TreeMap<>();
-                    instances.forEach((id, policies) -> {
-                        Map<String, Setting> settings = policies.get(policy);
-                        if (settings != null) {
-                            overrides.put(id, settings);
-                        }
-                    });
-                    policy.validateInstances(defaults.getOrDefault(policy, Map.of()), overrides, problems);
-                }
+        /** Validates the defaults, named configs and instance overrides of every policy. */
+        private static void validate(Map<PolicyType<?, ?>, Map<String, Setting>> defaults,
+                Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> configs,
+                Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> instances, Problems problems) {
+            for (PolicyType<?, ?> policy : PolicyType.ALL) {
+                Map<String, Setting> policyDefaults = defaults.getOrDefault(policy, Map.of());
+                policy.validate(policyDefaults, byName(configs, policy), problems);
+                policy.validateInstances(policyDefaults, byName(instances, policy), problems);
             }
-            problems.throwIfAny();
-            return new ResilienceConfig(active, defaults, configs, instances);
+        }
+
+        /** The settings of one policy, by config name or instance id, sorted. */
+        private static Map<String, Map<String, Setting>> byName(
+                Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> settingsByName, PolicyType<?, ?> policy) {
+            Map<String, Map<String, Setting>> result = new TreeMap<>();
+            settingsByName.forEach((name, policies) -> {
+                Map<String, Setting> settings = policies.get(policy);
+                if (settings != null) {
+                    result.put(name, settings);
+                }
+            });
+            return result;
         }
 
         private List<String> activeProfiles(Map<String, Setting> merged, Problems problems) {
@@ -582,7 +612,7 @@ public final class ResilienceConfig {
                 active = new ArrayList<>();
                 for (String profile : profiles) {
                     try {
-                        active.add(Key.name(Objects.requireNonNull(profile, "profile").strip(), "profile",
+                        active.add(Key.name(Objects.requireNonNull(profile, PROFILE).strip(), PROFILE,
                                 "ResilienceConfig.Builder.profiles(...)"));
                     } catch (ProblemException e) {
                         problems.add(e);
@@ -607,14 +637,7 @@ public final class ResilienceConfig {
             String current = name;
             while (true) {
                 if (chain.contains(current)) {
-                    List<String> cycle = new ArrayList<>(chain.subList(chain.indexOf(current), chain.size()));
-                    if (reportedCycles.add(new TreeSet<>(cycle))) {
-                        cycle.add(current);
-                        problems.add(new ProblemException(ProblemException.BAD_EXTENDS, "configs extend each other in"
-                                + " a cycle: " + String.join(" -> ", cycle) + ", set by "
-                                + cycle.subList(0, cycle.size() - 1).stream().map(c -> parents.get(c).origin())
-                                        .collect(Collectors.joining(", "))));
-                    }
+                    reportCycle(chain, current, parents, problems, reportedCycles);
                     return chain;
                 }
                 chain.add(current);
@@ -637,6 +660,19 @@ public final class ResilienceConfig {
             }
         }
 
+        /** Reports the cycle that {@code current} closes in {@code chain}, once per set of configs. */
+        private static void reportCycle(List<String> chain, String current, Map<String, Setting> parents,
+                Problems problems, Set<Set<String>> reportedCycles) {
+            List<String> cycle = new ArrayList<>(chain.subList(chain.indexOf(current), chain.size()));
+            if (reportedCycles.add(new TreeSet<>(cycle))) {
+                cycle.add(current);
+                problems.add(new ProblemException(ProblemException.BAD_EXTENDS, "configs extend each other in"
+                        + " a cycle: " + String.join(" -> ", cycle) + ", set by "
+                        + cycle.subList(0, cycle.size() - 1).stream().map(c -> parents.get(c).origin())
+                                .collect(Collectors.joining(", "))));
+            }
+        }
+
         private static Object value(Key key, Sources.Raw raw, ClassLoader loader) {
             return switch (key.section()) {
                 case ACTIVE_PROFILES -> {
@@ -644,7 +680,7 @@ public final class ResilienceConfig {
                     for (String part : raw.value().split(",", -1)) {
                         String name = part.strip();
                         if (!name.isEmpty() || raw.value().contains(",")) {
-                            names.add(Key.name(name, "profile", raw.origin()));
+                            names.add(Key.name(name, PROFILE, raw.origin()));
                         }
                     }
                     yield List.copyOf(names);

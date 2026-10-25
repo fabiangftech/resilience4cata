@@ -111,7 +111,7 @@ final class TimeoutTimer {
     }
 
     private void register(Lane lane) {
-        long wanted = Math.max(MIN_TICK, Math.min(MAX_TICK, lane.durationNanos / 16));
+        long wanted = Math.clamp(lane.durationNanos / 16, MIN_TICK, MAX_TICK);
         long before = tick.getAndAccumulate(wanted, Math::min);
         lane.registered = true;
         AtomicBoolean once = started;
@@ -132,7 +132,9 @@ final class TimeoutTimer {
         return tick.get();
     }
 
-    @SuppressWarnings("java:S2189") // the daemon timer thread runs for the life of the JVM
+    // java:S2189: the daemon timer thread runs for the life of the JVM.
+    // java:S1181: nothing may stop the timer thread, or pending async timeouts would never fire.
+    @SuppressWarnings({"java:S2189", "java:S1181"})
     private void run() {
         while (true) {
             try {
@@ -154,7 +156,8 @@ final class TimeoutTimer {
     /** Step 1 of a tick; separate for tests that replay races. */
     void drainCancelled() {
         for (Stripe stripe : stripes) {
-            for (TimerEntry entry = stripe.take(Heads.CANCELLED); entry != null; ) {
+            TimerEntry entry = stripe.take(Heads.CANCELLED);
+            while (entry != null) {
                 TimerEntry next = entry.stackNext;
                 entry.stackNext = null;
                 unlink(entry);
@@ -167,7 +170,8 @@ final class TimeoutTimer {
     /** Step 2 of a tick; separate for tests that replay races. */
     void drainNew(long now) {
         for (Stripe stripe : stripes) {
-            for (TimerEntry entry = stripe.take(Heads.INBOX); entry != null; ) {
+            TimerEntry entry = stripe.take(Heads.INBOX);
+            while (entry != null) {
                 TimerEntry next = entry.stackNext;
                 entry.stackNext = null; // before the CAS: a canceller may reuse the link once it sees SCHEDULED
                 if (entry.tryMove(TimerEntry.NEW, TimerEntry.SCHEDULED)) {
@@ -182,6 +186,9 @@ final class TimeoutTimer {
     }
 
     /** Step 3 of a tick; separate for tests that replay races. */
+    // java:S3776: one pass over the lanes per tick, kept whole on the timer thread.
+    // java:S1181: a launcher failure of any kind must not stop the other timeouts from firing.
+    @SuppressWarnings({"java:S3776", "java:S1181"})
     void expire(long now) {
         for (int i = active.size() - 1; i >= 0; i--) {
             Lane lane = active.get(i);
@@ -280,7 +287,14 @@ final class TimeoutTimer {
     /** Padding before the stack heads, so that they do not share a cache line with what precedes them. */
     @SuppressWarnings("unused")
     private static class PadBefore {
-        long p0, p1, p2, p3, p4, p5, p6, p7;
+        long p0;
+        long p1;
+        long p2;
+        long p3;
+        long p4;
+        long p5;
+        long p6;
+        long p7;
     }
 
     private static class Heads extends PadBefore {
@@ -299,16 +313,24 @@ final class TimeoutTimer {
 
         // java:S3077: both are lock-free stack heads, pushed and taken only by compare-and-set through their
         // VarHandles; a TimerEntry's own state is a volatile, CASed field too.
-        @SuppressWarnings({"unused", "java:S3077"}) // accessed through INBOX
+        // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
+        @SuppressWarnings({"unused", "java:S3077", "java:S1845"}) // accessed through INBOX
         volatile @Nullable TimerEntry inbox;
-        @SuppressWarnings({"unused", "java:S3077"}) // accessed through CANCELLED
+        @SuppressWarnings({"unused", "java:S3077", "java:S1845"}) // accessed through CANCELLED
         volatile @Nullable TimerEntry cancelled;
     }
 
     /** Two lock-free stacks (many pushers, one taker). Superclass fields are laid out first, so the heads sit between two blocks of padding. */
     @SuppressWarnings("unused")
     private static final class Stripe extends Heads {
-        long q0, q1, q2, q3, q4, q5, q6, q7;
+        long q0;
+        long q1;
+        long q2;
+        long q3;
+        long q4;
+        long q5;
+        long q6;
+        long q7;
 
         void push(VarHandle head, TimerEntry entry) {
             TimerEntry current = (TimerEntry) head.getOpaque(this);

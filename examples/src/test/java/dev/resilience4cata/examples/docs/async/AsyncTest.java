@@ -90,6 +90,8 @@ class AsyncTest {
         assertThatThrownBy(() -> http.neverCompletes.get(5, TimeUnit.SECONDS)).isInstanceOf(CancellationException.class);
     }
 
+    // java:S5838: the value is a Number, which has no isZero(); equality also checks that it is an Integer
+    @SuppressWarnings("java:S5838")
     @Test
     void aWildcardStageWorksWithItsUpperBound() throws Exception {
         ResilienceRegistry registry = ResilienceRegistry.builder().build();

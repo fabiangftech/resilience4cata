@@ -168,6 +168,8 @@ class PoliciesOnManualClockTest {
         })).isInstanceOf(CallTimeoutException.class);
     }
 
+    // java:S2925: the call must really block, so that only the timeout's interrupt ends it
+    @SuppressWarnings("java:S2925")
     @Test
     void aSyncCallBlockedElsewhereTimesOutWhenAnotherThreadAdvancesTheClock() throws Exception {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)

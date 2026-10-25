@@ -30,6 +30,7 @@ final class TimeWindow implements SlidingWindow {
     }
 
     @Override
+    @SuppressWarnings("java:S6213") // record is only a contextual keyword; renaming would touch every window caller
     public int record(int outcome, long now) {
         long second = Math.floorDiv(now, SECOND);
         int index = (int) Math.floorMod(second, (long) seconds);

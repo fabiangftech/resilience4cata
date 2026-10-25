@@ -58,6 +58,8 @@ class WildcardEndToEndTest {
         assertThat(countCalls).hasValue(2);
     }
 
+    // java:S5838: the value is a Number, which has no isZero(); equality also checks that it is an Integer
+    @SuppressWarnings("java:S5838")
     @Test
     void aWildcardStageFallsBackToAValueOfTheUpperBound() throws Exception {
         Number value = client.count("fail").toCompletableFuture().get(5, TimeUnit.SECONDS);

@@ -87,9 +87,10 @@ class ExhaustedResultProcessorTest {
                 // without a fallback: thrown where the retries give up on the result
                 .contains("throw r4c$retry.rejected(r4c$result, r4c$attempts); // rejected, and no retries left")
                 // with a fallback: a catch parameter, so that the fallback's rethrow is precise
-                .contains("throw r4c$retry.rejected(r4c$result, r4c$attempts);\n"
-                        + "                } catch (java.lang.Throwable r4c$r) {\n"
-                        + "                    if (!this.fallback1.handles(r4c$r)) {")
+                .contains("""
+                        throw r4c$retry.rejected(r4c$result, r4c$attempts);
+                                        } catch (java.lang.Throwable r4c$r) {
+                                            if (!this.fallback1.handles(r4c$r)) {""")
                 .contains("if (r4c$r instanceof dev.resilience4cata.ResultRejectedException r4c$f0) {")
                 .contains("this.fallback2.context(r4c$r, r4c$attempts, new java.lang.Object[] {p0});")
                 .contains("throw r4c$retry.rejected(null, r4c$attempts);")
@@ -121,12 +122,14 @@ class ExhaustedResultProcessorTest {
         assertThat(result.errors()).isEmpty();
         String generated = result.generatedSource("demo.Client$Resilient");
         assertThat(generated)
-                .contains("} catch (java.lang.Throwable r4c$c) {\n"
-                        + "                    r4c$retry.onClassifierFailure(r4c$attempts + 1, r4c$c);\n"
-                        + "                    throw r4c$c;")
-                .contains("} catch (java.lang.Throwable r4c$c) {\n"
-                        + "                r4c$retry.onClassifierFailure(r4c$attempts + 1, r4c$c);\n"
-                        + "                if (!this.fallback1.handles(r4c$c)) {");
+                .contains("""
+                        } catch (java.lang.Throwable r4c$c) {
+                                            r4c$retry.onClassifierFailure(r4c$attempts + 1, r4c$c);
+                                            throw r4c$c;""")
+                .contains("""
+                        } catch (java.lang.Throwable r4c$c) {
+                                        r4c$retry.onClassifierFailure(r4c$attempts + 1, r4c$c);
+                                        if (!this.fallback1.handles(r4c$c)) {""");
         assertThat(generated.split("onClassifierFailure", -1)).as("two classify calls per method").hasSize(5);
     }
 

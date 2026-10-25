@@ -8,7 +8,6 @@ import dev.resilience4cata.event.RateLimiterEvent;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.LongSupplier;
 import org.jspecify.annotations.Nullable;
@@ -179,9 +178,18 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
     /** Padding before {@code tat}, so that it does not share a cache line with what precedes it in memory. */
     @SuppressWarnings("unused")
     private static class PadBefore {
-        long p0, p1, p2, p3, p4, p5, p6, p7;
+        long p0;
+        long p1;
+        long p2;
+        long p3;
+        long p4;
+        long p5;
+        long p6;
+        long p7;
     }
 
+    // java:S1700: the holder of the padded value, which it names; the VarHandle VALUE follows the convention.
+    @SuppressWarnings("java:S1700")
     private static class Value extends PadBefore {
         static final VarHandle VALUE;
 
@@ -193,7 +201,8 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
             }
         }
 
-        @SuppressWarnings("unused") // accessed through VALUE
+        // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
+        @SuppressWarnings({"unused", "java:S1845"}) // accessed through VALUE
         volatile long value;
     }
 
@@ -206,7 +215,14 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
      */
     @SuppressWarnings("unused")
     private static final class PaddedTat extends Value {
-        long q0, q1, q2, q3, q4, q5, q6, q7;
+        long q0;
+        long q1;
+        long q2;
+        long q3;
+        long q4;
+        long q5;
+        long q6;
+        long q7;
 
         long getOpaque() {
             return (long) VALUE.getOpaque(this);

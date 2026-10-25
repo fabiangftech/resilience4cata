@@ -162,20 +162,22 @@ class PipelineTest {
                 .build();
 
         assertThatThrownBy(() -> rethrows.execute(failing(new AtomicInteger(), 1, down))).isSameAs(down);
-        assertThatThrownBy(() -> wraps.execute(failing(new AtomicInteger(), 1, down)))
+        PipelineCall<String, IOException> fails = failing(new AtomicInteger(), 1, down);
+        assertThatThrownBy(() -> wraps.execute(fails))
                 .isInstanceOf(UndeclaredThrowableException.class)
                 .hasRootCauseMessage("other");
     }
 
     @Test
-    void anOpenBreakerRejectsAndStopsTheRetries() throws IOException {
+    void anOpenBreakerRejectsAndStopsTheRetries() {
         Pipeline<String> pipeline = Pipeline.builder(registry, "breaker", String.class)
                 .retry("five")
                 .circuitBreaker("tiny")
                 .build();
         AtomicInteger calls = new AtomicInteger();
+        PipelineCall<String, IOException> fails = failing(calls, 100, new IOException());
 
-        assertThatThrownBy(() -> pipeline.execute(failing(calls, 100, new IOException())))
+        assertThatThrownBy(() -> pipeline.execute(fails))
                 .as("two failures open the breaker; the third attempt is rejected and not retried")
                 .isInstanceOf(CallNotPermittedException.class);
         assertThat(calls).hasValue(2);
@@ -189,23 +191,24 @@ class PipelineTest {
     @Test
     void anOpenBreakerStopsTheRetriesWithACustomAbortOn() {
         List<RetryEvent.GaveUp> gaveUp = new ArrayList<>();
-        ResilienceRegistry registry = ResilienceRegistry.builder()
+        ResilienceRegistry abortOnRegistry = ResilienceRegistry.builder()
                 .retryDefaults(r -> r.maxAttempts(10).delay(Duration.ZERO).jitter(RetryConfig.Jitter.NONE)
                         .abortOn(List.of(IllegalArgumentException.class)))
                 .listen(RetryEvent.GaveUp.class, gaveUp::add)
                 .build();
-        Pipeline<String> pipeline = Pipeline.builder(registry, "breaker-abort-on", String.class)
+        Pipeline<String> pipeline = Pipeline.builder(abortOnRegistry, "breaker-abort-on", String.class)
                 .retry()
                 .circuitBreaker(cb -> cb.windowSize(2).minimumCalls(2).failureRateThreshold(50)
                         .waitInOpen(Duration.ofHours(1)))
                 .build();
         AtomicInteger calls = new AtomicInteger();
+        PipelineCall<String, IOException> fails = failing(calls, 100, new IOException());
 
-        assertThatThrownBy(() -> pipeline.execute(failing(calls, 100, new IOException())))
+        assertThatThrownBy(() -> pipeline.execute(fails))
                 .isInstanceOf(CallNotPermittedException.class);
         assertThat(calls).as("two failures open the breaker").hasValue(2);
 
-        registry.circuitBreaker("breaker-abort-on").reset();
+        abortOnRegistry.circuitBreaker("breaker-abort-on").reset();
         CompletableFuture<String> async = pipeline.executeAsync(() -> {
             calls.incrementAndGet();
             return CompletableFuture.failedFuture(new IOException());
@@ -241,6 +244,8 @@ class PipelineTest {
         assertThat(registry.rateLimiter("limited").availablePermits()).isZero();
     }
 
+    // java:S2925: the call must really block so that the real watchdog interrupts it
+    @SuppressWarnings("java:S2925")
     @Test
     void theTimeoutInterruptsALongCall() {
         Pipeline<String> pipeline = Pipeline.builder(registry, "timed", String.class)
@@ -330,7 +335,7 @@ class PipelineTest {
     }
 
     @Test
-    void aPipelineWithoutPoliciesJustCalls() throws IOException {
+    void aPipelineWithoutPoliciesJustCalls() {
         Pipeline<String> pipeline = Pipeline.builder(registry, "empty", String.class).build();
         IOException down = new IOException();
 

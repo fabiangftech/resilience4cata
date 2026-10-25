@@ -287,6 +287,8 @@ public final class TimeoutPolicy {
      * @param <T> the result type
      * @return a future that completes with the call's outcome, or fails with {@link CallTimeoutException}
      */
+    // java:S2589: time != null always holds there (checked above); kept so the nullable local is visibly non-null.
+    @SuppressWarnings("java:S2589")
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
         CompletionStage<T> stage = AsyncSupport.call(call);
         TimeoutTimer.Lane deadlines = lane;

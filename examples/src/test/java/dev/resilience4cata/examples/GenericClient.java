@@ -28,6 +28,8 @@ public interface GenericClient {
     @Fallback(method = "smallest")
     <T extends Comparable<T>> T largest(List<T> values);
 
+    // java:S1172: a fallback mirrors the protected method's parameters, then takes the failure, which selects it by type
+    @SuppressWarnings("java:S1172")
     static <T extends Comparable<T>> T smallest(List<T> values, IllegalStateException e) {
         return values.stream().min(Comparable::compareTo).orElseThrow();
     }

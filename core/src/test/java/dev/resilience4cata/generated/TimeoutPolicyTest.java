@@ -163,6 +163,8 @@ class TimeoutPolicyTest {
         assertThat(watchdog.registeredThreads()).isZero();
     }
 
+    // java:S2925: the call must really block so that the shared watchdog thread interrupts it
+    @SuppressWarnings("java:S2925")
     @Test
     void theSharedWatchdogInterruptsABlockedCall() throws InterruptedException {
         TimeoutPolicy timeout = new TimeoutPolicy("shared", TimeoutConfig.builder().timeout(Duration.ofMillis(50)).build());

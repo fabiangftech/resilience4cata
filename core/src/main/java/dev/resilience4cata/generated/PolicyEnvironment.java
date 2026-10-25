@@ -113,6 +113,7 @@ public final class PolicyEnvironment {
      * positive; otherwise on a new virtual thread from the shared timer, or, with a manual ticker, on the
      * thread that advances the ticker past the delay.
      */
+    @SuppressWarnings("java:S1452") // the JDK's own type for a scheduled Runnable; callers only cancel it
     @Nullable Future<?> later(long delayNanos, Runnable task) {
         Ticker time = manual;
         if (time == null || delayNanos <= 0) {

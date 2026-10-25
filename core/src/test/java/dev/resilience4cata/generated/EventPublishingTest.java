@@ -49,7 +49,7 @@ class EventPublishingTest {
     }
 
     private PolicyEnvironment environment(EventDispatcher.Subscription... subscriptions) {
-        return PolicyEnvironment.forTest(now::get, nanos -> now.addAndGet(nanos), EventDispatcher.of(List.of(subscriptions)));
+        return PolicyEnvironment.forTest(now::get, now::addAndGet, EventDispatcher.of(List.of(subscriptions)));
     }
 
     // Circuit breaker
@@ -283,7 +283,7 @@ class EventPublishingTest {
     // Bulkhead
 
     @Test
-    void bulkheadRejectionsArePublished() throws Exception {
+    void bulkheadRejectionsArePublished() {
         PolicyEnvironment environment = listening(BulkheadEvent.class);
         BulkheadPolicy full = new BulkheadPolicy("b", BulkheadConfig.builder().maxConcurrent(1).build(), environment);
         assertThat(full.tryEnter()).isTrue();

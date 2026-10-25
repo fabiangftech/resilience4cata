@@ -47,8 +47,11 @@ class SubclassProcessorTest {
         String generated = result.generatedSource("demo.Service$Resilient");
         assertThat(generated)
                 .contains("public final class Service$Resilient extends demo.Service {")
-                .contains("public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry, java.lang.String p0,"
-                        + " int... p1) throws java.io.IOException {\n        super(p0, p1);\n")
+                .contains("""
+                        public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry, java.lang.String p0, \
+                        int... p1) throws java.io.IOException {
+                                super(p0, p1);
+                        """)
                 .contains("public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry) {\n        super();\n")
                 .doesNotContain("long p0")
                 .contains("\"demo.Service#call(java.lang.String)\"")

@@ -158,7 +158,7 @@ class FallbackPageTest {
         RecordingQuoteApi quotes = Resilient.of(RecordingQuoteApi.class, (sku, quantity) -> {
             throw new IllegalStateException("pricing down");
         }, registry);
-        assertThat(quotes.quote("sku-1", 3)).isEqualTo(0L);
+        assertThat(quotes.quote("sku-1", 3)).isZero();
         FallbackContext context = seen.get();
         assertThat(context.attempts()).isEqualTo(3);
         assertThat(context.failure()).isInstanceOf(IllegalStateException.class);

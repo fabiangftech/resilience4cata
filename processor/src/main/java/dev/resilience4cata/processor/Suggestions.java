@@ -21,7 +21,7 @@ final class Suggestions {
                 bestDistance = distance;
             }
         }
-        int allowed = Math.max(1, Math.min(3, normalized.length() / 3));
+        int allowed = Math.clamp(normalized.length() / 3, 1, 3);
         return bestDistance <= allowed ? best : null;
     }
 

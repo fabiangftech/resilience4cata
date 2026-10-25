@@ -98,7 +98,7 @@ class BulkheadEndToEndTest {
     }
 
     @Test
-    void methodsWithTheSameNameShareOneBulkhead() throws InterruptedException {
+    void methodsWithTheSameNameShareOneBulkhead() {
         hold(() -> client.exportCsv("hold-csv"));
         while (registry.bulkhead("exports").concurrentCalls() == 0) {
             Thread.onSpinWait();

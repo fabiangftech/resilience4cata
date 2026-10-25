@@ -79,6 +79,7 @@ final class AsyncSupport {
     }
 
     /** Runs {@code task} on a new virtual thread after {@code delayNanos}; at once if the delay is not positive. */
+    @SuppressWarnings("java:S1452") // the JDK's own type for a scheduled Runnable; callers only cancel it
     static @Nullable ScheduledFuture<?> later(long delayNanos, Runnable task) {
         Objects.requireNonNull(task, "task");
         if (delayNanos <= 0) {

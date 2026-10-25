@@ -19,5 +19,7 @@ public interface Recovery<T> {
      * @return the alternative result
      * @throws Throwable to fail the call instead
      */
+    // java:S112: public API used by generated code; fallbacks may rethrow the original failure, whatever it is.
+    @SuppressWarnings("java:S112")
     CompletionStage<T> recover(Throwable failure, int attempts) throws Throwable;
 }

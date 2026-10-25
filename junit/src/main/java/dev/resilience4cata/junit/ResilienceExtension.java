@@ -36,6 +36,7 @@ public final class ResilienceExtension implements ParameterResolver, AfterEachCa
 
     /** Creates the extension; JUnit calls this when it registers it. */
     public ResilienceExtension() {
+        // Stateless: each test's clock and registry live in its ExtensionContext store.
     }
 
     @Override
@@ -52,7 +53,7 @@ public final class ResilienceExtension implements ParameterResolver, AfterEachCa
                     + " so take them as parameters of the test method or of a @BeforeEach method instead of a constructor or a @BeforeAll method");
         }
         PerTest state = state(context);
-        return parameter.getParameter().getType() == ManualClock.class ? state.clock : state.registry(context);
+        return parameter.getParameter().getType() == ManualClock.class ? state.clock : state.registryFor(context);
     }
 
     @Override
@@ -112,7 +113,7 @@ public final class ResilienceExtension implements ParameterResolver, AfterEachCa
             this.clock = new ManualClock(settings.startNanos());
         }
 
-        ResilienceRegistry registry(ExtensionContext context) {
+        ResilienceRegistry registryFor(ExtensionContext context) {
             ResilienceRegistry built = registry;
             if (built == null) {
                 ResilienceRegistry.Builder builder = ResilienceTesting.registry(clock, settings.seed());

@@ -2,6 +2,8 @@ package dev.resilience4cata.examples.docs.troubleshooting;
 
 import java.util.List;
 
+// java:S1172: fetchPrice stands in for a remote call; suppressed on the class, which is a documentation snippet
+@SuppressWarnings("java:S1172")
 // tag::troubleshooting-self-invocation[]
 final class HttpCatalog implements CatalogApi {
 

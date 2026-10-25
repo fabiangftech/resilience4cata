@@ -10,7 +10,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
@@ -125,17 +124,17 @@ public final class RetryPolicy {
     }
 
     private long startSlow() {
-        RetryBudget budget = this.budget;
-        if (budget != null) {
-            budget.onCall();
+        RetryBudget retryBudget = this.budget;
+        if (retryBudget != null) {
+            retryBudget.onCall();
         }
         return maxDurationNanos > 0 ? ticker.getAsLong() : 0L;
     }
 
     /** The budget's current window, for snapshots; {@code null} without a budget. Off the call path. */
     public RetrySnapshot.@Nullable Budget budgetSnapshot() {
-        RetryBudget budget = this.budget;
-        return budget != null ? budget.snapshot(ticker.getAsLong()) : null;
+        RetryBudget retryBudget = this.budget;
+        return retryBudget != null ? retryBudget.snapshot(ticker.getAsLong()) : null;
     }
 
     /**
@@ -226,7 +225,7 @@ public final class RetryPolicy {
                 || Thread.currentThread().isInterrupted() || !retryable
                 || failure instanceof CallNotPermittedException) {
             if (gaveUp != null) {
-                publishGaveUp(attempts, failure, retryable);
+                publishGaveUp(attempts, failure);
             }
             return NO_RETRY;
         }
@@ -238,8 +237,8 @@ public final class RetryPolicy {
             }
             return NO_RETRY;
         }
-        RetryBudget budget = this.budget;
-        if (budget != null && !budget.tryAcquire(ticker.getAsLong())) {
+        RetryBudget retryBudget = this.budget;
+        if (retryBudget != null && !retryBudget.tryAcquire(ticker.getAsLong())) {
             return budgetExhausted(attempts, failure);
         }
         EventSink<RetryEvent.Retrying> sink = retrying;
@@ -257,11 +256,15 @@ public final class RetryPolicy {
         return NO_RETRY;
     }
 
-    private void publishGaveUp(int attempts, @Nullable Throwable failure, boolean retryable) {
-        RetryEvent.Reason reason = attempts >= maxAttempts ? RetryEvent.Reason.MAX_ATTEMPTS
-                : failure instanceof InterruptedException || Thread.currentThread().isInterrupted()
-                        ? RetryEvent.Reason.INTERRUPTED
-                        : RetryEvent.Reason.NOT_RETRYABLE;
+    private void publishGaveUp(int attempts, @Nullable Throwable failure) {
+        RetryEvent.Reason reason;
+        if (attempts >= maxAttempts) {
+            reason = RetryEvent.Reason.MAX_ATTEMPTS;
+        } else if (failure instanceof InterruptedException || Thread.currentThread().isInterrupted()) {
+            reason = RetryEvent.Reason.INTERRUPTED;
+        } else {
+            reason = RetryEvent.Reason.NOT_RETRYABLE;
+        }
         Objects.requireNonNull(gaveUp).publish(new RetryEvent.GaveUp(id, ticker.getAsLong(), attempts, reason, failure));
     }
 
@@ -439,6 +442,8 @@ public final class RetryPolicy {
         private final long start;
         private int attempts; // written by one attempt's callback before the next attempt is started
 
+        // java:S107: one constructor call per async retried call; a parameter object would be one more allocation.
+        @SuppressWarnings("java:S107")
         AsyncAttempts(RetryPolicy policy, AsyncCall<T> call, @Nullable Classifier<? super T> classifier,
                 boolean throwOnExhaustedResult, @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery, CompletableFuture<T> result,
                 long start) {
@@ -457,17 +462,20 @@ public final class RetryPolicy {
             AsyncSupport.call(call).whenComplete(this);
         }
 
+        // java:S3776: the per-attempt callback, kept in one piece like the other per-call methods.
+        // java:S1181: a classifier failure of any kind must end the retries through the future, not escape.
         @Override
+        @SuppressWarnings({"java:S3776", "java:S1181"})
         public void accept(@Nullable T value, @Nullable Throwable failure) {
-            Classifier<? super T> classifier = this.classifier;
+            Classifier<? super T> resultClassifier = this.classifier;
             if (failure == null) {
-                if (classifier == null) {
+                if (resultClassifier == null) {
                     result.complete(value);
                     return;
                 }
                 Classifier.Outcome outcome;
                 try {
-                    outcome = classifier.classify(value, null);
+                    outcome = resultClassifier.classify(value, null);
                 } catch (Throwable classifierFailure) {
                     classifierFailed(classifierFailure);
                     return;
@@ -488,12 +496,12 @@ public final class RetryPolicy {
                 return;
             }
             long delay;
-            if (classifier == null) {
+            if (resultClassifier == null) {
                 delay = policy.onFailure(++attempts, cause, start);
             } else {
                 Classifier.Outcome outcome;
                 try {
-                    outcome = classifier.classify(null, cause);
+                    outcome = resultClassifier.classify(null, cause);
                 } catch (Throwable classifierFailure) {
                     classifierFailed(classifierFailure);
                     return;

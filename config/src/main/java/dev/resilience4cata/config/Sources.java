@@ -31,11 +31,13 @@ final class Sources {
     /** Prefixes of system properties read; optional in files. */
     static final List<String> PREFIXES = List.of("resilience4cata.", "r4c.");
 
+    private static final String CANNOT_READ = "cannot read ";
+
     /** Priorities: a source with a higher priority wins; equal priorities, the one added later wins. */
-    static final int CLASSPATH = 1;
-    static final int FILE = 2;
-    static final int ENVIRONMENT = 3;
-    static final int SYSTEM_PROPERTIES = 4;
+    static final int CLASSPATH_PRIORITY = 1;
+    static final int FILE_PRIORITY = 2;
+    static final int ENVIRONMENT_PRIORITY = 3;
+    static final int SYSTEM_PROPERTIES_PRIORITY = 4;
 
     private Sources() {
     }
@@ -81,13 +83,13 @@ final class Sources {
                 try {
                     content = text.apply(loader);
                 } catch (RuntimeException e) {
-                    problems.add(new ProblemException(ProblemException.UNREADABLE, "cannot read " + description + ": "
+                    problems.add(new ProblemException(ProblemException.UNREADABLE, CANNOT_READ + description + ": "
                             + e.getMessage()));
                     return List.of();
                 }
                 if (content == null) {
                     if (!optional) {
-                        problems.add(new ProblemException(ProblemException.UNREADABLE, "cannot read " + description
+                        problems.add(new ProblemException(ProblemException.UNREADABLE, CANNOT_READ + description
                                 + ": not found"));
                     }
                     return List.of();
@@ -96,7 +98,7 @@ final class Sources {
                 try {
                     entries = PropertiesReader.read(content);
                 } catch (IllegalArgumentException e) {
-                    problems.add(new ProblemException(ProblemException.UNREADABLE, "cannot read " + description + ": "
+                    problems.add(new ProblemException(ProblemException.UNREADABLE, CANNOT_READ + description + ": "
                             + e.getMessage()));
                     return List.of();
                 }
@@ -118,7 +120,7 @@ final class Sources {
         return new Source() {
             @Override
             public int priority() {
-                return FILE;
+                return FILE_PRIORITY;
             }
 
             @Override
@@ -140,7 +142,7 @@ final class Sources {
         return new Source() {
             @Override
             public int priority() {
-                return SYSTEM_PROPERTIES;
+                return SYSTEM_PROPERTIES_PRIORITY;
             }
 
             @Override
@@ -171,7 +173,7 @@ final class Sources {
         return new Source() {
             @Override
             public int priority() {
-                return ENVIRONMENT;
+                return ENVIRONMENT_PRIORITY;
             }
 
             @Override
@@ -319,16 +321,7 @@ final class Sources {
             if (t[i].equals("defaults")) {
                 policyAttribute(t, i + 1, "defaults.", keys, nearMisses);
             } else if (t[i].equals("configs")) {
-                for (int j = i + 2; j <= t.length; j++) {
-                    String config = name(t, i + 1, j);
-                    if (config == null) {
-                        continue;
-                    }
-                    if (j == t.length - 1 && t[j].equals("extends")) {
-                        keys.add("configs." + config + ".extends");
-                    }
-                    policyAttribute(t, j, "configs." + config + ".", keys, nearMisses);
-                }
+                configs(t, i, keys, nearMisses);
             } else if (t[i].equals("instances")) {
                 for (int j = i + 2; j < t.length; j++) {
                     String instance = name(t, i + 1, j);
@@ -336,6 +329,19 @@ final class Sources {
                         policyAttribute(t, j, "instances." + instance + ".", keys, nearMisses);
                     }
                 }
+            }
+        }
+
+        private static void configs(String[] t, int i, Set<String> keys, List<String> nearMisses) {
+            for (int j = i + 2; j <= t.length; j++) {
+                String config = name(t, i + 1, j);
+                if (config == null) {
+                    continue;
+                }
+                if (j == t.length - 1 && t[j].equals("extends")) {
+                    keys.add("configs." + config + ".extends");
+                }
+                policyAttribute(t, j, "configs." + config + ".", keys, nearMisses);
             }
         }
 
@@ -364,7 +370,7 @@ final class Sources {
                 return null;
             }
             String name = String.join("-", List.of(t).subList(from, to));
-            return Key.NAME.matcher(name).matches() ? name : null;
+            return Key.NAME_PATTERN.matcher(name).matches() ? name : null;
         }
     }
 }

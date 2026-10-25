@@ -81,6 +81,8 @@ class ResilientCreateTest {
     void rejectsTypesThatCannotHaveAGeneratedSubclass() {
         class Local {
         }
+        // java:S2133: the test needs an anonymous class, not Object itself
+        @SuppressWarnings("java:S2133")
         Object anonymous = new Object() {
         };
         assertThatIllegalArgumentException().isThrownBy(() -> Resilient.create(Runnable.class, registry))

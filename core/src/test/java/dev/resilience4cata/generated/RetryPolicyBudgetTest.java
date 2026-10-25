@@ -43,7 +43,7 @@ class RetryPolicyBudgetTest {
     void withoutABudgetStartReadsNoClockAndThereIsNothingToSnapshot() {
         RetryPolicy retry = policy(RetryConfig.builder());
         AtomicInteger reads = new AtomicInteger();
-        RetryPolicy counted = new RetryPolicy(RetryConfig.DEFAULTS, () -> reads.incrementAndGet(), nanos -> { });
+        RetryPolicy counted = new RetryPolicy(RetryConfig.DEFAULTS, reads::incrementAndGet, nanos -> { });
         assertThat(reads).as("no clock read to create the policy").hasValue(0);
 
         assertThat(counted.start()).isZero();

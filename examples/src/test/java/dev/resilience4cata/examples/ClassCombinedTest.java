@@ -27,7 +27,7 @@ class ClassCombinedTest {
         service.script.add(new IOException("1"));
         service.script.add("found");
         CharSequence found = service.find("b").toCompletableFuture().get(5, TimeUnit.SECONDS);
-        assertThat(found.toString()).isEqualTo("found");
+        assertThat(found).hasToString("found");
         assertThat(service.calls).isEqualTo(2);
     }
 

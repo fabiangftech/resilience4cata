@@ -50,6 +50,8 @@ class EventEndToEndTest {
         }
 
         @Override
+        // java:S2925: the call must really block so that the timeout interrupts it
+        @SuppressWarnings("java:S2925")
         public String slow(String id) throws InterruptedException {
             Thread.sleep(10_000);
             return id;

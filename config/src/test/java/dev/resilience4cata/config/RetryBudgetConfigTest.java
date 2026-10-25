@@ -51,15 +51,17 @@ class RetryBudgetConfigTest {
 
     @Test
     void invalidBudgetsAreReportedWithTheirKeys() {
-        assertThatThrownBy(() -> ResilienceConfig.builder().text("test.properties", """
+        ResilienceConfig.Builder window = ResilienceConfig.builder().text("test.properties", """
                 defaults.retry.budgetWindow=100ms
-                """).build())
+                """);
+        assertThatThrownBy(window::build)
                 .isInstanceOf(ConfigException.class)
                 .hasMessageContaining("[R4C-CFG-006] invalid retry defaults: budgetWindow must be between 1s and 1h")
                 .hasMessageContaining("'defaults.retry.budgetWindow' (test.properties, line 1)");
-        assertThatThrownBy(() -> ResilienceConfig.builder().text("test.properties", """
+        ResilienceConfig.Builder percent = ResilienceConfig.builder().text("test.properties", """
                 instances.payments.retry.budgetPercent=-1
-                """).build())
+                """);
+        assertThatThrownBy(percent::build)
                 .isInstanceOf(ConfigException.class)
                 .hasMessageContaining("[R4C-CFG-006] invalid retry instance 'payments': budgetPercent must be a finite number >= 0")
                 .hasMessageContaining("'instances.payments.retry.budgetPercent' (test.properties, line 1)");

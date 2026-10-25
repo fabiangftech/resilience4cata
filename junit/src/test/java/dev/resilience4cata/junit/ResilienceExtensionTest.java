@@ -66,6 +66,8 @@ class ResilienceExtensionTest {
         assertThat(Fixtures.SEEN).containsExactly(0L, delaysWithSeed(8)); // nothing merged from the class
     }
 
+    // java:S3415: SEEN is the actual value; Sonar takes the constant for the expected one
+    @SuppressWarnings("java:S3415")
     @Test
     void nestedTestsTakeTheSettingsOfTheEnclosingClass() {
         run(selectNestedClass(List.of(Fixtures.WithSettings.class), Fixtures.WithSettings.Inner.class)).testEvents()

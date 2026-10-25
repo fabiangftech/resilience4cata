@@ -56,7 +56,8 @@ final class RetryBudget {
     private final double fraction;
     private final double reserve;
     private final long origin;
-    @SuppressWarnings({"unused", "FieldMayBeFinal"}) // accessed through MARKS
+    // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
+    @SuppressWarnings({"unused", "FieldMayBeFinal", "java:S1845"}) // accessed through MARKS
     private Marks marks;
 
     /**
@@ -111,15 +112,15 @@ final class RetryBudget {
      */
     boolean tryAcquire(long now) {
         long bucket = Math.floorDiv(now - origin, bucketNanos);
-        Marks marks = (Marks) MARKS.getOpaque(this);
-        if (bucket > marks.bucket) {
-            marks = advance(marks, bucket);
+        Marks current = (Marks) MARKS.getOpaque(this);
+        if (bucket > current.bucket) {
+            current = advance(current, bucket);
         }
-        // marks.bucket >= bucket now; a thread whose clock reading is older uses the newer marks.
-        int oldest = (int) Math.floorMod(marks.bucket - BUCKETS + 1, (long) BUCKETS);
-        long calls = Math.max(0, sumCalls() - marks.calls[oldest]);
+        // current.bucket >= bucket now; a thread whose clock reading is older uses the newer marks.
+        int oldest = (int) Math.floorMod(current.bucket - BUCKETS + 1, (long) BUCKETS);
+        long calls = Math.max(0, sumCalls() - current.calls[oldest]);
         double allowed = reserve + fraction * calls;
-        long base = marks.retries[oldest];
+        long base = current.retries[oldest];
         long retries = (long) CELL.getOpaque(cells, RETRIES);
         while (retries - base + 1 <= allowed) {
             if (CELL.weakCompareAndSetPlain(cells, RETRIES, retries, retries + 1)) {
@@ -165,19 +166,19 @@ final class RetryBudget {
     /** Reads the window without changing it; off the call path. */
     RetrySnapshot.Budget snapshot(long now) {
         long bucket = Math.floorDiv(now - origin, bucketNanos);
-        Marks marks = (Marks) MARKS.getOpaque(this);
+        Marks current = (Marks) MARKS.getOpaque(this);
         long callsNow = sumCalls();
         long retriesNow = (long) CELL.getOpaque(cells, RETRIES);
-        long oldest = Math.max(bucket, marks.bucket) - BUCKETS + 1;
+        long oldest = Math.max(bucket, current.bucket) - BUCKETS + 1;
         long calls;
         long retries;
-        if (oldest > marks.bucket) { // every mark is older than the window: what came after is dated at the last one
+        if (oldest > current.bucket) { // every mark is older than the window: what came after is dated at the last one
             calls = 0;
             retries = 0;
         } else {
             int slot = (int) Math.floorMod(oldest, (long) BUCKETS);
-            calls = Math.max(0, callsNow - marks.calls[slot]);
-            retries = Math.max(0, retriesNow - marks.retries[slot]);
+            calls = Math.max(0, callsNow - current.calls[slot]);
+            retries = Math.max(0, retriesNow - current.retries[slot]);
         }
         return new RetrySnapshot.Budget(calls, retries, (long) (reserve + fraction * calls));
     }

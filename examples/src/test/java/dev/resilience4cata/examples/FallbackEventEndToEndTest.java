@@ -141,13 +141,13 @@ class FallbackEventEndToEndTest {
     @Test
     void asyncFallbacksPublishOnlyWhenTheyRun() {
         IllegalStateException state = new IllegalStateException();
-        assertThatThrownBy(() -> client.loadAsync("1", state).join()).isInstanceOf(CompletionException.class)
-                .hasCause(state);
-        assertThatThrownBy(() -> client.retriedAsync("1", state).join()).isInstanceOf(CompletionException.class)
-                .hasCause(state);
+        CompletableFuture<String> loaded = client.loadAsync("1", state);
+        assertThatThrownBy(loaded::join).isInstanceOf(CompletionException.class).hasCause(state);
+        CompletableFuture<String> retried = client.retriedAsync("1", state);
+        assertThatThrownBy(retried::join).isInstanceOf(CompletionException.class).hasCause(state);
         IllegalArgumentException skipped = new IllegalArgumentException();
-        assertThatThrownBy(() -> client.handledAsync("1", skipped).join()).isInstanceOf(CompletionException.class)
-                .hasCause(skipped);
+        CompletableFuture<String> handled = client.handledAsync("1", skipped);
+        assertThatThrownBy(handled::join).isInstanceOf(CompletionException.class).hasCause(skipped);
         assertThat(applied).isEmpty();
 
         assertThat(client.loadAsync("1", new IOException()).join()).isEqualTo("cached 1");

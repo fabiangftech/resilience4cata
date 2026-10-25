@@ -98,6 +98,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     static final AttributeKey<String> REASON = AttributeKey.stringKey("reason");
     static final AttributeKey<String> STATE_KEY = AttributeKey.stringKey("state");
 
+    private static final String CALL_UNIT = "{call}";
     private static final System.Logger LOGGER = System.getLogger(OpenTelemetryMetrics.class.getName());
     private static final CircuitBreakerState[] STATES = CircuitBreakerState.values();
     private static final RetryEvent.Reason[] REASONS = RetryEvent.Reason.values();
@@ -105,14 +106,14 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
 
     private final Meter meter;
     private final LongCounter rejected;
-    private final LongCounter transitions;
-    private final LongCounter retries;
+    private final LongCounter transitionCounter;
+    private final LongCounter retryCounter;
     private final LongCounter gaveUp;
     private final LongCounter timedOut;
     private final LongCounter fallbacks;
 
     // Attributes are immutable: each set is built once per instance id and reused for every event and collection.
-    private final ConcurrentHashMap<String, Attributes> instanceAttributes = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Attributes> instanceCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Attributes> breakerRejections = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Attributes> limiterRejections = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Attributes> bulkheadRejections = new ConcurrentHashMap<>();
@@ -128,12 +129,12 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
 
     private OpenTelemetryMetrics(Meter meter) {
         this.meter = meter;
-        rejected = counter(CALLS_REJECTED, "{call}", "Calls rejected by a circuit breaker, rate limiter or bulkhead");
-        transitions = counter(TRANSITIONS, "{transition}", "Circuit breaker state changes");
-        retries = counter(RETRIES, "{retry}", "Attempts that failed and will be retried");
-        gaveUp = counter(GAVE_UP, "{call}", "Retries that stopped without a success, by reason");
-        timedOut = counter(TIMED_OUT, "{call}", "Calls that timed out");
-        fallbacks = counter(FALLBACK_APPLIED, "{call}", "Failures answered by a fallback");
+        rejected = counter(CALLS_REJECTED, CALL_UNIT, "Calls rejected by a circuit breaker, rate limiter or bulkhead");
+        transitionCounter = counter(TRANSITIONS, "{transition}", "Circuit breaker state changes");
+        retryCounter = counter(RETRIES, "{retry}", "Attempts that failed and will be retried");
+        gaveUp = counter(GAVE_UP, CALL_UNIT, "Retries that stopped without a success, by reason");
+        timedOut = counter(TIMED_OUT, CALL_UNIT, "Calls that timed out");
+        fallbacks = counter(FALLBACK_APPLIED, CALL_UNIT, "Failures answered by a fallback");
     }
 
     /**
@@ -194,35 +195,12 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
                 .setDescription("Slow call rate of the circuit breaker's window, in percent; no value until it holds minimumCalls"
                         + " calls, or without slow-call detection")
                 .buildObserver();
-        ObservableLongMeasurement concurrent = longGauge(CONCURRENT_CALLS, "{call}", "Calls running in the bulkhead");
-        ObservableLongMeasurement waiting = longGauge(WAITING_CALLS, "{call}", "Calls waiting for a place in the bulkhead");
-        ObservableLongMeasurement maxConcurrent = longGauge(MAX_CONCURRENT, "{call}", "The bulkhead's maxConcurrent");
+        ObservableLongMeasurement concurrent = longGauge(CONCURRENT_CALLS, CALL_UNIT, "Calls running in the bulkhead");
+        ObservableLongMeasurement waiting = longGauge(WAITING_CALLS, CALL_UNIT, "Calls waiting for a place in the bulkhead");
+        ObservableLongMeasurement maxConcurrent = longGauge(MAX_CONCURRENT, CALL_UNIT, "The bulkhead's maxConcurrent");
         ObservableLongMeasurement permits = longGauge(AVAILABLE_PERMITS, "{permit}", "Permits the rate limiter can grant now");
-        Runnable observe = () -> {
-            ResilienceSnapshot snapshot = registry.snapshot();
-            for (CircuitBreakerSnapshot breaker : snapshot.circuitBreakers()) {
-                Attributes[] states = states(breaker.instance());
-                for (CircuitBreakerState s : STATES) {
-                    state.record(breaker.state() == s ? 1 : 0, states[s.ordinal()]);
-                }
-                Attributes instance = instance(breaker.instance());
-                if (breaker.failureRate() >= 0) { // -1 until the window holds minimumCalls: no point (NaN is not valid)
-                    failureRate.record(breaker.failureRate(), instance);
-                }
-                if (breaker.slowCallRate() >= 0) {
-                    slowCallRate.record(breaker.slowCallRate(), instance);
-                }
-            }
-            for (BulkheadSnapshot bulkhead : snapshot.bulkheads()) {
-                Attributes instance = instance(bulkhead.instance());
-                concurrent.record(bulkhead.concurrentCalls(), instance);
-                waiting.record(bulkhead.waitingCalls(), instance);
-                maxConcurrent.record(bulkhead.maxConcurrent(), instance);
-            }
-            for (RateLimiterSnapshot limiter : snapshot.rateLimiters()) {
-                permits.record(limiter.availablePermits(), instance(limiter.instance()));
-            }
-        };
+        Gauges gauges = new Gauges(state, failureRate, slowCallRate, concurrent, waiting, maxConcurrent, permits);
+        Runnable observe = () -> gauges.observe(registry.snapshot());
         synchronized (callbacks) { // cold: once per bind, never on a call path
             if (closed) {
                 throw new IllegalStateException("These OpenTelemetryMetrics are closed: create new ones to bind a registry.");
@@ -246,6 +224,69 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
         }
     }
 
+    /** The gauges of one bound registry, recorded from its snapshot at each collection. */
+    private final class Gauges {
+        private final ObservableLongMeasurement state;
+        private final ObservableDoubleMeasurement failureRate;
+        private final ObservableDoubleMeasurement slowCallRate;
+        private final ObservableLongMeasurement concurrent;
+        private final ObservableLongMeasurement waiting;
+        private final ObservableLongMeasurement maxConcurrent;
+        private final ObservableLongMeasurement permits;
+
+        // java:S107: one parameter per gauge, called once per bind
+        @SuppressWarnings("java:S107")
+        Gauges(ObservableLongMeasurement state, ObservableDoubleMeasurement failureRate,
+                ObservableDoubleMeasurement slowCallRate, ObservableLongMeasurement concurrent,
+                ObservableLongMeasurement waiting, ObservableLongMeasurement maxConcurrent,
+                ObservableLongMeasurement permits) {
+            this.state = state;
+            this.failureRate = failureRate;
+            this.slowCallRate = slowCallRate;
+            this.concurrent = concurrent;
+            this.waiting = waiting;
+            this.maxConcurrent = maxConcurrent;
+            this.permits = permits;
+        }
+
+        void observe(ResilienceSnapshot snapshot) {
+            snapshot.circuitBreakers().forEach(this::observe);
+            for (BulkheadSnapshot bulkhead : snapshot.bulkheads()) {
+                Attributes instance = attributes(bulkhead.instance());
+                concurrent.record(bulkhead.concurrentCalls(), instance);
+                waiting.record(bulkhead.waitingCalls(), instance);
+                maxConcurrent.record(bulkhead.maxConcurrent(), instance);
+            }
+            for (RateLimiterSnapshot limiter : snapshot.rateLimiters()) {
+                permits.record(limiter.availablePermits(), attributes(limiter.instance()));
+            }
+        }
+
+        private void observe(CircuitBreakerSnapshot breaker) {
+            Attributes[] states = states(breaker.instance());
+            for (CircuitBreakerState s : STATES) {
+                state.record(breaker.state() == s ? 1 : 0, states[s.ordinal()]);
+            }
+            Attributes instance = attributes(breaker.instance());
+            if (breaker.failureRate() >= 0) { // -1 until the window holds minimumCalls: no point (NaN is not valid)
+                failureRate.record(breaker.failureRate(), instance);
+            }
+            if (breaker.slowCallRate() >= 0) {
+                slowCallRate.record(breaker.slowCallRate(), instance);
+            }
+        }
+
+        private Attributes[] states(String id) {
+            return cached(stateAttributes, id, i -> {
+                Attributes[] all = new Attributes[STATES.length];
+                for (CircuitBreakerState breakerState : STATES) {
+                    all[breakerState.ordinal()] = Attributes.of(INSTANCE, i, STATE_KEY, lower(breakerState));
+                }
+                return all;
+            });
+        }
+    }
+
     private LongCounter counter(String name, String unit, String description) {
         return meter.counterBuilder(name).setUnit(unit).setDescription(description).build();
     }
@@ -262,76 +303,68 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
                 return;
             }
             try {
-                record(event);
+                recordEvent(event);
             } catch (RuntimeException e) { // a metrics problem must never fail or slow down the call
                 LOGGER.log(System.Logger.Level.DEBUG, "Could not record " + event, e);
             }
         }
 
-        private void record(ResilienceEvent event) {
+        private void recordEvent(ResilienceEvent event) {
             String id = event.instance();
             switch (event) {
                 case CircuitBreakerEvent.StateTransition t ->
-                        transitions.add(1, transitions(id)[t.from().ordinal() * STATES.length + t.to().ordinal()]);
+                        transitionCounter.add(1, transitions(id)[t.from().ordinal() * STATES.length + t.to().ordinal()]);
                 case CircuitBreakerEvent.CallNotPermitted r -> rejected.add(1, breakerRejection(id));
                 case RateLimiterEvent.Rejected r -> rejected.add(1, limiterRejection(id));
                 case BulkheadEvent.Rejected r -> rejected.add(1, bulkheadRejection(id));
-                case RetryEvent.Retrying r -> retries.add(1, instance(id));
+                case RetryEvent.Retrying r -> retryCounter.add(1, attributes(id));
                 case RetryEvent.GaveUp g -> gaveUp.add(1, reasons(id)[g.reason().ordinal()]);
-                case TimeoutEvent.TimedOut t -> timedOut.add(1, instance(id));
-                case FallbackEvent.Applied f -> fallbacks.add(1, instance(id));
+                case TimeoutEvent.TimedOut t -> timedOut.add(1, attributes(id));
+                case FallbackEvent.Applied f -> fallbacks.add(1, attributes(id));
             }
+        }
+
+        private Attributes breakerRejection(String id) {
+            return cached(breakerRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "circuitbreaker"));
+        }
+
+        private Attributes limiterRejection(String id) {
+            return cached(limiterRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "ratelimiter"));
+        }
+
+        private Attributes bulkheadRejection(String id) {
+            return cached(bulkheadRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "bulkhead"));
+        }
+
+        private Attributes[] transitions(String id) {
+            return cached(transitionAttributes, id, i -> {
+                Attributes[] all = new Attributes[STATES.length * STATES.length];
+                for (CircuitBreakerState from : STATES) {
+                    for (CircuitBreakerState to : STATES) {
+                        all[from.ordinal() * STATES.length + to.ordinal()] =
+                                Attributes.of(INSTANCE, i, FROM, lower(from), TO, lower(to));
+                    }
+                }
+                return all;
+            });
+        }
+
+        private Attributes[] reasons(String id) {
+            return cached(reasonAttributes, id, i -> {
+                Attributes[] all = new Attributes[REASONS.length];
+                for (RetryEvent.Reason reason : REASONS) {
+                    all[reason.ordinal()] = Attributes.of(INSTANCE, i, REASON, lower(reason));
+                }
+                return all;
+            });
         }
     }
 
-    Attributes instance(String id) {
-        return cached(instanceAttributes, id, i -> Attributes.of(INSTANCE, i));
+    @SuppressWarnings("java:S3398") // shared by Gauges, the listener and the tests, so it stays here
+    Attributes attributes(String id) {
+        return cached(instanceCache, id, i -> Attributes.of(INSTANCE, i));
     }
 
-    private Attributes breakerRejection(String id) {
-        return cached(breakerRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "circuitbreaker"));
-    }
-
-    private Attributes limiterRejection(String id) {
-        return cached(limiterRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "ratelimiter"));
-    }
-
-    private Attributes bulkheadRejection(String id) {
-        return cached(bulkheadRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "bulkhead"));
-    }
-
-    private Attributes[] transitions(String id) {
-        return cached(transitionAttributes, id, i -> {
-            Attributes[] all = new Attributes[STATES.length * STATES.length];
-            for (CircuitBreakerState from : STATES) {
-                for (CircuitBreakerState to : STATES) {
-                    all[from.ordinal() * STATES.length + to.ordinal()] =
-                            Attributes.of(INSTANCE, i, FROM, lower(from), TO, lower(to));
-                }
-            }
-            return all;
-        });
-    }
-
-    private Attributes[] reasons(String id) {
-        return cached(reasonAttributes, id, i -> {
-            Attributes[] all = new Attributes[REASONS.length];
-            for (RetryEvent.Reason reason : REASONS) {
-                all[reason.ordinal()] = Attributes.of(INSTANCE, i, REASON, lower(reason));
-            }
-            return all;
-        });
-    }
-
-    private Attributes[] states(String id) {
-        return cached(stateAttributes, id, i -> {
-            Attributes[] all = new Attributes[STATES.length];
-            for (CircuitBreakerState state : STATES) {
-                all[state.ordinal()] = Attributes.of(INSTANCE, i, STATE_KEY, lower(state));
-            }
-            return all;
-        });
-    }
 
     /** A lock-free read when present; {@code computeIfAbsent} only the first time an id is seen. */
     private static <V> V cached(ConcurrentHashMap<String, V> cache, String id, Function<String, V> create) {

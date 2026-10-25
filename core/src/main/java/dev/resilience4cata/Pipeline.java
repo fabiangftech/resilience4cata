@@ -66,6 +66,10 @@ import org.jspecify.annotations.Nullable;
 public final class Pipeline<T> {
 
     private static final @Nullable Object[] NO_ARGUMENTS = {};
+    private static final String CONFIG = "config";
+    private static final String OVERRIDES = "overrides";
+    private static final String CLASSIFIER = "classifier";
+    private static final String PIPELINE_PREFIX = "Pipeline '";
 
     private final String id;
     private final @Nullable FallbackPolicy fallback;
@@ -99,10 +103,9 @@ public final class Pipeline<T> {
         Step<BulkheadConfig.Builder> bulkheadStep = builder.bulkhead;
         this.bulkhead = bulkheadStep == null ? null
                 : registry.bulkheadPolicy(id, "", bulkheadStep.config(), bulkheadStep.overrides());
-        this.retryClassifier = retryStep == null ? null
-                : builder.retryClassifier != null ? builder.retryClassifier : builder.classifier;
+        this.retryClassifier = retryStep == null ? null : ownOrShared(builder.retryClassifier, builder.classifier);
         this.circuitBreakerClassifier = circuitBreakerStep == null ? null
-                : builder.circuitBreakerClassifier != null ? builder.circuitBreakerClassifier : builder.classifier;
+                : ownOrShared(builder.circuitBreakerClassifier, builder.classifier);
         this.throwOnExhaustedResult = builder.onExhaustedResult == ExhaustedResult.THROW;
         FallbackHandler<? extends T> handler = builder.fallbackHandler;
         FallbackHandler<? extends CompletionStage<T>> asyncHandler = builder.asyncFallbackHandler;
@@ -123,6 +126,12 @@ public final class Pipeline<T> {
                         CompletableFuture.<T>completedFuture(sync.apply(policy.context(failure, attempts, NO_ARGUMENTS)));
             }
         }
+    }
+
+    /** The policy's own classifier if it has one, else the pipeline's shared one. */
+    private static <T> @Nullable Classifier<? super T> ownOrShared(@Nullable Classifier<? super T> own,
+            @Nullable Classifier<? super T> shared) {
+        return own != null ? own : shared;
     }
 
     /** A synchronous call with only an asynchronous fallback waits (not interruptibly) for the fallback's stage. */
@@ -203,26 +212,30 @@ public final class Pipeline<T> {
      * @return the call's result, or the fallback's
      * @throws X the call's last failure, when no fallback handles it
      */
+    // java:S1181: a resilience layer must see every failure the call throws, Errors included, and relay it unchanged
+    @SuppressWarnings("java:S1181")
     public <X extends Throwable> T execute(PipelineCall<? extends T, X> call) throws X {
-        RetryPolicy retry = this.retry;
-        if (retry != null) {
+        RetryPolicy retryPolicy = this.retry;
+        if (retryPolicy != null) {
             Classifier<? super T> classifier = retryClassifier;
-            return classifier == null ? retrying(retry, call) : classifiedRetrying(retry, classifier, call);
+            return classifier == null ? retrying(retryPolicy, call) : classifiedRetrying(retryPolicy, classifier, call);
         }
-        FallbackPolicy fallback = this.fallback;
-        if (fallback == null) {
+        FallbackPolicy fallbackPolicy = this.fallback;
+        if (fallbackPolicy == null) {
             return circuitBreakerLayer(call);
         }
         try {
             return circuitBreakerLayer(call);
         } catch (Throwable e) {
-            if (!fallback.handles(e)) {
+            if (!fallbackPolicy.handles(e)) {
                 throw e;
             }
             return fallback(e, 1);
         }
     }
 
+    // java:S1181: a resilience layer must see every failure the call throws, Errors included, and relay it unchanged
+    @SuppressWarnings("java:S1181")
     private <X extends Throwable> T retrying(RetryPolicy retry, PipelineCall<? extends T, X> call) throws X {
         long start = retry.start();
         int attempts = 0;
@@ -234,8 +247,8 @@ public final class Pipeline<T> {
             } catch (Throwable e) {
                 long delay = retry.onFailure(++attempts, e, start);
                 if (delay < 0 || !retry.pause(delay)) {
-                    FallbackPolicy fallback = this.fallback;
-                    if (fallback == null || !fallback.handles(e)) {
+                    FallbackPolicy fallbackPolicy = this.fallback;
+                    if (fallbackPolicy == null || !fallbackPolicy.handles(e)) {
                         throw e;
                     }
                     return fallback(e, attempts);
@@ -245,6 +258,9 @@ public final class Pipeline<T> {
     }
 
     /** Same as {@link #retrying}, with the classifier's verdict on exceptions and results, as in generated code. */
+    // java:S1181: a resilience layer must see every failure, and a classifier's Error must fail the call too.
+    // java:S3776: a per-call method, kept in one piece like the generated retry loop it mirrors (JIT inlining).
+    @SuppressWarnings({"java:S1181", "java:S3776"})
     private <X extends Throwable> T classifiedRetrying(RetryPolicy retry, Classifier<? super T> classifier,
             PipelineCall<? extends T, X> call) throws X {
         long start = retry.start();
@@ -264,8 +280,8 @@ public final class Pipeline<T> {
                 }
                 long delay = retry.onFailure(++attempts, e, start, verdict);
                 if (delay < 0 || !retry.pause(delay)) {
-                    FallbackPolicy fallback = this.fallback;
-                    if (fallback == null || !fallback.handles(e)) {
+                    FallbackPolicy fallbackPolicy = this.fallback;
+                    if (fallbackPolicy == null || !fallbackPolicy.handles(e)) {
                         throw e;
                     }
                     return fallback(e, attempts);
@@ -300,13 +316,15 @@ public final class Pipeline<T> {
      * the fallback's result if it handles it.
      */
     private T giveUp(Throwable failure, int attempts) {
-        FallbackPolicy fallback = this.fallback;
-        if (fallback == null || !fallback.handles(failure)) {
+        FallbackPolicy fallbackPolicy = this.fallback;
+        if (fallbackPolicy == null || !fallbackPolicy.handles(failure)) {
             throw Pipeline.<RuntimeException>sneaky(failure); // unchecked: thrown by a Classifier
         }
         return fallback(failure, attempts);
     }
 
+    // java:S1181: a resilience layer must see every failure the call throws, Errors included, and relay it unchanged
+    @SuppressWarnings("java:S1181")
     private T fallback(Throwable failure, int attempts) {
         FallbackHandler<? extends T> handler = fallbackHandler;
         FallbackPolicy policy = Objects.requireNonNull(fallback);
@@ -327,6 +345,8 @@ public final class Pipeline<T> {
         throw (E) failure;
     }
 
+    // java:S1181: a resilience layer must see every failure the call throws, Errors included, and relay it unchanged
+    @SuppressWarnings("java:S1181")
     private <X extends Throwable> T circuitBreakerLayer(PipelineCall<? extends T, X> call) throws X {
         CircuitBreakerPolicy cb = this.circuitBreaker;
         if (cb == null) {
@@ -356,6 +376,8 @@ public final class Pipeline<T> {
      * and its exception goes to the retry wrapped in a {@link ClassifierFailure}, so that the retry ends
      * the call with it instead of classifying it again.
      */
+    // java:S1181: a resilience layer must see every failure, and a classifier's Error must fail the call too
+    @SuppressWarnings("java:S1181")
     private <X extends Throwable> T classifiedCircuitBreakerLayer(CircuitBreakerPolicy cb,
             Classifier<? super T> classifier, PipelineCall<? extends T, X> call) throws X {
         long token = cb.acquire();
@@ -397,42 +419,44 @@ public final class Pipeline<T> {
     }
 
     private <X extends Throwable> T rateLimiterLayer(PipelineCall<? extends T, X> call) throws X {
-        RateLimiterPolicy rateLimiter = this.rateLimiter;
-        if (rateLimiter != null && !rateLimiter.tryAcquire()) {
-            throw rateLimiter.rejection();
+        RateLimiterPolicy limiter = this.rateLimiter;
+        if (limiter != null && !limiter.tryAcquire()) {
+            throw limiter.rejection();
         }
         return timeoutLayer(call);
     }
 
+    // java:S1181: a resilience layer must see every failure the call throws, Errors included, and relay it unchanged
+    @SuppressWarnings("java:S1181")
     private <X extends Throwable> T timeoutLayer(PipelineCall<? extends T, X> call) throws X {
-        TimeoutPolicy timeout = this.timeout;
-        if (timeout == null) {
+        TimeoutPolicy timeoutPolicy = this.timeout;
+        if (timeoutPolicy == null) {
             return bulkheadLayer(call);
         }
-        TimeoutPolicy.Scope scope = timeout.enter();
+        TimeoutPolicy.Scope scope = timeoutPolicy.enter();
         T result;
         try {
             result = bulkheadLayer(call);
         } catch (Throwable e) {
-            timeout.failed(scope, e);
+            timeoutPolicy.failed(scope, e);
             throw e;
         }
-        timeout.succeeded(scope);
+        timeoutPolicy.succeeded(scope);
         return result;
     }
 
     private <X extends Throwable> T bulkheadLayer(PipelineCall<? extends T, X> call) throws X {
-        BulkheadPolicy bulkhead = this.bulkhead;
-        if (bulkhead == null) {
+        BulkheadPolicy bulkheadPolicy = this.bulkhead;
+        if (bulkheadPolicy == null) {
             return call.call();
         }
-        if (!bulkhead.tryEnter()) {
-            throw bulkhead.rejection();
+        if (!bulkheadPolicy.tryEnter()) {
+            throw bulkheadPolicy.rejection();
         }
         try {
             return call.call();
         } finally {
-            bulkhead.exit();
+            bulkheadPolicy.exit();
         }
     }
 
@@ -449,39 +473,39 @@ public final class Pipeline<T> {
     public CompletableFuture<T> executeAsync(PipelineCall<? extends CompletionStage<T>, ?> call) {
         Objects.requireNonNull(call, "call");
         AsyncCall<T> next = call::call;
-        BulkheadPolicy bulkhead = this.bulkhead;
-        if (bulkhead != null) {
+        BulkheadPolicy bulkheadPolicy = this.bulkhead;
+        if (bulkheadPolicy != null) {
             AsyncCall<T> inner = next;
-            next = () -> bulkhead.executeAsync(inner);
+            next = () -> bulkheadPolicy.executeAsync(inner);
         }
-        TimeoutPolicy timeout = this.timeout;
-        if (timeout != null) {
+        TimeoutPolicy timeoutPolicy = this.timeout;
+        if (timeoutPolicy != null) {
             AsyncCall<T> inner = next;
-            next = () -> timeout.executeAsync(inner);
+            next = () -> timeoutPolicy.executeAsync(inner);
         }
-        RateLimiterPolicy rateLimiter = this.rateLimiter;
-        if (rateLimiter != null) {
+        RateLimiterPolicy limiter = this.rateLimiter;
+        if (limiter != null) {
             AsyncCall<T> inner = next;
-            next = () -> rateLimiter.executeAsync(inner);
+            next = () -> limiter.executeAsync(inner);
         }
-        CircuitBreakerPolicy circuitBreaker = this.circuitBreaker;
-        if (circuitBreaker != null) {
+        CircuitBreakerPolicy breaker = this.circuitBreaker;
+        if (breaker != null) {
             AsyncCall<T> inner = next;
             Classifier<? super T> classifier = circuitBreakerClassifier;
             boolean insideRetry = this.retry != null;
-            next = classifier == null ? () -> circuitBreaker.executeAsync(inner)
-                    : () -> circuitBreaker.executeAsync(inner, classifier, insideRetry);
+            next = classifier == null ? () -> breaker.executeAsync(inner)
+                    : () -> breaker.executeAsync(inner, classifier, insideRetry);
         }
-        RetryPolicy retry = this.retry;
-        if (retry != null) {
+        RetryPolicy retryPolicy = this.retry;
+        if (retryPolicy != null) {
             Classifier<? super T> classifier = retryClassifier;
-            return classifier == null ? retry.executeAsync(next, fallback, recovery)
-                    : retry.executeAsync(next, classifier, throwOnExhaustedResult, fallback, recovery);
+            return classifier == null ? retryPolicy.executeAsync(next, fallback, recovery)
+                    : retryPolicy.executeAsync(next, classifier, throwOnExhaustedResult, fallback, recovery);
         }
-        FallbackPolicy fallback = this.fallback;
-        Recovery<T> recovery = this.recovery;
-        if (fallback != null && recovery != null) {
-            return fallback.executeAsync(next, recovery);
+        FallbackPolicy fallbackPolicy = this.fallback;
+        Recovery<T> recoveryCall = this.recovery;
+        if (fallbackPolicy != null && recoveryCall != null) {
+            return fallbackPolicy.executeAsync(next, recoveryCall);
         }
         return start(next);
     }
@@ -617,7 +641,7 @@ public final class Pipeline<T> {
          * @return this builder
          */
         public Builder<T> retry(Consumer<RetryConfig.Builder> overrides) {
-            return retry("", Objects.requireNonNull(overrides, "overrides"));
+            return retry("", Objects.requireNonNull(overrides, OVERRIDES));
         }
 
         /**
@@ -629,7 +653,7 @@ public final class Pipeline<T> {
          */
         public Builder<T> retry(String config, @Nullable Consumer<RetryConfig.Builder> overrides) {
             once(retry, "retry");
-            retry = new Step<>(Objects.requireNonNull(config, "config"), overrides);
+            retry = new Step<>(Objects.requireNonNull(config, CONFIG), overrides);
             return this;
         }
 
@@ -660,7 +684,7 @@ public final class Pipeline<T> {
          * @return this builder
          */
         public Builder<T> circuitBreaker(Consumer<CircuitBreakerConfig.Builder> overrides) {
-            return circuitBreaker("", Objects.requireNonNull(overrides, "overrides"));
+            return circuitBreaker("", Objects.requireNonNull(overrides, OVERRIDES));
         }
 
         /**
@@ -672,7 +696,7 @@ public final class Pipeline<T> {
          */
         public Builder<T> circuitBreaker(String config, @Nullable Consumer<CircuitBreakerConfig.Builder> overrides) {
             once(circuitBreaker, "circuitBreaker");
-            circuitBreaker = new Step<>(Objects.requireNonNull(config, "config"), overrides);
+            circuitBreaker = new Step<>(Objects.requireNonNull(config, CONFIG), overrides);
             return this;
         }
 
@@ -703,7 +727,7 @@ public final class Pipeline<T> {
          * @return this builder
          */
         public Builder<T> rateLimiter(Consumer<RateLimiterConfig.Builder> overrides) {
-            return rateLimiter("", Objects.requireNonNull(overrides, "overrides"));
+            return rateLimiter("", Objects.requireNonNull(overrides, OVERRIDES));
         }
 
         /**
@@ -715,7 +739,7 @@ public final class Pipeline<T> {
          */
         public Builder<T> rateLimiter(String config, @Nullable Consumer<RateLimiterConfig.Builder> overrides) {
             once(rateLimiter, "rateLimiter");
-            rateLimiter = new Step<>(Objects.requireNonNull(config, "config"), overrides);
+            rateLimiter = new Step<>(Objects.requireNonNull(config, CONFIG), overrides);
             return this;
         }
 
@@ -745,7 +769,7 @@ public final class Pipeline<T> {
          * @return this builder
          */
         public Builder<T> timeout(Consumer<TimeoutConfig.Builder> overrides) {
-            return timeout("", Objects.requireNonNull(overrides, "overrides"));
+            return timeout("", Objects.requireNonNull(overrides, OVERRIDES));
         }
 
         /**
@@ -757,7 +781,7 @@ public final class Pipeline<T> {
          */
         public Builder<T> timeout(String config, @Nullable Consumer<TimeoutConfig.Builder> overrides) {
             once(timeout, "timeout");
-            timeout = new Step<>(Objects.requireNonNull(config, "config"), overrides);
+            timeout = new Step<>(Objects.requireNonNull(config, CONFIG), overrides);
             return this;
         }
 
@@ -787,7 +811,7 @@ public final class Pipeline<T> {
          * @return this builder
          */
         public Builder<T> bulkhead(Consumer<BulkheadConfig.Builder> overrides) {
-            return bulkhead("", Objects.requireNonNull(overrides, "overrides"));
+            return bulkhead("", Objects.requireNonNull(overrides, OVERRIDES));
         }
 
         /**
@@ -799,7 +823,7 @@ public final class Pipeline<T> {
          */
         public Builder<T> bulkhead(String config, @Nullable Consumer<BulkheadConfig.Builder> overrides) {
             once(bulkhead, "bulkhead");
-            bulkhead = new Step<>(Objects.requireNonNull(config, "config"), overrides);
+            bulkhead = new Step<>(Objects.requireNonNull(config, CONFIG), overrides);
             return this;
         }
 
@@ -816,7 +840,7 @@ public final class Pipeline<T> {
             if (this.classifier != null) {
                 throw setTwice("The classifier");
             }
-            this.classifier = Objects.requireNonNull(classifier, "classifier");
+            this.classifier = Objects.requireNonNull(classifier, CLASSIFIER);
             return this;
         }
 
@@ -835,7 +859,7 @@ public final class Pipeline<T> {
             if (retryClassifier != null) {
                 throw setTwice("The retry classifier");
             }
-            retryClassifier = Objects.requireNonNull(classifier, "classifier");
+            retryClassifier = Objects.requireNonNull(classifier, CLASSIFIER);
             return this;
         }
 
@@ -868,7 +892,7 @@ public final class Pipeline<T> {
             if (circuitBreakerClassifier != null) {
                 throw setTwice("The circuit breaker classifier");
             }
-            circuitBreakerClassifier = Objects.requireNonNull(classifier, "classifier");
+            circuitBreakerClassifier = Objects.requireNonNull(classifier, CLASSIFIER);
             return this;
         }
 
@@ -983,26 +1007,26 @@ public final class Pipeline<T> {
         public Pipeline<T> build() {
             if ((fallbackApplyOn.size() != 1 || fallbackApplyOn.get(0) != Throwable.class || !fallbackSkipOn.isEmpty())
                     && fallbackHandler == null && asyncFallbackHandler == null) {
-                throw new IllegalStateException(ErrorCode.FALLBACK_FILTER_WITHOUT_FALLBACK.message("Pipeline '" + id
+                throw new IllegalStateException(ErrorCode.FALLBACK_FILTER_WITHOUT_FALLBACK.message(PIPELINE_PREFIX + id
                         + "' selects fallback failures but has no fallback. Add a fallback, or remove fallbackApplyOn and"
                         + " fallbackSkipOn."));
             }
             if (classifier != null && retry == null && circuitBreaker == null) {
-                throw new IllegalStateException(ErrorCode.CLASSIFIER_WITHOUT_POLICY.message("Pipeline '" + id
+                throw new IllegalStateException(ErrorCode.CLASSIFIER_WITHOUT_POLICY.message(PIPELINE_PREFIX + id
                         + "' has a classifier but no retry or circuit breaker. Add one of them, or remove the classifier."));
             }
             if (retryClassifier != null && retry == null) {
-                throw new IllegalStateException(ErrorCode.RETRY_CLASSIFIER_WITHOUT_RETRY.message("Pipeline '" + id
+                throw new IllegalStateException(ErrorCode.RETRY_CLASSIFIER_WITHOUT_RETRY.message(PIPELINE_PREFIX + id
                         + "' has a retry classifier but no retry. Add a retry, or remove the retry classifier."));
             }
             if (onExhaustedResult != null && (retry == null || (retryClassifier == null && classifier == null))) {
-                throw new IllegalStateException(ErrorCode.EXHAUSTED_RESULT_WITHOUT_CLASSIFIER.message("Pipeline '" + id
+                throw new IllegalStateException(ErrorCode.EXHAUSTED_RESULT_WITHOUT_CLASSIFIER.message(PIPELINE_PREFIX + id
                         + "' sets onExhaustedResult but has no retry with a classifier: only a classifier can reject a"
                         + " result. Add a retry and a classifier, or remove onExhaustedResult."));
             }
             if (circuitBreakerClassifier != null && circuitBreaker == null) {
                 throw new IllegalStateException(ErrorCode.CIRCUIT_BREAKER_CLASSIFIER_WITHOUT_CIRCUIT_BREAKER.message(
-                        "Pipeline '" + id + "' has a circuit breaker classifier but no circuit breaker. Add a circuit breaker, or"
+                        PIPELINE_PREFIX + id + "' has a circuit breaker classifier but no circuit breaker. Add a circuit breaker, or"
                         + " remove the circuit breaker classifier."));
             }
             return new Pipeline<>(this);

@@ -96,6 +96,9 @@ public record RetryConfig(
         EQUAL
     }
 
+    /** The policy name in validation messages. */
+    private static final String POLICY = "retry";
+
     /** Validates every value and copies the exception lists. */
     public RetryConfig {
         Objects.requireNonNull(delay, "delay");
@@ -107,29 +110,29 @@ public record RetryConfig(
         retryOn = List.copyOf(retryOn);
         abortOn = List.copyOf(abortOn);
         if (maxAttempts < 1) {
-            throw ErrorCode.invalidValue("retry", "maxAttempts must be at least 1, was " + maxAttempts);
+            throw ErrorCode.invalidValue(POLICY, "maxAttempts must be at least 1, was " + maxAttempts);
         }
         if (delay.isNegative()) {
-            throw ErrorCode.invalidValue("retry", "delay must not be negative, was " + delay);
+            throw ErrorCode.invalidValue(POLICY, "delay must not be negative, was " + delay);
         }
-        if (!(multiplier >= 1.0) || Double.isInfinite(multiplier)) {
-            throw ErrorCode.invalidValue("retry", "multiplier must be a finite number >= 1, was " + multiplier);
+        if (Double.isNaN(multiplier) || multiplier < 1.0 || Double.isInfinite(multiplier)) {
+            throw ErrorCode.invalidValue(POLICY, "multiplier must be a finite number >= 1, was " + multiplier);
         }
         if (maxDelay.compareTo(delay) < 0) {
-            throw ErrorCode.invalidValue("retry", "maxDelay (" + maxDelay + ") must not be shorter than delay (" + delay + ")");
+            throw ErrorCode.invalidValue(POLICY, "maxDelay (" + maxDelay + ") must not be shorter than delay (" + delay + ")");
         }
         if (maxDuration.isNegative()) {
-            throw ErrorCode.invalidValue("retry", "maxDuration must not be negative, was " + maxDuration);
+            throw ErrorCode.invalidValue(POLICY, "maxDuration must not be negative, was " + maxDuration);
         }
-        if (!(budgetPercent >= 0) || Double.isInfinite(budgetPercent)) {
-            throw ErrorCode.invalidValue("retry", "budgetPercent must be a finite number >= 0, was " + budgetPercent);
+        if (Double.isNaN(budgetPercent) || budgetPercent < 0 || Double.isInfinite(budgetPercent)) {
+            throw ErrorCode.invalidValue(POLICY, "budgetPercent must be a finite number >= 0, was " + budgetPercent);
         }
         if (budgetMinRetriesPerSecond < 0) {
-            throw ErrorCode.invalidValue("retry", "budgetMinRetriesPerSecond must not be negative, was "
+            throw ErrorCode.invalidValue(POLICY, "budgetMinRetriesPerSecond must not be negative, was "
                     + budgetMinRetriesPerSecond);
         }
         if (budgetWindow.compareTo(Duration.ofSeconds(1)) < 0 || budgetWindow.compareTo(MAX_BUDGET_WINDOW) > 0) {
-            throw ErrorCode.invalidValue("retry", "budgetWindow must be between 1s and 1h, was " + budgetWindow);
+            throw ErrorCode.invalidValue(POLICY, "budgetWindow must be between 1s and 1h, was " + budgetWindow);
         }
     }
 

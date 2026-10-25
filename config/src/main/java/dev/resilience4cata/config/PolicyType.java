@@ -28,6 +28,8 @@ final class PolicyType<B, C> {
     /** Starts the message of a value rejected by a core {@code *Config} (code R4C-REG-001). */
     private static final Pattern INVALID_VALUE_PREFIX = Pattern.compile("^\\[R4C-REG-001\\] Invalid \\w+ config: ");
 
+    private static final String ENABLED = "enabled";
+
     /** Registers a named configuration overlay or per-instance overrides. */
     interface NamedRegistrar<B> {
         void register(ResilienceRegistry.Builder registry, String name, Consumer<B> config);
@@ -37,7 +39,7 @@ final class PolicyType<B, C> {
             RetryConfig.DEFAULTS, RetryConfig::toBuilder, RetryConfig.Builder::build,
             ResilienceRegistry.Builder::retryDefaults, ResilienceRegistry.Builder::retryOverlay,
             ResilienceRegistry.Builder::retryInstance, List.of(
-                    Attribute.bool("enabled", RetryConfig.Builder::enabled),
+                    Attribute.bool(ENABLED, RetryConfig.Builder::enabled),
                     Attribute.integer("maxAttempts", RetryConfig.Builder::maxAttempts),
                     Attribute.duration("delay", RetryConfig.Builder::delay),
                     Attribute.enumeration("backoff", RetryConfig.Backoff.class, RetryConfig.Builder::backoff),
@@ -56,7 +58,7 @@ final class PolicyType<B, C> {
             CircuitBreakerConfig.Builder::build, ResilienceRegistry.Builder::circuitBreakerDefaults,
             ResilienceRegistry.Builder::circuitBreakerOverlay,
             ResilienceRegistry.Builder::circuitBreakerInstance, List.of(
-                    Attribute.bool("enabled", CircuitBreakerConfig.Builder::enabled),
+                    Attribute.bool(ENABLED, CircuitBreakerConfig.Builder::enabled),
                     Attribute.enumeration("windowType", CircuitBreakerConfig.WindowType.class,
                             CircuitBreakerConfig.Builder::windowType),
                     Attribute.integer("windowSize", CircuitBreakerConfig.Builder::windowSize),
@@ -74,14 +76,14 @@ final class PolicyType<B, C> {
             TimeoutConfig.DEFAULTS, TimeoutConfig::toBuilder, TimeoutConfig.Builder::build,
             ResilienceRegistry.Builder::timeoutDefaults, ResilienceRegistry.Builder::timeoutOverlay,
             ResilienceRegistry.Builder::timeoutInstance, List.of(
-                    Attribute.bool("enabled", TimeoutConfig.Builder::enabled),
+                    Attribute.bool(ENABLED, TimeoutConfig.Builder::enabled),
                     Attribute.duration("value", "timeout", TimeoutConfig.Builder::timeout)));
 
     static final PolicyType<BulkheadConfig.Builder, BulkheadConfig> BULKHEAD = new PolicyType<>("bulkhead",
             BulkheadConfig.DEFAULTS, BulkheadConfig::toBuilder, BulkheadConfig.Builder::build,
             ResilienceRegistry.Builder::bulkheadDefaults, ResilienceRegistry.Builder::bulkheadOverlay,
             ResilienceRegistry.Builder::bulkheadInstance, List.of(
-                    Attribute.bool("enabled", BulkheadConfig.Builder::enabled),
+                    Attribute.bool(ENABLED, BulkheadConfig.Builder::enabled),
                     Attribute.integer("maxConcurrent", BulkheadConfig.Builder::maxConcurrent),
                     Attribute.duration("maxWait", BulkheadConfig.Builder::maxWait)));
 
@@ -89,7 +91,7 @@ final class PolicyType<B, C> {
             "rateLimiter", RateLimiterConfig.DEFAULTS, RateLimiterConfig::toBuilder, RateLimiterConfig.Builder::build,
             ResilienceRegistry.Builder::rateLimiterDefaults, ResilienceRegistry.Builder::rateLimiterOverlay,
             ResilienceRegistry.Builder::rateLimiterInstance, List.of(
-                    Attribute.bool("enabled", RateLimiterConfig.Builder::enabled),
+                    Attribute.bool(ENABLED, RateLimiterConfig.Builder::enabled),
                     Attribute.integer("permits", RateLimiterConfig.Builder::permits),
                     Attribute.duration("period", RateLimiterConfig.Builder::period),
                     Attribute.duration("maxWait", RateLimiterConfig.Builder::maxWait)));
@@ -106,6 +108,7 @@ final class PolicyType<B, C> {
     private final NamedRegistrar<B> instanceRegistrar;
     final Map<String, Attribute<B>> attributes = new LinkedHashMap<>();
 
+    @SuppressWarnings("java:S107") // java:S107: one descriptor per policy, built once in the constants above
     private PolicyType(String name, C builtIn, Function<C, B> toBuilder, Function<B, C> build,
             BiConsumer<ResilienceRegistry.Builder, Consumer<B>> defaultsRegistrar, NamedRegistrar<B> namedRegistrar,
             NamedRegistrar<B> instanceRegistrar, List<Attribute<B>> attributes) {
@@ -121,6 +124,7 @@ final class PolicyType<B, C> {
         }
     }
 
+    @SuppressWarnings("java:S1452") // java:S1452: the policies have different builder and config types
     static @Nullable PolicyType<?, ?> find(String segment) {
         String normalized = Suggestions.normalize(segment);
         for (PolicyType<?, ?> policy : ALL) {

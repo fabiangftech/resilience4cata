@@ -63,8 +63,7 @@ class PoliciesPageTest {
 
         @Override
         public String retriedRejections(String id) {
-            calls.incrementAndGet();
-            return "ok";
+            return limited(id);
         }
 
         @Override

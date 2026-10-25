@@ -100,7 +100,7 @@ class RetryPageTest {
     }
 
     @Test
-    void exceptionListsAndTheTimeBudget() throws IOException {
+    void exceptionListsAndTheTimeBudget() {
         ManualClock clock = new ManualClock();
         List<RetryEvent.GaveUp> gaveUp = new CopyOnWriteArrayList<>();
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
@@ -198,7 +198,7 @@ class RetryPageTest {
     @Test
     void aFixedDelayAboveTheDefaultMaxDelayIsRejectedWhenWrapping() {
         ResilienceRegistry registry = ResilienceRegistry.builder().build();
-        assertThatThrownBy(() -> Resilient.of(SlowPoller.class, new SlowPoller() {
+        SlowPoller poller = new SlowPoller() {
             @Override
             public String poll(String id) {
                 return id;
@@ -208,15 +208,16 @@ class RetryPageTest {
             public String pollFixed(String id) {
                 return id;
             }
-        }, registry)).isInstanceOf(IllegalArgumentException.class)
+        };
+        assertThatThrownBy(() -> Resilient.of(SlowPoller.class, poller, registry)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("R4C-REG-003").hasMessageContaining("maxDelay");
     }
 
     @Test
     void longFixedDelaysNeedAMaxDelay() {
         ResilienceRegistry.Builder builder = ResilienceRegistry.builder();
-        assertThatThrownBy(() -> builder.retryDefaults(r -> r.backoff(RetryConfig.Backoff.FIXED)
-                .delay(Duration.ofSeconds(20))).build())
+        builder.retryDefaults(r -> r.backoff(RetryConfig.Backoff.FIXED).delay(Duration.ofSeconds(20)));
+        assertThatThrownBy(builder::build)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxDelay");
     }

@@ -23,6 +23,8 @@ class TroubleshootingGuideTest {
         assertThat(retried.price("a")).isEqualTo(10); // through the wrapper: retried
     }
 
+    // java:S5778: the lambda holds a documentation snippet; only its last call is expected to throw
+    @SuppressWarnings("java:S5778")
     @Test
     void verifyInstancesReportsOverridesThatMatchNothing() {
         Properties properties = new Properties();

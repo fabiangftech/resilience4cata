@@ -72,6 +72,8 @@ public class ClassOrderService implements ClassOrderApi {
         throw new IllegalStateException("inventory down");
     }
 
+    // java:S2925: the call must really block so that the timeout interrupts it
+    @SuppressWarnings("java:S2925")
     @Timeout("50ms")
     public String slow(String id) {
         try {

@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -84,6 +85,17 @@ class ResilienceConfigTest {
                 defaults.timeout.enabled=false
                 """).build().toRegistry();
 
+        assertExternalRetry(registry);
+        assertExternalCircuitBreaker(registry);
+        assertThat(registry.timeoutConfig("external")).isEqualTo(new TimeoutConfig(false, Duration.ofSeconds(3)));
+        assertThat(registry.timeoutConfig("")).isEqualTo(new TimeoutConfig(false, TimeoutConfig.DEFAULTS.timeout()));
+        assertThat(registry.bulkheadConfig("external")).isEqualTo(new BulkheadConfig(true, 7, Duration.ofMillis(50)));
+        assertThat(registry.rateLimiterConfig("external"))
+                .isEqualTo(new RateLimiterConfig(true, 100, Duration.ofMinutes(1), Duration.ZERO));
+        assertThat(registry.bulkheadConfig("default")).isEqualTo(BulkheadConfig.DEFAULTS);
+    }
+
+    private static void assertExternalRetry(ResilienceRegistry registry) {
         RetryConfig retry = registry.retryConfig("external");
         assertThat(retry.maxAttempts()).isEqualTo(4);
         assertThat(retry.jitter()).isEqualTo(RetryConfig.Jitter.NONE);
@@ -95,7 +107,9 @@ class ResilienceConfigTest {
         assertThat(retry.multiplier()).isEqualTo(1.5);
         assertThat(retry.maxDelay()).isEqualTo(Duration.ofSeconds(1));
         assertThat(registry.retryConfig("default").maxAttempts()).isEqualTo(4);
+    }
 
+    private static void assertExternalCircuitBreaker(ResilienceRegistry registry) {
         CircuitBreakerConfig cb = registry.circuitBreakerConfig("external");
         assertThat(cb.failureRateThreshold()).isEqualTo(50f);
         assertThat(cb.slowCallRateThreshold()).isEqualTo(75.5f);
@@ -108,13 +122,6 @@ class ResilienceConfigTest {
         assertThat(cb.maxWaitInHalfOpen()).isEqualTo(Duration.ofMinutes(1));
         assertThat(cb.recordOn()).containsExactly(IOException.class);
         assertThat(cb.ignoreOn()).containsExactly(Boom.class);
-
-        assertThat(registry.timeoutConfig("external")).isEqualTo(new TimeoutConfig(false, Duration.ofSeconds(3)));
-        assertThat(registry.timeoutConfig("")).isEqualTo(new TimeoutConfig(false, TimeoutConfig.DEFAULTS.timeout()));
-        assertThat(registry.bulkheadConfig("external")).isEqualTo(new BulkheadConfig(true, 7, Duration.ofMillis(50)));
-        assertThat(registry.rateLimiterConfig("external"))
-                .isEqualTo(new RateLimiterConfig(true, 100, Duration.ofMinutes(1), Duration.ZERO));
-        assertThat(registry.bulkheadConfig("default")).isEqualTo(BulkheadConfig.DEFAULTS);
     }
 
     @Test
@@ -343,8 +350,11 @@ class ResilienceConfigTest {
     @Test
     void sourcePrecedenceIsClasspathFileEnvironmentSystemProperties(@TempDir Path dir) throws IOException {
         Path file = dir.resolve("app.properties");
-        Files.writeString(file, "configs.external.retry.maxAttempts=2\nconfigs.external.retry.delay=2ms\n"
-                + "configs.external.timeout.value=2s\n");
+        Files.writeString(file, """
+                configs.external.retry.maxAttempts=2
+                configs.external.retry.delay=2ms
+                configs.external.timeout.value=2s
+                """);
         Properties system = new Properties();
         system.setProperty("r4c.configs.external.retry.maxAttempts", "4");
         system.setProperty("unrelated.property", "ignored");
@@ -644,7 +654,8 @@ class ResilienceConfigTest {
         ResilienceRegistry second = config.toRegistry();
         assertThat(first.retryConfig("").maxAttempts()).isEqualTo(2);
         assertThat(second.retryConfig("")).isEqualTo(first.retryConfig(""));
-        assertThatThrownBy(() -> config.configNames().add("x")).isInstanceOf(UnsupportedOperationException.class);
+        Set<String> names = config.configNames();
+        assertThatThrownBy(() -> names.add("x")).isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test

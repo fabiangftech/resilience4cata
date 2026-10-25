@@ -24,6 +24,7 @@ public class ClassCombinedService {
     int calls;
 
     public ClassCombinedService() {
+        // explicit, so that the generated subclass has a constructor to mirror
     }
 
     private Object next() throws IOException {
@@ -41,6 +42,8 @@ public class ClassCombinedService {
         return type.cast(next());
     }
 
+    // java:S1172: a fallback mirrors the protected method's parameters, then takes the failure, which selects it by type
+    @SuppressWarnings("java:S1172")
     protected <U> U load(Class<U> type, String id, IOException e) {
         return type.cast("fallback " + id);
     }
@@ -60,6 +63,8 @@ public class ClassCombinedService {
         return (String) next();
     }
 
+    // java:S1172: a fallback mirrors the protected method's parameters, then takes the failure, which selects it by type
+    @SuppressWarnings("java:S1172")
     protected String status(String id, ResultRejectedException e) {
         return "rejected after " + e.attempts();
     }

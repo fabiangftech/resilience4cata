@@ -78,7 +78,8 @@ class OpenTelemetryMetricsTest {
                 .circuitBreaker(cb -> cb.windowSize(2).minimumCalls(2).slowCallDuration(Duration.ofSeconds(1)))
                 .build();
 
-        assertThatThrownBy(() -> pipeline.execute(() -> { throw new IllegalStateException(); }));
+        assertThatThrownBy(() -> pipeline.execute(() -> { throw new IllegalStateException(); }))
+                .isInstanceOf(IllegalStateException.class);
         collect();
         assertThat(gauge("r4c.circuitbreaker.state", attrs("instance", "inventory", "state", "closed"))).contains(1.0);
         // one call in a window of minimumCalls = 2: no rate yet (NaN is not a valid point)
@@ -88,7 +89,7 @@ class OpenTelemetryMetricsTest {
         assertThatThrownBy(() -> pipeline.execute(() -> {
             clock.advance(Duration.ofSeconds(2)); // slow, and a failure
             throw new IllegalStateException();
-        }));
+        })).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> pipeline.execute(() -> "never runs")).isInstanceOf(CallNotPermittedException.class);
 
         collect();
@@ -122,7 +123,8 @@ class OpenTelemetryMetricsTest {
             clock.advance(Duration.ofSeconds(2));
             return "slow";
         });
-        assertThatThrownBy(() -> pipeline.execute(() -> { throw new IllegalStateException(); }));
+        assertThatThrownBy(() -> pipeline.execute(() -> { throw new IllegalStateException(); }))
+                .isInstanceOf(IllegalStateException.class);
         pipeline.execute(() -> "fast");
         collect();
         assertThat(gauge("r4c.circuitbreaker.failure.rate", instance("search"))).isEmpty(); // 3 calls of 4
@@ -197,7 +199,7 @@ class OpenTelemetryMetricsTest {
     }
 
     @Test
-    void instancesCreatedAfterBindingAreReportedAtTheNextCollection() throws Exception {
+    void instancesCreatedAfterBindingAreReportedAtTheNextCollection() {
         ResilienceRegistry registry = metrics.register(ResilienceTesting.registry(clock)).build();
         metrics.bindTo(registry);
         collect();
@@ -273,7 +275,7 @@ class OpenTelemetryMetricsTest {
 
     @Test
     void attributeSetsAreBuiltOnceAndReused() {
-        assertThat(metrics.instance("payments")).isSameAs(metrics.instance("payments"));
+        assertThat(metrics.attributes("payments")).isSameAs(metrics.attributes("payments"));
     }
 
     // --- collection helpers

@@ -203,7 +203,8 @@ class CircuitBreakerPageTest {
             }
         }, registry);
         for (int i = 0; i < 4; i++) {
-            assertThatThrownBy(() -> ledger.balanceAsync("a").join()).isInstanceOf(CompletionException.class)
+            CompletableFuture<Long> failed = ledger.balanceAsync("a");
+            assertThatThrownBy(failed::join).isInstanceOf(CompletionException.class)
                     .hasCauseInstanceOf(IllegalStateException.class);
         }
         CompletableFuture<Long> rejected = ledger.balanceAsync("a");
