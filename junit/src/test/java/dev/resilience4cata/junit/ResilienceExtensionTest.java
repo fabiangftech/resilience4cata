@@ -114,6 +114,7 @@ class ResilienceExtensionTest {
         // JUnit 5 wraps it in a ParameterResolutionException, JUnit 6 does not
         Throwable cause = failure instanceof ExtensionConfigurationException ? failure : failure.getCause();
         assertThat(cause).isInstanceOf(ExtensionConfigurationException.class)
+                .hasMessageStartingWith("[R4C-JU-002] ")
                 .hasMessageContaining("configure(dev.resilience4cata.ResilienceRegistry$Builder)")
                 .hasMessageContaining("must be a non-private void method with one ResilienceRegistry.Builder parameter");
     }
@@ -123,6 +124,7 @@ class ResilienceExtensionTest {
         Throwable failure = onlyFailure(run(selectClass(Fixtures.ConstructorInjection.class)).testEvents());
 
         assertThat(failure).isInstanceOf(ParameterResolutionException.class)
+                .hasMessageStartingWith("[R4C-JU-001] ")
                 .hasMessageContaining("cannot inject ManualClock")
                 .hasMessageContaining("take them as parameters of the test method or of a @BeforeEach method");
     }
@@ -140,7 +142,7 @@ class ResilienceExtensionTest {
                 ManualClock.class.getName())).testEvents());
 
         assertThat(failure).isInstanceOf(AssertionError.class)
-                .hasMessageStartingWith("The test ended with 1 task(s) still pending on its clock")
+                .hasMessageStartingWith("[R4C-JU-003] The test ended with 1 task(s) still pending on its clock")
                 .hasMessageContaining("pending task delays (ns)=[1000000000]")
                 .hasMessageContaining("clock.advanceUntilIdle()");
     }

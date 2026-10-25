@@ -186,11 +186,11 @@ public final class MicrometerMetrics implements AutoCloseable {
                     breaker.id(), breaker, b -> b.state() == state ? 1 : 0, null, "state", lower(state));
         }
         gauge("r4c.circuitbreaker.failure.rate",
-                "Failure rate of the circuit breaker's window; NaN until it holds minimumCalls calls",
+                "Failure rate of the circuit breaker's window, in percent; no value until it holds minimumCalls calls",
                 breaker.id(), breaker, b -> percent(b.snapshot().failureRate()), "percent");
         gauge("r4c.circuitbreaker.slow.call.rate",
-                "Slow call rate of the circuit breaker's window; NaN until it holds minimumCalls calls,"
-                        + " or without slow-call detection",
+                "Slow call rate of the circuit breaker's window, in percent; no value until it holds minimumCalls"
+                        + " calls, or without slow-call detection",
                 breaker.id(), breaker, b -> percent(b.snapshot().slowCallRate()), "percent");
     }
 

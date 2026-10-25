@@ -4,7 +4,7 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
-## [Unreleased] :id=unreleased
+## [0.3.0] - 2026-10-25 :id=0.3.0
 
 ### Agregado
 
@@ -14,6 +14,8 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y 
 - **`resilience4cata-micrometer`**: [métricas de Micrometer](guides/micrometer.md) en tres líneas (`MicrometerMetrics.create(meterRegistry)`, `register(builder)`, `bindTo(registry)`): counters a partir de eventos (rechazos, transiciones del breaker, reintentos, abandonos, timeouts, fallbacks) y gauges para cada circuit breaker, bulkhead y rate limiter, incluidas las instancias creadas después de conectar. Reemplaza la receta escrita a mano de la guía de observabilidad.
 - `ResilienceRegistry.onInstanceCreated(Runnable)`: ejecuta una acción una vez por cada instancia de política nueva (al envolver un servicio o construir un pipeline, nunca durante una llamada), para que los puentes de métricas registren meters para instancias creadas después ([Observabilidad](guides/observability.md#diy)).
 - **Presupuesto de reintentos** para `@Retry`, `RetryConfig` y `Pipeline`: `budgetPercent`, `budgetMinRetriesPerSecond` y `budgetWindow` limitan los reintentos de una instancia de retry, compartidos por todos sus llamadores, a una reserva por segundo más un porcentaje de sus llamadas en la ventana, para que una caída no multiplique la carga sobre la dependencia que falla. `budgetPercent` lo activa, con una reserva por defecto de 10 reintentos por segundo. Apagado por defecto; sin él, el código generado y el camino de éxito no cambian. Un reintento rechazado publica `RetryEvent.GaveUp` con la nueva razón `BUDGET_EXHAUSTED`; `RetrySnapshot.budget()` muestra la ventana. Claves `defaults.retry.budget…` (y `configs.…`, `instances.…`, variables de entorno); nuevo error del procesador [R4C-ATR-007](errors.md#r4c-atr-007). [Presupuesto de reintentos](policies/retry.md#presupuesto-de-reintentos)
+- Códigos de error para los módulos de pruebas: `R4C-TK-001`…`003` (`ManualClock`, `ResilienceTesting`) y `R4C-JU-001`…`003` (la extensión de JUnit), cada uno documentado en la [referencia de errores](errors.md#pruebas-testkit-r4c-tk) con su corrección.
+- Los módulos de Micrometer y OpenTelemetry dan a cada métrica la misma descripción (el texto `# HELP` de Prometheus), comprobado por un test.
 
 ## [0.2.0] - 2026-10-25 :id=0.2.0
 

@@ -98,7 +98,8 @@ public final class ManualClock implements Ticker {
      */
     public void advance(long nanos) {
         if (nanos < 0) {
-            throw new IllegalArgumentException("A clock cannot move backwards: " + nanos + " ns");
+            throw new IllegalArgumentException(ErrorCode.CLOCK_BACKWARDS.prefix() + "A clock cannot move backwards: advance(" + nanos
+                    + " ns). Pass a duration of zero or more; to start a test at another time, create the clock with that time");
         }
         advanceTo(now + nanos);
     }
@@ -127,7 +128,9 @@ public final class ManualClock implements Ticker {
             }
             advanceTo(next - now > 0 ? next : now);
         }
-        throw new IllegalStateException("Tasks keep scheduling new tasks: gave up after " + MAX_IDLE_TASKS);
+        throw new IllegalStateException(ErrorCode.NEVER_IDLE.prefix() + "Tasks keep scheduling new tasks: gave up after "
+                + MAX_IDLE_TASKS + " in a row. Something reschedules itself forever (for example a retry with no maxAttempts or"
+                + " maxDuration limit that keeps failing); advance to a fixed time with advance(...) instead");
     }
 
     /**

@@ -47,7 +47,7 @@ public final class ResilienceExtension implements ParameterResolver, AfterEachCa
     @Override
     public Object resolveParameter(ParameterContext parameter, ExtensionContext context) {
         if (context.getTestMethod().isEmpty() || context.getTestInstance().isEmpty()) {
-            throw new ParameterResolutionException("ResilienceExtension cannot inject " + parameter.getParameter().getType().getSimpleName()
+            throw new ParameterResolutionException(ErrorCode.NOT_PER_TEST.prefix() + "ResilienceExtension cannot inject " + parameter.getParameter().getType().getSimpleName()
                     + " into " + parameter.getDeclaringExecutable() + ": the clock and the registry are created for each test,"
                     + " so take them as parameters of the test method or of a @BeforeEach method instead of a constructor or a @BeforeAll method");
         }
@@ -63,7 +63,7 @@ public final class ResilienceExtension implements ParameterResolver, AfterEachCa
         }
         int pending = state.clock.pendingTasks();
         if (pending > 0) {
-            throw new AssertionError("The test ended with " + pending + " task(s) still pending on its clock (" + state.clock
+            throw new AssertionError(ErrorCode.PENDING_TASKS.prefix() + "The test ended with " + pending + " task(s) still pending on its clock (" + state.clock
                     + "): an async retry, wait or timeout never ran. Advance the clock past them, for instance with"
                     + " clock.advanceUntilIdle(), or set @ResilienceTest(failOnPendingTasks = false)");
         }
@@ -131,7 +131,7 @@ public final class ResilienceExtension implements ParameterResolver, AfterEachCa
                 if (method.getReturnType() != void.class || method.getParameterCount() != 1
                         || method.getParameterTypes()[0] != ResilienceRegistry.Builder.class
                         || Modifier.isPrivate(method.getModifiers())) {
-                    throw new ExtensionConfigurationException("@ConfigureRegistry method " + method
+                    throw new ExtensionConfigurationException(ErrorCode.BAD_CONFIGURE_METHOD.prefix() + "@ConfigureRegistry method " + method
                             + " must be a non-private void method with one ResilienceRegistry.Builder parameter, for example"
                             + " 'void configure(ResilienceRegistry.Builder builder)'");
                 }

@@ -128,12 +128,12 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
 
     private OpenTelemetryMetrics(Meter meter) {
         this.meter = meter;
-        rejected = counter(CALLS_REJECTED, "{call}", "Calls rejected by a circuit breaker, rate limiter or bulkhead.");
-        transitions = counter(TRANSITIONS, "{transition}", "Circuit breaker state changes.");
-        retries = counter(RETRIES, "{retry}", "Retries scheduled after a failed attempt.");
-        gaveUp = counter(GAVE_UP, "{call}", "Retries that stopped without a success, by reason.");
-        timedOut = counter(TIMED_OUT, "{call}", "Calls that timed out.");
-        fallbacks = counter(FALLBACK_APPLIED, "{call}", "Fallbacks applied.");
+        rejected = counter(CALLS_REJECTED, "{call}", "Calls rejected by a circuit breaker, rate limiter or bulkhead");
+        transitions = counter(TRANSITIONS, "{transition}", "Circuit breaker state changes");
+        retries = counter(RETRIES, "{retry}", "Attempts that failed and will be retried");
+        gaveUp = counter(GAVE_UP, "{call}", "Retries that stopped without a success, by reason");
+        timedOut = counter(TIMED_OUT, "{call}", "Calls that timed out");
+        fallbacks = counter(FALLBACK_APPLIED, "{call}", "Failures answered by a fallback");
     }
 
     /**
@@ -186,17 +186,18 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     public void bindTo(ResilienceRegistry registry) {
         Objects.requireNonNull(registry, "registry");
         ObservableLongMeasurement state = meter.gaugeBuilder(STATE).ofLongs()
-                .setDescription("1 for the circuit breaker's current state, 0 for the others.").buildObserver();
+                .setDescription("1 for the circuit breaker's current state, 0 for the others").buildObserver();
         ObservableDoubleMeasurement failureRate = meter.gaugeBuilder(FAILURE_RATE).setUnit("%")
-                .setDescription("Failure rate in the circuit breaker's window; absent until it holds minimumCalls calls.")
+                .setDescription("Failure rate of the circuit breaker's window, in percent; no value until it holds minimumCalls calls")
                 .buildObserver();
         ObservableDoubleMeasurement slowCallRate = meter.gaugeBuilder(SLOW_CALL_RATE).setUnit("%")
-                .setDescription("Slow-call rate in the circuit breaker's window; absent until it holds minimumCalls calls.")
+                .setDescription("Slow call rate of the circuit breaker's window, in percent; no value until it holds minimumCalls"
+                        + " calls, or without slow-call detection")
                 .buildObserver();
-        ObservableLongMeasurement concurrent = longGauge(CONCURRENT_CALLS, "{call}", "Calls inside the bulkhead.");
-        ObservableLongMeasurement waiting = longGauge(WAITING_CALLS, "{call}", "Calls waiting for a bulkhead slot.");
-        ObservableLongMeasurement maxConcurrent = longGauge(MAX_CONCURRENT, "{call}", "The bulkhead's maxConcurrent.");
-        ObservableLongMeasurement permits = longGauge(AVAILABLE_PERMITS, "{permit}", "Permits the rate limiter would grant now.");
+        ObservableLongMeasurement concurrent = longGauge(CONCURRENT_CALLS, "{call}", "Calls running in the bulkhead");
+        ObservableLongMeasurement waiting = longGauge(WAITING_CALLS, "{call}", "Calls waiting for a place in the bulkhead");
+        ObservableLongMeasurement maxConcurrent = longGauge(MAX_CONCURRENT, "{call}", "The bulkhead's maxConcurrent");
+        ObservableLongMeasurement permits = longGauge(AVAILABLE_PERMITS, "{permit}", "Permits the rate limiter can grant now");
         Runnable observe = () -> {
             ResilienceSnapshot snapshot = registry.snapshot();
             for (CircuitBreakerSnapshot breaker : snapshot.circuitBreakers()) {

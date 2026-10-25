@@ -15,6 +15,8 @@ dependencies {
 // The fixtures are run by the tests through EngineTestKit, never directly.
 tasks.withType(Test).configureEach {
     exclude 'dev/resilience4cata/junit/fixtures/**'
+    // ErrorCodeTest reads the error reference pages.
+    inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // `test` runs on the build's JUnit (6.x); `minimumJUnitTest` runs the same tests on the oldest supported JUnit.

@@ -62,7 +62,9 @@ public final class ResilienceTesting {
     public static void elapseWaitInOpen(CircuitBreakerHandle breaker, ManualClock clock) {
         CircuitBreakerState state = breaker.state();
         if (state != CircuitBreakerState.OPEN) {
-            throw new IllegalStateException("Breaker '" + breaker.id() + "' is " + state + ", not OPEN");
+            throw new IllegalStateException(ErrorCode.BREAKER_NOT_OPEN.prefix() + "Breaker '" + breaker.id() + "' is " + state
+                    + ", not OPEN: elapseWaitInOpen only makes sense once it opened. Check that the failures reached"
+                    + " minimumCalls and failureRateThreshold, or force it with breaker.forceOpen() if that is what the test means");
         }
         clock.advance(breaker.config().waitInOpen());
     }

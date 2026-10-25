@@ -4,7 +4,7 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
-## [Unreleased] :id=unreleased
+## [0.3.0] - 2026-10-25 :id=0.3.0
 
 ### Added
 
@@ -14,6 +14,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **`resilience4cata-micrometer`**: [Micrometer metrics](guides/micrometer.md) in three lines (`MicrometerMetrics.create(meterRegistry)`, `register(builder)`, `bindTo(registry)`): counters from events (rejections, breaker transitions, retries, give-ups, timeouts, fallbacks) and gauges for every circuit breaker, bulkhead and rate limiter, including instances created after binding. Replaces the hand-written recipe of the observability guide.
 - `ResilienceRegistry.onInstanceCreated(Runnable)`: runs an action once per new policy instance (when a service is wrapped or a pipeline is built, never during a call), so that metrics bridges can register meters for instances created later ([Observability](guides/observability.md#diy)).
 - **Retry budget** for `@Retry`, `RetryConfig` and `Pipeline`: `budgetPercent`, `budgetMinRetriesPerSecond` and `budgetWindow` cap the retries of one retry instance, shared by all its callers, at a reserve per second plus a percentage of its calls in the window, so that an outage does not multiply the load on the failing dependency. `budgetPercent` turns it on, with a default reserve of 10 retries per second. Off by default; without it, generated code and the success path are unchanged. A refused retry publishes `RetryEvent.GaveUp` with the new reason `BUDGET_EXHAUSTED`; `RetrySnapshot.budget()` shows the window. Config keys `defaults.retry.budget…` (and `configs.…`, `instances.…`, environment variables); new processor error [R4C-ATR-007](errors.md#r4c-atr-007). [Retry budget](policies/retry.md#retry-budget)
+- Error codes for the test modules: `R4C-TK-001`…`003` (`ManualClock`, `ResilienceTesting`) and `R4C-JU-001`…`003` (the JUnit extension), each documented in the [error reference](errors.md#tests-testkit-r4c-tk) with its fix.
+- The Micrometer and OpenTelemetry modules give every metric the same description (Prometheus `# HELP` text), checked by a test.
 
 ## [0.2.0] - 2026-10-25 :id=0.2.0
 

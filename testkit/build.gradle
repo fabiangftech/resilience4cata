@@ -8,3 +8,8 @@ description = 'Test support: a manual clock for retries, breakers, rate limiters
 dependencies {
     api project(':core')
 }
+
+// ErrorCodeTest reads the error reference pages.
+tasks.named('test') {
+    inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
+}

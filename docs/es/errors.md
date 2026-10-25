@@ -22,6 +22,8 @@ y cómo corregirlo. Los mensajes están en inglés.
 | `R4C-RT` | `resilience4cata-core` en ejecución | `Resilient.of`, `Resilient.create`, `Pipeline.Builder` |
 | `R4C-REG` | `resilience4cata-core` en ejecución | builders `*Config`, `ResilienceRegistry` y su builder: configuraciones con nombre, instancias |
 | `R4C-CFG` | `resilience4cata-config` en ejecución | configuración externa (`ResilienceConfig`) |
+| `R4C-TK` | `resilience4cata-testkit` en las pruebas | `ManualClock`, `ResilienceTesting` |
+| `R4C-JU` | `resilience4cata-junit` en las pruebas | la extensión de JUnit (`@ResilienceTest`) |
 
 Los códigos son estables: nunca se renumeran ni cambian de significado. Un error nuevo recibe el siguiente
 número libre de su área; un error que ya no se reporta conserva su código, marcado abajo como retirado.
@@ -2496,3 +2498,61 @@ solo existen una vez envueltos los servicios). El mensaje sugiere el id más par
 
 **Corrección:** usa un id de instancia existente: el `name` de la política, o
 `<interface>#<method>(<parameter types>)` si no tiene.
+
+## Pruebas: testkit (R4C-TK)
+
+`ManualClock` y `ResilienceTesting` reportan un mal uso en las pruebas con estos códigos.
+
+### R4C-TK-001
+
+**Causa:** `ManualClock.advance(…)` con una duración negativa (`IllegalArgumentException`). Un reloj solo
+avanza.
+
+**Corrección:** pasa una duración de cero o más. Para empezar una prueba en otro momento, crea el reloj con
+ese tiempo: `new ManualClock(startNanos)`, o `@ResilienceTest(startNanos = …)` con la extensión de JUnit.
+
+### R4C-TK-002
+
+**Causa:** `ManualClock.advanceUntilIdle()` se rindió después de 100.000 tareas seguidas
+(`IllegalStateException`): cada tarea que ejecutó programó otra, así que el reloj nunca quedaría libre.
+Normalmente es un retry que sigue fallando sin límite de tiempo, o un helper de prueba que se reprograma solo.
+
+**Corrección:** avanza a un tiempo fijo con `clock.advance(…)`, o dale un límite al retry (`maxAttempts`,
+`maxDuration`) para que las tareas terminen.
+
+### R4C-TK-003
+
+**Causa:** `ResilienceTesting.elapseWaitInOpen(breaker, clock)` sobre un circuit breaker que no está
+`OPEN` (`IllegalStateException`); el mensaje dice en qué estado está.
+
+**Corrección:** llámalo cuando el breaker ya se abrió: comprueba que los fallos registrados alcancen
+`minimumCalls` y `failureRateThreshold`. Para probar el estado abierto sin fallos, usa `breaker.forceOpen()`.
+
+## Pruebas: extensión de JUnit (R4C-JU)
+
+`@ResilienceTest` (`ResilienceExtension`) reporta un mal uso con estos códigos; JUnit los muestra como el fallo
+de la prueba o de la clase.
+
+### R4C-JU-001
+
+**Causa:** un parámetro `ManualClock` o `ResilienceRegistry` en un constructor o en un método `@BeforeAll`
+(`ParameterResolutionException`). La extensión crea un reloj y un registry nuevos para cada prueba, así que no
+hay ninguno antes de que empiece la primera.
+
+**Corrección:** recíbelos como parámetros del método de prueba o de un método `@BeforeEach`.
+
+### R4C-JU-002
+
+**Causa:** un método `@ConfigureRegistry` con otra firma (`ExtensionConfigurationException`; JUnit 5 lo
+envuelve en una `ParameterResolutionException`).
+
+**Corrección:** que sea un método `void` no privado con un parámetro `ResilienceRegistry.Builder`, estático o
+no: `void configure(ResilienceRegistry.Builder builder)`.
+
+### R4C-JU-003
+
+**Causa:** con `@ResilienceTest(failOnPendingTasks = true)`, una prueba pasó pero dejó tareas en su reloj
+(`AssertionError`): un retry, una espera o un timeout async que nunca se ejecutó. El mensaje lista sus plazos.
+
+**Corrección:** avanza el reloj más allá de ellas (`clock.advanceUntilIdle()`, o `clock.advance(…)` lo
+suficiente), o pon `failOnPendingTasks = false` si dejarlas es intencional.

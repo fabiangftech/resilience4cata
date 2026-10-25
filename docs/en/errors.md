@@ -22,6 +22,8 @@ and how to fix it.
 | `R4C-RT` | `resilience4cata-core` at run time | `Resilient.of`, `Resilient.create`, `Pipeline.Builder` |
 | `R4C-REG` | `resilience4cata-core` at run time | `*Config` builders, `ResilienceRegistry` and its builder: named configs, instances |
 | `R4C-CFG` | `resilience4cata-config` at run time | external configuration (`ResilienceConfig`) |
+| `R4C-TK` | `resilience4cata-testkit` in tests | `ManualClock`, `ResilienceTesting` |
+| `R4C-JU` | `resilience4cata-junit` in tests | the JUnit extension (`@ResilienceTest`) |
 
 Codes are stable: a code is never renumbered or given a new meaning. A new error gets the next free number of
 its area; an error that is no longer reported keeps its code, marked as retired below.
@@ -2482,3 +2484,61 @@ services are wrapped). The message suggests the closest id.
 
 **Fix:** use an existing instance id: the policy's `name`, or `<interface>#<method>(<parameter types>)` when
 it has none.
+
+## Tests: testkit (R4C-TK)
+
+`ManualClock` and `ResilienceTesting` report misuse in tests with these codes.
+
+### R4C-TK-001
+
+**Trigger:** `ManualClock.advance(…)` with a negative duration (`IllegalArgumentException`). A clock only moves
+forward.
+
+**Fix:** pass a duration of zero or more. To start a test at another time, create the clock with that time:
+`new ManualClock(startNanos)`, or `@ResilienceTest(startNanos = …)` with the JUnit extension.
+
+### R4C-TK-002
+
+**Trigger:** `ManualClock.advanceUntilIdle()` gave up after 100,000 tasks in a row
+(`IllegalStateException`): every task it ran scheduled another one, so the clock would never be idle. Usually a
+retry that keeps failing with no limit in time, or a test helper that reschedules itself.
+
+**Fix:** advance to a fixed time with `clock.advance(…)` instead, or give the retry a limit (`maxAttempts`,
+`maxDuration`) so that the tasks end.
+
+### R4C-TK-003
+
+**Trigger:** `ResilienceTesting.elapseWaitInOpen(breaker, clock)` on a circuit breaker that is not `OPEN`
+(`IllegalStateException`); the message says which state it is in.
+
+**Fix:** call it once the breaker opened: check that the failures recorded so far reach `minimumCalls` and
+`failureRateThreshold`. To test the open state without failures, use `breaker.forceOpen()`.
+
+## Tests: JUnit extension (R4C-JU)
+
+`@ResilienceTest` (`ResilienceExtension`) reports misuse with these codes; JUnit shows them as the failure of
+the test or class.
+
+### R4C-JU-001
+
+**Trigger:** a `ManualClock` or `ResilienceRegistry` parameter on a constructor or a `@BeforeAll` method
+(`ParameterResolutionException`). The extension creates a new clock and registry for each test, so there is
+none before the first test starts.
+
+**Fix:** take them as parameters of the test method or of a `@BeforeEach` method.
+
+### R4C-JU-002
+
+**Trigger:** a `@ConfigureRegistry` method with another signature (`ExtensionConfigurationException`; JUnit 5
+wraps it in a `ParameterResolutionException`).
+
+**Fix:** make it a non-private `void` method with one `ResilienceRegistry.Builder` parameter, static or not:
+`void configure(ResilienceRegistry.Builder builder)`.
+
+### R4C-JU-003
+
+**Trigger:** with `@ResilienceTest(failOnPendingTasks = true)`, a test passed but left tasks on its clock
+(`AssertionError`): an async retry, wait or timeout that never ran. The message lists their delays.
+
+**Fix:** advance the clock past them (`clock.advanceUntilIdle()`, or `clock.advance(…)` far enough), or set
+`failOnPendingTasks = false` if leaving them is intended.
