@@ -63,8 +63,9 @@ class ResilienceProcessorTest {
         assertThat(result.success()).isFalse();
         assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-ATR-001");
         assertThat(result.errors()).singleElement().asString()
-                .contains("@Retry.delay = \"2 seconds\" is not a valid duration")
-                .contains("\"250ms\"");
+                .contains("@Retry.delay = \"2 seconds\" is not a valid duration: unrecognized format. Use a number")
+                .contains("\"250ms\"")
+                .satisfies(e -> assertThat(e.split("a number followed by", -1)).as("the grammar is stated once").hasSize(2));
     }
 
     @Test

@@ -628,7 +628,7 @@ public final class ResilienceConfig {
                         String closest = Suggestions.closest(target, names);
                         problems.add(new ProblemException(ProblemException.BAD_EXTENDS, parent.origin()
                                 + " extends config '" + target + "', which is not defined in external configuration"
-                                + (closest == null ? "" : ". Did you mean '" + closest + "'?") + " Known configs: "
+                                + (closest == null ? "." : ". Did you mean '" + closest + "'?") + " Known configs: "
                                 + names));
                     }
                     return chain;

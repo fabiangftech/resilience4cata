@@ -34,7 +34,7 @@ class DurationsTest {
     @ValueSource(strings = {"", "2", "2 s", "2S", "-1s", "1.5s", "s", "2sec", "ms250"})
     void rejectsMalformed(String text) {
         assertThatIllegalArgumentException().isThrownBy(() -> Durations.parseNanos(text))
-                .withMessage("expected " + Durations.GRAMMAR);
+                .withMessage("unrecognized format"); // callers append ". Use " + GRAMMAR
     }
 
     @Test

@@ -38,7 +38,7 @@ final class Durations {
         }
         Matcher matcher = SIMPLE.matcher(text);
         if (!matcher.matches()) {
-            throw new IllegalArgumentException("expected " + GRAMMAR);
+            throw new IllegalArgumentException("unrecognized format");
         }
         try {
             long amount = Long.parseLong(matcher.group(1));

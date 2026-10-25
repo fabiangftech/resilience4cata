@@ -234,6 +234,15 @@ class ResilienceConfigTest {
     }
 
     @Test
+    void extendsUnknownConfigWithoutACloseNameStillReadsAsASentence() {
+        String p = problem("""
+                configs.external.retry.delay=1s
+                configs.batch.extends=zzz
+                """);
+        assertThat(p).endsWith("which is not defined in external configuration. Known configs: [batch, external]");
+    }
+
+    @Test
     void extendsCycleIsReportedOnce() {
         ConfigException e = failure(text("""
                 configs.a.extends=b
@@ -463,7 +472,7 @@ class ResilienceConfigTest {
     void environmentValuesAreValidatedWithTheirOrigin() {
         assertThat(failure(ResilienceConfig.builder().environment(Map.of("R4C_DEFAULTS_RETRY_DELAY", "fast")))
                 .problems().get(0)).isEqualTo("[R4C-CFG-002] environment variable 'R4C_DEFAULTS_RETRY_DELAY' = \"fast\""
-                        + " is not a valid duration: expected " + Durations.GRAMMAR + ". Use " + Durations.GRAMMAR + ".");
+                        + " is not a valid duration: unrecognized format. Use " + Durations.GRAMMAR + ".");
     }
 
     @Test

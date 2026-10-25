@@ -4,7 +4,15 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
-## [Unreleased] :id=unreleased
+## [0.2.0] - 2026-10-25 :id=0.2.0
+
+Corrige tres errores de comportamiento de la 0.1.0; uno de los arreglos cambia un valor por defecto (ver Actualizar).
+
+### Actualizar desde 0.1.0
+
+- Mantén `core` y `processor` en la misma versión (importa el BOM). El código generado por el procesador 0.2.0 necesita el `core` 0.2.0; el código generado por la 0.1.0 sigue enlazando contra el `core` 0.2.0, que solo agrega API.
+- `abortOn` ya no contiene `CallNotPermittedException` por defecto, porque ahora un circuit breaker abierto detiene los reintentos por sí solo. Quita `CallNotPermittedException` de tus propias listas `abortOn` si lo agregaste solo para eso; dejarlo no causa problemas.
+- Una llamada rechazada por un breaker abierto ya no se puede reintentar con ninguna configuración, ni siquiera con un classifier.
 
 ### Cambiado
 
@@ -13,6 +21,8 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y 
 ### Corregido
 
 - `FallbackEvent.Applied` ya no se publica para una falla que ningún método hermano de fallback recibe (por ejemplo un `Error` cuando el único hermano recibe `Exception`): esa falla se relanza, y el evento ahora significa que un fallback realmente se ejecutó.
+- Los mensajes de error R4C-ATR-001 y R4C-CFG-002 indican la gramática de duraciones una vez en lugar de dos, y R4C-CFG-007 cierra la oración antes de "Known configs".
+- El descriptor de módulo del procesador declara también `AnnotationClaimer`, así que `-Xlint:processing` no avisa cuando el procesador corre desde el module path de procesadores junto a otros procesadores.
 - Un classifier que lanza dentro de `@CircuitBreaker` (o del breaker de un `Pipeline`) ahora termina la llamada enseguida, sync y async: el retry que lo rodea ya no clasifica la excepción del classifier como la falla del método ni la reintenta (lo que podía abrir el breaker y mostrar `CallNotPermittedException` en su lugar). El breaker registra una falla, el retry publica `GaveUp(CLASSIFIER_FAILED)` una vez, y el fallback o quien llama recibe la excepción del classifier. Ver [Un classifier que lanza](guides/classifiers.md#un-classifier-que-lanza).
 
 ## [0.1.0] - 2026-10-25 :id=0.1.0
