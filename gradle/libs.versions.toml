@@ -1,17 +1,26 @@
 [versions]
 junit = "6.0.0"
+# The oldest JUnit the junit module supports: its main code compiles against it, and its tests also run on it.
+junitMinimum = "5.10.5"
 assertj = "3.27.3"
 jspecify = "1.0.0"
 jmh = "1.37"
 jcstress = "0.16"
 resilience4j = "2.4.0"
-# Test-only, in examples: the user-side metrics recipe of docs/en/guides/observability.md.
+# api of the micrometer module; the Prometheus registry is test-only (examples), for the sample scrape in the docs.
 micrometer = "1.17.1"
+# The opentelemetry module: the API is an api dependency, the SDK is test-only.
+opentelemetry = "1.67.0"
+# Test-only, in examples: the Prometheus exporter of docs/en/guides/opentelemetry.md (published only as -alpha).
+opentelemetry-prometheus = "1.67.0-alpha"
 
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+junit-platform-testkit = { module = "org.junit.platform:junit-platform-testkit" }
+junit-jupiter-api-minimum = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junitMinimum" }
+junit-bom-minimum = { module = "org.junit:junit-bom", version.ref = "junitMinimum" }
 assertj = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }
@@ -23,3 +32,8 @@ resilience4j-timelimiter = { module = "io.github.resilience4j:resilience4j-timel
 resilience4j-bulkhead = { module = "io.github.resilience4j:resilience4j-bulkhead", version.ref = "resilience4j" }
 resilience4j-ratelimiter = { module = "io.github.resilience4j:resilience4j-ratelimiter", version.ref = "resilience4j" }
 micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
+opentelemetry-api = { module = "io.opentelemetry:opentelemetry-api", version.ref = "opentelemetry" }
+opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "opentelemetry" }
+opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testing", version.ref = "opentelemetry" }
+opentelemetry-exporter-prometheus = { module = "io.opentelemetry:opentelemetry-exporter-prometheus", version.ref = "opentelemetry-prometheus" }
+micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }

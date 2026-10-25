@@ -8,7 +8,7 @@ resilience4cata cubre seis políticas (retry, circuit breaker, rate limiter, tim
 
 - autoconfiguración de Spring Boot, endpoints de actuator, binding de `application.yml` o anotaciones de Spring AOP (resilience4cata no tiene integración con Spring, CDI ni AspectJ);
 - operadores de Reactor, RxJava o corrutinas de Kotlin (resilience4cata solo admite `CompletionStage` / `CompletableFuture`);
-- un bulkhead con pool de threads, una caché, un time limiter para futures arbitrarios o el módulo de métricas de Micrometer que publica Resilience4j;
+- un bulkhead con pool de threads, una caché o un time limiter para futures arbitrarios;
 - cambiar la configuración de una política en tiempo de ejecución (resilience4cata resuelve la configuración una sola vez, por diseño);
 - una versión de Java anterior a la 21.
 
@@ -40,7 +40,7 @@ resilience4cata cubre seis políticas (retry, circuit breaker, rate limiter, tim
 | `circuitBreaker.getEventPublisher().onStateTransition(…)` | `registryBuilder.listen(CircuitBreakerEvent.StateTransition.class, …)` ([eventos](../guides/observability.md#events)) |
 | `circuitBreaker.getMetrics()` | `registry.circuitBreaker(id).snapshot()` |
 | `transitionToForcedOpenState()`, `transitionToDisabledState()`, `reset()` | `forceOpen()`, `disable()`, `reset()` en `CircuitBreakerHandle` |
-| `resilience4j-micrometer` (`TaggedCircuitBreakerMetrics`, …) | sin módulo: una [receta de Micrometer](../guides/observability.md#micrometer) construida sobre eventos y snapshots |
+| `resilience4j-micrometer` (`TaggedCircuitBreakerMetrics`, …) | `resilience4cata-micrometer` ([Micrometer](../guides/micrometer.md)); los nombres de los meters cambian (`r4c.*`), así que los dashboards y las alertas necesitan consultas nuevas |
 | `RetryConfig.retryOnResult(…)`, `CircuitBreakerConfig.recordResult(…)` | un [`Classifier`](../guides/classifiers.md) en `@Retry` / `@CircuitBreaker` |
 | `failAfterMaxAttempts(true)` (`MaxRetriesExceededException`) | `@Retry(onExhaustedResult = THROW)` (`ResultRejectedException`) |
 | `IntervalFunction.ofExponentialBackoff(…)`, `ofExponentialRandomBackoff(…)` | `backoff`, `multiplier`, `maxDelay`, `jitter` |
@@ -229,6 +229,6 @@ Cárgalo con `ResilienceConfig.load()` (como `resilience4cata.properties` en el 
 1. Agrega las dependencias, incluido el procesador en el processor path ([Instalación](../start/installation.md)).
 2. Para cada llamada decorada, pon la llamada detrás de una interfaz (o anota la clase) y traduce la configuración con las tablas anteriores. Define `backoff`, `jitter` y `maxWait` explícitamente donde los valores predeterminados difieren.
 3. Reemplaza `Decorators`/las anotaciones de Spring por las anotaciones de resilience4cata y `Resilient.of` (o `Resilient.create` para clases anotadas). Las llamadas que no puedas poner detrás de una interfaz pasan por un [`Pipeline`](../guides/pipeline.md).
-4. Mueve los consumidores de eventos a `ResilienceRegistry.Builder.listen(…)`, y las métricas a la [receta de Micrometer](../guides/observability.md#micrometer).
+4. Mueve los consumidores de eventos a `ResilienceRegistry.Builder.listen(…)`, y las métricas al [módulo de Micrometer](../guides/micrometer.md).
 5. Reemplaza las pruebas basadas en tiempo por [`ManualClock`](../guides/testing.md).
 6. Compila con `-Xlint:all -Werror` si quieres: el código generado compila sin advertencias.

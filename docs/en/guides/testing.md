@@ -18,33 +18,44 @@ The annotations and the generated code are the same as in production; only the r
 
 ## Dependency :id=dependency
 
-testkit depends only on `resilience4cata-core` and has no JUnit dependency, so it works with any test framework.
+Two artifacts, both test-only:
+
+- **`resilience4cata-junit`** (since 0.3.0): a JUnit Jupiter extension that gives each test a fresh clock and a registry that follows it. The easiest way if you use JUnit. It brings `resilience4cata-testkit` with it.
+- **`resilience4cata-testkit`**: the clock and the shortcuts on their own. It depends only on `resilience4cata-core` and has no JUnit dependency, so it works with any test framework.
 
 <!-- tabs:start -->
 #### **Gradle**
 ```groovy
 dependencies {
-    testImplementation 'dev.resilience4cata:resilience4cata-testkit'   // version from the BOM
+    testImplementation platform('dev.resilience4cata:resilience4cata-bom:0.3.0')
+    testImplementation 'dev.resilience4cata:resilience4cata-junit'      // with JUnit; brings testkit
+    // or, with another test framework:
+    // testImplementation 'dev.resilience4cata:resilience4cata-testkit'
 }
 ```
 #### **Gradle (Kotlin)**
 ```kotlin
 dependencies {
-    testImplementation("dev.resilience4cata:resilience4cata-testkit")   // version from the BOM
+    testImplementation(platform("dev.resilience4cata:resilience4cata-bom:0.3.0"))
+    testImplementation("dev.resilience4cata:resilience4cata-junit")      // with JUnit; brings testkit
+    // or, with another test framework:
+    // testImplementation("dev.resilience4cata:resilience4cata-testkit")
 }
 ```
 #### **Maven**
 ```xml
+<!-- with the BOM imported in <dependencyManagement> (see Installation) -->
 <dependency>
     <groupId>dev.resilience4cata</groupId>
-    <artifactId>resilience4cata-testkit</artifactId>
-    <version>0.2.0</version>
+    <artifactId>resilience4cata-junit</artifactId>  <!-- or resilience4cata-testkit without JUnit -->
     <scope>test</scope>
 </dependency>
 ```
 <!-- tabs:end -->
 
-Without the BOM, add the version (`0.2.0`) in Gradle too. If you annotate interfaces under `src/test`, the processor must also run on test sources: `testCompileOnly` the annotations and `testAnnotationProcessor` the processor (see [Installation](../start/installation.md)).
+If the BOM is already imported for your main dependencies (see [Installation](../start/installation.md)), the platform line is not needed again in Gradle. If you annotate interfaces under `src/test`, the processor must also run on test sources: `testCompileOnly` the annotations and `testAnnotationProcessor` the processor.
+
+`resilience4cata-junit` needs JUnit Jupiter 5.10 or newer, JUnit 6 included: it is compiled against `junit-jupiter-api` 5.10.5 (declared as an `api` dependency, so your own, newer JUnit version wins) and its tests run on both 5.10.5 and 6.0.0. It uses your JUnit; it does not bring an engine.
 
 ## Your first test :id=first-test
 
@@ -59,7 +70,34 @@ public interface QuoteService {
 }
 ```
 
-The test builds the registry with `ResilienceTesting.registry(clock)` instead of `ResilienceRegistry.builder()`, wraps a stub that fails three times, and checks both the result and how much time passed on the clock:
+With `@ResilienceTest` on the class, a test takes a `ManualClock` and a `ResilienceRegistry` that follows it as parameters. It wraps a stub that fails three times, and checks both the result and how much time passed on the clock:
+
+<!-- snippet: testing-junit-first -->
+```java
+@ResilienceTest
+class QuoteServiceTest {
+
+    @Test
+    void retriesThreeTimesWithoutWaiting(ManualClock clock, ResilienceRegistry registry) {
+        AtomicInteger calls = new AtomicInteger();
+        QuoteService quotes = Resilient.of(QuoteService.class, sku -> {
+            if (calls.incrementAndGet() < 4) {
+                throw new IllegalStateException("upstream down");
+            }
+            return "quote for " + sku;
+        }, registry);
+
+        assertThat(quotes.quote("A-1")).isEqualTo("quote for A-1");
+
+        assertThat(calls).hasValue(4);
+        assertThat(clock.elapsed()).isEqualTo(Duration.ofSeconds(3)); // three 1 s delays, no real waiting
+    }
+}
+```
+
+### Without the extension :id=without-the-extension
+
+With another test framework, or to build the registry yourself, create the clock and use `ResilienceTesting.registry(clock)` instead of `ResilienceRegistry.builder()`. This is the same test with testkit alone:
 
 <!-- snippet: testing-first-test -->
 ```java
@@ -86,7 +124,146 @@ void retriesThreeTimesWithoutWaiting() {
 
 `ManualClock` in short: `read()` (nanoseconds, starting at 0), `elapsed()`, `advance(Duration)`, `advanceUntilIdle()` (runs every pending task, however far ahead, and returns how far the clock moved), `sleep(Duration)` (for stubs: advances the clock instead of blocking), `pendingTasks()`, `nextTaskIn()`. The clock plugs in through the `dev.resilience4cata.Ticker` SPI (`ResilienceRegistry.Builder.ticker(…)`), so another test clock can implement it too.
 
+## The JUnit extension :id=junit
+
+`@ResilienceTest` (package `dev.resilience4cata.junit`) registers `ResilienceExtension`. `@ExtendWith(ResilienceExtension.class)` does the same with the default settings.
+
+- **Parameters.** A test method, and its `@BeforeEach` and `@AfterEach` methods, can take a `ManualClock`, a `ResilienceRegistry`, or both.
+- **One pair per test.** Within one test, every parameter of a type gets the same instance, and the registry follows that clock. The next test gets a new clock and a new registry, so instances with the same `name` (a breaker opened by one test, for example) are never shared between tests. Each invocation of a `@ParameterizedTest` or `@RepeatedTest` counts as a test.
+- **Built lazily.** The clock is created when a test first asks for the clock or the registry; the registry, the first time it asks for the registry, from `ResilienceTesting.registry(clock, seed)`.
+- **Not in constructors or `@BeforeAll` methods.** They serve more than one test, so the extension fails them with a `ParameterResolutionException` that says so.
+
+Wrap the service once in `@BeforeEach`: the test receives the same registry, so it can look at the handles of the policies it drives:
+
+<!-- snippet: testing-junit-before-each -->
+```java
+@ResilienceTest
+class InventoryServiceTest {
+
+    private final AtomicBoolean down = new AtomicBoolean(true);
+    private InventoryService inventory;
+
+    @BeforeEach
+    void wrap(ResilienceRegistry registry) {
+        inventory = Resilient.of(InventoryService.class, sku -> {
+            if (down.get()) {
+                throw new IllegalStateException("inventory down");
+            }
+            return 7;
+        }, registry);
+    }
+
+    @Test
+    void theBreakerOpensThenLetsAProbeThrough(ManualClock clock, ResilienceRegistry registry) { // the same registry
+        for (int i = 0; i < 4; i++) {
+            assertThatThrownBy(() -> inventory.stock("X")).isInstanceOf(IllegalStateException.class);
+        }
+        CircuitBreakerHandle breaker = registry.circuitBreaker("inventory");
+        assertThat(breaker.state()).isEqualTo(CircuitBreakerState.OPEN);
+
+        down.set(false);
+        ResilienceTesting.elapseWaitInOpen(breaker, clock);
+        assertThat(inventory.stock("X")).isEqualTo(7);
+        assertThat(breaker.state()).isEqualTo(CircuitBreakerState.CLOSED);
+    }
+
+    @Test
+    void eachTestStartsWithAClosedBreaker(ResilienceRegistry registry) { // a new registry for each test
+        assertThat(registry.circuitBreaker("inventory").state()).isEqualTo(CircuitBreakerState.CLOSED);
+    }
+}
+```
+
+### Configuring the registry :id=configure-registry
+
+A method annotated `@ConfigureRegistry` receives the `ResilienceRegistry.Builder` before it is built, already set up with the test's clock and seeded jitter: add named configs, defaults, listeners, or `ResilienceConfig.applyTo(builder)`. For an interface that takes its settings from a named config:
+
+<!-- snippet: testing-junit-payment-interface -->
+```java
+public interface PaymentService {
+
+    @Retry(config = "payments") // attempts and delays come from the registry's "payments" config
+    String charge(String order);
+}
+```
+
+<!-- snippet: testing-junit-configure -->
+```java
+@ResilienceTest
+class PaymentServiceTest {
+
+    private final List<RetryEvent.Retrying> retries = new CopyOnWriteArrayList<>();
+
+    @ConfigureRegistry
+    void configure(ResilienceRegistry.Builder builder) { // runs before the registry is built, once per test
+        builder.retry("payments", r -> r.maxAttempts(3).delay(Duration.ofSeconds(2))
+                        .backoff(RetryConfig.Backoff.FIXED).jitter(RetryConfig.Jitter.NONE))
+                .listen(RetryEvent.Retrying.class, retries::add);
+    }
+
+    @Test
+    void usesTheNamedConfig(ManualClock clock, ResilienceRegistry registry) {
+        PaymentService payments = Resilient.of(PaymentService.class, order -> {
+            throw new IllegalStateException("card declined");
+        }, registry);
+
+        assertThatThrownBy(() -> payments.charge("o-1")).isInstanceOf(IllegalStateException.class);
+
+        assertThat(retries).hasSize(2);
+        assertThat(clock.elapsed()).isEqualTo(Duration.ofSeconds(4)); // two 2 s delays
+    }
+}
+```
+
+The method returns `void`, takes exactly one `ResilienceRegistry.Builder`, is not private, and may be static. It runs on the test instance, once per test, when the test first asks for the registry (a test that only takes the clock never runs it). With several such methods, an enclosing class's run before a `@Nested` class's, and a superclass's before a subclass's; the order of several in one class is not specified. Another signature fails the test with an `ExtensionConfigurationException`.
+
+### Settings :id=junit-settings
+
+| Attribute | Default | Meaning |
+|---|---|---|
+| `seed` | `42` (`ResilienceTesting.DEFAULT_SEED`) | Seed of the `java.util.Random` the registry draws jitter from, so jittered delays are the same on every run ([seeded jitter](#seeded-jitter)) |
+| `startNanos` | `0` | First reading of the clock, for instance close to `Long.MAX_VALUE` to check that nothing breaks when `nanoTime` wraps around |
+| `failOnPendingTasks` | `false` | Fails a test that passed but left tasks pending on its clock: an async retry, wait or timeout it never advanced past |
+
+`@ResilienceTest` also goes on a method, to change the settings of one test. The closest annotation wins as a whole (the attributes are not merged): the method's, then the class's (or a superclass's), then an enclosing class's for `@Nested` tests.
+
+`failOnPendingTasks` is checked after the `@AfterEach` methods, and only when the test passed, so it never hides the test's own failure. Completed async calls leave nothing behind: a finished call cancels its timeout, and a bulkhead hand-off cancels the waiter's wait limit.
+
+<!-- snippet: testing-junit-async-interface -->
+```java
+public interface AsyncQuoteService {
+
+    @Retry(maxAttempts = 3, delay = "1s") // the default FULL jitter
+    CompletableFuture<String> quote(String sku);
+}
+```
+
+<!-- snippet: testing-junit-settings -->
+```java
+@ResilienceTest(seed = 7, failOnPendingTasks = true)
+class AsyncQuoteServiceTest {
+
+    @Test
+    void asyncRetriesRunWhenTheClockAdvances(ManualClock clock, ResilienceRegistry registry) {
+        AtomicInteger calls = new AtomicInteger();
+        AsyncQuoteService quotes = Resilient.of(AsyncQuoteService.class, sku -> calls.incrementAndGet() < 3
+                ? CompletableFuture.failedFuture(new IllegalStateException("upstream down"))
+                : CompletableFuture.completedFuture("quote for " + sku), registry);
+
+        CompletableFuture<String> quote = quotes.quote("A-1"); // the second attempt waits on the clock
+        assertThat(quote).isNotDone();
+
+        clock.advanceUntilIdle(); // without this line the test fails: a retry is still pending on the clock
+        assertThat(quote).isCompletedWithValue("quote for A-1");
+    }
+}
+```
+
+The extension works the same with every way of protecting code: `Resilient.of` on interfaces, `Resilient.create` on annotated classes, `Pipeline` (build it from the injected registry), and async methods.
+
 ## Recipes :id=recipes
+
+The recipes build the clock and the registry by hand, so they work with any test framework. With the extension, take `clock` and `registry` as parameters instead and drop the first lines.
 
 ### Retry delays and backoff :id=retry
 
@@ -334,7 +511,7 @@ void asyncRetriesRunWhenTheClockAdvances() {
 
 ## Seeded jitter :id=seeded-jitter
 
-With jitter (the default is `FULL`), delays are random. On a testkit registry they come from a `java.util.Random` with a fixed seed, so the same test gives the same delays on every run. `ResilienceTesting.registry(clock, seed)` picks another seed:
+With jitter (the default is `FULL`), delays are random. On a testkit registry they come from a `java.util.Random` with a fixed seed, so the same test gives the same delays on every run. `ResilienceTesting.registry(clock, seed)` picks another seed (with the JUnit extension, `@ResilienceTest(seed = …)`):
 
 <!-- snippet: testing-seeded-jitter -->
 ```java
@@ -417,7 +594,7 @@ See [Observability](observability.md) for every event and snapshot field.
 ## Pitfalls :id=pitfalls
 
 - **`Thread.sleep` in a stub does not move the clock.** Use `clock.sleep(…)` to simulate a slow dependency; a real sleep makes the test slow and a timeout never fires (the watchdog follows the manual clock).
-- **One registry per test.** Instances with the same `name` are shared inside a registry, so a breaker opened by one test stays open for the next one if they share the registry.
+- **One registry per test.** Instances with the same `name` are shared inside a registry, so a breaker opened by one test stays open for the next one if they share the registry. The JUnit extension gives each test its own.
 - **Advance from one thread.** Two threads advancing at once both make progress, but the order of their tasks is then not deterministic.
 - **The breaker moves to half-open on the next call**, not when the clock passes `waitInOpen`; `state()` reports `OPEN` until then.
 - **Listeners must be registered before `build()`.** Adding them later is not possible.

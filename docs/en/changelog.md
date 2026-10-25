@@ -4,6 +4,17 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
+## [Unreleased] :id=unreleased
+
+### Added
+
+- `resilience4cata-opentelemetry`: OpenTelemetry metrics. `OpenTelemetryMetrics.create(openTelemetry)`, `register(builder)` and `bindTo(registry)` report rejections, retries, give-ups, breaker transitions, timeouts and fallbacks as counters fed by events, and breaker, bulkhead and rate-limiter state as asynchronous gauges read from the snapshot at each collection, so instances created later are included. Same metric names as the Micrometer module. Metrics only, no tracing yet. See [OpenTelemetry](guides/opentelemetry.md).
+- `resilience4cata-junit`: a JUnit Jupiter extension. `@ResilienceTest` injects a fresh `ManualClock` and a `ResilienceRegistry` that follows it into each test (and its `@BeforeEach`/`@AfterEach` methods), with `seed`, `startNanos` and an opt-in `failOnPendingTasks`; `@ConfigureRegistry` methods customize the builder. Needs JUnit 5.10 or newer, JUnit 6 included. See [Testing](guides/testing.md#junit).
+- An async `@Timeout` call that finishes in time now takes its deadline off a `ManualClock` at once, so `pendingTasks()` no longer counts it until the deadline passes.
+- **`resilience4cata-micrometer`**: [Micrometer metrics](guides/micrometer.md) in three lines (`MicrometerMetrics.create(meterRegistry)`, `register(builder)`, `bindTo(registry)`): counters from events (rejections, breaker transitions, retries, give-ups, timeouts, fallbacks) and gauges for every circuit breaker, bulkhead and rate limiter, including instances created after binding. Replaces the hand-written recipe of the observability guide.
+- `ResilienceRegistry.onInstanceCreated(Runnable)`: runs an action once per new policy instance (when a service is wrapped or a pipeline is built, never during a call), so that metrics bridges can register meters for instances created later ([Observability](guides/observability.md#diy)).
+- **Retry budget** for `@Retry`, `RetryConfig` and `Pipeline`: `budgetPercent`, `budgetMinRetriesPerSecond` and `budgetWindow` cap the retries of one retry instance, shared by all its callers, at a reserve per second plus a percentage of its calls in the window, so that an outage does not multiply the load on the failing dependency. Off by default; without it, generated code and the success path are unchanged. A refused retry publishes `RetryEvent.GaveUp` with the new reason `BUDGET_EXHAUSTED`; `RetrySnapshot.budget()` shows the window. Config keys `defaults.retry.budget…` (and `configs.…`, `instances.…`, environment variables); new processor error [R4C-ATR-007](errors.md#r4c-atr-007). [Retry budget](policies/retry.md#retry-budget)
+
 ## [0.2.0] - 2026-10-25 :id=0.2.0
 
 Fixes three behaviour bugs of 0.1.0; one of the fixes changes a default (see Upgrading).

@@ -1,0 +1,19 @@
+# The data lines of a real scrape (PrometheusMeterRegistry), compared by MicrometerGuideTest.
+# tag::micrometer-prometheus[]
+r4c_bulkhead_concurrent_calls{instance="payments"} 0.0
+r4c_bulkhead_max_concurrent{instance="payments"} 10.0
+r4c_bulkhead_waiting_calls{instance="payments"} 0.0
+r4c_calls_rejected_total{instance="payments",kind="circuitbreaker"} 1.0
+r4c_circuitbreaker_failure_rate_percent{instance="payments"} NaN
+r4c_circuitbreaker_slow_call_rate_percent{instance="payments"} NaN
+r4c_circuitbreaker_state{instance="payments",state="closed"} 0.0
+r4c_circuitbreaker_state{instance="payments",state="disabled"} 0.0
+r4c_circuitbreaker_state{instance="payments",state="forced_open"} 0.0
+r4c_circuitbreaker_state{instance="payments",state="half_open"} 0.0
+r4c_circuitbreaker_state{instance="payments",state="open"} 1.0
+r4c_circuitbreaker_transitions_total{from="closed",instance="payments",to="open"} 1.0
+r4c_ratelimiter_available_permits{instance="payments"} 98.0
+r4c_retry_gave_up_total{instance="payments",reason="max_attempts"} 1.0
+r4c_retry_gave_up_total{instance="payments",reason="not_retryable"} 1.0
+r4c_retry_retries_total{instance="payments"} 3.0
+# end::micrometer-prometheus[]

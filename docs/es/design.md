@@ -20,7 +20,7 @@ resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit 
 | Build | Gradle con un DSL de Groovy mínimo; convention plugins escritos en Java; version catalog. Nada de Kotlin en el proyecto | [arquitectura](architecture.md#build-y-herramientas) |
 | Mecanismo de anotaciones | **Procesador de anotaciones en compilación (APT)** que genera código Java. Sin proxies, generación de bytecode ni agentes en `core` | [arquitectura](architecture.md#mecanismo-de-anotaciones) |
 | Frameworks | Solo Java puro por ahora | — |
-| Módulos | Nombres de una palabra: `annotations`, `core`, `processor`, `config`, `testkit`, `bom` (y `micrometer`, previsto para v1), más los internos `benchmark`, `stress`, `examples` | [arquitectura](architecture.md#módulos) |
+| Módulos | Nombres de una palabra: `annotations`, `core`, `processor`, `config`, `testkit`, `micrometer`, `bom`, más los internos `benchmark`, `stress`, `examples` | [arquitectura](architecture.md#módulos) |
 | Dependencias de `core` | Ninguna salvo JSpecify (ver abajo) | [arquitectura](architecture.md#módulos) |
 | Políticas del MVP | `@CircuitBreaker`, `@Retry`, `@Timeout`, `@Bulkhead`, `@RateLimiter`, `@Fallback` | [features](policies/README.md) |
 | Contrato de rendimiento | 0 B/op en el camino exitoso, sin locks en el camino caliente, verificado con JMH en CI | [features](performance.md) |
@@ -59,7 +59,7 @@ resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit 
 | Códigos de error | **Hecho**: cada diagnóstico del procesador (`R4C-APT/ATR/CMP/ASY/CLS/FB/SUB`), error de envoltura o de pipeline en runtime (`R4C-RT`), error del registry y de configuración de políticas (`R4C-REG`: valores inválidos, configuraciones con nombre desconocidas o duplicadas, instancias compartidas en conflicto, ids de instancia desconocidos, con "¿quisiste decir…?") y problema de configuración (`R4C-CFG`) tiene un código estable y una sección en la [referencia de errores](errors.md), con un ejemplo incorrecto y su corrección; el build compila los ejemplos del procesador |
 | Publicación | Preparada para Maven Central (`r4c.publish`, `bom`, `centralBundle`); 0.1.0 y 0.2.0 publicadas (`release.yml`) — ver [Publicar una versión](releasing.md) |
 | Guía de usuario | **Hecha**: [primeros pasos](start/quickstart.md), con cada snippet compilado y ejecutado por `examples/.../GuideTest.java`; `README.md` en la raíz para GitHub |
-| CI (GitHub Actions) | **Hecho, todavía sin correr en GitHub** (no hay remoto): `build` en JDK 21 y 25 (`./gradlew build -PtestJdk=N`), `alloc-gate` en cada PR (`./gradlew :benchmark:allocationCheck`: 35 benchmarks de éxito y de rechazo contra sus presupuestos de B/op en `benchmark/allocation-budgets.properties`), `stress` (jcstress quick) después de cada push a main y cada noche; Dependabot para el catálogo de versiones y las actions, que están fijadas a SHAs de commit |
+| CI (GitHub Actions) | **Hecho, todavía sin correr en GitHub** (no hay remoto): `build` en JDK 21 y 25 (`./gradlew build -PtestJdk=N`), `alloc-gate` en cada PR (`./gradlew :benchmark:allocationCheck`: 37 benchmarks de éxito y de rechazo contra sus presupuestos de B/op en `benchmark/allocation-budgets.properties`), `stress` (jcstress quick) después de cada push a main y cada noche; Dependabot para el catálogo de versiones y las actions, que están fijadas a SHAs de commit |
 
 ## Preguntas abiertas
 

@@ -66,7 +66,7 @@ Each annotated method gets its own policy instances, with the id `<type>#<method
 
 ### How do I get metrics? :id=metrics
 
-From events (counters) and snapshots (gauges). There is no Micrometer module yet, but the [observability guide](guides/observability.md#micrometer) has a tested recipe you can copy.
+With the [Micrometer module](guides/micrometer.md) (`resilience4cata-micrometer`): three lines of setup give you counters from events and gauges for every circuit breaker, bulkhead and rate limiter. For another metrics library, build the same thing on [events and handles](guides/observability.md#diy).
 
 ### Does it count successful calls or measure latency? :id=success-metrics
 
@@ -92,7 +92,7 @@ On AWS Graviton3, a retry whose first attempt succeeds costs 1.2 ns and a circui
 
 ### What is not supported yet? :id=not-supported
 
-Hedging, adaptive concurrency limits, retry budgets, caching and thread-pool bulkheads; reactive types; `? super` async types; changing the policy order; runtime reconfiguration; framework integration modules. See [Design decisions](design.md) for what is planned and what is excluded by decision.
+Hedging, adaptive concurrency limits, caching and thread-pool bulkheads; reactive types; `? super` async types; changing the policy order; runtime reconfiguration; framework integration modules. See [Design decisions](design.md) for what is planned and what is excluded by decision.
 
 ### What is on the roadmap? :id=roadmap
 
@@ -102,15 +102,13 @@ Planned, not promised; names and scope can change:
 |---|---|---|
 | Hedging (`@Hedge`) | v1 | Resilience4j has none |
 | Adaptive concurrency limit (`@AdaptiveLimit`: AIMD, Vegas, Gradient2) | v1 | |
-| Retry budget | v1 | prevents retry storms |
-| Micrometer and OpenTelemetry bridges | v1 | separate modules |
+| OpenTelemetry tracing | later | metrics are in `resilience4cata-opentelemetry` since 0.3.0 ([guide](guides/opentelemetry.md)) |
 | YAML configuration | v1 | separate module, so `core` stays dependency-free |
 | Configurable execution order (`@Order`) | v1 | |
-| JUnit 5 extension | v1 | |
 | `locked` attribute (an instance that external configuration cannot override) | v1 | |
 | `@Cached`, reactive types, Kotlin coroutines, fault injection, deadline propagation, framework integrations | later | |
 
-Until then, the [observability recipe](guides/observability.md#micrometer) covers metrics and [testkit](guides/testing.md) covers tests.
+Until then, [testkit](guides/testing.md) covers tests.
 
 ### Where do I report a bug? :id=bugs
 

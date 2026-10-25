@@ -19,6 +19,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.random.RandomGenerator;
@@ -57,6 +58,8 @@ public final class ResilienceRegistry {
     private final ConcurrentHashMap<String, BulkheadPolicy> bulkheads = new ConcurrentHashMap<>();
     private final PolicyEnvironment environment;
     private final Instances instances;
+    /** {@link #onInstanceCreated} actions; read only when an instance is created, never on a call. */
+    private final CopyOnWriteArrayList<Runnable> creationListeners = new CopyOnWriteArrayList<>();
 
     private ResilienceRegistry(RetryConfig retryDefaults, Map<String, RetryConfig> retryConfigs,
             CircuitBreakerConfig circuitBreakerDefaults, Map<String, CircuitBreakerConfig> circuitBreakerConfigs,
@@ -219,7 +222,7 @@ public final class ResilienceRegistry {
         String key = name.isEmpty() ? instanceId : name;
         RetryConfig resolved = resolve(retryConfig(config), overrides, instances.retry().get(key), RetryConfig::toBuilder,
                 RetryConfig.Builder::build, "retry", key, config);
-        RetryPolicy policy = retries.computeIfAbsent(key, k -> new RetryPolicy(k, resolved, environment));
+        RetryPolicy policy = instance(retries, key, k -> new RetryPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException(ErrorCode.CONFLICTING_INSTANCE.message("Retry instance '" + key
                     + "' is used with two different configurations (a shared name, or the same pipeline id"
@@ -245,7 +248,7 @@ public final class ResilienceRegistry {
         String key = name.isEmpty() ? instanceId : name;
         CircuitBreakerConfig resolved = resolve(circuitBreakerConfig(config), overrides, instances.circuitBreaker().get(key), CircuitBreakerConfig::toBuilder,
                 CircuitBreakerConfig.Builder::build, "circuitBreaker", key, config);
-        CircuitBreakerPolicy policy = circuitBreakers.computeIfAbsent(key, k -> new CircuitBreakerPolicy(k, resolved, environment));
+        CircuitBreakerPolicy policy = instance(circuitBreakers, key, k -> new CircuitBreakerPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException(ErrorCode.CONFLICTING_INSTANCE.message("Circuit breaker '" + key
                     + "' is used with two different configurations (a shared name, or the same pipeline id"
@@ -271,7 +274,7 @@ public final class ResilienceRegistry {
         String key = name.isEmpty() ? instanceId : name;
         RateLimiterConfig resolved = resolve(rateLimiterConfig(config), overrides, instances.rateLimiter().get(key), RateLimiterConfig::toBuilder,
                 RateLimiterConfig.Builder::build, "rateLimiter", key, config);
-        RateLimiterPolicy policy = rateLimiters.computeIfAbsent(key, k -> new RateLimiterPolicy(k, resolved, environment));
+        RateLimiterPolicy policy = instance(rateLimiters, key, k -> new RateLimiterPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException(ErrorCode.CONFLICTING_INSTANCE.message("Rate limiter '" + key
                     + "' is used with two different configurations (a shared name, or the same pipeline id"
@@ -297,7 +300,9 @@ public final class ResilienceRegistry {
         TimeoutConfig resolved = resolve(timeoutConfig(config), overrides, instances.timeout().get(key), TimeoutConfig::toBuilder,
                 TimeoutConfig.Builder::build, "timeout", key, config);
         TimeoutPolicy policy = new TimeoutPolicy(key, resolved, environment);
-        timeouts.putIfAbsent(key, policy); // only for snapshot(): the first call site with this id is shown
+        if (timeouts.putIfAbsent(key, policy) == null) { // only for snapshot(): the first call site with this id is shown
+            instanceCreated();
+        }
         return policy;
     }
 
@@ -348,7 +353,7 @@ public final class ResilienceRegistry {
         String key = name.isEmpty() ? instanceId : name;
         BulkheadConfig resolved = resolve(bulkheadConfig(config), overrides, instances.bulkhead().get(key), BulkheadConfig::toBuilder,
                 BulkheadConfig.Builder::build, "bulkhead", key, config);
-        BulkheadPolicy policy = bulkheads.computeIfAbsent(key, k -> new BulkheadPolicy(k, resolved, environment));
+        BulkheadPolicy policy = instance(bulkheads, key, k -> new BulkheadPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw new IllegalStateException(ErrorCode.CONFLICTING_INSTANCE.message("Bulkhead '" + key
                     + "' is used with two different configurations (a shared name, or the same pipeline id"
@@ -412,6 +417,69 @@ public final class ResilienceRegistry {
                 + " wrapped with Resilient.of(...), its class created with Resilient.create(...), or its pipeline built."));
     }
 
+    /**
+     * Runs {@code action} each time a new policy instance appears in {@link #snapshot()}, from now on:
+     * once per instance, on the thread that creates it ({@code Resilient.of}, {@code Resilient.create}
+     * or {@code Pipeline.Builder.build()}), after it is visible through {@link #snapshot()} and the
+     * handle lookups. Meant for metrics bridges that register meters for instances created after they
+     * were bound. Instances are created when services are wrapped, never during a call, so this adds
+     * nothing to the calls. An exception thrown by {@code action} does not reach the code that created
+     * the instance: it goes to the current thread's uncaught exception handler.
+     *
+     * @param action what to run; it may read the registry (for example {@link #snapshot()})
+     * @return a registration whose {@link Registration#close()} stops the action
+     */
+    public Registration onInstanceCreated(Runnable action) {
+        Objects.requireNonNull(action, "action");
+        Runnable registered = action::run; // a distinct object, so that close() removes this registration only
+        CopyOnWriteArrayList<Runnable> listeners = creationListeners; // the registration must not hold the registry
+        listeners.add(registered);
+        return () -> listeners.remove(registered);
+    }
+
+    /** A registration made with {@link #onInstanceCreated(Runnable)}. */
+    @FunctionalInterface
+    public interface Registration extends AutoCloseable {
+
+        /** Stops the action; calling it again does nothing. */
+        @Override
+        void close();
+    }
+
+    /** Returns the instance for {@code key}, creating it and telling {@link #onInstanceCreated} listeners if new. */
+    private <P> P instance(ConcurrentHashMap<String, P> policies, String key, Function<String, P> create) {
+        P existing = policies.get(key);
+        if (existing != null) {
+            return existing;
+        }
+        boolean[] created = new boolean[1];
+        P policy = policies.computeIfAbsent(key, k -> {
+            created[0] = true;
+            return create.apply(k);
+        });
+        if (created[0]) {
+            instanceCreated();
+        }
+        return policy;
+    }
+
+    private void instanceCreated() {
+        for (Runnable listener : creationListeners) {
+            try {
+                listener.run();
+            } catch (VirtualMachineError e) {
+                throw e;
+            } catch (Throwable e) {
+                Thread thread = Thread.currentThread();
+                try {
+                    thread.getUncaughtExceptionHandler().uncaughtException(thread, e);
+                } catch (Throwable ignored) {
+                    // The handler failed too: creating the instance must still succeed.
+                }
+            }
+        }
+    }
+
     /** Returns every circuit breaker created so far, sorted by id. */
     public List<CircuitBreakerHandle> circuitBreakers() {
         return circuitBreakers.values().stream()
@@ -430,7 +498,8 @@ public final class ResilienceRegistry {
     public ResilienceSnapshot snapshot() {
         return new ResilienceSnapshot(
                 sorted(circuitBreakers, CircuitBreakerPolicy::snapshot, CircuitBreakerSnapshot::instance),
-                sorted(retries, (String id, RetryPolicy retry) -> new RetrySnapshot(id, retry.config()),
+                sorted(retries, (String id, RetryPolicy retry) -> new RetrySnapshot(id, retry.config(),
+                        retry.budgetSnapshot()),
                         RetrySnapshot::instance),
                 sorted(rateLimiters, RateLimiterPolicy::snapshot, RateLimiterSnapshot::instance),
                 sorted(timeouts, (String id, TimeoutPolicy timeout) -> new TimeoutSnapshot(id, timeout.config()),

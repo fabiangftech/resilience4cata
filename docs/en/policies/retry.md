@@ -84,7 +84,9 @@ flowchart TD
     retryable -- yes --> delay["Compute the delay:<br/>backoff, capped at maxDelay, then jitter"]
     delay --> budget{"maxDuration set and<br/>elapsed + delay > maxDuration?"}
     budget -- yes --> fail
-    budget -- no --> sleep["Wait for the delay"] --> attempt
+    budget -- no --> retryBudget{"Retry budget set<br/>and used up?"}
+    retryBudget -- yes --> fail
+    retryBudget -- no --> sleep["Wait for the delay"] --> attempt
 ```
 
 - **What is retried.** An exception that is an instance of a `retryOn` type (default: `Exception`) and of no `abortOn` type (default: none). `abortOn` wins over `retryOn`. A `CallNotPermittedException` (an open circuit breaker) is never retried, whatever the lists say. Anything else is rethrown at once, so `Error`s (`OutOfMemoryError`, `AssertionError`, …) are never retried by default. A method that returns normally is never retried, unless a [classifier](../guides/classifiers.md) says its result is a failure.
@@ -108,6 +110,9 @@ flowchart TD
 | `maxDuration` | duration | `0` (no budget) | `defaults.retry.maxDuration` | Time budget for the whole operation, across attempts and delays. |
 | `retryOn` | `Class<? extends Throwable>[]` | `{Exception.class}` | `defaults.retry.retryOn` | Exceptions that are retried, subclasses included. |
 | `abortOn` | `Class<? extends Throwable>[]` | `{}` | `defaults.retry.abortOn` | Exceptions that stop the retries; wins over `retryOn` and the classifier. An open breaker stops them whether listed or not. |
+| `budgetPercent` | `double` | `0` (no budget) | `defaults.retry.budgetPercent` | [Retry budget](#retry-budget): retries allowed, in percent of the instance's calls in the last `budgetWindow`. Finite, at least 0. |
+| `budgetMinRetriesPerSecond` | `int` | `0` | `defaults.retry.budgetMinRetriesPerSecond` | Retry budget: retries allowed per second of `budgetWindow`, whatever the traffic. At least 0. |
+| `budgetWindow` | duration | `10s` | `defaults.retry.budgetWindow` | Retry budget: how far back calls and retries are counted. From `1s` to `1h`. |
 | `classifier` | `Class<?>` | none | annotation only | A `Classifier<T>` that decides what is retried, results included. Replaces `retryOn`. See [Classifiers](../guides/classifiers.md). |
 | `onExhaustedResult` | `ExhaustedResult` | `RETURN` | annotation only | With a classifier: return the last rejected result, or `THROW` a `ResultRejectedException`. |
 | `name` | `String` | one instance per method | annotation only | Instance id; methods with the same `name` share one retry policy. |
@@ -146,9 +151,65 @@ If `report` keeps failing, the first two attempts open the breaker, the third ge
 
 Without `name`, every method gets its own retry policy, with the id `<interface>#<method>(<parameter types>)`, for example `dev.resilience4cata.examples.docs.retry.InventoryApi#stock(java.lang.String)`. That id is what you use in `instances.<id>.retry.…` overrides and what events and snapshots report.
 
-A retry keeps no state between calls (the attempt count lives in a local variable of the generated method), so sharing one by `name` only shares its configuration. Methods that share a `name` must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008).
+Without a [retry budget](#retry-budget), a retry keeps no state between calls (the attempt count lives in a local variable of the generated method), so sharing one by `name` only shares its configuration. With a budget, it also shares the budget. Methods that share a `name` must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008).
 
-There is no handle for a retry: `registry` has no `retry(id)` method. `registry.snapshot().retries()` lists each one as a `RetrySnapshot(instance, config)`, with its resolved configuration.
+There is no handle for a retry: `registry` has no `retry(id)` method. `registry.snapshot().retries()` lists each one as a `RetrySnapshot(instance, config, budget)`, with its resolved configuration and, if it has a retry budget, the budget's current window (`null` otherwise).
+
+## Retry budget
+
+`maxAttempts` caps the retries of one call. A **retry budget** caps the retries of every call of one instance together, relative to its traffic: retries in the last `budgetWindow` may not exceed
+
+> `budgetMinRetriesPerSecond × budgetWindow in seconds + budgetPercent % of the calls in budgetWindow`
+
+**Use it when** many callers share a dependency that can go down. Without a budget, every caller retries every failure: with `maxAttempts = 3` an outage triples the load on a dependency that is already failing (a retry storm). With `budgetPercent = 20`, it adds at most 20%. While the dependency is healthy, failures are rare and the budget is never reached. The design follows [Finagle's `RetryBudget`](https://twitter.github.io/finagle/guide/Clients.html#retries) (a percentage of the requests plus a per-second reserve over a window); [gRPC](https://github.com/grpc/proposal/blob/master/A6-client-retries.md) and [Envoy](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/cluster/v3/circuit_breaker.proto) have similar limits.
+
+<!-- snippet: retry-budget -->
+```java
+@Retry(name = "catalog", maxAttempts = 3, delay = "100ms",
+        budgetPercent = 20, budgetMinRetriesPerSecond = 1)
+String product(String id);
+```
+
+Here, in any 10 s (the default `budgetWindow`), the `catalog` retry allows 10 retries plus one for every five calls, shared by every method with `name = "catalog"`. Once they are used, a failure is not retried: the last failure is rethrown (or the fallback runs) and `GaveUp` is published with reason `BUDGET_EXHAUSTED`. Every other rule still applies first, so a failure that would not be retried anyway takes nothing from the budget.
+
+- **Off by default**: the budget is off while `budgetPercent` and `budgetMinRetriesPerSecond` are both 0. Set the reserve too: with `budgetPercent = 20` alone, a method called four times in the window cannot retry at all.
+- **What counts**: calls, not attempts. A call is counted when it starts, whether it succeeds or not; a retry is counted when it is granted.
+- **Sharing**: one budget per instance, so give the methods that call the same dependency the same `name` (and the same attributes, as for any shared instance). Without `name`, each method has its own budget.
+- **Same everywhere**: sync and async methods, methods with a classifier (a rejected result that would be retried takes from the budget too) and [`Pipeline`](../guides/pipeline.md) (`.retry(r -> r.budgetPercent(20).budgetMinRetriesPerSecond(1))`).
+- **The window** moves forward a tenth of `budgetWindow` at a time, and only failures move it, so successes read no clock. The time of a call made while nothing failed is therefore not known: it is dated at the last failure before it. After a quiet period longer than the window, those calls have all expired, and the budget starts again from its reserve plus the calls that follow, erring on the side of fewer retries.
+- **Snapshot**: `RetrySnapshot.budget()` is a `Budget(calls, retries, allowedRetries)` for the current window.
+
+On a [`ManualClock`](../guides/testing.md), a dependency that is down shows the cap exactly:
+
+<!-- snippet: retry-budget-testing -->
+```java
+ManualClock clock = new ManualClock();
+List<RetryEvent.GaveUp> gaveUp = new CopyOnWriteArrayList<>();
+ResilienceRegistry registry = ResilienceTesting.registry(clock)
+        .listen(RetryEvent.GaveUp.class, gaveUp::add)
+        .build();
+AtomicInteger attempts = new AtomicInteger();
+CatalogApi catalog = Resilient.of(CatalogApi.class, id -> {
+    attempts.incrementAndGet();
+    throw new IllegalStateException("catalog down");
+}, registry);
+
+for (int i = 0; i < 100; i++) {
+    assertThatThrownBy(() -> catalog.product("p-1")).isInstanceOf(IllegalStateException.class);
+}
+
+assertThat(attempts).hasValue(130);   // 100 calls + 10 (1/s over 10 s) + 20 (20% of 100), not 300
+assertThat(gaveUp).filteredOn(e -> e.reason() == RetryEvent.Reason.BUDGET_EXHAUSTED).hasSize(95);
+assertThat(registry.snapshot().retries().getFirst().budget())
+        .isEqualTo(new RetrySnapshot.Budget(100, 30, 30));   // calls, retries, allowed retries
+```
+
+The first five calls get both their retries; from the sixth on, the budget allows one retry for every five calls.
+
+**What it costs.** Without a budget, nothing changes: the generated code is the same and `start()` reads one field, as before. With one, each call adds one plain read-and-write on a counter striped by a hash of the thread id, each stripe on its own cache line, so that concurrent callers do not write to a shared line; no clock is read and nothing is allocated. The count is approximate on purpose: two threads that share a stripe and race can lose a call, which only makes the budget stricter. A failure that would be retried reads the clock and sums the stripes, and a granted retry adds one compare-and-set on the shared retry count.
+
+> [!MEASURED]
+> AWS `c7g.xlarge` (Graviton3), 1 / 4 threads: a successful call costs 3.5 / 3.6 ns with a budget against 1.3 / 1.3 ns without one; a call retried once, 62 / 301 ns against 6.9 / 7.1 ns. From [Retry budget, 0.3.0](../benchmarks.md#retry-budget-030-2026-10-25-aws-graviton3).
 
 ## With other policies
 
@@ -194,7 +255,7 @@ The pipeline's id (`"inventory"`) is the instance id. `retry()` uses the default
 | `RetryEvent.Retrying` | A failed attempt will be retried | `instance`, `nanoTime`, `attempt`, `delay`, `failure` (`null` for a rejected result) |
 | `RetryEvent.GaveUp` | No more attempts | `instance`, `nanoTime`, `attempts`, `reason`, `failure` |
 
-`GaveUp.reason()` is `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (not in `retryOn`, in `abortOn`, or an open breaker), `INTERRUPTED` or `CLASSIFIER_FAILED`. Successful calls publish nothing. Listeners are registered on the registry builder; see [Observability](../guides/observability.md).
+`GaveUp.reason()` is `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (not in `retryOn`, in `abortOn`, or an open breaker), `INTERRUPTED`, `CLASSIFIER_FAILED` or `BUDGET_EXHAUSTED` (the [retry budget](#retry-budget) is used up). Successful calls publish nothing. Listeners are registered on the registry builder; see [Observability](../guides/observability.md).
 
 ## Testing it with `ManualClock`
 
@@ -229,7 +290,7 @@ assertThat(clock.elapsed()).isEqualTo(Duration.ofMillis(300));   // 100 ms, then
 - `maxDuration` decides before each delay; it does not interrupt a running attempt. Combine it with `@Timeout`.
 - Only interface annotations count with `Resilient.of`, and calls the implementation makes to itself (`this.stock(…)`) are not retried. With [annotated classes](../guides/annotated-classes.md) they are.
 - The sync form blocks the caller's thread during delays (cheap on a virtual thread). Use the async form to free it.
-- Related errors: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (duration syntax), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`maxAttempts` below 1), [`R4C-ATR-004`](../errors.md#r4c-atr-004) (`multiplier`), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` with `retryOn`), [`R4C-CLS-012`](../errors.md#r4c-cls-012) (`onExhaustedResult` without a classifier), [`R4C-REG-001`](../errors.md#r4c-reg-001)/[`R4C-REG-003`](../errors.md#r4c-reg-003) (invalid combination), [`R4C-REG-004`](../errors.md#r4c-reg-004) (unknown `config`), [`R4C-REG-008`](../errors.md#r4c-reg-008) (shared `name`, different config).
+- Related errors: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (duration syntax), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`maxAttempts` below 1), [`R4C-ATR-004`](../errors.md#r4c-atr-004) (`multiplier`), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-ATR-007`](../errors.md#r4c-atr-007) (retry budget values), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` with `retryOn`), [`R4C-CLS-012`](../errors.md#r4c-cls-012) (`onExhaustedResult` without a classifier), [`R4C-REG-001`](../errors.md#r4c-reg-001)/[`R4C-REG-003`](../errors.md#r4c-reg-003) (invalid combination), [`R4C-REG-004`](../errors.md#r4c-reg-004) (unknown `config`), [`R4C-REG-008`](../errors.md#r4c-reg-008) (shared `name`, different config).
 
 ## What it costs
 

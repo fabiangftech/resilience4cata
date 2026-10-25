@@ -1,0 +1,23 @@
+plugins {
+    id 'r4c.java-library'
+    id 'r4c.publish'
+}
+
+description = 'OpenTelemetry metrics for resilience4cata: counters from events, gauges from snapshots.'
+
+dependencies {
+    api project(':core')
+    api libs.opentelemetry.api
+    testImplementation project(':testkit')
+    testImplementation libs.opentelemetry.sdk
+    testImplementation libs.opentelemetry.sdk.testing
+}
+
+// The instrumentation scope version: the build's version, written into a resource.
+def moduleVersion = project.version.toString()
+tasks.named('processResources') {
+    inputs.property('moduleVersion', moduleVersion)
+    filesMatching('**/version.properties') {
+        expand(version: moduleVersion)
+    }
+}

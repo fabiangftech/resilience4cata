@@ -23,6 +23,7 @@ enum ProcessorError {
     INVALID_MULTIPLIER("R4C-ATR-004", "multiplier must be a finite number >= 1"),
     INVALID_PERCENTAGE("R4C-ATR-005", "rate threshold must be a percentage > 0 and <= 100"),
     INVALID_ENABLED("R4C-ATR-006", "enabled must be \"\", \"true\" or \"false\""),
+    INVALID_BUDGET("R4C-ATR-007", "retry budget value out of range"),
 
     BUNDLE_NOT_MARKED("R4C-CMP-001", "composed annotation not marked with @ResiliencePolicy"),
     BUNDLE_CONFLICT("R4C-CMP-002", "two composed annotations set an attribute to different values"),

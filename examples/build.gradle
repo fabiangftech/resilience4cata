@@ -7,9 +7,16 @@ description = 'Runnable examples. Not published: their tests check the generated
 dependencies {
     testImplementation project(':core')
     testImplementation project(':testkit')
+    testImplementation project(':junit')
     testImplementation project(':config')
-    // Only for the Micrometer recipe in docs/en/guides/observability.md; resilience4cata has no Micrometer module.
-    testImplementation libs.micrometer.core
+    // docs/en/guides/opentelemetry.md: the module, an SDK, and the Prometheus exporter it shows.
+    testImplementation project(':opentelemetry')
+    testImplementation libs.opentelemetry.sdk
+    testImplementation libs.opentelemetry.sdk.testing
+    testImplementation libs.opentelemetry.exporter.prometheus
+    testImplementation project(':micrometer')
+    // Only for the sample scrape in docs/en/guides/micrometer.md.
+    testImplementation libs.micrometer.registry.prometheus
     testCompileOnly project(':annotations')
     testAnnotationProcessor project(':processor')
 }

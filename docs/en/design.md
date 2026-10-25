@@ -20,7 +20,7 @@ resilience4cata is a resilience library for **plain Java 21+**: circuit breaker,
 | Build | Gradle with a minimal Groovy DSL; convention plugins written in Java; version catalog. No Kotlin in the project | [architecture](architecture.md#build-and-tooling) |
 | Annotation mechanism | **Compile-time annotation processor (APT)** that generates plain Java source. No runtime proxies, bytecode generation or agents in `core` | [architecture](architecture.md#annotation-mechanism) |
 | Frameworks | Plain Java only for now | — |
-| Modules | Single-word names: `annotations`, `core`, `processor`, `config`, `testkit`, `bom` (and `micrometer`, planned for v1), plus internal `benchmark`, `stress`, `examples` | [architecture](architecture.md#modules) |
+| Modules | Single-word names: `annotations`, `core`, `processor`, `config`, `testkit`, `micrometer`, `bom`, plus internal `benchmark`, `stress`, `examples` | [architecture](architecture.md#modules) |
 | `core` dependencies | None besides JSpecify (see below) | [architecture](architecture.md#modules) |
 | MVP policies | `@CircuitBreaker`, `@Retry`, `@Timeout`, `@Bulkhead`, `@RateLimiter`, `@Fallback` | [features](policies/README.md) |
 | Performance contract | 0 B/op on success paths, no locks on hot paths, enforced by JMH in CI | [features](performance.md) |
@@ -59,7 +59,7 @@ resilience4cata is a resilience library for **plain Java 21+**: circuit breaker,
 | Error codes | **Done**: every processor diagnostic (`R4C-APT/ATR/CMP/ASY/CLS/FB/SUB`), runtime wrapping and pipeline error (`R4C-RT`), registry and policy-configuration error (`R4C-REG`: invalid values, unknown or duplicate named configs, conflicting shared instances, unknown instance ids, with "Did you mean …?") and config problem (`R4C-CFG`) has a stable code and a section in the [error reference](errors.md), with a wrong example and the fix; the build compiles the processor examples |
 | Publishing | Maven Central setup ready (`r4c.publish`, `bom`, `centralBundle`); 0.1.0 and 0.2.0 released (`release.yml`) — see [Releasing](releasing.md) |
 | User guide | **Done**: [getting started](start/quickstart.md), every snippet compiled and run by `examples/.../GuideTest.java`; root `README.md` for GitHub |
-| CI (GitHub Actions) | **Done, not yet run on GitHub** (no remote): `build` on JDK 21 and 25 (`./gradlew build -PtestJdk=N`), `alloc-gate` on every PR (`./gradlew :benchmark:allocationCheck`: 35 success and rejection benchmarks against their B/op budgets in `benchmark/allocation-budgets.properties`), `stress` (jcstress quick) after every push to main and nightly; Dependabot for the version catalog and the actions, which are pinned to commit SHAs |
+| CI (GitHub Actions) | **Done, not yet run on GitHub** (no remote): `build` on JDK 21 and 25 (`./gradlew build -PtestJdk=N`), `alloc-gate` on every PR (`./gradlew :benchmark:allocationCheck`: 37 success and rejection benchmarks against their B/op budgets in `benchmark/allocation-budgets.properties`), `stress` (jcstress quick) after every push to main and nightly; Dependabot for the version catalog and the actions, which are pinned to commit SHAs |
 
 ## Open questions
 

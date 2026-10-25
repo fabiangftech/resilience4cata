@@ -86,6 +86,66 @@ class ResilienceProcessorTest {
     }
 
     @Test
+    void aRetryBudgetOnlyAddsBuilderCallsToTheGeneratedCode() {
+        String plain = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Retry;
+                public interface Client {
+                    @Retry(maxAttempts = 3)
+                    String call(String argument);
+                }
+                """).generatedSource("demo.Client$Resilient");
+        Compilation budgeted = Compilation.compile(workDir.resolve("budgeted"), Map.of("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Retry;
+                public interface Client {
+                    @Retry(maxAttempts = 3, budgetPercent = 20, budgetMinRetriesPerSecond = 5, budgetWindow = "30s")
+                    String call(String argument);
+                }
+                """));
+
+        assertThat(budgeted.errors()).isEmpty();
+        String generated = budgeted.generatedSource("demo.Client$Resilient");
+        assertThat(generated)
+                .contains("r4c$b.budgetPercent(20.0);")
+                .contains("r4c$b.budgetMinRetriesPerSecond(5);")
+                .contains("r4c$b.budgetWindow(java.time.Duration.ofNanos(30000000000L));");
+        assertThat(generated.lines().filter(line -> !line.contains("r4c$b.budget")).toList())
+                .as("the same code as without a budget, apart from the overrides")
+                .isEqualTo(plain.lines().toList());
+    }
+
+    @Test
+    void rejectsInvalidRetryBudgets() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.Retry;
+                public interface Client {
+                    @Retry(budgetPercent = -5, budgetMinRetriesPerSecond = -2)
+                    String negative();
+                    @Retry(budgetPercent = Double.POSITIVE_INFINITY, budgetWindow = "500ms")
+                    String shortWindow();
+                    @Retry(budgetWindow = "2h")
+                    String longWindow();
+                    @Retry(budgetWindow = "ten seconds")
+                    String notADuration();
+                    @Retry(budgetPercent = 0, budgetMinRetriesPerSecond = 0, budgetWindow = "1h")
+                    String limits();
+                }
+                """);
+
+        assertThat(result.errorCodes()).containsExactlyInAnyOrder(
+                "R4C-ATR-007", "R4C-ATR-007", "R4C-ATR-007", "R4C-ATR-007", "R4C-ATR-007", "R4C-ATR-001");
+        assertThat(result.errors())
+                .anySatisfy(e -> assertThat(e).contains("@Retry.budgetPercent must be a finite number >= 0, was -5.0"))
+                .anySatisfy(e -> assertThat(e).contains("@Retry.budgetPercent must be a finite number >= 0, was Infinity"))
+                .anySatisfy(e -> assertThat(e).contains("@Retry.budgetMinRetriesPerSecond must not be negative, was -2"))
+                .anySatisfy(e -> assertThat(e).contains("@Retry.budgetWindow must be between 1s and 1h, was \"500ms\""))
+                .anySatisfy(e -> assertThat(e).contains("@Retry.budgetWindow must be between 1s and 1h, was \"2h\""))
+                .anySatisfy(e -> assertThat(e).contains("@Retry.budgetWindow = \"ten seconds\" is not a valid duration"));
+    }
+
+    @Test
     void rejectsInvalidEnabledValues() {
         Compilation result = compile("demo.Client", """
                 package demo;

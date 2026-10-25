@@ -15,16 +15,17 @@ import dev.resilience4cata.Resilient;
 import dev.resilience4cata.event.CircuitBreakerEvent;
 import dev.resilience4cata.event.ResilienceEvent;
 import dev.resilience4cata.event.RetryEvent;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.text.MessageFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.ResourceBundle;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.DoubleSupplier;
 import org.junit.jupiter.api.Test;
 
-/** The code of {@code docs/en/guides/observability.md}, including the Micrometer recipe. */
+/** The code of {@code docs/en/guides/observability.md}. */
 class ObservabilityGuideTest {
 
     private final AtomicBoolean down = new AtomicBoolean(true);
@@ -96,41 +97,30 @@ class ObservabilityGuideTest {
     }
 
     @Test
-    void theMicrometerRecipeMovesTheMeters() {
-        // tag::observability-micrometer-wiring[]
-        MeterRegistry meters = new SimpleMeterRegistry(); // in your app: the registry you already export
+    void theBuildingBlocksOfAMetricsBridge() {
+        Map<String, Long> retries = new ConcurrentHashMap<>();
+        Map<String, DoubleSupplier> gauges = new ConcurrentHashMap<>();
+        // tag::observability-diy[]
         ResilienceRegistry registry = ResilienceRegistry.builder()
-                .listen(ResilienceEvent.class, new ResilienceEventCounters(meters))
+                // counters: from events, on the thread that caused them
+                .listen(RetryEvent.Retrying.class, e -> retries.merge(e.instance(), 1L, Long::sum))
                 .build();
+        // gauges: one per instance, read at collection time; new instances are announced once each
+        registry.onInstanceCreated(() -> {
+            for (CircuitBreakerHandle breaker : registry.circuitBreakers()) {
+                gauges.putIfAbsent(breaker.id(), () -> breaker.state() == CircuitBreakerState.OPEN ? 1 : 0);
+            }
+        });
+        // end::observability-diy[]
         PaymentGateway payments = Resilient.of(PaymentGateway.class, delegate, registry);
-        ResilienceGauges.bind(registry, meters); // after wrapping: the instances exist now
-        // end::observability-micrometer-wiring[]
-
-        assertThat(meters.get("r4c.circuitbreaker.state").tags("instance", "payments", "state", "closed").gauge().value())
-                .isEqualTo(1.0);
-        assertThat(meters.get("r4c.circuitbreaker.failure.rate").tag("instance", "payments").gauge().value()).isNaN();
+        assertThat(gauges.get("payments").getAsDouble()).isZero();
 
         for (int i = 0; i < 2; i++) {
             assertThatThrownBy(() -> payments.charge("o-1")).isInstanceOf(RuntimeException.class);
         }
 
-        assertThat(meters.get("r4c.retry.retries").tag("instance", "payments").counter().count()).isEqualTo(3.0);
-        assertThat(meters.get("r4c.retry.gave.up").tags("instance", "payments", "reason", "max_attempts").counter()
-                .count()).isEqualTo(1.0);
-        assertThat(meters.get("r4c.retry.gave.up").tags("instance", "payments", "reason", "not_retryable").counter()
-                .count()).isEqualTo(1.0);
-        assertThat(meters.get("r4c.circuitbreaker.transitions").tags("instance", "payments", "from", "closed", "to", "open")
-                .counter().count()).isEqualTo(1.0);
-        assertThat(meters.get("r4c.calls.rejected").tags("instance", "payments", "kind", "circuitbreaker").counter()
-                .count()).isEqualTo(1.0);
-        assertThat(meters.get("r4c.circuitbreaker.state").tags("instance", "payments", "state", "open").gauge().value())
-                .isEqualTo(1.0);
-        assertThat(meters.get("r4c.circuitbreaker.state").tags("instance", "payments", "state", "closed").gauge().value())
-                .isZero();
-        assertThat(meters.get("r4c.bulkhead.max.concurrent").tag("instance", "payments").gauge().value()).isEqualTo(10.0);
-        assertThat(meters.get("r4c.bulkhead.concurrent.calls").tag("instance", "payments").gauge().value()).isZero();
-        assertThat(meters.get("r4c.ratelimiter.available.permits").tag("instance", "payments").gauge().value())
-                .isBetween(96.0, 100.0); // four attempts took a permit; one comes back every 10 ms
+        assertThat(retries).containsEntry("payments", 3L);
+        assertThat(gauges.get("payments").getAsDouble()).isEqualTo(1.0);
         assertThatThrownBy(() -> payments.charge("o-2")).isInstanceOf(CallNotPermittedException.class);
     }
 

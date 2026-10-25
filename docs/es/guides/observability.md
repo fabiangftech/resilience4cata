@@ -7,8 +7,8 @@ resilience4cata te da dos piezas básicas:
 1. **Eventos**: un record por cada cosa que hace una política aparte de dejar pasar una llamada (un retry, una transición del breaker, un rechazo, un timeout, un fallback), entregado a los listeners que registras en el builder del registry.
 2. **Snapshots y handles**: el estado actual de cada instancia, leído cuando lo pides.
 
-> [!NOTE]
-> Todavía no hay módulo de Micrometer, OpenTelemetry ni logging. La [receta de Micrometer](#micrometer) de abajo es código que pones en tu aplicación; está probada en este repositorio con Micrometer 1.17.1, pero no es un artefacto de la librería.
+> [!TIP]
+> Para métricas, agrega el [módulo de Micrometer](micrometer.md) o el [módulo de OpenTelemetry](opentelemetry.md): tres líneas de configuración te dan las [métricas de abajo](#metric-names), construidas sobre estas dos piezas. Esta página describe las piezas en sí, para logs, health checks u otra librería de métricas.
 
 ## Eventos :id=events
 
@@ -19,7 +19,7 @@ Cada evento implementa la interfaz sellada `dev.resilience4cata.event.Resilience
 | Circuit breaker | `CircuitBreakerEvent.StateTransition` | `CircuitBreakerState from`, `CircuitBreakerState to` | el estado cambia, exactamente una vez por cambio, incluidos `forceOpen()`, `disable()` y `reset()` |
 | Circuit breaker | `CircuitBreakerEvent.CallNotPermitted` | `CircuitBreakerState state` | una llamada es rechazada (`OPEN`, `FORCED_OPEN`, o `HALF_OPEN` con todas las pruebas tomadas) |
 | Retry | `RetryEvent.Retrying` | `int attempt`, `Duration delay`, `@Nullable Throwable failure` | un intento falló y se ejecutará otro después de `delay`; `failure` es `null` cuando un [classifier](classifiers.md) rechazó un resultado |
-| Retry | `RetryEvent.GaveUp` | `int attempts`, `RetryEvent.Reason reason`, `@Nullable Throwable failure` | el retry se detiene sin un éxito: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (el fallo no está en `retryOn`, está en `abortOn`, o es la `CallNotPermittedException` de un breaker abierto), `INTERRUPTED`, `CLASSIFIER_FAILED` |
+| Retry | `RetryEvent.GaveUp` | `int attempts`, `RetryEvent.Reason reason`, `@Nullable Throwable failure` | el retry se detiene sin un éxito: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (el fallo no está en `retryOn`, está en `abortOn`, o es la `CallNotPermittedException` de un breaker abierto), `INTERRUPTED`, `CLASSIFIER_FAILED`, `BUDGET_EXHAUSTED` (el [presupuesto de reintentos](../policies/retry.md#presupuesto-de-reintentos) se agotó) |
 | Rate limiter | `RateLimiterEvent.Rejected` | ninguno | una llamada es rechazada con `RateLimitExceededException` |
 | Timeout | `TimeoutEvent.TimedOut` | `Duration timeout` | una llamada excede su timeout |
 | Bulkhead | `BulkheadEvent.Rejected` | `int maxConcurrent` | una llamada es rechazada con `BulkheadFullException` |
@@ -101,13 +101,13 @@ Los handles leen una instancia en vivo, y el del breaker además puede cambiar s
 
 Una instancia existe solo cuando su interfaz ya fue envuelta (`Resilient.of`, `Resilient.create`) o su `Pipeline` ya fue construido; antes de eso, o para un id que no existe, la búsqueda lanza `IllegalArgumentException` [R4C-REG-009](../errors.md#r4c-reg-009) con el id más cercano. Retry y timeout no tienen handle; su configuración está en el snapshot. No hay método de listado para bulkheads y rate limiters: enuméralos a través de `registry.snapshot()`.
 
-## Receta de Micrometer :id=micrometer
+## Métricas :id=metrics
 
-Counters a partir de eventos, gauges a partir de handles. Copia las dos clases en tu aplicación; necesitan `io.micrometer:micrometer-core` (la receta está probada con 1.17.1).
+El [módulo de Micrometer](micrometer.md) (`resilience4cata-micrometer`) convierte los eventos en counters y los handles en gauges. Su página tiene la configuración, un scrape real de Prometheus, consultas de Grafana y consejos sobre cardinalidad. El [módulo de OpenTelemetry](opentelemetry.md) (`resilience4cata-opentelemetry`) reporta las mismas métricas, con los mismos nombres y etiquetas, a través de la API de métricas de OpenTelemetry, así que los dashboards funcionan con cualquiera de los dos.
 
 ### Nombres de métricas :id=metric-names
 
-Los nombres van en minúsculas y separados por puntos, como recomienda Micrometer; cada meter tiene un tag `instance` (los ids de instancia están fijos en tu código, así que el tag está acotado) y como mucho uno o dos tags más con un conjunto fijo de valores.
+Los nombres van en minúsculas y separados por puntos, como recomienda Micrometer (Prometheus los muestra como `r4c_retry_retries_total`, etc.); cada meter tiene un tag `instance` (el id de instancia: los ids de instancia están fijos en tu código, así que el tag está acotado) y como mucho uno o dos tags más con un conjunto fijo de valores. Los valores de los tags van en minúsculas.
 
 | Meter | Tipo | Tags | Origen |
 |---|---|---|---|
@@ -122,173 +122,25 @@ Los nombres van en minúsculas y separados por puntos, como recomienda Micromete
 | `r4c.bulkhead.concurrent.calls`, `r4c.bulkhead.waiting.calls`, `r4c.bulkhead.max.concurrent` | gauge | `instance` | `BulkheadHandle` |
 | `r4c.ratelimiter.available.permits` | gauge | `instance` | `RateLimiterHandle` |
 
-No agregues la clase ni el mensaje de la excepción como tag: en la práctica no están acotados.
+### Otra librería de métricas :id=diy
 
-### Counters a partir de eventos :id=counters
+Un puente hacia otra librería hace lo mismo que el módulo de Micrometer, con tres piezas de la API de core: un listener para los counters, los handles leídos al recolectar para los gauges, y `registry.onInstanceCreated(…)` para enterarse de las instancias creadas después de conectar el registry (las instancias se crean al envolver un servicio o construir un pipeline, nunca durante una llamada):
 
-<!-- snippet: observability-counters -->
+<!-- snippet: observability-diy -->
 ```java
-import dev.resilience4cata.event.BulkheadEvent;
-import dev.resilience4cata.event.CircuitBreakerEvent;
-import dev.resilience4cata.event.EventListener;
-import dev.resilience4cata.event.FallbackEvent;
-import dev.resilience4cata.event.RateLimiterEvent;
-import dev.resilience4cata.event.ResilienceEvent;
-import dev.resilience4cata.event.RetryEvent;
-import dev.resilience4cata.event.TimeoutEvent;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
-import java.util.Locale;
-
-/**
- * Turns resilience4cata events into Micrometer counters. Your code, not a library module: copy it.
- * Register it with ResilienceRegistry.Builder.listen(ResilienceEvent.class, ...) before build().
- */
-public final class ResilienceEventCounters implements EventListener<ResilienceEvent> {
-
-    private final MeterRegistry meters;
-
-    public ResilienceEventCounters(MeterRegistry meters) {
-        this.meters = meters;
-    }
-
-    @Override
-    public void onEvent(ResilienceEvent event) {
-        switch (event) {
-            case CircuitBreakerEvent.StateTransition t ->
-                    count("r4c.circuitbreaker.transitions", t, "from", lower(t.from()), "to", lower(t.to()));
-            case CircuitBreakerEvent.CallNotPermitted r -> count("r4c.calls.rejected", r, "kind", "circuitbreaker");
-            case RateLimiterEvent.Rejected r -> count("r4c.calls.rejected", r, "kind", "ratelimiter");
-            case BulkheadEvent.Rejected r -> count("r4c.calls.rejected", r, "kind", "bulkhead");
-            case RetryEvent.Retrying r -> count("r4c.retry.retries", r);
-            case RetryEvent.GaveUp g -> count("r4c.retry.gave.up", g, "reason", lower(g.reason()));
-            case TimeoutEvent.TimedOut t -> count("r4c.timeout.timed.out", t);
-            case FallbackEvent.Applied f -> count("r4c.fallback.applied", f);
-        }
-    }
-
-    private void count(String name, ResilienceEvent event, String... tags) {
-        Counter.builder(name).tag("instance", event.instance()).tags(tags).register(meters).increment();
-    }
-
-    private static String lower(Enum<?> value) {
-        return value.name().toLowerCase(Locale.ROOT);
-    }
-}
-```
-
-`Counter.builder(…).register(meters)` busca el counter en cada evento (Micrometer devuelve el que ya existe). Eso cuesta una allocation y una búsqueda en un mapa por evento, solo en los caminos de fallo; si tus eventos son muy frecuentes, guarda en caché los counters por instancia y valores de tags.
-
-### Gauges a partir de handles :id=gauges
-
-<!-- snippet: observability-gauges -->
-```java
-import dev.resilience4cata.BulkheadHandle;
-import dev.resilience4cata.BulkheadSnapshot;
-import dev.resilience4cata.CircuitBreakerHandle;
-import dev.resilience4cata.CircuitBreakerState;
-import dev.resilience4cata.RateLimiterHandle;
-import dev.resilience4cata.RateLimiterSnapshot;
-import dev.resilience4cata.ResilienceRegistry;
-import dev.resilience4cata.ResilienceSnapshot;
-import io.micrometer.core.instrument.Gauge;
-import io.micrometer.core.instrument.MeterRegistry;
-import java.util.Locale;
-
-/**
- * Micrometer gauges read from the registry's handles when the meters are scraped. Your code, not a
- * library module: copy it. Call bind(...) after wrapping your services: an instance exists only then.
- */
-public final class ResilienceGauges {
-
-    private ResilienceGauges() {
-    }
-
-    public static void bind(ResilienceRegistry registry, MeterRegistry meters) {
-        for (CircuitBreakerHandle breaker : registry.circuitBreakers()) {
-            for (CircuitBreakerState state : CircuitBreakerState.values()) { // 1 for the current state, else 0
-                Gauge.builder("r4c.circuitbreaker.state", breaker, b -> b.state() == state ? 1 : 0)
-                        .tag("instance", breaker.id()).tag("state", state.name().toLowerCase(Locale.ROOT))
-                        .strongReference(true).register(meters);
-            }
-            Gauge.builder("r4c.circuitbreaker.failure.rate", breaker, b -> percent(b.snapshot().failureRate()))
-                    .tag("instance", breaker.id()).baseUnit("percent").strongReference(true).register(meters);
-            Gauge.builder("r4c.circuitbreaker.slow.call.rate", breaker, b -> percent(b.snapshot().slowCallRate()))
-                    .tag("instance", breaker.id()).baseUnit("percent").strongReference(true).register(meters);
-        }
-        ResilienceSnapshot snapshot = registry.snapshot(); // lists every bulkhead and rate limiter
-        for (BulkheadSnapshot b : snapshot.bulkheads()) {
-            BulkheadHandle bulkhead = registry.bulkhead(b.instance());
-            Gauge.builder("r4c.bulkhead.concurrent.calls", bulkhead, BulkheadHandle::concurrentCalls)
-                    .tag("instance", b.instance()).strongReference(true).register(meters);
-            Gauge.builder("r4c.bulkhead.waiting.calls", bulkhead, BulkheadHandle::waitingCalls)
-                    .tag("instance", b.instance()).strongReference(true).register(meters);
-            Gauge.builder("r4c.bulkhead.max.concurrent", bulkhead, h -> h.config().maxConcurrent())
-                    .tag("instance", b.instance()).strongReference(true).register(meters);
-        }
-        for (RateLimiterSnapshot r : snapshot.rateLimiters()) {
-            RateLimiterHandle limiter = registry.rateLimiter(r.instance());
-            Gauge.builder("r4c.ratelimiter.available.permits", limiter, RateLimiterHandle::availablePermits)
-                    .tag("instance", r.instance()).strongReference(true).register(meters);
-        }
-    }
-
-    /** The snapshot reports -1 until the window holds minimumCalls calls: no value yet. */
-    private static double percent(float rate) {
-        return rate < 0 ? Double.NaN : rate;
-    }
-}
-```
-
-Los gauges se leen cuando se hace scrape del registry. `strongReference(true)` mantiene vivo el handle aunque nada más lo referencie (Micrometer guarda los objetos de los gauges con referencias débiles por defecto).
-
-### Conexión :id=wiring
-
-El listener debe registrarse antes de `build()`, y los gauges vincularse después de envolver los servicios, porque las instancias existen solo a partir de ese momento. Las instancias creadas más tarde (otra llamada a `Resilient.of`) necesitan otra llamada a `ResilienceGauges.bind(…)`, o bien vincula una sola vez al final de tu conexión.
-
-<!-- snippet: observability-micrometer-wiring -->
-```java
-MeterRegistry meters = new SimpleMeterRegistry(); // in your app: the registry you already export
 ResilienceRegistry registry = ResilienceRegistry.builder()
-        .listen(ResilienceEvent.class, new ResilienceEventCounters(meters))
+        // counters: from events, on the thread that caused them
+        .listen(RetryEvent.Retrying.class, e -> retries.merge(e.instance(), 1L, Long::sum))
         .build();
-PaymentGateway payments = Resilient.of(PaymentGateway.class, delegate, registry);
-ResilienceGauges.bind(registry, meters); // after wrapping: the instances exist now
+// gauges: one per instance, read at collection time; new instances are announced once each
+registry.onInstanceCreated(() -> {
+    for (CircuitBreakerHandle breaker : registry.circuitBreakers()) {
+        gauges.putIfAbsent(breaker.id(), () -> breaker.state() == CircuitBreakerState.OPEN ? 1 : 0);
+    }
+});
 ```
 
-### Lo que muestra Prometheus :id=prometheus
-
-Con un `PrometheusMeterRegistry`, la convención de nombres de Micrometer convierte los puntos en guiones bajos y agrega `_total` a los counters. Después de que un breaker se abrió, un scrape contiene líneas como estas (resumidas, los valores son un ejemplo):
-
-```text
-r4c_retry_retries_total{instance="payments"} 3.0
-r4c_retry_gave_up_total{instance="payments",reason="max_attempts"} 1.0
-r4c_retry_gave_up_total{instance="payments",reason="not_retryable"} 1.0
-r4c_calls_rejected_total{instance="payments",kind="circuitbreaker"} 1.0
-r4c_circuitbreaker_transitions_total{from="closed",instance="payments",to="open"} 1.0
-r4c_circuitbreaker_state{instance="payments",state="closed"} 0.0
-r4c_circuitbreaker_state{instance="payments",state="open"} 1.0
-r4c_circuitbreaker_failure_rate_percent{instance="payments"} 100.0
-r4c_bulkhead_concurrent_calls{instance="payments"} 0.0
-r4c_bulkhead_max_concurrent{instance="payments"} 10.0
-r4c_ratelimiter_available_permits{instance="payments"} 96.0
-```
-
-### Paneles de Grafana :id=grafana
-
-PromQL para los paneles que necesitan la mayoría de los servicios:
-
-| Panel | Consulta | Notas |
-|---|---|---|
-| Rechazos por segundo, por política | `sum by (instance, kind) (rate(r4c_calls_rejected_total[5m]))` | serie temporal apilada |
-| Breakers abiertos ahora | `sum by (instance) (r4c_circuitbreaker_state{state=~"open\|forced_open"})` | stat o state timeline; alerta cuando sea `> 0` durante unos minutos |
-| Transiciones del breaker | `increase(r4c_circuitbreaker_transitions_total{to="open"}[1h])` | un breaker inestable se abre muchas veces |
-| Retries por segundo | `sum by (instance) (rate(r4c_retry_retries_total[5m]))` | compáralo con tu tasa de requests |
-| Abandonos por motivo | `sum by (instance, reason) (increase(r4c_retry_gave_up_total[1h]))` | `not_retryable` incluye las llamadas detenidas por un breaker abierto |
-| Tasa de fallos | `r4c_circuitbreaker_failure_rate_percent` | huecos hasta `minimumCalls` |
-| Saturación del bulkhead | `r4c_bulkhead_concurrent_calls / r4c_bulkhead_max_concurrent` | 1 significa lleno; grafica también `r4c_bulkhead_waiting_calls` |
-| Timeouts por segundo | `sum by (instance) (rate(r4c_timeout_timed_out_total[5m]))` | |
-| Fallbacks por segundo | `sum by (instance) (rate(r4c_fallback_applied_total[5m]))` | la proporción de respuestas degradadas |
+`onInstanceCreated` ejecuta su acción una vez por cada instancia nueva, en el thread que la crea, después de que la instancia es visible en `snapshot()` y en las búsquedas de handles; devuelve un `Registration` cuyo `close()` la detiene. Los bulkheads y los rate limiters no tienen método de lista: búscalos en `registry.snapshot()`. Guarda tus counters en caché por instancia y valores de tags, para que un evento no registre un meter cada vez.
 
 ## Registrar transiciones en logs :id=logging
 

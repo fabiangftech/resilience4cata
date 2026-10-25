@@ -247,6 +247,23 @@ class PoliciesOnManualClockTest {
     }
 
     @Test
+    void anAsyncCallThatFinishesInTimeLeavesNoTaskOnTheClock() {
+        ResilienceRegistry registry = ResilienceTesting.registry(clock)
+                .timeoutDefaults(t -> t.timeout(Duration.ofSeconds(2)))
+                .build();
+        TimeoutPolicy timeout = registry.timeoutPolicy("t", "", "", null);
+        CompletableFuture<String> later = new CompletableFuture<>();
+
+        CompletableFuture<String> completed = timeout.executeAsync(() -> later);
+        assertThat(clock.pendingTasks()).isEqualTo(1);
+        later.complete("ok");
+
+        assertThat(completed).isCompletedWithValue("ok");
+        assertThat(clock.pendingTasks()).isZero(); // before the deadline, not only after it
+        assertThat(clock.nextTaskIn()).isNull();
+    }
+
+    @Test
     void asyncRateLimiterWaitsForTheClock() {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .rateLimiterDefaults(rl -> rl.permits(1).period(Duration.ofSeconds(1)).maxWait(Duration.ofSeconds(5)))

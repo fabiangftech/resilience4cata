@@ -19,6 +19,8 @@
   - [Pipeline API](/en/guides/pipeline.md)
   - [Testing](/en/guides/testing.md)
   - [Observability](/en/guides/observability.md)
+  - [Micrometer](/en/guides/micrometer.md)
+  - [OpenTelemetry](/en/guides/opentelemetry.md)
   - [Troubleshooting](/en/guides/troubleshooting.md)
 - **Reference**
   - [Configuration keys](/en/reference/configuration.md)

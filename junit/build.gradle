@@ -1,0 +1,42 @@
+plugins {
+    id 'r4c.java-library'
+    id 'r4c.publish'
+}
+
+description = 'JUnit Jupiter extension: a fresh ManualClock and a ResilienceRegistry on it, injected into each test.'
+
+dependencies {
+    api project(':testkit')
+    // Compiled against the oldest supported JUnit; the user's own (newer) JUnit wins at resolution.
+    api libs.junit.jupiter.api.minimum
+    testImplementation libs.junit.platform.testkit
+}
+
+// The fixtures are run by the tests through EngineTestKit, never directly.
+tasks.withType(Test).configureEach {
+    exclude 'dev/resilience4cata/junit/fixtures/**'
+}
+
+// `test` runs on the build's JUnit (6.x); `minimumJUnitTest` runs the same tests on the oldest supported JUnit.
+testing {
+    suites {
+        minimumJUnitTest(JvmTestSuite) {
+            useJUnitJupiter(libs.versions.junitMinimum)
+            sources {
+                java {
+                    srcDirs = ['src/test/java']
+                }
+            }
+            dependencies {
+                implementation project()
+                implementation platform(libs.junit.bom.minimum)
+                implementation libs.junit.platform.testkit
+                implementation libs.assertj
+            }
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn testing.suites.minimumJUnitTest
+}

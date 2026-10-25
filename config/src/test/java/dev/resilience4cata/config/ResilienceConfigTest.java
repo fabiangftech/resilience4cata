@@ -486,7 +486,7 @@ class ResilienceConfigTest {
         assertThat(failure(ResilienceConfig.builder().systemProperties(system)).problems().get(0))
                 .isEqualTo("[R4C-CFG-001] unknown key system property 'r4c.defaults.retry.maxAttempt'."
                         + " Did you mean 'r4c.defaults.retry.maxAttempts'? Attributes of retry: enabled,"
-                        + " maxAttempts, delay, backoff, multiplier, maxDelay, jitter, maxDuration, retryOn, abortOn");
+                        + " maxAttempts, delay, backoff, multiplier, maxDelay, jitter, maxDuration, retryOn, abortOn, budgetPercent, budgetMinRetriesPerSecond, budgetWindow");
     }
 
     // ---- key validation ----

@@ -18,6 +18,13 @@ import java.util.Objects;
  * @param retryOn exceptions that trigger a retry
  * @param abortOn exceptions that stop retrying; they win over {@code retryOn}. A
  *     {@link CallNotPermittedException} always stops retrying, whether listed or not
+ * @param budgetPercent retry budget: retries allowed, in percent of the calls made in the last
+ *     {@code budgetWindow}, on top of {@code budgetMinRetriesPerSecond}; finite, at least 0. The budget
+ *     is off while this and {@code budgetMinRetriesPerSecond} are both 0 (the default)
+ * @param budgetMinRetriesPerSecond retry budget: retries allowed per second of {@code budgetWindow}
+ *     whatever the traffic, so that rarely called methods can still retry; at least 0
+ * @param budgetWindow retry budget: how far back calls and retries are counted; between 1 s and 1 h
+ * @see #hasBudget()
  */
 public record RetryConfig(
         boolean enabled,
@@ -29,17 +36,45 @@ public record RetryConfig(
         Jitter jitter,
         Duration maxDuration,
         List<Class<? extends Throwable>> retryOn,
-        List<Class<? extends Throwable>> abortOn) {
+        List<Class<? extends Throwable>> abortOn,
+        double budgetPercent,
+        int budgetMinRetriesPerSecond,
+        Duration budgetWindow) {
+
+    /** The longest {@code budgetWindow}. */
+    private static final Duration MAX_BUDGET_WINDOW = Duration.ofHours(1);
 
     /**
      * Built-in defaults: 3 attempts, exponential backoff from 200 ms up to 10 s, full jitter, retry on
      * {@link Exception}, empty {@code abortOn}. Whatever the configuration, a call rejected by a circuit
      * breaker ({@link CallNotPermittedException}) is never retried: that abort is built in, not an entry
-     * of {@code abortOn}.
+     * of {@code abortOn}. No retry budget (with a 10 s {@code budgetWindow} once one is set).
      */
     public static final RetryConfig DEFAULTS = new RetryConfig(
             true, 3, Duration.ofMillis(200), Backoff.EXPONENTIAL, 2.0, Duration.ofSeconds(10),
-            Jitter.FULL, Duration.ZERO, List.of(Exception.class), List.of());
+            Jitter.FULL, Duration.ZERO, List.of(Exception.class), List.of(), 0.0, 0, Duration.ofSeconds(10));
+
+    /**
+     * Creates a configuration without a retry budget: the constructor of 0.2.0, kept so that code that
+     * calls it still compiles.
+     *
+     * @param enabled whether failed calls are retried at all
+     * @param maxAttempts total attempts, including the first one
+     * @param delay delay before the first retry
+     * @param backoff how the delay grows between attempts
+     * @param multiplier growth factor for {@link Backoff#EXPONENTIAL}
+     * @param maxDelay upper bound for a single delay
+     * @param jitter randomisation applied to each delay
+     * @param maxDuration time budget for the whole operation
+     * @param retryOn exceptions that trigger a retry
+     * @param abortOn exceptions that stop retrying
+     */
+    public RetryConfig(boolean enabled, int maxAttempts, Duration delay, Backoff backoff, double multiplier,
+            Duration maxDelay, Jitter jitter, Duration maxDuration, List<Class<? extends Throwable>> retryOn,
+            List<Class<? extends Throwable>> abortOn) {
+        this(enabled, maxAttempts, delay, backoff, multiplier, maxDelay, jitter, maxDuration, retryOn, abortOn,
+                0.0, 0, Duration.ofSeconds(10));
+    }
 
     /** How the delay grows between attempts. */
     public enum Backoff {
@@ -66,6 +101,7 @@ public record RetryConfig(
         Objects.requireNonNull(maxDelay, "maxDelay");
         Objects.requireNonNull(jitter, "jitter");
         Objects.requireNonNull(maxDuration, "maxDuration");
+        Objects.requireNonNull(budgetWindow, "budgetWindow");
         retryOn = List.copyOf(retryOn);
         abortOn = List.copyOf(abortOn);
         if (maxAttempts < 1) {
@@ -83,6 +119,26 @@ public record RetryConfig(
         if (maxDuration.isNegative()) {
             throw ErrorCode.invalidValue("retry", "maxDuration must not be negative, was " + maxDuration);
         }
+        if (!(budgetPercent >= 0) || Double.isInfinite(budgetPercent)) {
+            throw ErrorCode.invalidValue("retry", "budgetPercent must be a finite number >= 0, was " + budgetPercent);
+        }
+        if (budgetMinRetriesPerSecond < 0) {
+            throw ErrorCode.invalidValue("retry", "budgetMinRetriesPerSecond must not be negative, was "
+                    + budgetMinRetriesPerSecond);
+        }
+        if (budgetWindow.compareTo(Duration.ofSeconds(1)) < 0 || budgetWindow.compareTo(MAX_BUDGET_WINDOW) > 0) {
+            throw ErrorCode.invalidValue("retry", "budgetWindow must be between 1s and 1h, was " + budgetWindow);
+        }
+    }
+
+    /**
+     * Returns whether this configuration has a retry budget: {@code budgetPercent} or
+     * {@code budgetMinRetriesPerSecond} is above 0. Without one, the retry keeps no state between calls.
+     *
+     * @return {@code true} if retries are capped relative to the instance's recent calls
+     */
+    public boolean hasBudget() {
+        return budgetPercent > 0 || budgetMinRetriesPerSecond > 0;
     }
 
     /** Returns a builder that starts from {@link #DEFAULTS}. */
@@ -107,6 +163,9 @@ public record RetryConfig(
         private Duration maxDuration;
         private List<Class<? extends Throwable>> retryOn;
         private List<Class<? extends Throwable>> abortOn;
+        private double budgetPercent;
+        private int budgetMinRetriesPerSecond;
+        private Duration budgetWindow;
 
         private Builder(RetryConfig from) {
             enabled = from.enabled;
@@ -119,6 +178,9 @@ public record RetryConfig(
             maxDuration = from.maxDuration;
             retryOn = from.retryOn;
             abortOn = from.abortOn;
+            budgetPercent = from.budgetPercent;
+            budgetMinRetriesPerSecond = from.budgetMinRetriesPerSecond;
+            budgetWindow = from.budgetWindow;
         }
 
         /** @param enabled whether failed calls are retried at all @return this builder */
@@ -182,6 +244,32 @@ public record RetryConfig(
         }
 
         /**
+         * @param budgetPercent retries allowed, in percent of the calls of the last {@code budgetWindow}, on
+         *     top of {@code budgetMinRetriesPerSecond}; 0 with {@code budgetMinRetriesPerSecond = 0} turns the
+         *     budget off
+         * @return this builder
+         */
+        public Builder budgetPercent(double budgetPercent) {
+            this.budgetPercent = budgetPercent;
+            return this;
+        }
+
+        /**
+         * @param budgetMinRetriesPerSecond retries allowed per second of {@code budgetWindow} whatever the traffic
+         * @return this builder
+         */
+        public Builder budgetMinRetriesPerSecond(int budgetMinRetriesPerSecond) {
+            this.budgetMinRetriesPerSecond = budgetMinRetriesPerSecond;
+            return this;
+        }
+
+        /** @param budgetWindow how far back the budget counts calls and retries @return this builder */
+        public Builder budgetWindow(Duration budgetWindow) {
+            this.budgetWindow = Objects.requireNonNull(budgetWindow, "budgetWindow");
+            return this;
+        }
+
+        /**
          * Validates the values and builds the configuration.
          *
          * @return the configuration
@@ -189,7 +277,7 @@ public record RetryConfig(
          */
         public RetryConfig build() {
             return new RetryConfig(enabled, maxAttempts, delay, backoff, multiplier, maxDelay, jitter,
-                    maxDuration, retryOn, abortOn);
+                    maxDuration, retryOn, abortOn, budgetPercent, budgetMinRetriesPerSecond, budgetWindow);
         }
     }
 }

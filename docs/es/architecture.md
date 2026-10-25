@@ -154,19 +154,19 @@ Carpetas de una sola palabra. Se publican con el groupId `dev.resilience4cata` (
 | `core` | sí | Todas las políticas, registry, modelo de configuración, `Pipeline`, protocolo para el código generado, eventos y snapshots | — (solo el JDK, más JSpecify) |
 | `processor` | sí | Procesador de anotaciones: validación y generación de código | `annotations` |
 | `config` | sí | Carga archivos properties, recursos del classpath, variables de entorno y propiedades del sistema en el builder del registry | `core` |
-| `micrometer` | previsto (v1) | Puente de métricas; todavía no publicado | `core`, Micrometer |
+| `micrometer` | sí | Métricas de Micrometer: counters a partir de eventos, gauges a partir de los handles de breakers, bulkheads y rate limiters ([guía](guides/micrometer.md)) | `core`, `micrometer-core` |
 | `testkit` | sí | Ayudas de test para usuarios: `ManualClock` (reloj, sleeps y timers), jitter con semilla, `elapseWaitInOpen` | `core` |
 | `bom` | sí | Alinea las versiones (`resilience4cata-bom`) | — |
 | `benchmark` | no | JMH contra Resilience4j | `core`, `processor`, Resilience4j |
 | `stress` | no | jcstress para las estructuras sin locks | `core` |
-| `examples` | no | Ejemplos ejecutables, que también son tests de punta a punta del código generado | `annotations`, `core`, `config`, `testkit`, `processor` |
+| `examples` | no | Ejemplos ejecutables, que también son tests de punta a punta del código generado | `annotations`, `core`, `config`, `testkit`, `micrometer`, `processor` |
 | `docs` | no | Documentación. No es un proyecto de Gradle | — |
 
 ```mermaid
 graph TD
   processor -->|compile| annotations
   config --> core
-  micrometer -.previsto.-> core
+  micrometer --> core
   testkit --> core
   stress --> core
   benchmark --> core

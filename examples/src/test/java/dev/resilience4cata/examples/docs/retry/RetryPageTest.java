@@ -169,6 +169,33 @@ class RetryPageTest {
     }
 
     @Test
+    void aRetryBudgetCapsTheRetriesOfADependencyThatIsDown() {
+        // tag::retry-budget-testing[]
+        ManualClock clock = new ManualClock();
+        List<RetryEvent.GaveUp> gaveUp = new CopyOnWriteArrayList<>();
+        ResilienceRegistry registry = ResilienceTesting.registry(clock)
+                .listen(RetryEvent.GaveUp.class, gaveUp::add)
+                .build();
+        AtomicInteger attempts = new AtomicInteger();
+        CatalogApi catalog = Resilient.of(CatalogApi.class, id -> {
+            attempts.incrementAndGet();
+            throw new IllegalStateException("catalog down");
+        }, registry);
+
+        for (int i = 0; i < 100; i++) {
+            assertThatThrownBy(() -> catalog.product("p-1")).isInstanceOf(IllegalStateException.class);
+        }
+
+        assertThat(attempts).hasValue(130);   // 100 calls + 10 (1/s over 10 s) + 20 (20% of 100), not 300
+        assertThat(gaveUp).filteredOn(e -> e.reason() == RetryEvent.Reason.BUDGET_EXHAUSTED).hasSize(95);
+        assertThat(registry.snapshot().retries().getFirst().budget())
+                .isEqualTo(new RetrySnapshot.Budget(100, 30, 30));   // calls, retries, allowed retries
+        // end::retry-budget-testing[]
+        assertThat(gaveUp).filteredOn(e -> e.reason() == RetryEvent.Reason.MAX_ATTEMPTS).hasSize(5);
+        assertThat(registry.snapshot().retries().getFirst().instance()).isEqualTo("catalog");
+    }
+
+    @Test
     void aFixedDelayAboveTheDefaultMaxDelayIsRejectedWhenWrapping() {
         ResilienceRegistry registry = ResilienceRegistry.builder().build();
         assertThatThrownBy(() -> Resilient.of(SlowPoller.class, new SlowPoller() {

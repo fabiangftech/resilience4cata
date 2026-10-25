@@ -1,0 +1,12 @@
+plugins {
+    id 'r4c.java-library'
+    id 'r4c.publish'
+}
+
+description = 'Micrometer metrics for resilience4cata: counters from events, gauges from breakers, bulkheads and rate limiters.'
+
+dependencies {
+    api project(':core')
+    api libs.micrometer.core
+    testImplementation project(':testkit')
+}

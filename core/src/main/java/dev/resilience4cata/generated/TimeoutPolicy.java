@@ -313,11 +313,13 @@ public final class TimeoutPolicy {
             deadlines.timer.schedule(expiry, deadlines);
         } else if (time != null) {
             // Manual ticker: the expiry never enters a lane, so it stays NEW until it fires or is cancelled.
-            time.schedule(timeoutNanos, () -> {
+            Future<?> task = time.schedule(timeoutNanos, () -> {
                 if (expiry.tryMove(TimerEntry.NEW, TimerEntry.FIRED)) {
                     expiry.run();
                 }
             });
+            // Take a call that finished in time off the ticker, so that ManualClock.pendingTasks() stays exact.
+            stage.whenComplete((value, failure) -> task.cancel(false));
         }
         stage.whenComplete(expiry);
         return result;

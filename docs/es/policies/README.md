@@ -129,7 +129,7 @@ Cada política se convierte en una capa de código lineal: el método público t
 
 - Las anotaciones también pueden ir en la interfaz misma, para todos sus métodos, y agruparse en anotaciones propias; ver [Bundles](../guides/bundles.md).
 - Cada política lee su configuración una sola vez, al envolver la interfaz, de los valores por defecto incorporados, `defaults.*`, las configuraciones con nombre y la anotación, en ese orden; ver [Configuración](../guides/configuration.md).
-- Breakers, rate limiters y bulkheads con el mismo `name` comparten una instancia, y también los pipelines con ese id. Los retries y timeouts no guardan estado entre llamadas.
+- Breakers, rate limiters y bulkheads con el mismo `name` comparten una instancia, y también los pipelines con ese id. Los retries y timeouts no guardan estado entre llamadas, salvo un retry con [presupuesto de reintentos](retry.md#presupuesto-de-reintentos), que comparte su presupuesto de la misma forma.
 
 ### Un breaker abierto detiene los reintentos
 

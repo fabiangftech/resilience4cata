@@ -12,5 +12,8 @@ dependencies {
         api project(':processor')
         api project(':config')
         api project(':testkit')
+        api project(':opentelemetry')
+        api project(':junit')
+        api project(':micrometer')
     }
 }

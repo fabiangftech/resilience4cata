@@ -353,6 +353,39 @@ public interface PriceClient {
 }
 ```
 
+### R4C-ATR-007
+
+**Causa:** un atributo del presupuesto de reintentos está fuera de rango: `budgetPercent` es negativo,
+infinito o NaN, `budgetMinRetriesPerSecond` es negativo, o `budgetWindow` es menor que 1 s o mayor que
+1 h. (Una `budgetWindow` que ni siquiera es una duración es [R4C-ATR-001](#r4c-atr-001).)
+
+**Incorrecto:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(budgetPercent = 20, budgetWindow = "500ms")
+    String price(String sku);
+}
+```
+
+**Corrección:** usa un porcentaje de 0 o más, una reserva de 0 o más reintentos por segundo y una ventana
+entre `"1s"` y `"1h"`; u omite el atributo para heredarlo (`budgetWindow` vale `10s` por defecto).
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(budgetPercent = 20, budgetMinRetriesPerSecond = 1, budgetWindow = "10s")
+    String price(String sku);
+}
+```
+
 ## Procesador de anotaciones: anotaciones compuestas (R4C-CMP)
 
 ### R4C-CMP-001

@@ -154,19 +154,19 @@ Single-word directories. Published under the groupId `dev.resilience4cata` (the 
 | `core` | yes | Every policy, registry, config model, `Pipeline`, the generated-code protocol, events and snapshots | — (JDK only, plus JSpecify) |
 | `processor` | yes | Annotation processor: validation and code generation | `annotations` |
 | `config` | yes | Loads properties files, classpath resources, environment variables and system properties into the registry builder | `core` |
-| `micrometer` | planned (v1) | Metrics bridge; not released yet | `core`, Micrometer |
+| `micrometer` | yes | Micrometer metrics: counters from events, gauges from breaker, bulkhead and rate limiter handles ([guide](guides/micrometer.md)) | `core`, `micrometer-core` |
 | `testkit` | yes | Test helpers for users: `ManualClock` (clock, sleeps and timers), seeded jitter, `elapseWaitInOpen` | `core` |
 | `bom` | yes | Version alignment (`resilience4cata-bom`) | — |
 | `benchmark` | no | JMH against Resilience4j | `core`, `processor`, Resilience4j |
 | `stress` | no | jcstress for lock-free structures | `core` |
-| `examples` | no | Runnable samples, also end-to-end tests of the generated code | `annotations`, `core`, `config`, `testkit`, `processor` |
+| `examples` | no | Runnable samples, also end-to-end tests of the generated code | `annotations`, `core`, `config`, `testkit`, `micrometer`, `processor` |
 | `docs` | no | Documentation. Not a Gradle project | — |
 
 ```mermaid
 graph TD
   processor -->|compile| annotations
   config --> core
-  micrometer -.planned.-> core
+  micrometer --> core
   testkit --> core
   stress --> core
   benchmark --> core

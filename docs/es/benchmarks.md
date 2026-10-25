@@ -332,6 +332,32 @@ Base: commit `53a6651`. Nueva: clases anotadas (estilo subclase), `@Fallback` en
 - `Pipeline.run` cuesta lo mismo que `execute` y no asigna memoria.
 - Sin medir, a propósito: los overrides por instancia de config (se resuelven una vez al crear la instancia) y el modo ticker del bulkhead (solo relojes de test; el camino por defecto suma la lectura de un `boolean` `final` después de un `tryAcquire` fallido, y *Bulkhead, modo con espera* no cambia).
 
+## Presupuesto de reintentos, 0.3.0 (2026-10-25, AWS Graviton3)
+
+Base: `6d82305` (0.2.0). Nueva: la integración de 0.3.0 (presupuesto de reintentos, módulos de Micrometer, OpenTelemetry y JUnit, `onInstanceCreated`). Mismo método que arriba (`infra/bench.sh`, `c7g.xlarge`; calibración 20,48–20,53 ns, 0,2 % de dispersión). Todos los caminos sincrónicos siguen en 0 B/op.
+
+**Sin regresión cuando no hay presupuesto** (ns/op, 1 / 4 threads):
+
+| Benchmark | Base | Nueva |
+|---|---:|---:|
+| `RetryBenchmark.resilience4cataSuccess` | 1,4 / 1,3 | 1,2 / 1,3 |
+| `MultiTypeRetryBenchmark.resilience4cataSuccess` | 4,3 / 4,3 | 3,9 / 4,0 |
+| `PipelineBenchmark.pipelineRetryCircuitBreaker` | 2,9 / 2,9 | 2,9 / 2,9 |
+| `RetryBenchmark.resilience4cataRetryOnce` | 6,7 / 6,5 | 6,8 / 6,7 |
+| `SubclassBenchmark.wrapperRetryOnce` | 6,6 / 6,5 | 6,8 / 6,8 |
+
+Una llamada reintentada cuesta 0,1–0,3 ns más (la comprobación de si hay presupuesto, en el camino de falla); los éxitos no cambian.
+
+**Cómo el presupuesto cuenta cada llamada** (`RetryBudgetBenchmark`, `budgetPercent = 1000` para que todo reintento se conceda; ns/op, 1 / 4 threads; sin presupuesto: 1,3 / 1,3 con éxito, 6,9 / 7,1 reintentada):
+
+| Cómo se cuenta una llamada | Éxito | Reintentada una vez |
+|---|---:|---:|
+| Bucle de compare-and-set sobre la parte del thread (`threadId & mask`) | 9,7 / 9,8 | 64 / 380 |
+| Una suma atómica (`getAndAddRelease`, LDADD) sobre una parte elegida por hash | 12,0 / 12,0 | 73 / 400 |
+| **Lectura y escritura simples sobre una parte elegida por hash (la publicada)** | **3,5 / 3,6** | **62 / 301** |
+
+Dos lecciones. Un compare-and-set, aun sin contención sobre una línea que ningún otro thread escribe, costó unos 8 ns por llamada en Graviton3, y la suma atómica de una instrucción más; el contador publicado es en cambio aproximado (dos threads que comparten parte y compiten pueden perder una llamada, lo que solo reduce el presupuesto). Y elegir la parte con los bits bajos del id del thread puso a todos los workers de JMH en una sola parte (sus ids eran múltiplos de la cantidad de partes): la versión con compare-and-set lo pagó en contención (380 ns), y la aproximada perdió tantas llamadas que el presupuesto rechazaba reintentos aun con diez veces el margen necesario. Mezclar el id primero (hash de Fibonacci) arregló ambas cosas. Con 4 threads, una llamada reintentada está dominada por el contador compartido de reintentos y la lectura del reloj, solo en el camino de falla.
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos (`-f 1 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`, unos 4 minutos) y falla si alguno asigna su presupuesto + 1 B/op o más, o si falta en los resultados. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.

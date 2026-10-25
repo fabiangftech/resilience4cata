@@ -19,6 +19,8 @@
   - [API Pipeline](/es/guides/pipeline.md)
   - [Tests](/es/guides/testing.md)
   - [Observabilidad](/es/guides/observability.md)
+  - [Micrometer](/es/guides/micrometer.md)
+  - [OpenTelemetry](/es/guides/opentelemetry.md)
   - [Solución de problemas](/es/guides/troubleshooting.md)
 - **Referencia**
   - [Claves de configuración](/es/reference/configuration.md)

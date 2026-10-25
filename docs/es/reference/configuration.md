@@ -80,6 +80,9 @@ Atributos de `@Retry`. Ver [Retry](../policies/retry.md).
 | `defaults.retry.maxDuration` | `R4C_DEFAULTS_RETRY_MAXDURATION` | duración | `0` | ≥ 0; `0` = sin límite | Presupuesto de tiempo de toda la operación: se rinde cuando la siguiente espera lo superaría. |
 | `defaults.retry.retryOn` | `R4C_DEFAULTS_RETRY_RETRYON` | lista de clases | `java.lang.Exception` | clases de excepción | Fallos que se reintentan, subclases incluidas. Por defecto los `Error` no se reintentan. |
 | `defaults.retry.abortOn` | `R4C_DEFAULTS_RETRY_ABORTON` | lista de clases | — | clases de excepción | Fallos que nunca se reintentan; ganan sobre `retryOn` y sobre un clasificador. Una `CallNotPermittedException` (breaker abierto) tampoco se reintenta nunca, esté en la lista o no. |
+| `defaults.retry.budgetPercent` | `R4C_DEFAULTS_RETRY_BUDGETPERCENT` | decimal | `0` | finito, ≥ 0 | Presupuesto de reintentos: reintentos permitidos, en porcentaje de las llamadas de la instancia en la última `budgetWindow`, además de `budgetMinRetriesPerSecond`. El presupuesto está apagado mientras ambos valen `0`. |
+| `defaults.retry.budgetMinRetriesPerSecond` | `R4C_DEFAULTS_RETRY_BUDGETMINRETRIESPERSECOND` | int | `0` | ≥ 0 | Presupuesto de reintentos: reintentos permitidos por segundo de `budgetWindow`, sea cual sea el tráfico. |
+| `defaults.retry.budgetWindow` | `R4C_DEFAULTS_RETRY_BUDGETWINDOW` | duración | `10s` | de 1s a 1h | Presupuesto de reintentos: hasta dónde hacia atrás se cuentan llamadas y reintentos. |
 
 ## Circuit breaker :id=circuit-breaker
 

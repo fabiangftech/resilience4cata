@@ -10,8 +10,11 @@ Cómo se publica resilience4cata en Maven Central. Todo usa los plugins propios 
 | `resilience4cata-core` | lo mismo; depende de `org.jspecify:jspecify` (scope `compile`) |
 | `resilience4cata-processor` | lo mismo; depende de `resilience4cata-annotations` (scope `runtime`, para el processor path) |
 | `resilience4cata-config` | lo mismo; depende de `resilience4cata-core` (`compile`) |
+| `resilience4cata-micrometer` | lo mismo; depende de `resilience4cata-core` y de `io.micrometer:micrometer-core` (`compile`) |
 | `resilience4cata-testkit` | lo mismo; depende de `resilience4cata-core` (`compile`) |
-| `resilience4cata-bom` | solo POM y metadatos de módulo: restricciones sobre los cinco módulos anteriores, en la misma versión |
+| `resilience4cata-opentelemetry` | lo mismo; depende de `resilience4cata-core` y de `io.opentelemetry:opentelemetry-api` (`compile`) |
+| `resilience4cata-junit` | lo mismo; depende de `resilience4cata-testkit` y de `org.junit.jupiter:junit-jupiter-api` 5.10.5 (`compile`) |
+| `resilience4cata-bom` | solo POM y metadatos de módulo: restricciones sobre todos los módulos anteriores, en la misma versión |
 
 groupId `dev.resilience4cata`. Cada jar lleva `LICENSE` y `NOTICE` (Apache-2.0) en `META-INF`, y los archivos son reproducibles (sin marcas de tiempo, orden fijo). `examples`, `benchmark` y `stress` no se publican.
 
@@ -21,6 +24,7 @@ groupId `dev.resilience4cata`. Cada jar lleva `LICENSE` y `NOTICE` (Apache-2.0) 
 - **`r4c.central`** (`CentralConventionPlugin.java`), aplicado por el `build.gradle` raíz:
   - `centralBundle` borra `build/central-staging`, publica ahí todos los módulos, lo verifica y lo comprime en `build/central-bundle.zip`. La verificación falla con una versión `-SNAPSHOT`, un módulo ausente, un jar de fuentes o de Javadoc ausente, o cualquier archivo sin su firma `.asc` y sus checksums `.md5`/`.sha1`. Solo entran los archivos de la versión publicada (sin `maven-metadata.xml`).
   - `centralUpload` envía el zip a la Publisher API del Central Portal (`POST /api/v1/publisher/upload`, `publishingType=USER_MANAGED`). Nada depende de esta tarea, así que `build` nunca sube nada, y falla sin token. Central valida un deployment `USER_MANAGED` y luego lo deja esperando en el portal hasta que alguien pulse **Publish**.
+- `opentelemetry` reporta su versión como versión del instrumentation scope de OpenTelemetry: `processResources` escribe la `version` del build en `dev/resilience4cata/opentelemetry/version.properties`, así que una release (también con `-Pversion=…`) no necesita ningún paso manual.
 - Sin clave no se firma, así que `./gradlew build` y `./gradlew publishToMavenLocal` no necesitan secretos.
 
 Propiedades de Gradle (o variables de entorno `ORG_GRADLE_PROJECT_<nombre>`):

@@ -129,7 +129,7 @@ Each policy becomes one layer of straight-line code: the public method holds the
 
 - Annotations can also go on the interface itself, for every method, and be bundled into your own annotations; see [Bundles](../guides/bundles.md).
 - Each policy reads its configuration once, when you wrap the interface, from built-in defaults, `defaults.*`, named configs and the annotation, in that order; see [Configuration](../guides/configuration.md).
-- Breakers, rate limiters and bulkheads with the same `name` share one instance, and so do pipelines with that id. Retries and timeouts keep no state between calls.
+- Breakers, rate limiters and bulkheads with the same `name` share one instance, and so do pipelines with that id. Retries and timeouts keep no state between calls, except a retry with a [retry budget](retry.md#retry-budget), which shares its budget the same way.
 
 ### An open breaker stops the retries
 

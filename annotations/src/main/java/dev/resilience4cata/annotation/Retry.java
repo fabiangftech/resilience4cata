@@ -74,6 +74,27 @@ public @interface Retry {
      */
     ExhaustedResult onExhaustedResult() default ExhaustedResult.INHERIT;
 
+    /**
+     * Retry budget: retries allowed, in percent of the calls this instance received in the last
+     * {@link #budgetWindow()}, on top of {@link #budgetMinRetriesPerSecond()}; for example {@code 20} lets
+     * one call in five be retried once. Finite, at least 0. The budget is shared by every caller of the
+     * instance (see {@link #name()}), and it is off while this and {@code budgetMinRetriesPerSecond} are
+     * both 0, the built-in default. {@code -1} means inherit.
+     */
+    double budgetPercent() default -1;
+
+    /**
+     * Retry budget: retries allowed per second of {@link #budgetWindow()} whatever the traffic, so that a
+     * method called rarely can still retry. At least 0. {@code -1} means inherit (the built-in default is 0).
+     */
+    int budgetMinRetriesPerSecond() default -1;
+
+    /**
+     * Retry budget: how far back calls and retries are counted, between {@code "1s"} and {@code "1h"}.
+     * Empty means inherit (the built-in default is {@code "10s"}).
+     */
+    String budgetWindow() default "";
+
     /** Tri-state switch: {@code ""}, {@code "true"} or {@code "false"}. */
     String enabled() default "";
 }

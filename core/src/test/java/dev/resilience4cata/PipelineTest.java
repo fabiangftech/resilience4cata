@@ -367,6 +367,31 @@ class PipelineTest {
                 .isLessThan(1024);
     }
 
+    @Test
+    void theSyncSuccessPathDoesNotAllocateWithARetryBudget() {
+        Pipeline<String> pipeline = Pipeline.builder(registry, "budget-allocation", String.class)
+                .retry(r -> r.budgetPercent(20).budgetMinRetriesPerSecond(10))
+                .build();
+        PipelineCall<String, RuntimeException> call = () -> "ok";
+        com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+        long thread = Thread.currentThread().threadId();
+        for (int i = 0; i < 20_000; i++) {
+            pipeline.execute(call);
+        }
+
+        long before = threads.getThreadAllocatedBytes(thread);
+        for (int i = 0; i < 100_000; i++) {
+            pipeline.execute(call);
+        }
+        long allocated = threads.getThreadAllocatedBytes(thread) - before;
+
+        assertThat(allocated).as("bytes allocated by 100k calls (the measurement itself may allocate a little)")
+                .isLessThan(1024);
+        assertThat(registry.snapshot().retries()).filteredOn(r -> r.instance().equals("budget-allocation"))
+                .singleElement().satisfies(r -> assertThat(r.budget()).isNotNull()
+                        .satisfies(b -> assertThat(b.calls()).isEqualTo(120_000)));
+    }
+
     /** {@code "busy"} is a failure, {@link IllegalStateException} is ignored, {@code "boom"} makes the classifier throw. */
     private static final Classifier<String> BUSY = (result, failure) -> {
         if (failure instanceof IllegalStateException) {

@@ -8,7 +8,7 @@ resilience4cata covers six policies (retry, circuit breaker, rate limiter, timeo
 
 - Spring Boot auto-configuration, actuator endpoints, `application.yml` binding, or Spring AOP annotations (resilience4cata has no Spring, CDI or AspectJ integration);
 - Reactor, RxJava or Kotlin coroutine operators (resilience4cata supports `CompletionStage` / `CompletableFuture` only);
-- a thread-pool bulkhead, a cache, a time limiter for arbitrary futures, or Resilience4j's published Micrometer metrics module;
+- a thread-pool bulkhead, a cache, or a time limiter for arbitrary futures;
 - changing a policy's configuration at runtime (resilience4cata resolves configuration once, by design);
 - a Java version before 21.
 
@@ -40,7 +40,7 @@ resilience4cata covers six policies (retry, circuit breaker, rate limiter, timeo
 | `circuitBreaker.getEventPublisher().onStateTransition(…)` | `registryBuilder.listen(CircuitBreakerEvent.StateTransition.class, …)` ([events](../guides/observability.md#events)) |
 | `circuitBreaker.getMetrics()` | `registry.circuitBreaker(id).snapshot()` |
 | `transitionToForcedOpenState()`, `transitionToDisabledState()`, `reset()` | `forceOpen()`, `disable()`, `reset()` on `CircuitBreakerHandle` |
-| `resilience4j-micrometer` (`TaggedCircuitBreakerMetrics`, …) | no module: a [Micrometer recipe](../guides/observability.md#micrometer) built on events and snapshots |
+| `resilience4j-micrometer` (`TaggedCircuitBreakerMetrics`, …) | `resilience4cata-micrometer` ([Micrometer](../guides/micrometer.md)); the meter names differ (`r4c.*`), so dashboards and alerts need new queries |
 | `RetryConfig.retryOnResult(…)`, `CircuitBreakerConfig.recordResult(…)` | a [`Classifier`](../guides/classifiers.md) on `@Retry` / `@CircuitBreaker` |
 | `failAfterMaxAttempts(true)` (`MaxRetriesExceededException`) | `@Retry(onExhaustedResult = THROW)` (`ResultRejectedException`) |
 | `IntervalFunction.ofExponentialBackoff(…)`, `ofExponentialRandomBackoff(…)` | `backoff`, `multiplier`, `maxDelay`, `jitter` |
@@ -229,6 +229,6 @@ Load it with `ResilienceConfig.load()` (as `resilience4cata.properties` on the c
 1. Add the dependencies, including the processor on the processor path ([Installation](../start/installation.md)).
 2. For each decorated call, put the call behind an interface (or annotate the class), and translate the configuration with the tables above. Set `backoff`, `jitter` and `maxWait` explicitly where the defaults differ.
 3. Replace `Decorators`/Spring annotations with resilience4cata annotations and `Resilient.of` (or `Resilient.create` for annotated classes). Calls you cannot put behind an interface go through a [`Pipeline`](../guides/pipeline.md).
-4. Move event consumers to `ResilienceRegistry.Builder.listen(…)`, and metrics to the [Micrometer recipe](../guides/observability.md#micrometer).
+4. Move event consumers to `ResilienceRegistry.Builder.listen(…)`, and metrics to the [Micrometer module](../guides/micrometer.md).
 5. Replace time-based tests with [`ManualClock`](../guides/testing.md).
 6. Build with `-Xlint:all -Werror` if you like: generated code compiles without warnings.

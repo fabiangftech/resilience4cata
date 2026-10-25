@@ -332,6 +332,32 @@ Base: commit `53a6651`. New: annotated classes (subclass style), `@Fallback` on 
 - `Pipeline.run` costs the same as `execute` and allocates nothing.
 - Not measured, by design: config per-instance overrides (resolved once at creation) and the bulkhead's ticker mode (test clocks only; the default path adds one `final` boolean read after a failed `tryAcquire`, and *Bulkhead, waiting mode* is unchanged).
 
+## Retry budget, 0.3.0 (2026-10-25, AWS Graviton3)
+
+Base: `6d82305` (0.2.0). New: the 0.3.0 integration (retry budget, Micrometer, OpenTelemetry and JUnit modules, `onInstanceCreated`). Same method as above (`infra/bench.sh`, `c7g.xlarge`; calibration 20.48–20.53 ns, 0.2% spread). Every sync path stays at 0 B/op.
+
+**No regression without a budget** (ns/op, 1 / 4 threads):
+
+| Benchmark | Base | New |
+|---|---:|---:|
+| `RetryBenchmark.resilience4cataSuccess` | 1.4 / 1.3 | 1.2 / 1.3 |
+| `MultiTypeRetryBenchmark.resilience4cataSuccess` | 4.3 / 4.3 | 3.9 / 4.0 |
+| `PipelineBenchmark.pipelineRetryCircuitBreaker` | 2.9 / 2.9 | 2.9 / 2.9 |
+| `RetryBenchmark.resilience4cataRetryOnce` | 6.7 / 6.5 | 6.8 / 6.7 |
+| `SubclassBenchmark.wrapperRetryOnce` | 6.6 / 6.5 | 6.8 / 6.8 |
+
+A retried call costs 0.1–0.3 ns more (the null check of the budget on the failure path); successes are unchanged.
+
+**The budget's per-call counting** (`RetryBudgetBenchmark`, `budgetPercent = 1000` so every retry is granted; ns/op, 1 / 4 threads; without a budget: 1.3 / 1.3 success, 6.9 / 7.1 retried):
+
+| How a call is counted | Success | Retried once |
+|---|---:|---:|
+| Compare-and-set loop on the thread's stripe (`threadId & mask`) | 9.7 / 9.8 | 64 / 380 |
+| One atomic add (`getAndAddRelease`, LDADD) on a hashed stripe | 12.0 / 12.0 | 73 / 400 |
+| **Plain read-and-write on a hashed stripe (shipped)** | **3.5 / 3.6** | **62 / 301** |
+
+Two lessons. A compare-and-set, even uncontended on a line no other thread writes, cost about 8 ns per call on Graviton3, and the single-instruction atomic add more; the shipped counter is lossy instead (two threads that share a stripe and race can lose a call, which only lowers the budget). And taking the stripe from the low bits of the thread id put every JMH worker on one stripe (their ids were multiples of the stripe count): the compare-and-set version paid for it in contention (380 ns), the lossy one lost so many calls that the budget refused retries even with ten times the needed margin. Mixing the id first (Fibonacci hashing) fixed both. With 4 threads, a retried call is dominated by the shared retry counter and the clock read, on the failure path only.
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings (`-f 1 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`, about 4 minutes) and fails if one allocates its budget + 1 B/op or more, or is missing from the results. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.

@@ -13,7 +13,9 @@ Add four artifacts to your build: the BOM, `core`, the annotations and the annot
 | `resilience4cata-annotations` | `@Retry`, `@CircuitBreaker`, `@RateLimiter`, `@Timeout`, `@Bulkhead`, `@Fallback`, `@ResiliencePolicy`. `CLASS` retention, so not needed at runtime | `compileOnly` (Gradle), `provided` (Maven) |
 | `resilience4cata-processor` | The annotation processor that generates the code. **Mandatory** when you use the annotations: there is no reflection fallback | `annotationProcessor` (Gradle), `annotationProcessorPaths` (Maven). Never on the runtime class path |
 | `resilience4cata-config` | Optional. External configuration: properties files, environment variables, system properties ([configuration guide](../guides/configuration.md)) | `implementation` / default scope |
+| `resilience4cata-micrometer` | Optional, from 0.3.0. Micrometer metrics: counters from events, gauges for breakers, bulkheads and rate limiters ([Micrometer guide](../guides/micrometer.md)). Brings in `micrometer-core` | `implementation` / default scope |
 | `resilience4cata-testkit` | Optional. `ManualClock` and `ResilienceTesting` for deterministic tests ([testing guide](../guides/testing.md)). Does not depend on JUnit | `testImplementation` / `test` |
+| `resilience4cata-junit` | Optional, since 0.3.0. JUnit Jupiter extension (`@ResilienceTest`): a fresh `ManualClock` and a registry on it for each test, as parameters ([testing guide](../guides/testing.md#junit)). Brings testkit; needs JUnit 5.10 or newer, JUnit 6 included | `testImplementation` / `test` |
 
 `core` and `processor` must have the same version; the BOM makes sure they do.
 

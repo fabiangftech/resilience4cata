@@ -66,7 +66,7 @@ Cada método anotado obtiene sus propias instancias de políticas, con el id `<t
 
 ### ¿Cómo obtengo métricas? :id=metrics
 
-A partir de los eventos (contadores) y los snapshots (gauges). Todavía no hay módulo de Micrometer, pero la [guía de observabilidad](guides/observability.md#micrometer) tiene una receta probada que puedes copiar.
+Con el [módulo de Micrometer](guides/micrometer.md) (`resilience4cata-micrometer`): tres líneas de configuración te dan counters a partir de los eventos y gauges para cada circuit breaker, bulkhead y rate limiter. Para otra librería de métricas, construye lo mismo sobre [eventos y handles](guides/observability.md#diy).
 
 ### ¿Cuenta las llamadas exitosas o mide la latencia? :id=success-metrics
 
@@ -92,7 +92,7 @@ En AWS Graviton3, un retry cuyo primer intento tiene éxito cuesta 1.2 ns y un c
 
 ### ¿Qué no se admite todavía? :id=not-supported
 
-Hedging, límites de concurrencia adaptativos, presupuestos de retry, caché y bulkheads con pool de threads; tipos reactivos; tipos async `? super`; cambiar el orden de las políticas; reconfiguración en tiempo de ejecución; módulos de integración con frameworks. Consulta [Decisiones de diseño](design.md) para ver qué está planeado y qué está excluido por decisión.
+Hedging, límites de concurrencia adaptativos, caché y bulkheads con pool de threads; tipos reactivos; tipos async `? super`; cambiar el orden de las políticas; reconfiguración en tiempo de ejecución; módulos de integración con frameworks. Consulta [Decisiones de diseño](design.md) para ver qué está planeado y qué está excluido por decisión.
 
 ### ¿Qué hay en la hoja de ruta? :id=roadmap
 
@@ -102,15 +102,13 @@ Planificado, no prometido; los nombres y el alcance pueden cambiar:
 |---|---|---|
 | Hedging (`@Hedge`) | v1 | Resilience4j no lo tiene |
 | Límite de concurrencia adaptativo (`@AdaptiveLimit`: AIMD, Vegas, Gradient2) | v1 | |
-| Presupuesto de retries | v1 | evita tormentas de retries |
-| Puentes a Micrometer y OpenTelemetry | v1 | módulos separados |
+| Tracing de OpenTelemetry | más adelante | las métricas están en `resilience4cata-opentelemetry` desde 0.3.0 ([guía](guides/opentelemetry.md)) |
 | Configuración YAML | v1 | módulo separado, para que `core` siga sin dependencias |
 | Orden de ejecución configurable (`@Order`) | v1 | |
-| Extensión de JUnit 5 | v1 | |
 | Atributo `locked` (una instancia que la configuración externa no puede sobrescribir) | v1 | |
 | `@Cached`, tipos reactivos, corrutinas de Kotlin, inyección de fallos, propagación de deadlines, integraciones con frameworks | más adelante | |
 
-Mientras tanto, la [receta de observabilidad](guides/observability.md#micrometer) cubre las métricas y [testkit](guides/testing.md) cubre las pruebas.
+Mientras tanto, [testkit](guides/testing.md) cubre las pruebas.
 
 ### ¿Dónde reporto un bug? :id=bugs
 

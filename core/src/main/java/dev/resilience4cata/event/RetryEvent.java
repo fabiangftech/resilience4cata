@@ -54,6 +54,11 @@ public sealed interface RetryEvent extends ResilienceEvent {
          * The method's classifier threw while classifying the attempt: its exception (the event's
          * {@code failure}) fails the call.
          */
-        CLASSIFIER_FAILED
+        CLASSIFIER_FAILED,
+        /**
+         * The instance's retry budget is exhausted: retries in the last {@code budgetWindow} already reached
+         * {@code budgetMinRetriesPerSecond} per second plus {@code budgetPercent} of the calls.
+         */
+        BUDGET_EXHAUSTED
     }
 }

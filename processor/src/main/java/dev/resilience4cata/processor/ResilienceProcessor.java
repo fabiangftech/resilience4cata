@@ -481,6 +481,35 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         overrides.add("multiplier(" + multiplier + ")");
                     }
                 }
+                case "budgetPercent" -> {
+                    double percent = (Double) value;
+                    if (!(percent >= 0) || Double.isInfinite(percent)) {
+                        valid = invalid(method, ProcessorError.INVALID_BUDGET, label + " must be a finite number >= 0, was " + percent);
+                    } else {
+                        overrides.add("budgetPercent(" + percent + ")");
+                    }
+                }
+                case "budgetMinRetriesPerSecond" -> {
+                    int number = (Integer) value;
+                    if (number < 0) {
+                        valid = invalid(method, ProcessorError.INVALID_BUDGET, label + " must not be negative, was " + number);
+                    } else {
+                        overrides.add("budgetMinRetriesPerSecond(" + number + ")");
+                    }
+                }
+                case "budgetWindow" -> {
+                    try {
+                        long nanos = Durations.parseNanos((String) value);
+                        if (nanos < 1_000_000_000L || nanos > 3_600_000_000_000L) {
+                            valid = invalid(method, ProcessorError.INVALID_BUDGET, label + " must be between 1s and 1h, was \"" + value + "\"");
+                        } else {
+                            overrides.add("budgetWindow(java.time.Duration.ofNanos(" + nanos + "L))");
+                        }
+                    } catch (IllegalArgumentException e) {
+                        valid = invalid(method, ProcessorError.INVALID_DURATION, label + " = \"" + value + "\" is not a valid duration: "
+                                + e.getMessage() + ". Use " + Durations.GRAMMAR + ".");
+                    }
+                }
                 case "failureRateThreshold", "slowCallRateThreshold" -> {
                     float rate = (Float) value;
                     if (!(rate > 0 && rate <= 100)) {

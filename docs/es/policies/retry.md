@@ -84,7 +84,9 @@ flowchart TD
     retryable -- sí --> delay["Calcular la espera:<br/>backoff, tope maxDelay, luego jitter"]
     delay --> budget{"¿maxDuration definido y<br/>transcurrido + espera > maxDuration?"}
     budget -- sí --> fail
-    budget -- no --> sleep["Esperar"] --> attempt
+    budget -- no --> retryBudget{"¿Hay presupuesto de reintentos<br/>y está agotado?"}
+    retryBudget -- sí --> fail
+    retryBudget -- no --> sleep["Esperar"] --> attempt
 ```
 
 - **Qué se reintenta.** Una excepción que es instancia de un tipo de `retryOn` (por defecto: `Exception`) y de ningún tipo de `abortOn` (por defecto: ninguno). `abortOn` gana sobre `retryOn`. Una `CallNotPermittedException` (un circuit breaker abierto) nunca se reintenta, digan lo que digan las listas. Todo lo demás se relanza enseguida, así que por defecto los `Error` (`OutOfMemoryError`, `AssertionError`, …) nunca se reintentan. Un método que termina normalmente nunca se reintenta, salvo que un [classifier](../guides/classifiers.md) diga que su resultado es una falla.
@@ -108,6 +110,9 @@ flowchart TD
 | `maxDuration` | duración | `0` (sin presupuesto) | `defaults.retry.maxDuration` | Presupuesto de tiempo para toda la operación, con intentos y esperas. |
 | `retryOn` | `Class<? extends Throwable>[]` | `{Exception.class}` | `defaults.retry.retryOn` | Excepciones que se reintentan, subclases incluidas. |
 | `abortOn` | `Class<? extends Throwable>[]` | `{}` | `defaults.retry.abortOn` | Excepciones que detienen los reintentos; gana sobre `retryOn` y sobre el classifier. Un breaker abierto los detiene esté en la lista o no. |
+| `budgetPercent` | `double` | `0` (sin presupuesto) | `defaults.retry.budgetPercent` | [Presupuesto de reintentos](#presupuesto-de-reintentos): reintentos permitidos, en porcentaje de las llamadas de la instancia en la última `budgetWindow`. Finito, al menos 0. |
+| `budgetMinRetriesPerSecond` | `int` | `0` | `defaults.retry.budgetMinRetriesPerSecond` | Presupuesto de reintentos: reintentos permitidos por segundo de `budgetWindow`, sea cual sea el tráfico. Al menos 0. |
+| `budgetWindow` | duración | `10s` | `defaults.retry.budgetWindow` | Presupuesto de reintentos: hasta dónde hacia atrás se cuentan llamadas y reintentos. De `1s` a `1h`. |
 | `classifier` | `Class<?>` | ninguno | solo anotación | Un `Classifier<T>` que decide qué se reintenta, resultados incluidos. Reemplaza a `retryOn`. Ver [Classifiers](../guides/classifiers.md). |
 | `onExhaustedResult` | `ExhaustedResult` | `RETURN` | solo anotación | Con un classifier: devolver el último resultado rechazado, o `THROW` para lanzar una `ResultRejectedException`. |
 | `name` | `String` | una instancia por método | solo anotación | Id de la instancia; los métodos con el mismo `name` comparten una política de retry. |
@@ -146,9 +151,65 @@ Si `report` sigue fallando, los dos primeros intentos abren el breaker, el terce
 
 Sin `name`, cada método tiene su propia política de retry, con el id `<interfaz>#<método>(<tipos de parámetros>)`, por ejemplo `dev.resilience4cata.examples.docs.retry.InventoryApi#stock(java.lang.String)`. Ese id es el que usas en los overrides `instances.<id>.retry.…` y el que reportan los eventos y los snapshots.
 
-Un retry no guarda estado entre llamadas (el conteo de intentos vive en una variable local del método generado), así que compartirlo por `name` solo comparte su configuración. Los métodos que comparten un `name` deben resolver la misma configuración, o envolverlos falla con [`R4C-REG-008`](../errors.md#r4c-reg-008).
+Sin [presupuesto de reintentos](#presupuesto-de-reintentos), un retry no guarda estado entre llamadas (el conteo de intentos vive en una variable local del método generado), así que compartirlo por `name` solo comparte su configuración. Con presupuesto, comparte también el presupuesto. Los métodos que comparten un `name` deben resolver la misma configuración, o envolverlos falla con [`R4C-REG-008`](../errors.md#r4c-reg-008).
 
-No hay handle para un retry: `registry` no tiene un método `retry(id)`. `registry.snapshot().retries()` lista cada uno como un `RetrySnapshot(instance, config)`, con su configuración resuelta.
+No hay handle para un retry: `registry` no tiene un método `retry(id)`. `registry.snapshot().retries()` lista cada uno como un `RetrySnapshot(instance, config, budget)`, con su configuración resuelta y, si tiene presupuesto de reintentos, la ventana actual del presupuesto (`null` si no).
+
+## Presupuesto de reintentos
+
+`maxAttempts` limita los reintentos de una llamada. Un **presupuesto de reintentos** limita los reintentos de todas las llamadas de una instancia juntas, en proporción a su tráfico: los reintentos de la última `budgetWindow` no pueden superar
+
+> `budgetMinRetriesPerSecond × budgetWindow en segundos + budgetPercent % de las llamadas de budgetWindow`
+
+**Úsalo cuando** muchos llamadores comparten una dependencia que puede caerse. Sin presupuesto, cada llamador reintenta cada fallo: con `maxAttempts = 3` una caída triplica la carga sobre una dependencia que ya está fallando (una tormenta de reintentos). Con `budgetPercent = 20`, la aumenta como mucho un 20%. Mientras la dependencia está sana, los fallos son raros y el presupuesto nunca se alcanza. El diseño sigue el [`RetryBudget` de Finagle](https://twitter.github.io/finagle/guide/Clients.html#retries) (un porcentaje de las peticiones más una reserva por segundo sobre una ventana); [gRPC](https://github.com/grpc/proposal/blob/master/A6-client-retries.md) y [Envoy](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/cluster/v3/circuit_breaker.proto) tienen límites parecidos.
+
+<!-- snippet: retry-budget -->
+```java
+@Retry(name = "catalog", maxAttempts = 3, delay = "100ms",
+        budgetPercent = 20, budgetMinRetriesPerSecond = 1)
+String product(String id);
+```
+
+Aquí, en cualquier intervalo de 10 s (la `budgetWindow` por defecto), el retry `catalog` permite 10 reintentos más uno por cada cinco llamadas, compartidos por todos los métodos con `name = "catalog"`. Una vez usados, un fallo no se reintenta: se relanza el último fallo (o se ejecuta el fallback) y se publica `GaveUp` con la razón `BUDGET_EXHAUSTED`. Todas las demás reglas se aplican antes, así que un fallo que no se reintentaría de todos modos no gasta presupuesto.
+
+- **Apagado por defecto**: el presupuesto está apagado mientras `budgetPercent` y `budgetMinRetriesPerSecond` valen 0. Define también la reserva: con `budgetPercent = 20` solo, un método llamado cuatro veces en la ventana no puede reintentar nada.
+- **Qué cuenta**: llamadas, no intentos. Una llamada se cuenta cuando empieza, salga bien o no; un reintento se cuenta cuando se concede.
+- **Compartir**: un presupuesto por instancia, así que da el mismo `name` (y los mismos atributos, como en toda instancia compartida) a los métodos que llaman a la misma dependencia. Sin `name`, cada método tiene su propio presupuesto.
+- **Igual en todas partes**: métodos sync y async, métodos con classifier (un resultado rechazado que se reintentaría también gasta presupuesto) y [`Pipeline`](../guides/pipeline.md) (`.retry(r -> r.budgetPercent(20).budgetMinRetriesPerSecond(1))`).
+- **La ventana** avanza de a una décima de `budgetWindow`, y solo los fallos la hacen avanzar, así que los éxitos no leen el reloj. Por eso no se conoce el momento de una llamada hecha mientras nada fallaba: se le asigna el del último fallo anterior. Tras un periodo tranquilo más largo que la ventana, esas llamadas ya expiraron, y el presupuesto vuelve a empezar desde su reserva más las llamadas que sigan: se equivoca hacia menos reintentos.
+- **Snapshot**: `RetrySnapshot.budget()` es un `Budget(calls, retries, allowedRetries)` de la ventana actual.
+
+Sobre un [`ManualClock`](../guides/testing.md), una dependencia caída muestra el límite con exactitud:
+
+<!-- snippet: retry-budget-testing -->
+```java
+ManualClock clock = new ManualClock();
+List<RetryEvent.GaveUp> gaveUp = new CopyOnWriteArrayList<>();
+ResilienceRegistry registry = ResilienceTesting.registry(clock)
+        .listen(RetryEvent.GaveUp.class, gaveUp::add)
+        .build();
+AtomicInteger attempts = new AtomicInteger();
+CatalogApi catalog = Resilient.of(CatalogApi.class, id -> {
+    attempts.incrementAndGet();
+    throw new IllegalStateException("catalog down");
+}, registry);
+
+for (int i = 0; i < 100; i++) {
+    assertThatThrownBy(() -> catalog.product("p-1")).isInstanceOf(IllegalStateException.class);
+}
+
+assertThat(attempts).hasValue(130);   // 100 calls + 10 (1/s over 10 s) + 20 (20% of 100), not 300
+assertThat(gaveUp).filteredOn(e -> e.reason() == RetryEvent.Reason.BUDGET_EXHAUSTED).hasSize(95);
+assertThat(registry.snapshot().retries().getFirst().budget())
+        .isEqualTo(new RetrySnapshot.Budget(100, 30, 30));   // calls, retries, allowed retries
+```
+
+Las cinco primeras llamadas obtienen sus dos reintentos; desde la sexta, el presupuesto permite un reintento por cada cinco llamadas.
+
+**Cuánto cuesta.** Sin presupuesto, nada cambia: el código generado es el mismo y `start()` lee un campo, como antes. Con presupuesto, cada llamada añade una lectura y una escritura simples sobre un contador repartido según un hash del id del thread, cada parte en su propia línea de caché, para que llamadores concurrentes no escriban en una línea compartida; no se lee el reloj ni se reserva memoria. La cuenta es aproximada a propósito: dos threads que comparten parte y compiten pueden perder una llamada, lo que solo hace el presupuesto más estricto. Un fallo que se reintentaría lee el reloj y suma las partes, y un reintento concedido añade un compare-and-set sobre el contador compartido de reintentos.
+
+> [!MEASURED]
+> AWS `c7g.xlarge` (Graviton3), 1 / 4 threads: una llamada con éxito cuesta 3,5 / 3,6 ns con presupuesto contra 1,3 / 1,3 ns sin él; una llamada reintentada una vez, 62 / 301 ns contra 6,9 / 7,1 ns. De [Presupuesto de reintentos, 0.3.0](../benchmarks.md#presupuesto-de-reintentos-030-2026-10-25-aws-graviton3).
 
 ## Con otras políticas
 
@@ -194,7 +255,7 @@ El id del pipeline (`"inventory"`) es el id de la instancia. `retry()` usa los v
 | `RetryEvent.Retrying` | Un intento fallido se va a reintentar | `instance`, `nanoTime`, `attempt`, `delay`, `failure` (`null` para un resultado rechazado) |
 | `RetryEvent.GaveUp` | No quedan intentos | `instance`, `nanoTime`, `attempts`, `reason`, `failure` |
 
-`GaveUp.reason()` es `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (no está en `retryOn`, está en `abortOn`, o es un breaker abierto), `INTERRUPTED` o `CLASSIFIER_FAILED`. Las llamadas exitosas no publican nada. Los listeners se registran en el builder del registry; ver [Observabilidad](../guides/observability.md).
+`GaveUp.reason()` es `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (no está en `retryOn`, está en `abortOn`, o es un breaker abierto), `INTERRUPTED`, `CLASSIFIER_FAILED` o `BUDGET_EXHAUSTED` (el [presupuesto de reintentos](#presupuesto-de-reintentos) está agotado). Las llamadas exitosas no publican nada. Los listeners se registran en el builder del registry; ver [Observabilidad](../guides/observability.md).
 
 ## Probarlo con `ManualClock`
 
@@ -229,7 +290,7 @@ assertThat(clock.elapsed()).isEqualTo(Duration.ofMillis(300));   // 100 ms, then
 - `maxDuration` decide antes de cada espera; no interrumpe un intento en curso. Combínalo con `@Timeout`.
 - Con `Resilient.of` solo cuentan las anotaciones de la interfaz, y las llamadas que la implementación se hace a sí misma (`this.stock(…)`) no se reintentan. Con [clases anotadas](../guides/annotated-classes.md) sí.
 - La forma sync bloquea el thread de quien llama durante las esperas (barato en un virtual thread). Usa la forma async para liberarlo.
-- Errores relacionados: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (sintaxis de duración), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`maxAttempts` menor que 1), [`R4C-ATR-004`](../errors.md#r4c-atr-004) (`multiplier`), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` junto con `retryOn`), [`R4C-CLS-012`](../errors.md#r4c-cls-012) (`onExhaustedResult` sin classifier), [`R4C-REG-001`](../errors.md#r4c-reg-001)/[`R4C-REG-003`](../errors.md#r4c-reg-003) (combinación inválida), [`R4C-REG-004`](../errors.md#r4c-reg-004) (`config` desconocida), [`R4C-REG-008`](../errors.md#r4c-reg-008) (`name` compartido con otra configuración).
+- Errores relacionados: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (sintaxis de duración), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`maxAttempts` menor que 1), [`R4C-ATR-004`](../errors.md#r4c-atr-004) (`multiplier`), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-ATR-007`](../errors.md#r4c-atr-007) (valores del presupuesto de reintentos), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` junto con `retryOn`), [`R4C-CLS-012`](../errors.md#r4c-cls-012) (`onExhaustedResult` sin classifier), [`R4C-REG-001`](../errors.md#r4c-reg-001)/[`R4C-REG-003`](../errors.md#r4c-reg-003) (combinación inválida), [`R4C-REG-004`](../errors.md#r4c-reg-004) (`config` desconocida), [`R4C-REG-008`](../errors.md#r4c-reg-008) (`name` compartido con otra configuración).
 
 ## Cuánto cuesta
 

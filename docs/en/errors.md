@@ -352,6 +352,39 @@ public interface PriceClient {
 }
 ```
 
+### R4C-ATR-007
+
+**Trigger:** a retry budget attribute is out of range: `budgetPercent` is negative, infinite or NaN,
+`budgetMinRetriesPerSecond` is negative, or `budgetWindow` is shorter than 1 s or longer than 1 h. (A
+`budgetWindow` that is not a duration at all is [R4C-ATR-001](#r4c-atr-001).)
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(budgetPercent = 20, budgetWindow = "500ms")
+    String price(String sku);
+}
+```
+
+**Fix:** use a percentage of 0 or more, a reserve of 0 or more retries per second, and a window between
+`"1s"` and `"1h"`; or leave the attribute out to inherit it (`budgetWindow` defaults to `10s`).
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public interface PriceClient {
+    @Retry(budgetPercent = 20, budgetMinRetriesPerSecond = 1, budgetWindow = "10s")
+    String price(String sku);
+}
+```
+
 ## Annotation processor: composed annotations (R4C-CMP)
 
 ### R4C-CMP-001

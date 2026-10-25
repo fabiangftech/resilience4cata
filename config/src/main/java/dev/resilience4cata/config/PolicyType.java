@@ -46,7 +46,10 @@ final class PolicyType<B, C> {
                     Attribute.enumeration("jitter", RetryConfig.Jitter.class, RetryConfig.Builder::jitter),
                     Attribute.duration("maxDuration", RetryConfig.Builder::maxDuration),
                     Attribute.classes("retryOn", RetryConfig.Builder::retryOn),
-                    Attribute.classes("abortOn", RetryConfig.Builder::abortOn)));
+                    Attribute.classes("abortOn", RetryConfig.Builder::abortOn),
+                    Attribute.real("budgetPercent", RetryConfig.Builder::budgetPercent),
+                    Attribute.integer("budgetMinRetriesPerSecond", RetryConfig.Builder::budgetMinRetriesPerSecond),
+                    Attribute.duration("budgetWindow", RetryConfig.Builder::budgetWindow)));
 
     static final PolicyType<CircuitBreakerConfig.Builder, CircuitBreakerConfig> CIRCUIT_BREAKER = new PolicyType<>(
             "circuitBreaker", CircuitBreakerConfig.DEFAULTS, CircuitBreakerConfig::toBuilder,

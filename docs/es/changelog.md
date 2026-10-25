@@ -4,6 +4,17 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Unreleased] :id=unreleased
+
+### Agregado
+
+- `resilience4cata-opentelemetry`: métricas de OpenTelemetry. `OpenTelemetryMetrics.create(openTelemetry)`, `register(builder)` y `bindTo(registry)` reportan rechazos, retries, abandonos, transiciones del breaker, timeouts y fallbacks como contadores alimentados por eventos, y el estado de breakers, bulkheads y rate limiters como gauges asíncronos leídos del snapshot en cada recolección, así que se incluyen las instancias creadas después. Los mismos nombres de métricas que el módulo de Micrometer. Solo métricas, todavía sin tracing. Consulta [OpenTelemetry](guides/opentelemetry.md).
+- `resilience4cata-junit`: una extensión de JUnit Jupiter. `@ResilienceTest` inyecta en cada prueba (y en sus métodos `@BeforeEach`/`@AfterEach`) un `ManualClock` nuevo y un `ResilienceRegistry` que lo sigue, con `seed`, `startNanos` y un `failOnPendingTasks` opcional; los métodos `@ConfigureRegistry` personalizan el builder. Necesita JUnit 5.10 o posterior, JUnit 6 incluido. Consulta [Pruebas](guides/testing.md#junit).
+- Una llamada async con `@Timeout` que termina a tiempo ahora quita su plazo de un `ManualClock` de inmediato, así que `pendingTasks()` ya no la cuenta hasta que pasa el plazo.
+- **`resilience4cata-micrometer`**: [métricas de Micrometer](guides/micrometer.md) en tres líneas (`MicrometerMetrics.create(meterRegistry)`, `register(builder)`, `bindTo(registry)`): counters a partir de eventos (rechazos, transiciones del breaker, reintentos, abandonos, timeouts, fallbacks) y gauges para cada circuit breaker, bulkhead y rate limiter, incluidas las instancias creadas después de conectar. Reemplaza la receta escrita a mano de la guía de observabilidad.
+- `ResilienceRegistry.onInstanceCreated(Runnable)`: ejecuta una acción una vez por cada instancia de política nueva (al envolver un servicio o construir un pipeline, nunca durante una llamada), para que los puentes de métricas registren meters para instancias creadas después ([Observabilidad](guides/observability.md#diy)).
+- **Presupuesto de reintentos** para `@Retry`, `RetryConfig` y `Pipeline`: `budgetPercent`, `budgetMinRetriesPerSecond` y `budgetWindow` limitan los reintentos de una instancia de retry, compartidos por todos sus llamadores, a una reserva por segundo más un porcentaje de sus llamadas en la ventana, para que una caída no multiplique la carga sobre la dependencia que falla. Apagado por defecto; sin él, el código generado y el camino de éxito no cambian. Un reintento rechazado publica `RetryEvent.GaveUp` con la nueva razón `BUDGET_EXHAUSTED`; `RetrySnapshot.budget()` muestra la ventana. Claves `defaults.retry.budget…` (y `configs.…`, `instances.…`, variables de entorno); nuevo error del procesador [R4C-ATR-007](errors.md#r4c-atr-007). [Presupuesto de reintentos](policies/retry.md#presupuesto-de-reintentos)
+
 ## [0.2.0] - 2026-10-25 :id=0.2.0
 
 Corrige tres errores de comportamiento de la 0.1.0; uno de los arreglos cambia un valor por defecto (ver Actualizar).

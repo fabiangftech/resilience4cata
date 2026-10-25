@@ -4,6 +4,7 @@ import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.Classifier;
 import dev.resilience4cata.ResultRejectedException;
 import dev.resilience4cata.RetryConfig;
+import dev.resilience4cata.RetrySnapshot;
 import dev.resilience4cata.event.RetryEvent;
 import java.time.Duration;
 import java.util.List;
@@ -32,6 +33,11 @@ import org.jspecify.annotations.Nullable;
  *     }
  * }
  * }</pre>
+ *
+ * <p>With a retry budget ({@link RetryConfig#hasBudget()}), {@link #start()} also counts the call in the
+ * instance's {@link RetryBudget}, and a retry that every other rule allows is still refused when the
+ * budget is exhausted ({@link RetryEvent.Reason#BUDGET_EXHAUSTED}). Without one, {@code start()} reads one
+ * field, as before budgets existed, and failures check one more {@code null} field.
  */
 public final class RetryPolicy {
 
@@ -48,6 +54,10 @@ public final class RetryPolicy {
     private final long maxDelayNanos;
     private final RetryConfig.Jitter jitter;
     private final long maxDurationNanos;
+    /** {@code maxDuration} or a budget is set: {@link #start()} has work to do. One field, read on every call. */
+    private final boolean startsSlow;
+    /** {@code null} without a retry budget; read only by {@link #startSlow()}, after failures and by snapshots. */
+    private final @Nullable RetryBudget budget;
     // One ClassValue per policy, as before classifiers: every extra ClassValue on the same exception class
     // shares that class's small lookup cache, and collisions there made failure paths contend under load.
     private final Classification verdicts;
@@ -89,6 +99,8 @@ public final class RetryPolicy {
         this.maxDelayNanos = config.maxDelay().toNanos();
         this.jitter = config.jitter();
         this.maxDurationNanos = config.maxDuration().toNanos();
+        this.budget = config.enabled() && config.hasBudget() ? new RetryBudget(config, environment.ticker.getAsLong()) : null;
+        this.startsSlow = maxDurationNanos > 0 || budget != null;
         this.verdicts = new Classification(config.retryOn(), config.abortOn());
         this.ticker = environment.ticker;
         this.sleeper = environment.sleeper;
@@ -104,12 +116,26 @@ public final class RetryPolicy {
     }
 
     /**
-     * Called once before the first attempt.
+     * Called once before the first attempt. Counts the call in the retry budget, if there is one.
      *
      * @return a start timestamp to pass to {@link #onFailure}; reads the clock only if {@code maxDuration} is set
      */
     public long start() {
+        return startsSlow ? startSlow() : 0L;
+    }
+
+    private long startSlow() {
+        RetryBudget budget = this.budget;
+        if (budget != null) {
+            budget.onCall();
+        }
         return maxDurationNanos > 0 ? ticker.getAsLong() : 0L;
+    }
+
+    /** The budget's current window, for snapshots; {@code null} without a budget. Off the call path. */
+    public RetrySnapshot.@Nullable Budget budgetSnapshot() {
+        RetryBudget budget = this.budget;
+        return budget != null ? budget.snapshot(ticker.getAsLong()) : null;
     }
 
     /**
@@ -188,7 +214,8 @@ public final class RetryPolicy {
      * {@code retryable} is what the exception lists or the classifier said. A call rejected by a circuit
      * breaker ({@link CallNotPermittedException}) is never retried, whatever the lists or the classifier
      * say: retrying would only be rejected again. That abort is implicit, not an entry of {@code abortOn},
-     * so a user's {@code abortOn} cannot drop it.
+     * so a user's {@code abortOn} cannot drop it. The retry budget is asked last, so that only a retry
+     * that is about to happen takes from it.
      */
     private long decide(int attempts, @Nullable Throwable failure, long start, boolean retryable) {
         if (!enabled) {
@@ -211,11 +238,23 @@ public final class RetryPolicy {
             }
             return NO_RETRY;
         }
+        RetryBudget budget = this.budget;
+        if (budget != null && !budget.tryAcquire(ticker.getAsLong())) {
+            return budgetExhausted(attempts, failure);
+        }
         EventSink<RetryEvent.Retrying> sink = retrying;
         if (sink != null) {
             sink.publish(new RetryEvent.Retrying(id, ticker.getAsLong(), attempts, Duration.ofNanos(delay), failure));
         }
         return delay;
+    }
+
+    private long budgetExhausted(int attempts, @Nullable Throwable failure) {
+        EventSink<RetryEvent.GaveUp> sink = gaveUp;
+        if (sink != null) {
+            sink.publish(new RetryEvent.GaveUp(id, ticker.getAsLong(), attempts, RetryEvent.Reason.BUDGET_EXHAUSTED, failure));
+        }
+        return NO_RETRY;
     }
 
     private void publishGaveUp(int attempts, @Nullable Throwable failure, boolean retryable) {
