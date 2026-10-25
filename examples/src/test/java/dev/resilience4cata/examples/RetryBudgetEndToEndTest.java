@@ -101,7 +101,7 @@ class RetryBudgetEndToEndTest {
     @Test
     void aPipelineRetryHasTheSameBudget() {
         Pipeline<String> pipeline = Pipeline.builder(registry, "pipeline-backend", String.class)
-                .retry(r -> r.maxAttempts(3).delay(Duration.ZERO).budgetMinRetriesPerSecond(1)
+                .retry(r -> r.maxAttempts(3).delay(Duration.ZERO).budgetPercent(0.001).budgetMinRetriesPerSecond(1)
                         .budgetWindow(Duration.ofSeconds(5)))
                 .build();
 

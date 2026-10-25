@@ -30,10 +30,13 @@ class RetryPolicyBudgetTest {
         return new RetryPolicy("budgeted", builder.build(), PolicyEnvironment.forTest(now::get, now::addAndGet, events));
     }
 
-    /** Reserve of 3 retries in the window, no share of the calls. */
+    /**
+     * Reserve of 3 retries in the window. The percent turns the budget on and is too small to add a retry
+     * for the few calls of these tests (allowed = 3 + 0.00001 × calls, and a retry needs a whole one).
+     */
     private static RetryConfig.Builder threeRetries() {
         return RetryConfig.builder().jitter(RetryConfig.Jitter.NONE).delay(Duration.ZERO).maxAttempts(10)
-                .budgetMinRetriesPerSecond(1).budgetWindow(Duration.ofSeconds(3));
+                .budgetPercent(0.001).budgetMinRetriesPerSecond(1).budgetWindow(Duration.ofSeconds(3));
     }
 
     @Test
@@ -90,7 +93,7 @@ class RetryPolicyBudgetTest {
     @Test
     void thePercentCountsCallsNotAttempts() {
         RetryPolicy retry = policy(RetryConfig.builder().jitter(RetryConfig.Jitter.NONE).delay(Duration.ZERO)
-                .maxAttempts(10).budgetPercent(50));
+                .maxAttempts(10).budgetPercent(50).budgetMinRetriesPerSecond(0)); // the percentage alone
         IOException failure = new IOException("down");
         for (int call = 0; call < 4; call++) {
             retry.start();

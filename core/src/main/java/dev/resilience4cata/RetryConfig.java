@@ -19,10 +19,11 @@ import java.util.Objects;
  * @param abortOn exceptions that stop retrying; they win over {@code retryOn}. A
  *     {@link CallNotPermittedException} always stops retrying, whether listed or not
  * @param budgetPercent retry budget: retries allowed, in percent of the calls made in the last
- *     {@code budgetWindow}, on top of {@code budgetMinRetriesPerSecond}; finite, at least 0. The budget
- *     is off while this and {@code budgetMinRetriesPerSecond} are both 0 (the default)
+ *     {@code budgetWindow}, on top of {@code budgetMinRetriesPerSecond}; finite, at least 0. Above 0 it turns
+ *     the budget on; 0 (the default) means no budget
  * @param budgetMinRetriesPerSecond retry budget: retries allowed per second of {@code budgetWindow}
- *     whatever the traffic, so that rarely called methods can still retry; at least 0
+ *     whatever the traffic, so that rarely called methods can still retry; applies once
+ *     {@code budgetPercent} turns the budget on; at least 0 (default 10)
  * @param budgetWindow retry budget: how far back calls and retries are counted; between 1 s and 1 h
  * @see #hasBudget()
  */
@@ -48,11 +49,12 @@ public record RetryConfig(
      * Built-in defaults: 3 attempts, exponential backoff from 200 ms up to 10 s, full jitter, retry on
      * {@link Exception}, empty {@code abortOn}. Whatever the configuration, a call rejected by a circuit
      * breaker ({@link CallNotPermittedException}) is never retried: that abort is built in, not an entry
-     * of {@code abortOn}. No retry budget (with a 10 s {@code budgetWindow} once one is set).
+     * of {@code abortOn}. No retry budget; once {@code budgetPercent} turns one on, its reserve is 10 retries per second (as
+     * in Finagle's {@code RetryBudget}) over a 10 s {@code budgetWindow}.
      */
     public static final RetryConfig DEFAULTS = new RetryConfig(
             true, 3, Duration.ofMillis(200), Backoff.EXPONENTIAL, 2.0, Duration.ofSeconds(10),
-            Jitter.FULL, Duration.ZERO, List.of(Exception.class), List.of(), 0.0, 0, Duration.ofSeconds(10));
+            Jitter.FULL, Duration.ZERO, List.of(Exception.class), List.of(), 0.0, 10, Duration.ofSeconds(10));
 
     /**
      * Creates a configuration without a retry budget: the constructor of 0.2.0, kept so that code that
@@ -73,7 +75,7 @@ public record RetryConfig(
             Duration maxDelay, Jitter jitter, Duration maxDuration, List<Class<? extends Throwable>> retryOn,
             List<Class<? extends Throwable>> abortOn) {
         this(enabled, maxAttempts, delay, backoff, multiplier, maxDelay, jitter, maxDuration, retryOn, abortOn,
-                0.0, 0, Duration.ofSeconds(10));
+                0.0, 10, Duration.ofSeconds(10));
     }
 
     /** How the delay grows between attempts. */
@@ -132,13 +134,14 @@ public record RetryConfig(
     }
 
     /**
-     * Returns whether this configuration has a retry budget: {@code budgetPercent} or
-     * {@code budgetMinRetriesPerSecond} is above 0. Without one, the retry keeps no state between calls.
+     * Returns whether this configuration has a retry budget: {@code budgetPercent} is above 0. The reserve
+     * ({@code budgetMinRetriesPerSecond}, 10 by default) only applies to a budget that is on. Without one, the
+     * retry keeps no state between calls.
      *
      * @return {@code true} if retries are capped relative to the instance's recent calls
      */
     public boolean hasBudget() {
-        return budgetPercent > 0 || budgetMinRetriesPerSecond > 0;
+        return budgetPercent > 0;
     }
 
     /** Returns a builder that starts from {@link #DEFAULTS}. */
@@ -245,8 +248,7 @@ public record RetryConfig(
 
         /**
          * @param budgetPercent retries allowed, in percent of the calls of the last {@code budgetWindow}, on
-         *     top of {@code budgetMinRetriesPerSecond}; 0 with {@code budgetMinRetriesPerSecond = 0} turns the
-         *     budget off
+         *     top of {@code budgetMinRetriesPerSecond}; above 0 turns the budget on, 0 turns it off
          * @return this builder
          */
         public Builder budgetPercent(double budgetPercent) {
@@ -255,7 +257,8 @@ public record RetryConfig(
         }
 
         /**
-         * @param budgetMinRetriesPerSecond retries allowed per second of {@code budgetWindow} whatever the traffic
+         * @param budgetMinRetriesPerSecond retries allowed per second of {@code budgetWindow} whatever the
+         *     traffic, once {@code budgetPercent} turns the budget on (default 10; 0 for a percentage alone)
          * @return this builder
          */
         public Builder budgetMinRetriesPerSecond(int budgetMinRetriesPerSecond) {

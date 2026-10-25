@@ -110,8 +110,8 @@ flowchart TD
 | `maxDuration` | duration | `0` (no budget) | `defaults.retry.maxDuration` | Time budget for the whole operation, across attempts and delays. |
 | `retryOn` | `Class<? extends Throwable>[]` | `{Exception.class}` | `defaults.retry.retryOn` | Exceptions that are retried, subclasses included. |
 | `abortOn` | `Class<? extends Throwable>[]` | `{}` | `defaults.retry.abortOn` | Exceptions that stop the retries; wins over `retryOn` and the classifier. An open breaker stops them whether listed or not. |
-| `budgetPercent` | `double` | `0` (no budget) | `defaults.retry.budgetPercent` | [Retry budget](#retry-budget): retries allowed, in percent of the instance's calls in the last `budgetWindow`. Finite, at least 0. |
-| `budgetMinRetriesPerSecond` | `int` | `0` | `defaults.retry.budgetMinRetriesPerSecond` | Retry budget: retries allowed per second of `budgetWindow`, whatever the traffic. At least 0. |
+| `budgetPercent` | `double` | `0` (no budget) | `defaults.retry.budgetPercent` | [Retry budget](#retry-budget): retries allowed, in percent of the instance's calls in the last `budgetWindow`. Finite, at least 0; above 0 turns the budget on. |
+| `budgetMinRetriesPerSecond` | `int` | `10` | `defaults.retry.budgetMinRetriesPerSecond` | Retry budget: retries allowed per second of `budgetWindow`, whatever the traffic, once `budgetPercent` turns the budget on. At least 0. |
 | `budgetWindow` | duration | `10s` | `defaults.retry.budgetWindow` | Retry budget: how far back calls and retries are counted. From `1s` to `1h`. |
 | `classifier` | `Class<?>` | none | annotation only | A `Classifier<T>` that decides what is retried, results included. Replaces `retryOn`. See [Classifiers](../guides/classifiers.md). |
 | `onExhaustedResult` | `ExhaustedResult` | `RETURN` | annotation only | With a classifier: return the last rejected result, or `THROW` a `ResultRejectedException`. |
@@ -172,7 +172,7 @@ String product(String id);
 
 Here, in any 10 s (the default `budgetWindow`), the `catalog` retry allows 10 retries plus one for every five calls, shared by every method with `name = "catalog"`. Once they are used, a failure is not retried: the last failure is rethrown (or the fallback runs) and `GaveUp` is published with reason `BUDGET_EXHAUSTED`. Every other rule still applies first, so a failure that would not be retried anyway takes nothing from the budget.
 
-- **Off by default**: the budget is off while `budgetPercent` and `budgetMinRetriesPerSecond` are both 0. Set the reserve too: with `budgetPercent = 20` alone, a method called four times in the window cannot retry at all.
+- **Off by default**: `budgetPercent` above 0 turns the budget on. It then comes with a reserve of 10 retries per second (`budgetMinRetriesPerSecond`, the default of Finagle's retry budget), so that a method called rarely can still retry. Setting the reserve to 0 leaves the percentage alone: with `budgetPercent = 20` and no reserve, a method called four times in the window cannot retry at all.
 - **What counts**: calls, not attempts. A call is counted when it starts, whether it succeeds or not; a retry is counted when it is granted.
 - **Sharing**: one budget per instance, so give the methods that call the same dependency the same `name` (and the same attributes, as for any shared instance). Without `name`, each method has its own budget.
 - **Same everywhere**: sync and async methods, methods with a classifier (a rejected result that would be retried takes from the budget too) and [`Pipeline`](../guides/pipeline.md) (`.retry(r -> r.budgetPercent(20).budgetMinRetriesPerSecond(1))`).

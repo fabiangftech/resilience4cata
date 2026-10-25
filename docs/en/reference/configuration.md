@@ -80,8 +80,8 @@ Everything is resolved once, when an instance is created. Nothing is reloaded af
 | `defaults.retry.maxDuration` | `R4C_DEFAULTS_RETRY_MAXDURATION` | duration | `0` | ≥ 0; `0` = unlimited | Time budget for the whole operation: gives up when waiting for the next delay would go past it. |
 | `defaults.retry.retryOn` | `R4C_DEFAULTS_RETRY_RETRYON` | class list | `java.lang.Exception` | exception classes | Failures that are retried, subclasses included. `Error`s are not retried by default. |
 | `defaults.retry.abortOn` | `R4C_DEFAULTS_RETRY_ABORTON` | class list | — | exception classes | Failures that are never retried; they win over `retryOn` and a classifier. A `CallNotPermittedException` (open breaker) is never retried either, whether listed or not. |
-| `defaults.retry.budgetPercent` | `R4C_DEFAULTS_RETRY_BUDGETPERCENT` | decimal | `0` | finite, ≥ 0 | Retry budget: retries allowed, in percent of the instance's calls in the last `budgetWindow`, on top of `budgetMinRetriesPerSecond`. The budget is off while both are `0`. |
-| `defaults.retry.budgetMinRetriesPerSecond` | `R4C_DEFAULTS_RETRY_BUDGETMINRETRIESPERSECOND` | int | `0` | ≥ 0 | Retry budget: retries allowed per second of `budgetWindow`, whatever the traffic. |
+| `defaults.retry.budgetPercent` | `R4C_DEFAULTS_RETRY_BUDGETPERCENT` | decimal | `0` | finite, ≥ 0 | Retry budget: retries allowed, in percent of the instance's calls in the last `budgetWindow`, on top of `budgetMinRetriesPerSecond`. Above `0` it turns the budget on; `0` means no budget. |
+| `defaults.retry.budgetMinRetriesPerSecond` | `R4C_DEFAULTS_RETRY_BUDGETMINRETRIESPERSECOND` | int | `10` | ≥ 0 | Retry budget: retries allowed per second of `budgetWindow`, whatever the traffic, once `budgetPercent` turns the budget on. `0` leaves the percentage alone. |
 | `defaults.retry.budgetWindow` | `R4C_DEFAULTS_RETRY_BUDGETWINDOW` | duration | `10s` | 1s to 1h | Retry budget: how far back calls and retries are counted. |
 
 ## Circuit breaker :id=circuit-breaker

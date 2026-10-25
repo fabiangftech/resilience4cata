@@ -27,11 +27,16 @@ class RetryConfigTest {
     }
 
     @Test
-    void theBudgetIsOffByDefaultAndOnWithAPercentOrAReserve() {
+    void theBudgetIsOffByDefaultAndTheAPercentTurnsItOnWithADefaultReserve() {
         assertThat(RetryConfig.DEFAULTS.hasBudget()).isFalse();
         assertThat(RetryConfig.DEFAULTS.budgetWindow()).isEqualTo(Duration.ofSeconds(10));
+        assertThat(RetryConfig.DEFAULTS.budgetMinRetriesPerSecond()).as("Finagle's default reserve").isEqualTo(10);
         assertThat(RetryConfig.builder().budgetPercent(20).build().hasBudget()).isTrue();
-        assertThat(RetryConfig.builder().budgetMinRetriesPerSecond(1).build().hasBudget()).isTrue();
+        assertThat(RetryConfig.builder().budgetPercent(20).build().budgetMinRetriesPerSecond()).isEqualTo(10);
+        assertThat(RetryConfig.builder().budgetMinRetriesPerSecond(1).build().hasBudget())
+                .as("a reserve alone is not a budget").isFalse();
+        assertThat(RetryConfig.builder().budgetPercent(20).budgetMinRetriesPerSecond(0).build().hasBudget())
+                .as("a percentage alone").isTrue();
         assertThat(RetryConfig.builder().budgetPercent(20).build().toBuilder().budgetPercent(0).build().hasBudget()).isFalse();
     }
 
