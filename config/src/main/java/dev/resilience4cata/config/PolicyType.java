@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -23,6 +24,9 @@ import org.jspecify.annotations.Nullable;
  * @param <C> the config record type
  */
 final class PolicyType<B, C> {
+
+    /** Starts the message of a value rejected by a core {@code *Config} (code R4C-REG-001). */
+    private static final Pattern INVALID_VALUE_PREFIX = Pattern.compile("^\\[R4C-REG-001\\] Invalid \\w+ config: ");
 
     /** Registers a named configuration overlay or per-instance overrides. */
     interface NamedRegistrar<B> {
@@ -214,13 +218,21 @@ final class PolicyType<B, C> {
             resolve(base, settings);
             return false;
         } catch (IllegalArgumentException e) {
-            List<String> named = mentioned(String.valueOf(e.getMessage()));
+            List<String> named = mentioned(detail(e));
             if (named.isEmpty() || !settings.keySet().containsAll(named)) {
                 return false;
             }
             problems.add(invalidConfig(what, e, settings));
             return true;
         }
+    }
+
+    /**
+     * The message of a core config validation error without its {@code [R4C-REG-001] Invalid <policy> config: }
+     * prefix: the problem is reported here under R4C-CFG-006, with the keys that set the values.
+     */
+    static String detail(IllegalArgumentException e) {
+        return INVALID_VALUE_PREFIX.matcher(String.valueOf(e.getMessage())).replaceFirst("");
     }
 
     /** The attributes whose record component a validation message names. */
@@ -238,7 +250,7 @@ final class PolicyType<B, C> {
     }
 
     private ProblemException invalidConfig(String what, IllegalArgumentException e, Map<String, Setting> settings) {
-        String message = String.valueOf(e.getMessage());
+        String message = detail(e);
         List<Setting> involved = settings.values().stream()
                 .filter(s -> {
                     Attribute<B> attribute = attributes.get(s.key().attribute());

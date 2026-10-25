@@ -20,6 +20,7 @@ y cómo corregirlo. Los mensajes están en inglés.
 | `R4C-FB` | procesador de anotaciones | `@Fallback` |
 | `R4C-SUB` | procesador de anotaciones | clases anotadas (subclases generadas) |
 | `R4C-RT` | `resilience4cata-core` en ejecución | `Resilient.of`, `Resilient.create`, `Pipeline.Builder` |
+| `R4C-REG` | `resilience4cata-core` en ejecución | builders `*Config`, `ResilienceRegistry` y su builder: configuraciones con nombre, instancias |
 | `R4C-CFG` | `resilience4cata-config` en ejecución | configuración externa (`ResilienceConfig`) |
 
 Los códigos son estables: nunca se renumeran ni cambian de significado. Un error nuevo recibe el siguiente
@@ -2158,6 +2159,142 @@ en anotaciones es [R4C-CLS-012](#r4c-cls-012).
 (`IllegalStateException` desde `build()`).
 
 **Corrección:** añade un circuit breaker, o quita el clasificador del circuit breaker.
+
+## Ejecución: registro y configuración de políticas (R4C-REG)
+
+Los lanza `resilience4cata-core` cuando se construye la configuración de una política (`RetryConfig.builder()`
+y los demás builders `*Config`), cuando se construye un `ResilienceRegistry`, y cuando el registro crea o
+busca una instancia de política: al envolver un servicio (`Resilient.of`, `Resilient.create`) o al construir
+un pipeline (`Pipeline.Builder.build()`, que los deja pasar sin cambios). Los tipos de excepción están
+documentados en cada método; el código va al inicio del mensaje. La configuración externa
+(`ResilienceConfig`) valida sus valores antes de que lleguen al registro y los reporta como
+[R4C-CFG-006](#r4c-cfg-006), con las claves que los definieron.
+
+### R4C-REG-001
+
+**Causa:** un builder `*Config` rechazó un valor (`IllegalArgumentException` desde `build()`), por ejemplo un
+`maxAttempts` menor que 1, una duración negativa, un `maxDelay` más corto que el `delay`, o un umbral de tasa
+fuera de `(0, 100]`. El mensaje nombra el atributo y el valor.
+
+**Incorrecto:** `RetryConfig.builder().maxAttempts(0).build()`
+
+**Corrección:** usa un valor dentro del rango que indica el mensaje:
+`RetryConfig.builder().maxAttempts(1).build()`.
+
+### R4C-REG-002
+
+**Causa:** `ResilienceRegistry.Builder.build()` encontró una configuración por defecto o con nombre inválida
+(`IllegalArgumentException`, con el error [R4C-REG-001](#r4c-reg-001) como causa). El mensaje nombra la
+configuración (o los valores por defecto) y dónde se definió.
+
+**Incorrecto:**
+
+```java
+ResilienceRegistry.builder()
+        .retry("slow", r -> r.delay(Duration.ofSeconds(2)).maxDelay(Duration.ofSeconds(1)))
+        .build();
+```
+
+**Corrección:** haz que los valores de esa configuración sean válidos en conjunto. Una configuración con
+nombre parte de los valores por defecto (`retryDefaults(...)`), luego aplica `retry("slow", ...)` y después
+`retryOverlay("slow", ...)` (`configs.slow.retry.*` en la configuración externa):
+
+```java
+ResilienceRegistry.builder()
+        .retry("slow", r -> r.delay(Duration.ofSeconds(1)).maxDelay(Duration.ofSeconds(2)))
+        .build();
+```
+
+### R4C-REG-003
+
+**Causa:** la configuración de una instancia de política es inválida una vez que se combina todo lo que se
+le aplica (`IllegalArgumentException`, con el error [R4C-REG-001](#r4c-reg-001) como causa): su
+configuración con nombre (o los valores por defecto), luego los valores de su anotación o paso de pipeline, y
+después sus ajustes por instancia (`retryInstance(id, ...)`, `instances.<id>.*` en la configuración
+externa). Se lanza cuando se crea la instancia: desde `Resilient.of`/`Resilient.create` o desde
+`Pipeline.Builder.build()`.
+
+**Incorrecto:** un ajuste por instancia que no encaja con los valores propios de la instancia:
+
+```java
+ResilienceRegistry registry = ResilienceRegistry.builder()
+        .retryInstance("payments", r -> r.delay(Duration.ofSeconds(30)))
+        .build();
+Pipeline.builder(registry, "payments").retry(r -> r.maxDelay(Duration.ofSeconds(20))).build();
+```
+
+**Corrección:** cambia el ajuste, o el valor con el que choca, para que la combinación sea válida, por
+ejemplo `retryInstance("payments", r -> r.delay(Duration.ofSeconds(10)))`.
+
+### R4C-REG-004
+
+**Causa:** `config = "name"` (en una anotación o en un paso de pipeline), o `retryConfig("name")` y las
+demás búsquedas `*Config(String)`, nombra una configuración que el registro no tiene
+(`IllegalArgumentException`). El mensaje lista las configuraciones conocidas y sugiere la más parecida
+("Did you mean …?").
+
+**Incorrecto:** `@Retry(config = "fiev")` con un registro que solo registra `retry("five", ...)`.
+
+**Corrección:** corrige el nombre, o registra la configuración:
+`ResilienceRegistry.builder().retry("fiev", r -> ...)`, o `configs.fiev.retry.*` en la configuración externa.
+
+### R4C-REG-005
+
+**Causa:** la misma configuración con nombre se registra dos veces en un builder, por ejemplo con dos
+llamadas a `retry("five", ...)` (`IllegalArgumentException`).
+
+**Corrección:** regístrala una sola vez. Para cambiar algunos de sus atributos en otro lugar, usa el overlay,
+que se aplica encima: `retryOverlay("five", r -> r.maxAttempts(3))`.
+
+### R4C-REG-006
+
+**Causa:** una configuración con nombre u overlay se registra con el nombre `""` o `"default"`, por ejemplo
+`retry("default", ...)` (`IllegalArgumentException`). Ambos nombres están reservados: significan los valores
+por defecto.
+
+**Corrección:** cambia los valores por defecto con `retryDefaults(...)` (`defaults.retry.*` en la
+configuración externa), o dale otro nombre a la configuración.
+
+### R4C-REG-007
+
+**Causa:** `retryInstance("", ...)` u otra llamada `*Instance(...)` con un id de instancia vacío
+(`IllegalArgumentException`).
+
+**Corrección:** pasa el id de la instancia: el `name` de su anotación, el id del pipeline, o el id derivado
+`<interface>#<method>(<parameter types>)`, por ejemplo `com.acme.PriceClient#price(java.lang.String)`.
+
+### R4C-REG-008
+
+**Causa:** dos puntos de llamada comparten una instancia de retry, circuit breaker, rate limiter o bulkhead,
+por el mismo `name` en sus anotaciones o el mismo id de pipeline, pero resuelven configuraciones distintas
+(`IllegalStateException`). El mensaje muestra ambas configuraciones. Las instancias con el mismo nombre se
+comparten, así que deben coincidir.
+
+**Incorrecto:**
+
+```java
+interface Inventory {
+    @Retry(name = "backend", maxAttempts = 3)
+    String stock(String sku);
+
+    @Retry(name = "backend", maxAttempts = 5)
+    String reserve(String sku);
+}
+```
+
+**Corrección:** da nombres distintos a los puntos de llamada si deben ser independientes, o haz idéntica su
+configuración (por ejemplo, el mismo `config = "..."` y ningún atributo distinto) si deben compartir una
+instancia.
+
+### R4C-REG-009
+
+**Causa:** `registry.circuitBreaker(id)`, `registry.rateLimiter(id)` o `registry.bulkhead(id)` con un id que
+ninguna instancia de este registro tiene (`IllegalArgumentException`). El mensaje lista los ids conocidos y
+sugiere el más parecido. Las instancias se crean cuando se envuelve su interfaz (`Resilient.of`), se crea su
+clase (`Resilient.create`) o se construye su pipeline, así que buscarlas antes también falla.
+
+**Corrección:** usa el `name` de la anotación (o el id del pipeline), o el id derivado
+`<interface>#<method>(<parameter types>)`, y búscala después de crear el servicio o el pipeline.
 
 ## Ejecución: configuración externa (R4C-CFG)
 

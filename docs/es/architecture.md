@@ -1,6 +1,6 @@
 # Arquitectura
 
-> Síntesis de [02 Mecanismos de anotaciones](research/02-annotation-mechanisms.md), [03 Rendimiento interno](research/03-performance-internals.md) y [05 Arquitectura del proyecto](research/05-project-architecture.md). Es una propuesta; todavía no hay nada implementado.
+> Síntesis de [02 Mecanismos de anotaciones](research/02-annotation-mechanisms.md), [03 Rendimiento interno](research/03-performance-internals.md) y [05 Arquitectura del proyecto](research/05-project-architecture.md). Describe el diseño tal como está implementado en 0.1.0; los documentos de investigación registran cómo se eligió.
 
 ## Visión general
 
@@ -9,15 +9,15 @@ graph LR
   user["Código del usuario<br/>@Retry @CircuitBreaker …"] -->|javac| processor
   processor -->|genera| gen["PaymentClient$Resilient<br/>(código Java)"]
   gen -->|protocolo de permisos| core
-  config -->|ConfigSource| core
+  config -->|builder del registry| core
   user -->|"Resilient.of(...)"| core
 ```
 
 1. El usuario anota interfaces o clases no final.
 2. Al compilar, `processor` valida las anotaciones (firmas de fallback, duraciones, paquetes en conflicto) y **genera código Java**: un wrapper que delega para las interfaces, una subclase para las clases no final.
-3. Al arrancar, el usuario construye un `ResilienceRegistry` (por código y/o desde configuración externa) y obtiene la instancia con `Resilient.of(PaymentClient.class, impl, registry)`, o con la factory generada `PaymentClientResilience.wrap(impl, registry)`.
+3. Al arrancar, el usuario construye un `ResilienceRegistry` (por código y/o desde configuración externa) y obtiene la instancia con `Resilient.of(PaymentClient.class, impl, registry)` para una interfaz, o con `Resilient.create(InventoryService.class, registry, argumentosDelConstructor...)` (o el constructor generado, `new InventoryService$Resilient(registry, ...)`) para una clase.
 4. El procesador es **obligatorio**. Si falta la clase generada (no se configuró el procesador), `Resilient.of` falla al arrancar con un mensaje que muestra la línea `annotationProcessor` que hay que agregar. No hay fallback con reflexión ni proxies.
-5. La configuración se resuelve **una sola vez**, al crear la instancia, en campos `final` de la clase generada. Las llamadas nunca buscan nada.
+5. La configuración se resuelve **una sola vez**, al crear la instancia, en objetos de política inmutables guardados en campos `final` de la clase generada. Las llamadas nunca buscan nada.
 
 ## Mecanismo de anotaciones
 
@@ -51,31 +51,63 @@ Descartados o pospuestos:
 El JMH muestra que la **forma** del código generado importa tanto como el mecanismo. Llamar a las políticas a través de una lambda compartida duplica el costo cuando hay varios servicios. Por eso `core` expone dos APIs:
 
 - Una **API funcional para personas** (`Pipeline`, builders) para el código que no se puede anotar.
-- Un **protocolo de permisos para el código generado**, de bajo nivel y sin asignar memoria, en un paquete exportado como `core.spi.generated`: `long acquire(now)`, `onSuccess(token, nanos)`, `onFailure(token, nanos, error)`, `tryEnter()` / `exit()`, etc.
+- Un **protocolo de permisos para el código generado**, de bajo nivel y sin asignar memoria, en el paquete `dev.resilience4cata.generated` (exportado, pero solo para el código generado): `acquire()` / `onSuccess(token, started)` / `onFailure(token, started, error)` para el breaker, `start()` / `onFailure(attempts, error, start)` / `pause(delay)` para el retry, `enter()` / `succeeded(scope)` / `failed(scope, error)` para el timeout, etc.
+
+Cada política es una capa: el método público tiene la más externa, y cada capa interna es un método privado con la misma firma, que termina con la llamada a la implementación. Esto es lo que genera el procesador para `@Retry` + `@CircuitBreaker` + `@Timeout` en `String track(String)` (de la guía de primeros pasos; aquí se acortan los nombres completos):
 
 ```java
-// Generado (ilustrativo)
 @Override
-public Receipt charge(Order order) {
-    int attempt = 0;
+public String track(String p0) throws IOException {
+    final RetryPolicy r4c$retry = this.retry0;
+    final long r4c$start = r4c$retry.start();
+    int r4c$attempts = 0;
     while (true) {
-        long t0 = ticker.read();
-        long permit = charge$cb.acquire(t0);              // sin lambda, sin boxing
-        if (permit == REJECTED) return fallback.apply(order, charge$cb.rejection());
         try {
-            Receipt r = delegate.charge(order);            // llamada monomórfica
-            charge$cb.onSuccess(permit, ticker.read() - t0);
-            return r;
-        } catch (Throwable e) {
-            charge$cb.onFailure(permit, ticker.read() - t0, e);
-            if (!charge$retry.shouldRetry(++attempt, e)) return fallback.apply(order, e);
-            charge$retry.pause(attempt);                   // sin problema en virtual threads
+            return this.r4c$circuitBreaker0(p0);
+        } catch (Throwable r4c$e) {
+            final long r4c$delay = r4c$retry.onFailure(++r4c$attempts, r4c$e, r4c$start);
+            if (r4c$delay < 0 || !r4c$retry.pause(r4c$delay)) {
+                throw r4c$e;
+            }
         }
     }
 }
+
+private String r4c$circuitBreaker0(String p0) throws IOException {
+    final CircuitBreakerPolicy r4c$cb = this.circuitBreaker0;
+    final long r4c$token = r4c$cb.acquire();
+    if (r4c$token < 0) {
+        throw r4c$cb.rejection();                          // preallocated, stackless
+    }
+    final long r4c$started = r4c$cb.startTimer();          // reads the clock only if slowCallDuration is set
+    try {
+        final String r4c$result = this.r4c$timeout0(p0);
+        r4c$cb.onSuccess(r4c$token, r4c$started);
+        return r4c$result;
+    } catch (Throwable r4c$e) {
+        r4c$cb.onFailure(r4c$token, r4c$started, r4c$e);
+        throw r4c$e;
+    }
+}
+
+private String r4c$timeout0(String p0) throws IOException {
+    final TimeoutPolicy r4c$timeout = this.timeout0;
+    final TimeoutPolicy.Scope r4c$scope = r4c$timeout.enter();
+    final String r4c$result;
+    try {
+        r4c$result = this.delegate.track(p0);              // monomorphic call
+    } catch (Throwable r4c$e) {
+        r4c$timeout.failed(r4c$scope, r4c$e);
+        throw r4c$e;
+    }
+    r4c$timeout.succeeded(r4c$scope);
+    return r4c$result;
+}
 ```
 
-El código generado incluye la versión del procesador, y `core` la verifica al inicializar la clase, así una diferencia de versión entre `processor` y `core` falla de inmediato.
+Los métodos async (que devuelven `CompletionStage` o `CompletableFuture`) son la excepción: se generan como llamadas anidadas `policy.executeAsync(() -> next)`, porque los futures ya asignan memoria y pasan por callbacks megamórficos, así que una lambda por capa cuesta poco ahí.
+
+Una diferencia de versión entre `processor` y `core` se detecta al crear la instancia: si a la clase generada le falta el constructor que espera este `core`, `Resilient.of` / `Resilient.create` fallan con [`R4C-RT-004`](errors.md#r4c-rt-004). El BOM mantiene ambos en la misma versión.
 
 ### Anotaciones en la interfaz vs la implementación
 
@@ -95,22 +127,22 @@ Decisión: las llamadas de un método a otro dentro del mismo objeto **se interc
 | Subclase (clase no final anotada, `Resilient.create(InventoryService.class, registry)`) | **Se intercepta** | La subclase generada sobrescribe `otro()`, así que la llamada virtual pasa por ella |
 | Wrapper (interfaz anotada, `Resilient.of(PaymentClient.class, impl, registry)`) | No se intercepta | La implementación del usuario se llama a sí misma directamente; el wrapper nunca lo ve |
 
-La diferencia queda documentada en la guía de usuario. Quien necesite auto-invocación con el estilo wrapper anota la clase de implementación. Un método que se llama a sí mismo de forma recursiva pasa por sus políticas en cada llamada, y eso también queda documentado.
+La diferencia queda documentada en la [guía de primeros pasos](getting-started.md#qué-estilo-usar). Quien necesite auto-invocación con el estilo wrapper anota la clase de implementación. Un método que se llama a sí mismo de forma recursiva pasa por sus políticas en cada llamada, y eso también queda documentado.
 
 ## Funcionamiento interno de las políticas
 
-Resumen de [03](research/03-performance-internals.md); cada punto es una hipótesis a validar con JMH y jcstress.
+Tal como está implementado, partiendo de las propuestas de [03](research/03-performance-internals.md); las partes sin locks se verifican con jcstress y cada cambio en el camino caliente con JMH ([benchmarks](benchmarks.md)).
 
 | Política | Diseño |
 |---|---|
-| Circuit breaker | Palabra de estado en un `VarHandle`; permisos marcados con la generación para half-open; ventana por cantidad como un arreglo de slots actualizado con `getAndSet` más contadores; ventana por tiempo como buckets marcados por época; los umbrales se evalúan solo cuando una tasa puede subir |
-| Rate limiter | GCRA sobre un solo `long` con CAS; el camino de rechazo solo lee; sin thread de fondo |
-| Bulkhead | Contador con `getAndAdd` que rechaza de inmediato; semáforo solo si `maxWait > 0` |
-| Retry | Estado del intento en variables locales; memoria solo si hay fallo; jitter decorrelated o full con `ThreadLocalRandom` |
-| Timeout | La llamada sigue en el thread del llamador; un timer wheel la interrumpe, con un protocolo CAS para que las interrupciones nunca se filtren; el async usa el mismo temporizador |
-| Transversal | Callbacks de listeners con argumentos primitivos; métricas por consulta; padding de los campos que se escriben mucho; un par de lecturas de reloj por llamada |
+| Circuit breaker | El estado es un objeto de fase inmutable (closed, open, half-open, forzado abierto, deshabilitado) que se cambia por CAS con un `VarHandle`, así que solo se crean objetos en las transiciones; los permisos llevan la generación de la fase y los resultados viejos se descartan; ventana por cantidad como un arreglo de slots actualizado con `getAndSet` más contadores, ventana por tiempo como buckets de un segundo con contadores `LongAdder`; mientras está cerrado y solo hay éxitos rápidos, una llamada solo lee el campo `quiet` |
+| Rate limiter | GCRA sobre un solo `long` con padding (el tiempo teórico de llegada) con un CAS plano; el camino de rechazo solo lee; quien pierde el CAS espera 1 ns antes de reintentar; sin thread de fondo |
+| Bulkhead | Con `maxWait = 0`, un loop de CAS sobre un contador con padding (acquire para tomar un slot, release para devolverlo); un `Semaphore` no fair cuando `maxWait > 0`; las esperas async se encolan sin bloquear y reciben los slots que se liberan |
+| Retry | Estado del intento en variables locales; nada de memoria en el camino de éxito; jitter full, equal o ninguno |
+| Timeout | La llamada sigue en el thread del llamador; un único thread watchdog compartido revisa scopes reutilizables por thread contra un reloj grueso e interrumpe las llamadas atrasadas, con un protocolo CAS con sello para que una interrupción nunca le llegue a la llamada siguiente; los timeouts async usan otro timer sin locks (inboxes repartidos) que nunca dispara antes de tiempo |
+| Transversal | Eventos como records tipados, que solo se crean si alguien escucha; snapshots a pedido; padding de los campos que se escriben mucho; rechazos preasignados y sin stack trace; ninguna lectura del reloj salvo que la función la necesite |
 
-No disponible con Java 21 como base: `StructuredTaskScope` (sigue en preview antes de JDK 28). El pinning de `synchronized` se arregló recién en JDK 24 (JEP 491), así que `synchronized` está prohibido en el camino caliente.
+No disponible con Java 21 como base: `StructuredTaskScope` (sigue siendo una API en preview en JDK 25). El pinning de `synchronized` se arregló recién en JDK 24 (JEP 491), así que `synchronized` está prohibido en el camino caliente.
 
 ## Módulos
 
@@ -119,32 +151,34 @@ Carpetas de una sola palabra. Se publican con el groupId `dev.resilience4cata` (
 | Módulo | Publicado | Responsabilidad | Depende de |
 |---|---|---|---|
 | `annotations` | sí | Tipos de anotación, más `@Experimental` / `@Internal` | — |
-| `core` | sí | Todas las políticas, registry, modelo de configuración, protocolo para el código generado, SPI de eventos, eventos JFR | — (solo el JDK) |
+| `core` | sí | Todas las políticas, registry, modelo de configuración, `Pipeline`, protocolo para el código generado, eventos y snapshots | — (solo el JDK, más JSpecify) |
 | `processor` | sí | Procesador de anotaciones: validación y generación de código | `annotations` |
-| `config` | sí | Carga properties, variables de entorno y propiedades del sistema; SPI `ConfigSource` | `core` |
-| `micrometer` | sí | Puente de métricas | `core`, Micrometer |
-| `testkit` | sí | Ayudas de test para usuarios: reloj manual, scheduler determinista, estados forzados | `core` |
-| `bom` | sí | Alinea las versiones | — |
+| `config` | sí | Carga archivos properties, recursos del classpath, variables de entorno y propiedades del sistema en el builder del registry | `core` |
+| `micrometer` | previsto (v1) | Puente de métricas; no está en 0.1.0 | `core`, Micrometer |
+| `testkit` | sí | Ayudas de test para usuarios: `ManualClock` (reloj, sleeps y timers), jitter con semilla, `elapseWaitInOpen` | `core` |
+| `bom` | sí | Alinea las versiones (`resilience4cata-bom`) | — |
 | `benchmark` | no | JMH contra Resilience4j | `core`, `processor`, Resilience4j |
 | `stress` | no | jcstress para las estructuras sin locks | `core` |
-| `examples` | no | Ejemplos ejecutables, que también son tests de punta a punta del código generado | `annotations`, `core`, `processor` |
+| `examples` | no | Ejemplos ejecutables, que también son tests de punta a punta del código generado | `annotations`, `core`, `config`, `testkit`, `processor` |
 | `docs` | no | Documentación. No es un proyecto de Gradle | — |
 
 ```mermaid
 graph TD
   processor -->|compile| annotations
   config --> core
-  micrometer --> core
+  micrometer -.previsto.-> core
   testkit --> core
   stress --> core
   benchmark --> core
   benchmark --> processor
   examples --> annotations
   examples --> core
+  examples --> config
+  examples --> testkit
   examples -.annotationProcessor.-> processor
 ```
 
-Reglas, verificadas con ArchUnit:
+Reglas, que hacen cumplir los descriptores de módulo (`module-info.java`) y las dependencias de Gradle (todavía sin ArchUnit):
 
 - Las interfaces a las que se refieren las anotaciones (`FallbackHandler<T>`, `Classifier<T>`) viven en `core`, no en `annotations`, así `annotations` puede seguir siendo `compileOnly`. Los atributos de las anotaciones son de tipo `Class<?>`, y el procesador valida al compilar que la clase implemente la interfaz correcta.
 
@@ -155,11 +189,12 @@ Reglas, verificadas con ArchUnit:
 - La división es por dependencias, nunca por patrón. La división de Resilience4j en un artefacto por patrón es una queja común.
 - No hay un módulo llamado `test`: chocaría con la tarea `test` de Gradle, así que el módulo se llama `testkit`.
 
-Lo que declara un usuario:
+Lo que declara un usuario (detalles, Maven y JPMS en [primeros pasos](getting-started.md#dependencias)):
 
 ```groovy
 dependencies {
     implementation platform('dev.resilience4cata:resilience4cata-bom:0.1.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.1.0')   // el path del processor no lo hereda
     implementation 'dev.resilience4cata:resilience4cata-core'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'   // retención CLASS: no hace falta en runtime
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
@@ -168,15 +203,15 @@ dependencies {
 
 ## Build y herramientas
 
-Según [05 §2–§4](research/05-project-architecture.md):
+A partir de [05 §2–§4](research/05-project-architecture.md), tal como está hoy:
 
-- **Nada de Kotlin.** Gradle 9 con el DSL de Groovy, mínimo y declarativo (`settings.gradle` y un `build.gradle` corto por módulo). Toda la lógica del build vive en convention plugins **escritos en Java**, en el included build `conventions`. Las versiones están en `gradle/libs.versions.toml`.
-- Toolchain de Java 21 con `--release 21`; CI en JDK 21 y 25. Configuration cache y build cache activos desde el primer día.
+- **Nada de Kotlin.** Gradle 9 (wrapper 9.6) con el DSL de Groovy, mínimo y declarativo (`settings.gradle` y un `build.gradle` corto por módulo). Toda la lógica del build vive en convention plugins **escritos en Java**, en el included build `conventions`. Las versiones están en `gradle/libs.versions.toml`.
+- Toolchain de Java 21 con `--release 21`, `-Xlint:all -Werror`; CI en JDK 21 y 25 (GitHub Actions, todavía sin correr en GitHub). Configuration cache y build cache activos.
 - `module-info.java` en cada módulo publicado; los paquetes internos no se exportan.
-- Tests: JUnit, AssertJ, jcstress, ArchUnit y compile-testing para el procesador. jqwik está en modo mantenimiento, así que hay que verificar su compatibilidad antes de adoptarlo.
-- Análisis estático: Error Prone + NullAway (modo JSpecify), Spotless, JaCoCo.
-- Publicación: plugin vanniktech maven-publish al Maven Central Portal (OSSRH cerró en junio de 2025), con firma GPG en CI. El namespace `dev.resilience4cata` se verifica en el Central Portal con un registro DNS TXT en `resilience4cata.dev`.
-- Versionado: SemVer, `0.x` mientras se incuba; japicmp en CI, que hace fallar el build desde `1.0`.
+- Tests: JUnit, AssertJ, jcstress y JMH (con un control de asignaciones). Los tests del procesador compilan fuentes en memoria con un helper `Compilation` propio sobre `javax.tools`, no con la librería compile-testing. ArchUnit y jqwik (en modo mantenimiento) son ideas, no se usan.
+- Análisis estático: `javac -Xlint:all -Werror` y anotaciones de nulidad de JSpecify. Error Prone + NullAway, Spotless y JaCoCo son ideas, no están configurados.
+- Publicación: al Maven Central Portal (OSSRH cerró en junio de 2025) con los plugins propios de Gradle `maven-publish` y `signing`, sin plugins de terceros. El plugin de convención `r4c.publish` escribe los POM y firma; `r4c.central`, en la raíz, arma un zip de bundle verificado y lo sube por la Publisher API como un deployment que se publica a mano en el portal. El namespace `dev.resilience4cata` se verifica en el Central Portal con un registro DNS TXT en `resilience4cata.dev`. Pasos: [Publicar una versión](releasing.md).
+- Versionado: SemVer, `0.x` mientras se incuba. Previsto: japicmp en CI, que hará fallar el build desde `1.0`.
 
 ## Documentación
 

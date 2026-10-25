@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -98,7 +99,7 @@ public final class ResilienceRegistry {
      * Runs once, when the instance is created.
      */
     private static <C, B> C resolve(C base, @Nullable Consumer<B> overrides, @Nullable Consumer<B> instance,
-            Function<C, B> toBuilder, Function<B, C> build, String kind, String key) {
+            Function<C, B> toBuilder, Function<B, C> build, String kind, String key, String config) {
         if (overrides == null && instance == null) {
             return base;
         }
@@ -106,16 +107,23 @@ public final class ResilienceRegistry {
         if (overrides != null) {
             overrides.accept(builder);
         }
-        if (instance == null) {
-            return build.apply(builder);
+        if (instance != null) {
+            instance.accept(builder);
         }
-        instance.accept(builder);
         try {
             return build.apply(builder);
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid " + kind + " config for instance '" + key
-                    + "' after its per-instance overrides (" + kind + "Instance(\"" + key + "\", ...), or"
-                    + " instances.<id>.* in external configuration): " + e.getMessage(), e);
+            String named = config.isEmpty() || config.equals(DEFAULT) ? "the " + kind + " defaults"
+                    : "named config '" + config + "'";
+            String sources = instance == null
+                    ? "the values set in its annotation or pipeline step"
+                    : (overrides == null ? "" : "the values set in its annotation or pipeline step, then ")
+                            + "its per-instance overrides (" + kind + "Instance(\"" + key + "\", ...), or instances."
+                            + (key.matches("[A-Za-z0-9_-]+") ? key : '"' + key + '"') + "." + kind
+                            + ".* in external configuration)";
+            throw new IllegalArgumentException(ErrorCode.INVALID_INSTANCE_CONFIG.message("Invalid " + kind
+                    + " config for instance '" + key + "': " + ErrorCode.detail(e) + ". It starts from " + named
+                    + " and applies " + sources + "; fix the value there so that the combination is valid."), e);
         }
     }
 
@@ -185,9 +193,12 @@ public final class ResilienceRegistry {
         }
         C found = named.get(config);
         if (found == null) {
-            throw new IllegalArgumentException("Unknown " + kind + " config '" + config + "'. Known configs: "
+            throw new IllegalArgumentException(ErrorCode.UNKNOWN_CONFIG.message("Unknown " + kind + " config '"
+                    + config + "' (config = \"" + config + "\" in an annotation or pipeline step)."
+                    + Suggestions.didYouMean(config, named.keySet()) + " Known " + kind + " configs: "
                     + new TreeSet<>(named.keySet()) + ". Register it with ResilienceRegistry.builder()." + kind
-                    + "(\"" + config + "\", c -> ...)");
+                    + "(\"" + config + "\", c -> ...), or with configs." + config + "." + kind
+                    + ".* in external configuration."));
         }
         return found;
     }
@@ -207,12 +218,13 @@ public final class ResilienceRegistry {
             @Nullable Consumer<RetryConfig.Builder> overrides) {
         String key = name.isEmpty() ? instanceId : name;
         RetryConfig resolved = resolve(retryConfig(config), overrides, instances.retry().get(key), RetryConfig::toBuilder,
-                RetryConfig.Builder::build, "retry", key);
+                RetryConfig.Builder::build, "retry", key, config);
         RetryPolicy policy = retries.computeIfAbsent(key, k -> new RetryPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
-            throw new IllegalStateException("Retry instance '" + key
-                    + "' is used with two different configurations:\n  " + policy.config() + "\n  " + resolved
-                    + "\nGive the call sites different names, or make their configuration identical.");
+            throw new IllegalStateException(ErrorCode.CONFLICTING_INSTANCE.message("Retry instance '" + key
+                    + "' is used with two different configurations (a shared name, or the same pipeline id"
+                    + " built twice):\n  " + policy.config() + "\n  " + resolved
+                    + "\nGive the call sites different names, or make their configuration identical."));
         }
         return policy;
     }
@@ -232,12 +244,13 @@ public final class ResilienceRegistry {
             @Nullable Consumer<CircuitBreakerConfig.Builder> overrides) {
         String key = name.isEmpty() ? instanceId : name;
         CircuitBreakerConfig resolved = resolve(circuitBreakerConfig(config), overrides, instances.circuitBreaker().get(key), CircuitBreakerConfig::toBuilder,
-                CircuitBreakerConfig.Builder::build, "circuitBreaker", key);
+                CircuitBreakerConfig.Builder::build, "circuitBreaker", key, config);
         CircuitBreakerPolicy policy = circuitBreakers.computeIfAbsent(key, k -> new CircuitBreakerPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
-            throw new IllegalStateException("Circuit breaker '" + key
-                    + "' is used with two different configurations:\n  " + policy.config() + "\n  " + resolved
-                    + "\nGive the call sites different names, or make their configuration identical.");
+            throw new IllegalStateException(ErrorCode.CONFLICTING_INSTANCE.message("Circuit breaker '" + key
+                    + "' is used with two different configurations (a shared name, or the same pipeline id"
+                    + " built twice):\n  " + policy.config() + "\n  " + resolved
+                    + "\nGive the call sites different names, or make their configuration identical."));
         }
         return policy;
     }
@@ -257,12 +270,13 @@ public final class ResilienceRegistry {
             @Nullable Consumer<RateLimiterConfig.Builder> overrides) {
         String key = name.isEmpty() ? instanceId : name;
         RateLimiterConfig resolved = resolve(rateLimiterConfig(config), overrides, instances.rateLimiter().get(key), RateLimiterConfig::toBuilder,
-                RateLimiterConfig.Builder::build, "rateLimiter", key);
+                RateLimiterConfig.Builder::build, "rateLimiter", key, config);
         RateLimiterPolicy policy = rateLimiters.computeIfAbsent(key, k -> new RateLimiterPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
-            throw new IllegalStateException("Rate limiter '" + key
-                    + "' is used with two different configurations:\n  " + policy.config() + "\n  " + resolved
-                    + "\nGive the call sites different names, or make their configuration identical.");
+            throw new IllegalStateException(ErrorCode.CONFLICTING_INSTANCE.message("Rate limiter '" + key
+                    + "' is used with two different configurations (a shared name, or the same pipeline id"
+                    + " built twice):\n  " + policy.config() + "\n  " + resolved
+                    + "\nGive the call sites different names, or make their configuration identical."));
         }
         return policy;
     }
@@ -281,7 +295,7 @@ public final class ResilienceRegistry {
             @Nullable Consumer<TimeoutConfig.Builder> overrides) {
         String key = name.isEmpty() ? instanceId : name;
         TimeoutConfig resolved = resolve(timeoutConfig(config), overrides, instances.timeout().get(key), TimeoutConfig::toBuilder,
-                TimeoutConfig.Builder::build, "timeout", key);
+                TimeoutConfig.Builder::build, "timeout", key, config);
         TimeoutPolicy policy = new TimeoutPolicy(key, resolved, environment);
         timeouts.putIfAbsent(key, policy); // only for snapshot(): the first call site with this id is shown
         return policy;
@@ -317,12 +331,13 @@ public final class ResilienceRegistry {
             @Nullable Consumer<BulkheadConfig.Builder> overrides) {
         String key = name.isEmpty() ? instanceId : name;
         BulkheadConfig resolved = resolve(bulkheadConfig(config), overrides, instances.bulkhead().get(key), BulkheadConfig::toBuilder,
-                BulkheadConfig.Builder::build, "bulkhead", key);
+                BulkheadConfig.Builder::build, "bulkhead", key, config);
         BulkheadPolicy policy = bulkheads.computeIfAbsent(key, k -> new BulkheadPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
-            throw new IllegalStateException("Bulkhead '" + key
-                    + "' is used with two different configurations:\n  " + policy.config() + "\n  " + resolved
-                    + "\nGive the call sites different names, or make their configuration identical.");
+            throw new IllegalStateException(ErrorCode.CONFLICTING_INSTANCE.message("Bulkhead '" + key
+                    + "' is used with two different configurations (a shared name, or the same pipeline id"
+                    + " built twice):\n  " + policy.config() + "\n  " + resolved
+                    + "\nGive the call sites different names, or make their configuration identical."));
         }
         return policy;
     }
@@ -337,8 +352,7 @@ public final class ResilienceRegistry {
     public BulkheadHandle bulkhead(String id) {
         BulkheadHandle handle = bulkheads.get(id);
         if (handle == null) {
-            throw new IllegalArgumentException("No bulkhead '" + id + "'. Known: " + new TreeSet<>(bulkheads.keySet())
-                    + ". Bulkheads exist once their interface has been wrapped with Resilient.of(...).");
+            throw unknownInstance("bulkhead", id, bulkheads.keySet());
         }
         return handle;
     }
@@ -353,9 +367,7 @@ public final class ResilienceRegistry {
     public RateLimiterHandle rateLimiter(String id) {
         RateLimiterHandle handle = rateLimiters.get(id);
         if (handle == null) {
-            throw new IllegalArgumentException("No rate limiter '" + id + "'. Known: "
-                    + new TreeSet<>(rateLimiters.keySet())
-                    + ". Rate limiters exist once their interface has been wrapped with Resilient.of(...).");
+            throw unknownInstance("rate limiter", id, rateLimiters.keySet());
         }
         return handle;
     }
@@ -371,11 +383,17 @@ public final class ResilienceRegistry {
     public CircuitBreakerHandle circuitBreaker(String id) {
         CircuitBreakerHandle handle = circuitBreakers.get(id);
         if (handle == null) {
-            throw new IllegalArgumentException("No circuit breaker '" + id + "'. Known: "
-                    + new TreeSet<>(circuitBreakers.keySet())
-                    + ". Breakers exist once their interface has been wrapped with Resilient.of(...).");
+            throw unknownInstance("circuit breaker", id, circuitBreakers.keySet());
         }
         return handle;
+    }
+
+    private static IllegalArgumentException unknownInstance(String what, String id, Set<String> known) {
+        return new IllegalArgumentException(ErrorCode.UNKNOWN_INSTANCE.message("No " + what + " '" + id
+                + "' in this registry." + Suggestions.didYouMean(id, known) + " Known: " + new TreeSet<>(known)
+                + ". Use the name set in the annotation (or the pipeline id), or the derived id"
+                + " <interface>#<method>(<parameter types>); an instance exists only once its interface has been"
+                + " wrapped with Resilient.of(...), its class created with Resilient.create(...), or its pipeline built."));
     }
 
     /** Returns every circuit breaker created so far, sorted by id. */
@@ -526,7 +544,7 @@ public final class ResilienceRegistry {
         public Builder retryOverlay(String name, Consumer<RetryConfig.Builder> overlay) {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(overlay, "overlay");
-            compose(retryOverlays, checkedName(name, "retry"), overlay);
+            compose(retryOverlays, checkedName(name, "retry", "Overlay"), overlay);
             return this;
         }
 
@@ -544,7 +562,7 @@ public final class ResilienceRegistry {
         public Builder retryInstance(String id, Consumer<RetryConfig.Builder> overrides) {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(overrides, "overrides");
-            compose(retryInstances, checkedId(id), overrides);
+            compose(retryInstances, checkedId(id, "retry"), overrides);
             return this;
         }
 
@@ -589,7 +607,7 @@ public final class ResilienceRegistry {
         public Builder circuitBreakerOverlay(String name, Consumer<CircuitBreakerConfig.Builder> overlay) {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(overlay, "overlay");
-            compose(circuitBreakerOverlays, checkedName(name, "circuitBreaker"), overlay);
+            compose(circuitBreakerOverlays, checkedName(name, "circuitBreaker", "Overlay"), overlay);
             return this;
         }
 
@@ -607,7 +625,7 @@ public final class ResilienceRegistry {
         public Builder circuitBreakerInstance(String id, Consumer<CircuitBreakerConfig.Builder> overrides) {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(overrides, "overrides");
-            compose(circuitBreakerInstances, checkedId(id), overrides);
+            compose(circuitBreakerInstances, checkedId(id, "circuitBreaker"), overrides);
             return this;
         }
 
@@ -651,7 +669,7 @@ public final class ResilienceRegistry {
         public Builder rateLimiterOverlay(String name, Consumer<RateLimiterConfig.Builder> overlay) {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(overlay, "overlay");
-            compose(rateLimiterOverlays, checkedName(name, "rateLimiter"), overlay);
+            compose(rateLimiterOverlays, checkedName(name, "rateLimiter", "Overlay"), overlay);
             return this;
         }
 
@@ -669,7 +687,7 @@ public final class ResilienceRegistry {
         public Builder rateLimiterInstance(String id, Consumer<RateLimiterConfig.Builder> overrides) {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(overrides, "overrides");
-            compose(rateLimiterInstances, checkedId(id), overrides);
+            compose(rateLimiterInstances, checkedId(id, "rateLimiter"), overrides);
             return this;
         }
 
@@ -713,7 +731,7 @@ public final class ResilienceRegistry {
         public Builder timeoutOverlay(String name, Consumer<TimeoutConfig.Builder> overlay) {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(overlay, "overlay");
-            compose(timeoutOverlays, checkedName(name, "timeout"), overlay);
+            compose(timeoutOverlays, checkedName(name, "timeout", "Overlay"), overlay);
             return this;
         }
 
@@ -731,7 +749,7 @@ public final class ResilienceRegistry {
         public Builder timeoutInstance(String id, Consumer<TimeoutConfig.Builder> overrides) {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(overrides, "overrides");
-            compose(timeoutInstances, checkedId(id), overrides);
+            compose(timeoutInstances, checkedId(id, "timeout"), overrides);
             return this;
         }
 
@@ -775,7 +793,7 @@ public final class ResilienceRegistry {
         public Builder bulkheadOverlay(String name, Consumer<BulkheadConfig.Builder> overlay) {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(overlay, "overlay");
-            compose(bulkheadOverlays, checkedName(name, "bulkhead"), overlay);
+            compose(bulkheadOverlays, checkedName(name, "bulkhead", "Overlay"), overlay);
             return this;
         }
 
@@ -793,7 +811,7 @@ public final class ResilienceRegistry {
         public Builder bulkheadInstance(String id, Consumer<BulkheadConfig.Builder> overrides) {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(overrides, "overrides");
-            compose(bulkheadInstances, checkedId(id), overrides);
+            compose(bulkheadInstances, checkedId(id, "bulkhead"), overrides);
             return this;
         }
 
@@ -830,24 +848,30 @@ public final class ResilienceRegistry {
         }
 
         private static <B> void register(Map<String, Consumer<B>> configs, String name, Consumer<B> config, String kind) {
-            if (name.isEmpty() || name.equals(DEFAULT)) {
-                throw new IllegalArgumentException("Use " + kind + "Defaults(...) to change the default " + kind + " config");
-            }
+            checkedName(name, kind, "");
             if (configs.putIfAbsent(name, config) != null) {
-                throw new IllegalArgumentException(kind + " config '" + name + "' is registered twice");
+                throw new IllegalArgumentException(ErrorCode.DUPLICATE_CONFIG.message("The " + kind + " config '"
+                        + name + "' is registered twice with ResilienceRegistry.Builder." + kind + "(\"" + name
+                        + "\", ...). Register it once; to change some of its attributes elsewhere, use "
+                        + kind + "Overlay(\"" + name + "\", ...)."));
             }
         }
 
-        private static String checkedName(String name, String kind) {
+        private static String checkedName(String name, String kind, String method) {
             if (name.isEmpty() || name.equals(DEFAULT)) {
-                throw new IllegalArgumentException("Use " + kind + "Defaults(...) to change the default " + kind + " config");
+                throw new IllegalArgumentException(ErrorCode.RESERVED_CONFIG_NAME.message("ResilienceRegistry.Builder."
+                        + kind + method + "(\"" + name + "\", ...): \"\" and \"default\" are reserved, they mean the "
+                        + kind + " defaults. Use " + kind + "Defaults(...) to change the defaults, or give the config"
+                        + " another name."));
             }
             return name;
         }
 
-        private static String checkedId(String id) {
+        private static String checkedId(String id, String kind) {
             if (id.isEmpty()) {
-                throw new IllegalArgumentException("The instance id must not be empty");
+                throw new IllegalArgumentException(ErrorCode.EMPTY_INSTANCE_ID.message("ResilienceRegistry.Builder."
+                        + kind + "Instance(\"\", ...): the instance id must not be empty. Pass the name set in the"
+                        + " annotation (or the pipeline id), or the derived id <interface>#<method>(<parameter types>)."));
             }
             return id;
         }
@@ -892,6 +916,17 @@ public final class ResilienceRegistry {
                             bulkheadInstances));
         }
 
+        private static IllegalArgumentException invalidNamed(String kind, String name, IllegalArgumentException e) {
+            String where = name.equals(DEFAULT)
+                    ? kind + " defaults: " + ErrorCode.detail(e) + ". Fix the value set with " + kind
+                            + "Defaults(...) (defaults." + kind + ".* in external configuration)."
+                    : kind + " config '" + name + "': " + ErrorCode.detail(e) + ". It starts from the " + kind
+                            + " defaults; fix the value set with " + kind + "(\"" + name + "\", ...) or " + kind
+                            + "Overlay(\"" + name + "\", ...) (configs." + name + "." + kind
+                            + ".* in external configuration).";
+            return new IllegalArgumentException(ErrorCode.INVALID_NAMED_CONFIG.message("Invalid " + where), e);
+        }
+
         private static RateLimiterConfig rateLimiter(RateLimiterConfig base,
                 @Nullable Consumer<RateLimiterConfig.Builder> config, String name) {
             if (config == null) {
@@ -902,7 +937,7 @@ public final class ResilienceRegistry {
             try {
                 return builder.build();
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid rateLimiter config '" + name + "': " + e.getMessage(), e);
+                throw invalidNamed("rateLimiter", name, e);
             }
         }
 
@@ -915,7 +950,7 @@ public final class ResilienceRegistry {
             try {
                 return builder.build();
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid bulkhead config '" + name + "': " + e.getMessage(), e);
+                throw invalidNamed("bulkhead", name, e);
             }
         }
 
@@ -928,7 +963,7 @@ public final class ResilienceRegistry {
             try {
                 return builder.build();
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid timeout config '" + name + "': " + e.getMessage(), e);
+                throw invalidNamed("timeout", name, e);
             }
         }
 
@@ -941,7 +976,7 @@ public final class ResilienceRegistry {
             try {
                 return builder.build();
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid retry config '" + name + "': " + e.getMessage(), e);
+                throw invalidNamed("retry", name, e);
             }
         }
 
@@ -955,7 +990,7 @@ public final class ResilienceRegistry {
             try {
                 return builder.build();
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid circuitBreaker config '" + name + "': " + e.getMessage(), e);
+                throw invalidNamed("circuitBreaker", name, e);
             }
         }
     }

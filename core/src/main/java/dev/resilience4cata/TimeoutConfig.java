@@ -18,7 +18,7 @@ public record TimeoutConfig(boolean enabled, Duration timeout) {
     public TimeoutConfig {
         Objects.requireNonNull(timeout, "timeout");
         if (timeout.isNegative() || timeout.isZero()) {
-            throw new IllegalArgumentException("timeout must be positive, was " + timeout);
+            throw ErrorCode.invalidValue("timeout", "timeout must be positive, was " + timeout);
         }
     }
 

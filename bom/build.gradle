@@ -1,0 +1,16 @@
+plugins {
+    id 'java-platform'
+    id 'r4c.publish'
+}
+
+description = 'Bill of materials: aligns the versions of every resilience4cata module.'
+
+dependencies {
+    constraints {
+        api project(':annotations')
+        api project(':core')
+        api project(':processor')
+        api project(':config')
+        api project(':testkit')
+    }
+}

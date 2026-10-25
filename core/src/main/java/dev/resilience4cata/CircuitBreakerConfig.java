@@ -65,30 +65,30 @@ public record CircuitBreakerConfig(
         recordOn = List.copyOf(recordOn);
         ignoreOn = List.copyOf(ignoreOn);
         if (windowSize < 1) {
-            throw new IllegalArgumentException("windowSize must be at least 1, was " + windowSize);
+            throw ErrorCode.invalidValue("circuitBreaker", "windowSize must be at least 1, was " + windowSize);
         }
         if (minimumCalls < 1) {
-            throw new IllegalArgumentException("minimumCalls must be at least 1, was " + minimumCalls);
+            throw ErrorCode.invalidValue("circuitBreaker", "minimumCalls must be at least 1, was " + minimumCalls);
         }
         checkRate("failureRateThreshold", failureRateThreshold);
         checkRate("slowCallRateThreshold", slowCallRateThreshold);
         if (slowCallDuration.isNegative()) {
-            throw new IllegalArgumentException("slowCallDuration must not be negative, was " + slowCallDuration);
+            throw ErrorCode.invalidValue("circuitBreaker", "slowCallDuration must not be negative, was " + slowCallDuration);
         }
         if (waitInOpen.isNegative()) {
-            throw new IllegalArgumentException("waitInOpen must not be negative, was " + waitInOpen);
+            throw ErrorCode.invalidValue("circuitBreaker", "waitInOpen must not be negative, was " + waitInOpen);
         }
         if (halfOpenCalls < 1) {
-            throw new IllegalArgumentException("halfOpenCalls must be at least 1, was " + halfOpenCalls);
+            throw ErrorCode.invalidValue("circuitBreaker", "halfOpenCalls must be at least 1, was " + halfOpenCalls);
         }
         if (maxWaitInHalfOpen.isNegative()) {
-            throw new IllegalArgumentException("maxWaitInHalfOpen must not be negative, was " + maxWaitInHalfOpen);
+            throw ErrorCode.invalidValue("circuitBreaker", "maxWaitInHalfOpen must not be negative, was " + maxWaitInHalfOpen);
         }
     }
 
     private static void checkRate(String name, float rate) {
         if (!(rate > 0 && rate <= 100)) {
-            throw new IllegalArgumentException(name + " must be a percentage > 0 and <= 100, was " + rate);
+            throw ErrorCode.invalidValue("circuitBreaker", name + " must be a percentage > 0 and <= 100, was " + rate);
         }
     }
 

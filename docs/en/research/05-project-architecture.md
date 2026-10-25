@@ -1,5 +1,7 @@
 # 05 — Project architecture, build and engineering practices
 
+> **Historical.** This research predates the implementation and is kept as written; for what 0.1.0 actually does, see [features](../features.md), [architecture](../architecture.md) and [benchmarks](../benchmarks.md).
+
 > Phase 1 research. Status: **proposal**, nothing here is implemented yet.
 > Spanish version: [../../es/research/05-project-architecture.md](../../es/research/05-project-architecture.md)
 

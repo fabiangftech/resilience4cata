@@ -1,5 +1,6 @@
 plugins {
     id 'r4c.java-library'
+    id 'r4c.publish'
 }
 
 description = 'Annotation processor: validates resilience annotations and generates the wrapper classes.'

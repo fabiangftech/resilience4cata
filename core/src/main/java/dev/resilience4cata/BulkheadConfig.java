@@ -19,10 +19,10 @@ public record BulkheadConfig(boolean enabled, int maxConcurrent, Duration maxWai
     public BulkheadConfig {
         Objects.requireNonNull(maxWait, "maxWait");
         if (maxConcurrent < 1) {
-            throw new IllegalArgumentException("maxConcurrent must be at least 1, was " + maxConcurrent);
+            throw ErrorCode.invalidValue("bulkhead", "maxConcurrent must be at least 1, was " + maxConcurrent);
         }
         if (maxWait.isNegative()) {
-            throw new IllegalArgumentException("maxWait must not be negative, was " + maxWait);
+            throw ErrorCode.invalidValue("bulkhead", "maxWait must not be negative, was " + maxWait);
         }
     }
 

@@ -1,5 +1,7 @@
 # 01 — Panorama: Resilience4j y antecedentes
 
+> **Histórico.** Esta investigación es anterior a la implementación y se conserva tal como se escribió; para lo que hace realmente 0.1.0, ver [features](../features.md), [arquitectura](../architecture.md) y [benchmarks](../benchmarks.md).
+
 > Investigación de la fase 1. Sin código de producción. Última actualización: 2026-10-23.
 > Alcance: qué existe, cómo funciona internamente la referencia (Resilience4j), de dónde vienen sus costes y qué puede hacer mejor una nueva biblioteca basada en anotaciones, en Java puro y para Java 21+.
 > Fuera de alcance (lo cubren documentos hermanos): la elección del mecanismo de procesamiento de anotaciones, el diseño detallado de primitivas de concurrencia, la superficie de API/configuración y la estructura de módulos.

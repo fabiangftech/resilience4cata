@@ -1,8 +1,10 @@
 - [Resumen](/es/)
+- [Primeros pasos](/es/getting-started.md)
 - [Features](/es/features.md)
 - [Arquitectura](/es/architecture.md)
 - [Benchmarks](/es/benchmarks.md)
 - [Referencia de errores](/es/errors.md)
+- [Publicar una versión](/es/releasing.md)
 - Investigación
   - [01 Panorama](/es/research/01-landscape.md)
   - [02 Mecanismos de anotaciones](/es/research/02-annotation-mechanisms.md)

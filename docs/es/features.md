@@ -1,38 +1,40 @@
 # Features
 
-> Síntesis de [01 Panorama](research/01-landscape.md), [03 Rendimiento interno](research/03-performance-internals.md) y [04 API y configuración](research/04-api-and-configuration.md). Es una propuesta: los nombres y atributos todavía pueden cambiar antes de `1.0`.
+> Síntesis de [01 Panorama](research/01-landscape.md), [03 Rendimiento interno](research/03-performance-internals.md) y [04 API y configuración](research/04-api-and-configuration.md). Describe lo que implementa 0.1.0 (y lo que está previsto después); los nombres y atributos todavía pueden cambiar antes de `1.0`. Para un recorrido paso a paso, ver [primeros pasos](getting-started.md).
 
 ## Niveles
 
-| Feature | Nivel | Notas |
-|---|---|---|
-| Circuit breaker: ventanas por cantidad y por tiempo, tasa de llamadas lentas, sondeo en half-open, `forceOpen` / `disable` | **MVP** | Mismo modelo que Resilience4j, para facilitar la migración |
-| Retry: backoff fijo o exponencial, jitter full o equal (activo por defecto), `maxDuration`, retry según el resultado | **MVP** | |
-| Timeout, síncrono y asíncrono | **MVP** | Síncrono: la llamada sigue en el thread del llamador y un temporizador la interrumpe |
-| Bulkhead (semáforo, rechazo inmediato o con `maxWait`) | **MVP** | Sin bulkhead de pool de threads: los virtual threads lo hacen innecesario |
-| Rate limiter | **MVP** | GCRA por dentro, configurado como permisos por período |
-| Fallback (clase handler tipada, o un método validado al compilar) | **MVP** | |
-| Async según el tipo de retorno (`CompletionStage` / `CompletableFuture`) | **MVP** | Sin anotación `@Asynchronous` |
-| Anotaciones compuestas (`@ResiliencePolicy`) | **MVP** | La forma principal de reutilizar configuraciones en el código |
-| Configuraciones con nombre, `extends`, perfiles; properties, variables de entorno y propiedades del sistema | **MVP** | |
-| API programática (sin anotaciones) | **MVP** | Para código que no se puede anotar |
-| Eventos tipados, sin asignar memoria si nadie escucha | **MVP** | |
-| Inspección de estado (`registry.snapshot()`) | **MVP** | Records de solo lectura, útiles para health checks |
-| Soporte para tests: reloj y scheduler manuales, jitter con semilla, estados forzados | **MVP** | En `testkit` |
-| Hedging (`@Hedge`) | v1 | Diferenciador; Resilience4j no lo tiene |
-| Límite de concurrencia adaptativo (`@AdaptiveLimit`: AIMD, Vegas, Gradient2) | v1 | Pedido en Resilience4j desde 2018 |
-| Presupuesto de reintentos | v1 | Evita tormentas de reintentos |
-| Puentes a Micrometer y OpenTelemetry | v1 | Módulos separados |
-| Configuración YAML | v1 | Módulo separado, para que `core` siga sin dependencias |
-| Orden de ejecución configurable (`@Order`) | v1 | |
-| Extensión de JUnit 5 | v1 | |
-| `@Cached`, tipos reactivos, corrutinas de Kotlin, inyección de fallos, propagación de deadlines, integración con frameworks | después | |
+| Feature | Nivel | Notas | Estado |
+|---|---|---|---|
+| Circuit breaker: ventanas por cantidad y por tiempo, tasa de llamadas lentas, sondeo en half-open, `forceOpen` / `disable` | **MVP** | Mismo modelo que Resilience4j, para facilitar la migración | Hecho |
+| Retry: backoff fijo o exponencial, jitter full o equal (activo por defecto), `maxDuration`, retry según el resultado | **MVP** | | Hecho |
+| Timeout, síncrono y asíncrono | **MVP** | Síncrono: la llamada sigue en el thread del llamador y un temporizador la interrumpe | Hecho |
+| Bulkhead (semáforo, rechazo inmediato o con `maxWait`) | **MVP** | Sin bulkhead de pool de threads: los virtual threads lo hacen innecesario | Hecho |
+| Rate limiter | **MVP** | GCRA por dentro, configurado como permisos por período | Hecho |
+| Fallback (clase handler tipada, o un método validado al compilar) | **MVP** | | Hecho |
+| Async según el tipo de retorno (`CompletionStage` / `CompletableFuture`) | **MVP** | Sin anotación `@Asynchronous` | Hecho |
+| Anotaciones compuestas (`@ResiliencePolicy`) | **MVP** | La forma principal de reutilizar configuraciones en el código | Hecho |
+| Clases no final anotadas (subclase generada, auto-invocación interceptada) | **MVP** | Agregado durante la fase 2 | Hecho |
+| Classifiers: resultados como fallas (`classifier` en `@Retry` / `@CircuitBreaker`) | **MVP** | Agregado durante la fase 2 | Hecho |
+| Configuraciones con nombre, `extends`, perfiles; properties, variables de entorno y propiedades del sistema | **MVP** | | Hecho |
+| API programática (sin anotaciones) | **MVP** | Para código que no se puede anotar | Hecho |
+| Eventos tipados, sin asignar memoria si nadie escucha | **MVP** | | Hecho |
+| Inspección de estado (`registry.snapshot()`) | **MVP** | Records de solo lectura, útiles para health checks | Hecho |
+| Soporte para tests: reloj y scheduler manuales, jitter con semilla, estados forzados | **MVP** | En `testkit` | Hecho |
+| Hedging (`@Hedge`) | v1 | Diferenciador; Resilience4j no lo tiene | Previsto |
+| Límite de concurrencia adaptativo (`@AdaptiveLimit`: AIMD, Vegas, Gradient2) | v1 | Pedido en Resilience4j desde 2018 | Previsto |
+| Presupuesto de reintentos | v1 | Evita tormentas de reintentos | Previsto |
+| Puentes a Micrometer y OpenTelemetry | v1 | Módulos separados | Previsto |
+| Configuración YAML | v1 | Módulo separado, para que `core` siga sin dependencias | Previsto |
+| Orden de ejecución configurable (`@Order`) | v1 | | Previsto |
+| Extensión de JUnit 5 | v1 | | Previsto |
+| `@Cached`, tipos reactivos, corrutinas de Kotlin, inyección de fallos, propagación de deadlines, integración con frameworks | después | | Después |
 
 ## Anotaciones
 
 ```java
 @CircuitBreaker  @Retry  @Timeout  @Bulkhead  @RateLimiter  @Fallback   // MVP
-@Hedge  @AdaptiveLimit  @Order                                           // v1
+@Hedge  @AdaptiveLimit  @Order                                           // planned for v1, not in 0.1.0
 @ResiliencePolicy                                                        // marca anotaciones compuestas
 ```
 
@@ -114,6 +116,8 @@ Por defecto, de afuera hacia adentro ([04 §5](research/04-api-and-configuration
 ```
 Fallback → Retry | Hedge → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → método
 ```
+
+`Hedge` y `AdaptiveLimit` están previstos (v1); en 0.1.0 el orden es `Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead → método`, y no se puede configurar.
 
 - El fallback va afuera, así ve el resultado final, incluidos los rechazos.
 - El breaker registra cada intento del retry, y un breaker abierto corta los reintentos.
@@ -310,16 +314,16 @@ clock.advance(Duration.ofSeconds(30)); // un breaker abierto con waitInOpen = 30
 
 ## Contrato de rendimiento
 
-Objetivos a verificar con JMH desde la primera versión ([01 §4.1](research/01-landscape.md), [03 §10](research/03-performance-internals.md)):
+Objetivos y cómo se verifica cada uno ([01 §4.1](research/01-landscape.md), [03 §10](research/03-performance-internals.md)):
 
 | Objetivo | Cómo se verifica |
 |---|---|
 | **0 B/op** en el camino exitoso de cada política y de una cadena completa | JMH `-prof gc` en CI: `./gradlew :benchmark:allocationCheck` hace fallar un PR si un benchmark de la lista alcanza su presupuesto + 1 B/op (0 en todo camino sincrónico; valores medidos para los futures async) ([benchmarks](benchmarks.md#gate-de-allocations)) |
-| Sin locks ni `synchronized` en el camino caliente | Revisión de código, ArchUnit, escenarios JMH con contención |
+| Sin locks ni `synchronized` en el camino caliente | Revisión de código, escenarios JMH con contención (una regla de ArchUnit es una idea, no está configurada) |
 | Código generado lineal y monomórfico por método; sin cadenas de lambdas compartidas | JMH con perfil de JIT contaminado, `-XX:+PrintInlining` |
 | Un par de lecturas de reloj por llamada, sin importar cuántas políticas haya | Revisión de código |
 | Excepciones de rechazo preasignadas y sin stack trace; eventos creados solo si alguien escucha | Escenarios JMH de rechazo (breaker abierto, bulkhead lleno, rate limiter agotado), con gate de 0 B/op en CI |
 | Estructuras sin locks correctas | jcstress, en CI después de cada push a main y cada noche |
-| Comparación publicada y reproducible contra Resilience4j 2.4.0 | 11 escenarios JMH ([03 §9](research/03-performance-internals.md)) |
+| Comparación publicada y reproducible contra Resilience4j 2.4.0 | El módulo `benchmark`: escenarios de retry, circuit breaker, timeout, bulkhead, rate limiter, async, classifier y `Pipeline` con configuración equivalente de Resilience4j; resultados y notas de equidad en [benchmarks](benchmarks.md) |
 
 Las mediciones actuales están en [benchmarks](benchmarks.md). La mayoría de las llamadas reales dependen de I/O (milisegundos), así que la propuesta es "overhead casi nulo que escala con los threads, más anotaciones sin framework", no solo velocidad bruta.

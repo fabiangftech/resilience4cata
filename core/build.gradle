@@ -1,5 +1,6 @@
 plugins {
     id 'r4c.java-library'
+    id 'r4c.publish'
 }
 
 description = 'Resilience policies, registry and the runtime used by generated code.'

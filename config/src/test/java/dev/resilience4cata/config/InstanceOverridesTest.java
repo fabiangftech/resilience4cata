@@ -266,7 +266,7 @@ class InstanceOverridesTest {
         ResilienceRegistry registry = text("instances.p.retry.delay=20s").build().toRegistry();
         assertThatIllegalArgumentException().isThrownBy(() -> retry(registry, "A#m()", "p"))
                 .withMessageContaining("Invalid retry config for instance 'p'")
-                .withMessageContaining("instances.<id>.*");
+                .withMessageContaining("instances.p.retry.*");
         assertThat(registry.retryPolicy("A#m()", "p", "", r -> r.maxDelay(Duration.ofMinutes(1))).config().delay())
                 .isEqualTo(Duration.ofSeconds(20));
     }

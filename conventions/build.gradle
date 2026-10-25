@@ -12,6 +12,14 @@ gradlePlugin {
             id = 'r4c.jmh'
             implementationClass = 'dev.resilience4cata.build.JmhConventionPlugin'
         }
+        publish {
+            id = 'r4c.publish'
+            implementationClass = 'dev.resilience4cata.build.PublishConventionPlugin'
+        }
+        central {
+            id = 'r4c.central'
+            implementationClass = 'dev.resilience4cata.build.CentralConventionPlugin'
+        }
         jcstress {
             id = 'r4c.jcstress'
             implementationClass = 'dev.resilience4cata.build.JcstressConventionPlugin'

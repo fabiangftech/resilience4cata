@@ -1,0 +1,4 @@
+plugins {
+    // centralBundle / centralUpload: see docs/en/releasing.md
+    id 'r4c.central'
+}

@@ -1,0 +1,63 @@
+# Builds, signs and checks the Maven Central bundle for the version in gradle.properties, and
+# uploads it to the Central Portal as a USER_MANAGED deployment if the token secrets are set.
+# Nothing is released here: the deployment waits in central.sonatype.com until someone presses
+# Publish. Steps and secrets: docs/en/releasing.md.
+# Locally: ./gradlew build centralBundle   (then centralUpload, or upload the zip in the portal)
+name: release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+      ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+      ORG_GRADLE_PROJECT_centralPortalUsername: ${{ secrets.CENTRAL_PORTAL_USERNAME }}
+      ORG_GRADLE_PROJECT_centralPortalPassword: ${{ secrets.CENTRAL_PORTAL_PASSWORD }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Release from a tag v<version> only, so a deployment always matches a commit in history.
+      - name: Check the tag
+        run: |
+          version=$(sed -n 's/^version=//p' gradle.properties)
+          if [ "$GITHUB_REF" != "refs/tags/v$version" ]; then
+            echo "::error::Run this workflow on tag v$version (got $GITHUB_REF)"; exit 1
+          fi
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # No Gradle caches for a release: build from scratch, and never save state (the configuration
+      # cache would hold the signing key) to the shared GitHub cache.
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-disabled: true
+
+      - name: Build and bundle
+        run: ./gradlew build centralBundle --no-build-cache --no-configuration-cache
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: central-bundle
+          path: build/central-bundle.zip
+          retention-days: 30
+
+      # -x centralBundle: upload the zip built and archived above, not a re-signed copy.
+      - name: Upload to the Central Portal (USER_MANAGED)
+        if: env.ORG_GRADLE_PROJECT_centralPortalUsername != '' && env.ORG_GRADLE_PROJECT_centralPortalPassword != ''
+        run: ./gradlew centralUpload -x centralBundle --no-build-cache --no-configuration-cache

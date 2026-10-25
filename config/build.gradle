@@ -1,5 +1,6 @@
 plugins {
     id 'r4c.java-library'
+    id 'r4c.publish'
 }
 
 description = 'External configuration (properties, environment, system properties) for the registry.'

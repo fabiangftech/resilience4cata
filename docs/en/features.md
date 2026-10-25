@@ -1,38 +1,40 @@
 # Features
 
-> Synthesis of [01 Landscape](research/01-landscape.md), [03 Performance internals](research/03-performance-internals.md) and [04 API and configuration](research/04-api-and-configuration.md). This is a proposal: names and attributes can still change before `1.0`.
+> Synthesis of [01 Landscape](research/01-landscape.md), [03 Performance internals](research/03-performance-internals.md) and [04 API and configuration](research/04-api-and-configuration.md). It describes what 0.1.0 implements (and what is planned after it); names and attributes can still change before `1.0`. For a walkthrough, see [getting started](getting-started.md).
 
 ## Tiers
 
-| Feature | Tier | Notes |
-|---|---|---|
-| Circuit breaker: count- and time-based windows, slow-call rate, half-open probes, `forceOpen` / `disable` | **MVP** | Same model as Resilience4j, to ease migration |
-| Retry: fixed / exponential backoff, full or equal jitter (on by default), `maxDuration`, result-based retry | **MVP** | |
-| Timeout, sync and async | **MVP** | Sync: the call stays on the caller's thread and a timer interrupts it |
-| Bulkhead (semaphore, fail-fast or with `maxWait`) | **MVP** | No thread-pool bulkhead: virtual threads make it unnecessary |
-| Rate limiter | **MVP** | GCRA internally, configured as permits per period |
-| Fallback (typed handler class, or a method checked at compile time) | **MVP** | |
-| Async from the return type (`CompletionStage` / `CompletableFuture`) | **MVP** | No `@Asynchronous` annotation |
-| Composed annotations (`@ResiliencePolicy`) | **MVP** | The main way to reuse configurations in code |
-| Named configs, `extends`, profiles; properties, environment and system properties | **MVP** | |
-| Programmatic API (no annotations) | **MVP** | For code that cannot be annotated |
-| Typed events, no allocation when nobody listens | **MVP** | |
-| State inspection (`registry.snapshot()`) | **MVP** | Read-only records, useful for health checks |
-| Test support: manual clock and scheduler, seeded jitter, forced states | **MVP** | In `testkit` |
-| Hedging (`@Hedge`) | v1 | Differentiator; Resilience4j has none |
-| Adaptive concurrency limit (`@AdaptiveLimit`: AIMD, Vegas, Gradient2) | v1 | Requested in Resilience4j since 2018 |
-| Retry budget | v1 | Prevents retry storms |
-| Micrometer and OpenTelemetry bridges | v1 | Separate modules |
-| YAML config | v1 | Separate module, so `core` stays dependency-free |
-| Configurable execution order (`@Order`) | v1 | |
-| JUnit 5 extension | v1 | |
-| `@Cached`, reactive types, Kotlin coroutines, fault injection, deadline propagation, framework integrations | later | |
+| Feature | Tier | Notes | Status |
+|---|---|---|---|
+| Circuit breaker: count- and time-based windows, slow-call rate, half-open probes, `forceOpen` / `disable` | **MVP** | Same model as Resilience4j, to ease migration | Done |
+| Retry: fixed / exponential backoff, full or equal jitter (on by default), `maxDuration`, result-based retry | **MVP** | | Done |
+| Timeout, sync and async | **MVP** | Sync: the call stays on the caller's thread and a timer interrupts it | Done |
+| Bulkhead (semaphore, fail-fast or with `maxWait`) | **MVP** | No thread-pool bulkhead: virtual threads make it unnecessary | Done |
+| Rate limiter | **MVP** | GCRA internally, configured as permits per period | Done |
+| Fallback (typed handler class, or a method checked at compile time) | **MVP** | | Done |
+| Async from the return type (`CompletionStage` / `CompletableFuture`) | **MVP** | No `@Asynchronous` annotation | Done |
+| Composed annotations (`@ResiliencePolicy`) | **MVP** | The main way to reuse configurations in code | Done |
+| Annotated non-final classes (generated subclass, self-invocation intercepted) | **MVP** | Added during phase 2 | Done |
+| Classifiers: results as failures (`classifier` on `@Retry` / `@CircuitBreaker`) | **MVP** | Added during phase 2 | Done |
+| Named configs, `extends`, profiles; properties, environment and system properties | **MVP** | | Done |
+| Programmatic API (no annotations) | **MVP** | For code that cannot be annotated | Done |
+| Typed events, no allocation when nobody listens | **MVP** | | Done |
+| State inspection (`registry.snapshot()`) | **MVP** | Read-only records, useful for health checks | Done |
+| Test support: manual clock and scheduler, seeded jitter, forced states | **MVP** | In `testkit` | Done |
+| Hedging (`@Hedge`) | v1 | Differentiator; Resilience4j has none | Planned |
+| Adaptive concurrency limit (`@AdaptiveLimit`: AIMD, Vegas, Gradient2) | v1 | Requested in Resilience4j since 2018 | Planned |
+| Retry budget | v1 | Prevents retry storms | Planned |
+| Micrometer and OpenTelemetry bridges | v1 | Separate modules | Planned |
+| YAML config | v1 | Separate module, so `core` stays dependency-free | Planned |
+| Configurable execution order (`@Order`) | v1 | | Planned |
+| JUnit 5 extension | v1 | | Planned |
+| `@Cached`, reactive types, Kotlin coroutines, fault injection, deadline propagation, framework integrations | later | | Later |
 
 ## Annotations
 
 ```java
 @CircuitBreaker  @Retry  @Timeout  @Bulkhead  @RateLimiter  @Fallback   // MVP
-@Hedge  @AdaptiveLimit  @Order                                           // v1
+@Hedge  @AdaptiveLimit  @Order                                           // planned for v1, not in 0.1.0
 @ResiliencePolicy                                                        // marks composed annotations
 ```
 
@@ -114,6 +116,8 @@ Default, outermost first ([04 §5](research/04-api-and-configuration.md)):
 ```
 Fallback → Retry | Hedge → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method
 ```
+
+`Hedge` and `AdaptiveLimit` are planned (v1); in 0.1.0 the order is `Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead → method`, and it is not configurable.
 
 - Fallback is outermost, so it sees the final outcome, including rejections.
 - Each retry attempt is recorded by the breaker, and an open breaker stops the retries.
@@ -310,16 +314,16 @@ clock.advance(Duration.ofSeconds(30)); // an open breaker with waitInOpen = 30s 
 
 ## Performance contract
 
-Targets to verify with JMH from the first release ([01 §4.1](research/01-landscape.md), [03 §10](research/03-performance-internals.md)):
+Targets and how each one is checked ([01 §4.1](research/01-landscape.md), [03 §10](research/03-performance-internals.md)):
 
 | Target | How it is checked |
 |---|---|
 | **0 B/op** on the success path of every policy and of a full stack | JMH `-prof gc` in CI: `./gradlew :benchmark:allocationCheck` fails a PR if a listed benchmark reaches its budget + 1 B/op (0 for every sync path; measured values for async futures) ([benchmarks](benchmarks.md#allocation-gate)) |
-| No locks and no `synchronized` on hot paths | Code review, ArchUnit, JMH contention scenarios |
+| No locks and no `synchronized` on hot paths | Code review, JMH contention scenarios (an ArchUnit rule is an idea, not set up) |
 | Monomorphic, straight-line generated code per method; no shared lambda chains | JMH with a polluted JIT profile, `-XX:+PrintInlining` |
 | One clock-read pair per call, whatever the number of policies | Code review |
 | Preallocated, stackless rejection exceptions; events allocated only if someone listens | JMH rejection scenarios (open breaker, full bulkhead, exhausted rate limiter), gated at 0 B/op in CI |
 | Correct lock-free structures | jcstress, in CI after every push to main and nightly |
-| Published, reproducible comparison against Resilience4j 2.4.0 | 11 JMH scenarios ([03 §9](research/03-performance-internals.md)) |
+| Published, reproducible comparison against Resilience4j 2.4.0 | The `benchmark` module: retry, circuit breaker, timeout, bulkhead, rate limiter, async, classifier and `Pipeline` scenarios with equivalent Resilience4j configuration; results and fairness notes in [benchmarks](benchmarks.md) |
 
 Current measurements are in [benchmarks](benchmarks.md). Most real calls are I/O-bound (milliseconds), so the pitch is "near-zero overhead that scales with threads, plus annotations without a framework", not raw speed alone.

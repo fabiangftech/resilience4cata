@@ -31,17 +31,17 @@ public record RateLimiterConfig(boolean enabled, int permits, Duration period, D
         Objects.requireNonNull(period, "period");
         Objects.requireNonNull(maxWait, "maxWait");
         if (permits < 1) {
-            throw new IllegalArgumentException("permits must be at least 1, was " + permits);
+            throw ErrorCode.invalidValue("rateLimiter", "permits must be at least 1, was " + permits);
         }
         if (period.isNegative() || period.isZero()) {
-            throw new IllegalArgumentException("period must be positive, was " + period);
+            throw ErrorCode.invalidValue("rateLimiter", "period must be positive, was " + period);
         }
         if (period.compareTo(Duration.ofNanos(permits)) < 0) {
-            throw new IllegalArgumentException("period must be at least one nanosecond per permit, was " + period
+            throw ErrorCode.invalidValue("rateLimiter", "period must be at least one nanosecond per permit, was " + period
                     + " for " + permits + " permits");
         }
         if (maxWait.isNegative()) {
-            throw new IllegalArgumentException("maxWait must not be negative, was " + maxWait);
+            throw ErrorCode.invalidValue("rateLimiter", "maxWait must not be negative, was " + maxWait);
         }
     }
 

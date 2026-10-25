@@ -82,7 +82,7 @@ class ResilienceRegistryOverridesTest {
                 .isThrownBy(() -> ResilienceRegistry.builder()
                         .retry("external", r -> { })
                         .retry("external", r -> { }))
-                .withMessageContaining("registered twice");
+                .withMessageStartingWith("[R4C-REG-005] The retry config 'external' is registered twice");
     }
 
     @Test
@@ -158,7 +158,7 @@ class ResilienceRegistryOverridesTest {
 
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> registry.retryPolicy("A#m()", "", "", r -> r.maxDelay(Duration.ofSeconds(20))))
-                .withMessageContaining("Invalid retry config for instance 'A#m()'")
+                .withMessageStartingWith("[R4C-REG-003] Invalid retry config for instance 'A#m()'")
                 .withMessageContaining("retryInstance(\"A#m()\", ...)")
                 .withMessageContaining("maxDelay");
     }
@@ -166,6 +166,7 @@ class ResilienceRegistryOverridesTest {
     @Test
     void emptyInstanceIdIsRejected() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> ResilienceRegistry.builder().retryInstance("", r -> { }));
+                .isThrownBy(() -> ResilienceRegistry.builder().retryInstance("", r -> { }))
+                .withMessageStartingWith("[R4C-REG-007] ");
     }
 }

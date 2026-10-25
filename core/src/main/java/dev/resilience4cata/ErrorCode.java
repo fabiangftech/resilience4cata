@@ -1,9 +1,10 @@
 package dev.resilience4cata;
 
 /**
- * Stable codes of the misconfiguration errors thrown by {@link Resilient} and {@link Pipeline.Builder}.
- * Only the codes are public, in the exception messages ({@code [R4C-RT-003] ...}); {@code docs/en/errors.md}
- * has one section per code. A code is never renumbered or reused: a new error takes the next free number,
+ * Stable codes of the misconfiguration errors thrown by {@link Resilient} and {@link Pipeline.Builder}
+ * (area {@code R4C-RT}), and by {@link ResilienceRegistry}, its builder and the {@code *Config} builders
+ * (area {@code R4C-REG}). Only the codes are public, in the exception messages ({@code [R4C-RT-003] ...});
+ * {@code docs/en/errors.md} has one section per code. A code is never renumbered or reused: a new error takes the next free number,
  * and a retired one stays here, marked as no longer reported.
  */
 enum ErrorCode {
@@ -24,7 +25,20 @@ enum ErrorCode {
     CLASSIFIER_WITHOUT_POLICY("R4C-RT-014"),
     RETRY_CLASSIFIER_WITHOUT_RETRY("R4C-RT-015"),
     EXHAUSTED_RESULT_WITHOUT_CLASSIFIER("R4C-RT-016"),
-    CIRCUIT_BREAKER_CLASSIFIER_WITHOUT_CIRCUIT_BREAKER("R4C-RT-017");
+    CIRCUIT_BREAKER_CLASSIFIER_WITHOUT_CIRCUIT_BREAKER("R4C-RT-017"),
+
+    INVALID_VALUE("R4C-REG-001"),
+    INVALID_NAMED_CONFIG("R4C-REG-002"),
+    INVALID_INSTANCE_CONFIG("R4C-REG-003"),
+    UNKNOWN_CONFIG("R4C-REG-004"),
+    DUPLICATE_CONFIG("R4C-REG-005"),
+    RESERVED_CONFIG_NAME("R4C-REG-006"),
+    EMPTY_INSTANCE_ID("R4C-REG-007"),
+    CONFLICTING_INSTANCE("R4C-REG-008"),
+    UNKNOWN_INSTANCE("R4C-REG-009");
+
+    /** What {@link #invalidValue} puts before the detail, after the code. */
+    private static final String INVALID_PREFIX = " config: ";
 
     private final String code;
 
@@ -39,5 +53,21 @@ enum ErrorCode {
     /** The exception message: {@code [code] } followed by {@code detail}. */
     String message(String detail) {
         return "[" + code + "] " + detail;
+    }
+
+    /**
+     * The exception of a {@code *Config} validation check: {@code [R4C-REG-001] Invalid <kind> config: <detail>}.
+     * {@code ResilienceRegistry} and {@code resilience4cata-config} take the detail back with {@link #detail}.
+     */
+    static IllegalArgumentException invalidValue(String kind, String detail) {
+        return new IllegalArgumentException(INVALID_VALUE.message("Invalid " + kind + INVALID_PREFIX + detail));
+    }
+
+    /** The detail of an {@link #invalidValue} exception, or the whole message of any other exception. */
+    static String detail(Throwable e) {
+        String message = String.valueOf(e.getMessage());
+        String prefix = "[" + INVALID_VALUE.code + "] Invalid ";
+        int end = message.indexOf(INVALID_PREFIX);
+        return message.startsWith(prefix) && end > 0 ? message.substring(end + INVALID_PREFIX.length()) : message;
     }
 }

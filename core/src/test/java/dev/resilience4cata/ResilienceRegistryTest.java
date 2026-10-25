@@ -27,8 +27,25 @@ class ResilienceRegistryTest {
     @Test
     void unknownConfigNamesTheKnownOnes() {
         assertThatIllegalArgumentException().isThrownBy(() -> registry.retryConfig("extrenal"))
-                .withMessageContaining("Unknown retry config 'extrenal'")
-                .withMessageContaining("[external]");
+                .withMessageStartingWith("[R4C-REG-004] Unknown retry config 'extrenal'")
+                .withMessageContaining("Did you mean 'external'?")
+                .withMessageContaining("Known retry configs: [external]");
+    }
+
+    @Test
+    void unknownConfigFarFromEveryNameSuggestsNothing() {
+        assertThatIllegalArgumentException().isThrownBy(() -> registry.retryConfig("payments"))
+                .withMessageNotContaining("Did you mean");
+    }
+
+    @Test
+    void unknownInstanceSuggestsTheClosestId() {
+        registry.circuitBreakerPolicy("A#m()", "payments", "", null);
+
+        assertThatIllegalArgumentException().isThrownBy(() -> registry.circuitBreaker("paymnets"))
+                .withMessageStartingWith("[R4C-REG-009] No circuit breaker 'paymnets'")
+                .withMessageContaining("Did you mean 'payments'?")
+                .withMessageContaining("Known: [payments]");
     }
 
     @Test
@@ -53,19 +70,48 @@ class ResilienceRegistryTest {
 
         assertThatIllegalStateException()
                 .isThrownBy(() -> registry.retryPolicy("B#n()", "shared", "external", r -> r.maxAttempts(9)))
-                .withMessageContaining("'shared'");
+                .withMessageStartingWith("[R4C-REG-008] Retry instance 'shared'");
     }
 
     @Test
     void invalidNamedConfigFailsAtBuild() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> ResilienceRegistry.builder().retry("bad", r -> r.maxAttempts(0)).build())
-                .withMessageContaining("Invalid retry config 'bad'");
+                .withMessageStartingWith("[R4C-REG-002] Invalid retry config 'bad': maxAttempts must be at least 1,"
+                        + " was 0. It starts from the retry defaults")
+                .withCauseInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void invalidDefaultsNameTheDefaults() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> ResilienceRegistry.builder().bulkheadDefaults(b -> b.maxConcurrent(0)).build())
+                .withMessageStartingWith("[R4C-REG-002] Invalid bulkhead defaults: maxConcurrent must be at least 1")
+                .withMessageContaining("bulkheadDefaults(...)");
+    }
+
+    @Test
+    void invalidPipelineOrAnnotationValuesNameTheInstance() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> registry.timeoutPolicy("A#m()", "", "", t -> t.timeout(Duration.ZERO)))
+                .withMessageStartingWith("[R4C-REG-003] Invalid timeout config for instance 'A#m()': timeout must be"
+                        + " positive")
+                .withMessageContaining("the values set in its annotation or pipeline step;");
+    }
+
+    @Test
+    void configValueErrorsHaveACode() {
+        assertThatIllegalArgumentException().isThrownBy(() -> RateLimiterConfig.builder().permits(0).build())
+                .withMessage("[R4C-REG-001] Invalid rateLimiter config: permits must be at least 1, was 0");
+        assertThat(ErrorCode.detail(new IllegalArgumentException("[R4C-REG-001] Invalid retry config: x")))
+                .isEqualTo("x");
+        assertThat(ErrorCode.detail(new IllegalArgumentException("plain"))).isEqualTo("plain");
     }
 
     @Test
     void defaultIsReserved() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> ResilienceRegistry.builder().retry("default", r -> { }));
+                .isThrownBy(() -> ResilienceRegistry.builder().retry("default", r -> { }))
+                .withMessageStartingWith("[R4C-REG-006] ResilienceRegistry.Builder.retry(\"default\", ...)");
     }
 }

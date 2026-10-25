@@ -66,19 +66,19 @@ public record RetryConfig(
         retryOn = List.copyOf(retryOn);
         abortOn = List.copyOf(abortOn);
         if (maxAttempts < 1) {
-            throw new IllegalArgumentException("maxAttempts must be at least 1, was " + maxAttempts);
+            throw ErrorCode.invalidValue("retry", "maxAttempts must be at least 1, was " + maxAttempts);
         }
         if (delay.isNegative()) {
-            throw new IllegalArgumentException("delay must not be negative, was " + delay);
+            throw ErrorCode.invalidValue("retry", "delay must not be negative, was " + delay);
         }
         if (!(multiplier >= 1.0) || Double.isInfinite(multiplier)) {
-            throw new IllegalArgumentException("multiplier must be a finite number >= 1, was " + multiplier);
+            throw ErrorCode.invalidValue("retry", "multiplier must be a finite number >= 1, was " + multiplier);
         }
         if (maxDelay.compareTo(delay) < 0) {
-            throw new IllegalArgumentException("maxDelay (" + maxDelay + ") must not be shorter than delay (" + delay + ")");
+            throw ErrorCode.invalidValue("retry", "maxDelay (" + maxDelay + ") must not be shorter than delay (" + delay + ")");
         }
         if (maxDuration.isNegative()) {
-            throw new IllegalArgumentException("maxDuration must not be negative, was " + maxDuration);
+            throw ErrorCode.invalidValue("retry", "maxDuration must not be negative, was " + maxDuration);
         }
     }
 

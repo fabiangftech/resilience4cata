@@ -194,7 +194,7 @@ class RetryEndToEndTest {
 
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> Resilient.of(InventoryClient.class, new FakeInventory(new Flaky(0)), empty))
-                .withMessageContaining("Unknown retry config 'inventory'");
+                .withMessageStartingWith("[R4C-REG-004] Unknown retry config 'inventory'");
     }
 
     @Test

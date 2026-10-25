@@ -1,8 +1,10 @@
 - [Overview](/en/)
+- [Getting started](/en/getting-started.md)
 - [Features](/en/features.md)
 - [Architecture](/en/architecture.md)
 - [Benchmarks](/en/benchmarks.md)
 - [Error reference](/en/errors.md)
+- [Releasing](/en/releasing.md)
 - Research
   - [01 Landscape](/en/research/01-landscape.md)
   - [02 Annotation mechanisms](/en/research/02-annotation-mechanisms.md)
