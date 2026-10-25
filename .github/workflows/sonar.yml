@@ -48,4 +48,4 @@ jobs:
 
       - name: Skipped
         if: env.SONAR_TOKEN == ''
-        run: echo "::notice::No SONAR_TOKEN (a pull request from a fork?): SonarCloud analysis skipped."
+        run: 'echo "::notice::No SONAR_TOKEN, so the SonarCloud analysis was skipped (a pull request from a fork?)"'
