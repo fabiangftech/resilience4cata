@@ -9,6 +9,8 @@ description = 'Quarkus extension (deployment): the build steps of resilience4cat
 dependencies {
     api project(':quarkus:runtime')
     api libs.quarkus.arc.deployment.minimum
+    // The Dev UI card (ResilienceDevUiProcessor), dev mode only.
+    implementation libs.quarkus.devui.deployment.spi.minimum
     // The build-step list (META-INF/quarkus-build-steps.list) and config metadata.
     annotationProcessor libs.quarkus.extension.processor.minimum
 }

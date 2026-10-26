@@ -316,6 +316,31 @@ A `Ticker` bean (the testkit's `ManualClock`) becomes the registry's clock. An a
   breakers that should turn it DOWN in `quarkus.resilience4cata.health.down-when-open` (`*` for all).
 - There is no Dev UI card or endpoint yet: `registry.snapshot()` has everything, if you want to expose it.
 
+## Dev UI :id=dev-ui
+
+In dev mode (`quarkus dev`, or `./gradlew quarkusDev`), the Dev UI at `/q/dev-ui` has a resilience4cata card. Its
+*Policies* page lists every policy instance the registry has created so far, refreshed every two seconds while the
+page is visible:
+
+| Policy | What the page shows |
+|---|---|
+| Circuit breakers | state, failure and slow-call rates, calls in the window (failed, slow) |
+| Bulkheads | concurrent calls against the maximum, waiting calls |
+| Rate limiters | available permits against the permits per period |
+| Adaptive limits | algorithm, current limit and its bounds, calls in flight, latency of the last window and long-term latency |
+| Retries, hedges | maximum attempts (and delay), the budget's calls and allowed retries or hedges, when a budget is set |
+| Timeouts | the timeout |
+
+Most instances are created on the first call to their method (an annotated class's when the bean is created), so a
+policy appears once it has been used. A value with no meaning yet, such as a failure rate before `minimumCalls`, is
+shown as a dash.
+
+The page can also force a circuit breaker open, disable it or reset it, as `registry.circuitBreaker(id)` does: handy
+to see how the application behaves with a dependency down. The card's *Guide* link opens this section.
+
+None of this exists outside dev mode: the build steps that add the card and its JsonRPC service run only in local
+development, so a test or production build has neither.
+
 ## SmallRye Fault Tolerance vs resilience4cata :id=smallrye
 
 Quarkus ships its own fault tolerance, [SmallRye Fault Tolerance](https://quarkus.io/guides/smallrye-fault-tolerance)

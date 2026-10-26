@@ -51,10 +51,22 @@ dependencies {
     // extensionTest ones: QuarkusExtensionTest builds its applications from the test source set's application model.
     testImplementation libs.quarkus.smallrye.fault.tolerance
     testImplementation libs.quarkus.narayana.jta
+    // DevUiTest (extensionTest, whose applications are built from this model too) runs an application in dev mode.
+    // A real dev-mode application model adds each extension's conditional dev dependencies: the Dev UI itself
+    // (from quarkus-vertx-http) and the -dev artifacts with the other extensions' Dev UI services; this model is
+    // the test one, so they are listed here. In test mode they do nothing. Keep the list in sync with the
+    // extensions above (conditional-dev-dependencies in their META-INF/quarkus-extension.properties).
+    testImplementation libs.quarkus.devui
+    testImplementation libs.quarkus.arc.dev
+    testImplementation libs.quarkus.rest.dev
+    testImplementation libs.quarkus.smallrye.health.dev
+    testImplementation libs.quarkus.smallrye.fault.tolerance.dev
     testCompileOnly project(':annotations')
     testAnnotationProcessor project(':processor')
 
     extensionTestImplementation libs.quarkus.junit.internal
+    // DevUiTest: JsonRPC calls to the Dev UI of a dev-mode application.
+    extensionTestImplementation libs.quarkus.devui.test.spi
     // QuarkusExtensionTest builds its applications with the deployment modules on the test class path, as in an
     // extension's own deployment module.
     extensionTestImplementation project(':quarkus:deployment')

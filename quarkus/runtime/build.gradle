@@ -18,3 +18,8 @@ dependencies {
     // Config roots, javadoc-based config documentation and META-INF/quarkus-*.list files.
     annotationProcessor libs.quarkus.extension.processor.minimum
 }
+
+// The Dev UI calls ResilienceJsonRpcService's methods with named arguments ({instance: ...}), read from the class file.
+tasks.named('compileJava') {
+    options.compilerArgs.add('-parameters')
+}

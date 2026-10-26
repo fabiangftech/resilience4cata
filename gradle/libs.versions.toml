@@ -78,12 +78,21 @@ jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations
 quarkus-arc-minimum = { module = "io.quarkus:quarkus-arc", version.ref = "quarkusMinimum" }
 quarkus-arc-deployment-minimum = { module = "io.quarkus:quarkus-arc-deployment", version.ref = "quarkusMinimum" }
 quarkus-extension-processor-minimum = { module = "io.quarkus:quarkus-extension-processor", version.ref = "quarkusMinimum" }
+# The Dev UI card's build items (deployment module only; arc-deployment also brings it).
+quarkus-devui-deployment-spi-minimum = { module = "io.quarkus:quarkus-devui-deployment-spi", version.ref = "quarkusMinimum" }
 microprofile-health-api-minimum = { module = "org.eclipse.microprofile.health:microprofile-health-api", version.ref = "microprofileHealthMinimum" }
 # The quarkus extension's tests (quarkus:it): versions from the Quarkus BOM.
 quarkus-bom = { module = "io.quarkus:quarkus-bom", version.ref = "quarkus" }
 quarkus-arc = { module = "io.quarkus:quarkus-arc" }
 quarkus-junit = { module = "io.quarkus:quarkus-junit" }
 quarkus-junit-internal = { module = "io.quarkus:quarkus-junit-internal" }
+quarkus-devui-test-spi = { module = "io.quarkus:quarkus-devui-test-spi" }
+# Dev-mode-only artifacts of the extensions quarkus:it uses (their conditional-dev-dependencies), for DevUiTest.
+quarkus-devui = { module = "io.quarkus:quarkus-devui" }
+quarkus-arc-dev = { module = "io.quarkus:quarkus-arc-dev" }
+quarkus-rest-dev = { module = "io.quarkus:quarkus-rest-dev" }
+quarkus-smallrye-health-dev = { module = "io.quarkus:quarkus-smallrye-health-dev" }
+quarkus-smallrye-fault-tolerance-dev = { module = "io.quarkus:quarkus-smallrye-fault-tolerance-dev" }
 quarkus-smallrye-health = { module = "io.quarkus:quarkus-smallrye-health" }
 quarkus-smallrye-fault-tolerance = { module = "io.quarkus:quarkus-smallrye-fault-tolerance" }
 quarkus-micrometer-registry-prometheus = { module = "io.quarkus:quarkus-micrometer-registry-prometheus" }

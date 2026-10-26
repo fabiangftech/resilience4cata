@@ -37,6 +37,7 @@ updates:
       - dependency-name: 'io.quarkus:quarkus-arc'
       - dependency-name: 'io.quarkus:quarkus-arc-deployment'
       - dependency-name: 'io.quarkus:quarkus-extension-processor'
+      - dependency-name: 'io.quarkus:quarkus-devui-deployment-spi'
       - dependency-name: 'org.eclipse.microprofile.health:microprofile-health-api'
     groups:
       junit:

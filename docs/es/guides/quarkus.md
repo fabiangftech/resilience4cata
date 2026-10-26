@@ -326,6 +326,32 @@ métricas); el bean `ResilienceConfig` sigue ahí para construirlo con `config.a
   `quarkus.resilience4cata.health.down-when-open` (`*` para todos).
 - Todavía no hay tarjeta en la Dev UI ni endpoint: `registry.snapshot()` lo tiene todo, si quieres exponerlo.
 
+## Dev UI :id=dev-ui
+
+En modo dev (`quarkus dev`, o `./gradlew quarkusDev`), la Dev UI en `/q/dev-ui` tiene una tarjeta de
+resilience4cata. Su página *Policies* lista cada instancia de política que el registry creó hasta el momento, y se
+actualiza cada dos segundos mientras la página está visible:
+
+| Política | Qué muestra la página |
+|---|---|
+| Circuit breakers | estado, tasas de fallas y de llamadas lentas, llamadas en la ventana (fallidas, lentas) |
+| Bulkheads | llamadas concurrentes contra el máximo, llamadas en espera |
+| Rate limiters | permisos disponibles contra los permisos por período |
+| Adaptive limits | algoritmo, límite actual y sus cotas, llamadas en curso, latencia de la última ventana y latencia de largo plazo |
+| Retries, hedges | intentos máximos (y espera), las llamadas del presupuesto y los reintentos o hedges permitidos, cuando hay presupuesto |
+| Timeouts | el timeout |
+
+La mayoría de las instancias se crean en la primera llamada a su método (las de una clase anotada, al crearse el
+bean), así que una política aparece una vez que se usó. Un valor que todavía no tiene sentido, como una tasa de fallas
+antes de `minimumCalls`, se muestra como un guion.
+
+La página también puede forzar la apertura de un circuit breaker, deshabilitarlo o reiniciarlo, como hace
+`registry.circuitBreaker(id)`: útil para ver cómo se comporta la aplicación con una dependencia caída. El enlace
+*Guide* de la tarjeta abre esta sección.
+
+Nada de esto existe fuera del modo dev: los build steps que agregan la tarjeta y su servicio JsonRPC corren solo en
+desarrollo local, así que un build de tests o de producción no tiene ninguno de los dos.
+
 ## SmallRye Fault Tolerance frente a resilience4cata :id=smallrye
 
 Quarkus trae su propia tolerancia a fallos, [SmallRye Fault Tolerance](https://quarkus.io/guides/smallrye-fault-tolerance)
