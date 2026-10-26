@@ -87,7 +87,8 @@ class HedgePolicyTest {
 
         assertThat(result).isCompletedWithValue("second");
         assertThat(attempts.get(0)).as("the loser is cancelled").isCancelled();
-        assertThatThrownBy(attempts.get(0)::join).isInstanceOf(HedgeCancelledException.class);
+        // The exception the loser was completed with; join() wraps it in a new CancellationException on JDK 23+.
+        assertThat(attempts.get(0).handle((value, failure) -> failure).join()).isInstanceOf(HedgeCancelledException.class);
         assertThat(hedgeEvents()).last().isEqualTo(new HedgeEvent.Won("h", DELAY_NANOS, 2));
         attempts.get(0).complete("late");
         assertThat(result).as("a late success changes nothing").isCompletedWithValue("second");
