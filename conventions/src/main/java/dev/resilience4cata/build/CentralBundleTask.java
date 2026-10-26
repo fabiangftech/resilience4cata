@@ -33,11 +33,15 @@ import org.gradle.api.tasks.TaskAction;
  * left in the staging directory). The task fails if the version is a SNAPSHOT, if an expected
  * artifact is missing, or if any file lacks its {@code .asc} signature or its {@code .md5} and
  * {@code .sha1} checksums; and, for a module with a jar, if its sources or Javadoc jar is missing.
+ * The {@code .sha256} and {@code .sha512} checksums Gradle also writes are left out: Central does not
+ * require them, and every file in the bundle counts against the Central Portal's monthly file quota.
  * Entries are sorted and carry a fixed timestamp, so the same staging content gives the same zip.
  */
 public abstract class CentralBundleTask extends DefaultTask {
 
     private static final Set<String> SIDE_FILES = Set.of(".asc", ".md5", ".sha1", ".sha256", ".sha512");
+    // Optional for Central and counted in the monthly file quota: not uploaded.
+    private static final Set<String> LEFT_OUT = Set.of(".sha256", ".sha512");
     // Local time, as Gradle's reproducible archives use: independent of the machine's time zone.
     private static final LocalDateTime FIXED_TIME = LocalDateTime.of(1980, 2, 1, 0, 0);
 
@@ -96,6 +100,9 @@ public abstract class CentralBundleTask extends DefaultTask {
                     require(names, name + ".md5", artifactId, problems);
                     require(names, name + ".sha1", artifactId, problems);
                 }
+                if (hasExtension(name, LEFT_OUT)) {
+                    continue;
+                }
                 entries.add(root.relativize(dir.resolve(name)).toString().replace('\\', '/'));
             }
         }
@@ -120,8 +127,12 @@ public abstract class CentralBundleTask extends DefaultTask {
     }
 
     private static boolean isSideFile(String name) {
+        return hasExtension(name, SIDE_FILES);
+    }
+
+    private static boolean hasExtension(String name, Set<String> extensions) {
         int dot = name.lastIndexOf('.');
-        return dot >= 0 && SIDE_FILES.contains(name.substring(dot));
+        return dot >= 0 && extensions.contains(name.substring(dot));
     }
 
     private static void require(Set<String> names, String name, String artifactId, List<String> problems) {
