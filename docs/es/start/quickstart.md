@@ -12,8 +12,8 @@ Necesitas Java 21 o posterior y un proyecto Gradle o Maven. Todo lo que sigue es
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.5.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.5.0')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.6.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.6.0')
 
     implementation 'dev.resilience4cata:resilience4cata-core'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
@@ -25,7 +25,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:0.5.0")
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:0.6.0")
     implementation(r4cBom)
     annotationProcessor(r4cBom)
 
@@ -42,12 +42,12 @@ dependencies {
   <dependency>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-core</artifactId>
-    <version>0.5.0</version>
+    <version>0.6.0</version>
   </dependency>
   <dependency>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-annotations</artifactId>
-    <version>0.5.0</version>
+    <version>0.6.0</version>
     <scope>provided</scope>
   </dependency>
 </dependencies>
@@ -57,7 +57,7 @@ dependencies {
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>0.5.0</version>
+    <version>0.6.0</version>
   </path>
 </annotationProcessorPaths>
 ```

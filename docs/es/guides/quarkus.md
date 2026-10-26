@@ -25,8 +25,8 @@ Quarkus encuentra su módulo de despliegue por sí solo.
 ```groovy
 dependencies {
     implementation enforcedPlatform("io.quarkus.platform:quarkus-bom:${quarkusPlatformVersion}")
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.5.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.5.0')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.6.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.6.0')
 
     implementation 'dev.resilience4cata:resilience4cata-quarkus'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
@@ -42,7 +42,7 @@ dependencies {
 ```kotlin
 dependencies {
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:${quarkusPlatformVersion}"))
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:0.5.0")
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:0.6.0")
     implementation(r4cBom)
     annotationProcessor(r4cBom)
 
@@ -74,7 +74,7 @@ dependencies {
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>0.5.0</version>
+    <version>0.6.0</version>
   </path>
   <!-- annotationProcessorPaths sustituye al descubrimiento: lista también los demás procesadores que uses -->
 </annotationProcessorPaths>

@@ -1,6 +1,6 @@
 # Arquitectura
 
-> Síntesis de [02 Mecanismos de anotaciones](research/02-annotation-mechanisms.md), [03 Rendimiento interno](research/03-performance-internals.md) y [05 Arquitectura del proyecto](research/05-project-architecture.md). Describe el diseño tal como está implementado en 0.5.0; los documentos de investigación registran cómo se eligió.
+> Síntesis de [02 Mecanismos de anotaciones](research/02-annotation-mechanisms.md), [03 Rendimiento interno](research/03-performance-internals.md) y [05 Arquitectura del proyecto](research/05-project-architecture.md). Describe el diseño tal como está implementado en 0.6.0; los documentos de investigación registran cómo se eligió.
 
 ## Visión general
 
@@ -196,8 +196,8 @@ Lo que declara un usuario (detalles, Maven y JPMS en [primeros pasos](start/inst
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.5.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.5.0')   // el path del processor no lo hereda
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.6.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.6.0')   // el path del processor no lo hereda
     implementation 'dev.resilience4cata:resilience4cata-core'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'   // retención CLASS: no hace falta en runtime
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
