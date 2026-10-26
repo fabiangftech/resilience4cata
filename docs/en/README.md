@@ -27,14 +27,14 @@
             <button class="r4c-copy" type="button">Copy</button>
           </div>
           <div role="tabpanel" id="r4c-p-g" aria-labelledby="r4c-t-g"><pre><span class="k">dependencies</span> {
-    <span class="k">implementation</span> platform(<span class="s">'dev.resilience4cata:resilience4cata-bom:0.4.0'</span>)
-    <span class="k">annotationProcessor</span> platform(<span class="s">'dev.resilience4cata:resilience4cata-bom:0.4.0'</span>)
+    <span class="k">implementation</span> platform(<span class="s">'dev.resilience4cata:resilience4cata-bom:0.5.0'</span>)
+    <span class="k">annotationProcessor</span> platform(<span class="s">'dev.resilience4cata:resilience4cata-bom:0.5.0'</span>)
     <span class="k">implementation</span> <span class="s">'dev.resilience4cata:resilience4cata-core'</span>
     <span class="k">compileOnly</span> <span class="s">'dev.resilience4cata:resilience4cata-annotations'</span>
     <span class="k">annotationProcessor</span> <span class="s">'dev.resilience4cata:resilience4cata-processor'</span>
 }</pre></div>
           <div role="tabpanel" id="r4c-p-k" aria-labelledby="r4c-t-k" hidden><pre><span class="k">dependencies</span> {
-    <span class="k">val</span> r4cBom = platform(<span class="s">"dev.resilience4cata:resilience4cata-bom:0.4.0"</span>)
+    <span class="k">val</span> r4cBom = platform(<span class="s">"dev.resilience4cata:resilience4cata-bom:0.5.0"</span>)
     implementation(r4cBom)
     annotationProcessor(r4cBom)
     implementation(<span class="s">"dev.resilience4cata:resilience4cata-core"</span>)
@@ -45,12 +45,12 @@
   &lt;<span class="k">dependency</span>&gt;
     &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
     &lt;<span class="k">artifactId</span>&gt;resilience4cata-core&lt;/<span class="k">artifactId</span>&gt;
-    &lt;<span class="k">version</span>&gt;0.4.0&lt;/<span class="k">version</span>&gt;
+    &lt;<span class="k">version</span>&gt;0.5.0&lt;/<span class="k">version</span>&gt;
   &lt;/<span class="k">dependency</span>&gt;
   &lt;<span class="k">dependency</span>&gt;
     &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
     &lt;<span class="k">artifactId</span>&gt;resilience4cata-annotations&lt;/<span class="k">artifactId</span>&gt;
-    &lt;<span class="k">version</span>&gt;0.4.0&lt;/<span class="k">version</span>&gt;
+    &lt;<span class="k">version</span>&gt;0.5.0&lt;/<span class="k">version</span>&gt;
     &lt;<span class="k">scope</span>&gt;provided&lt;/<span class="k">scope</span>&gt;
   &lt;/<span class="k">dependency</span>&gt;
 &lt;/<span class="k">dependencies</span>&gt;
@@ -60,11 +60,11 @@
   &lt;<span class="k">path</span>&gt;
     &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
     &lt;<span class="k">artifactId</span>&gt;resilience4cata-processor&lt;/<span class="k">artifactId</span>&gt;
-    &lt;<span class="k">version</span>&gt;0.4.0&lt;/<span class="k">version</span>&gt;
+    &lt;<span class="k">version</span>&gt;0.5.0&lt;/<span class="k">version</span>&gt;
   &lt;/<span class="k">path</span>&gt;
 &lt;/<span class="k">annotationProcessorPaths</span>&gt;</pre></div>
         </div>
-        <p class="install-note">Version 0.4.0 on Maven Central. The processor only goes on the annotation processor path; the annotations are compile-only. <a href="#/en/start/installation">Installation guide</a></p>
+        <p class="install-note">Version 0.5.0 on Maven Central. The processor only goes on the annotation processor path; the annotations are compile-only. <a href="#/en/start/installation">Installation guide</a></p>
       </div>
     </div>
     <div class="r4c-compile" aria-label="Annotated interface and the class the processor generates from it">
@@ -283,7 +283,7 @@ at CheckoutService.pay</pre>
     <div>
       <a class="r4c-brand" href="#/en/"><svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#F2B500"/><g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round"><path d="M4 27h7"/><path d="M13.6 25.4 L27 13"/><path d="M31 27h5"/></g><circle cx="13" cy="27" r="2.6" fill="#1A1F24"/><circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/></svg><span>resilience<b>4cata</b></span></a>
       <p>Annotation-driven resilience for plain Java 21+. Apache License 2.0.</p>
-      <span class="coord">dev.resilience4cata:resilience4cata-bom:0.4.0</span>
+      <span class="coord">dev.resilience4cata:resilience4cata-bom:0.5.0</span>
     </div>
     <div><h4>Learn</h4><ul><li><a href="#/en/start/installation">Installation</a></li><li><a href="#/en/start/quickstart">Quickstart</a></li><li><a href="#/en/start/how-it-works">How it works</a></li><li><a href="#/en/guides/testing">Testing with ManualClock</a></li></ul></div>
     <div><h4>Reference</h4><ul><li><a href="#/en/errors">Error codes</a></li><li><a href="#/en/reference/configuration">Configuration keys</a></li><li><a href="#/en/performance">Performance</a></li><li><a href="https://javadoc.io/doc/dev.resilience4cata">Javadoc</a></li></ul></div>
