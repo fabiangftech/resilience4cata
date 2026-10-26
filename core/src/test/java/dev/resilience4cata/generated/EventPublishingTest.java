@@ -3,13 +3,16 @@ package dev.resilience4cata.generated;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.resilience4cata.AdaptiveLimitConfig;
 import dev.resilience4cata.BulkheadConfig;
 import dev.resilience4cata.CallTimeoutException;
 import dev.resilience4cata.CircuitBreakerConfig;
 import dev.resilience4cata.CircuitBreakerState;
+import dev.resilience4cata.LimitExceededException;
 import dev.resilience4cata.RateLimiterConfig;
 import dev.resilience4cata.RetryConfig;
 import dev.resilience4cata.TimeoutConfig;
+import dev.resilience4cata.event.AdaptiveLimitEvent;
 import dev.resilience4cata.event.BulkheadEvent;
 import dev.resilience4cata.event.CircuitBreakerEvent;
 import dev.resilience4cata.event.CircuitBreakerEvent.CallNotPermitted;
@@ -175,6 +178,9 @@ class EventPublishingTest {
         RateLimiterPolicy limiter = new RateLimiterPolicy("r",
                 RateLimiterConfig.builder().permits(1).period(Duration.ofHours(1)).build(), environment);
         assertThat(limiter.tryAcquire()).isTrue();
+        AdaptiveLimitPolicy adaptive = new AdaptiveLimitPolicy("a",
+                AdaptiveLimitConfig.builder().initialLimit(1).build(), environment);
+        adaptive.acquire();
 
         java.lang.management.ThreadMXBean mx = java.lang.management.ManagementFactory.getThreadMXBean();
         if (!(mx instanceof com.sun.management.ThreadMXBean threads) || !threads.isThreadAllocatedMemorySupported()) {
@@ -187,14 +193,41 @@ class EventPublishingTest {
                 rejected += cb.acquire() < 0 ? 1 : 0;
                 rejected += bulkhead.tryEnter() ? 0 : 1;
                 rejected += limiter.tryAcquire() ? 0 : 1;
+                rejected += rejectedBy(adaptive);
             }
             long allocated = threads.getCurrentThreadAllocatedBytes() - before;
             if (round == 2) {
-                assertThat(allocated).as("bytes allocated by 300,000 rejections").isLessThan(16 * 1024);
+                assertThat(allocated).as("bytes allocated by 400,000 rejections").isLessThan(16 * 1024);
             }
         }
-        assertThat(rejected).isEqualTo(900_000);
+        assertThat(rejected).isEqualTo(1_200_000);
         assertThat(events).hasSize(1); // the forceOpen transition
+    }
+
+    private static int rejectedBy(AdaptiveLimitPolicy adaptive) {
+        try {
+            adaptive.acquire();
+            return 0;
+        } catch (LimitExceededException e) {
+            return 1;
+        }
+    }
+
+    // Adaptive limit
+
+    @Test
+    void adaptiveLimitRejectionsAndLimitChangesArePublished() {
+        AdaptiveLimitPolicy adaptive = new AdaptiveLimitPolicy("a", AdaptiveLimitConfig.builder()
+                .algorithm(AdaptiveLimitConfig.Algorithm.AIMD).initialLimit(1).minWindowSamples(1)
+                .window(Duration.ofMillis(10)).build(), listening(AdaptiveLimitEvent.class));
+        long start = adaptive.acquire();
+        assertThatThrownBy(adaptive::acquire).isSameAs(adaptive.rejection());
+        now.addAndGet(10 * MS);
+        adaptive.onSuccess(start); // ends the window: one in flight out of a limit of 1, so AIMD adds one
+
+        assertThat(events).containsExactly(
+                new AdaptiveLimitEvent.Rejected("a", 1_000 * MS, 1),
+                new AdaptiveLimitEvent.LimitChanged("a", 1_010 * MS, 1, 2, 10 * MS));
     }
 
     // Retry

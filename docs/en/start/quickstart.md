@@ -164,12 +164,12 @@ The second call takes up to a few hundred milliseconds: between attempts the ret
 - **The first call** failed with `IOException`, so the retry waited and tried again; the second attempt returned `9.99`.
 - **The second wrapper** always fails, so after three attempts the fallback `unknownPrice` answered `0`.
 - **The breaker** recorded every attempt, five calls with four failures, but stayed `CLOSED`: by default it judges only once its window holds 100 calls (`minimumCalls`).
-- The policies nest in a fixed order, outermost first: `Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead → method`. That is why the fallback sees the final outcome and every retry attempt has its own two-second timeout.
+- The policies nest in a fixed order, outermost first: `Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method`. That is why the fallback sees the final outcome and every retry attempt has its own two-second timeout.
 
 ## Next steps
 
 - [How it works](how-it-works.md): what the processor generates, instance ids, where configuration comes from.
-- [Policies](../policies/README.md): every attribute of the six policies, with their defaults.
+- [Policies](../policies/README.md): every attribute of every policy, with their defaults.
 - [Configuration](../guides/configuration.md): retune the same code from a properties file, environment variables or system properties.
 - [Testing](../guides/testing.md): run this example on a `ManualClock`, with no real waiting.
 - [Async methods](../guides/async.md): return a `CompletableFuture` and nothing blocks.

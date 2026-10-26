@@ -4,7 +4,7 @@ Cómo se corresponden los registries, configs, decoradores y anotaciones de Spri
 
 ## ¿Deberías migrar? :id=when
 
-resilience4cata cubre seis políticas (retry, circuit breaker, rate limiter, timeout, bulkhead, fallback) para Java 21+ puro, con código generado en tiempo de compilación. **Quédate en Resilience4j** si necesitas algo de esto, que resilience4cata todavía no tiene:
+resilience4cata cubre ocho políticas (retry, hedge, circuit breaker, rate limiter, adaptive limit, timeout, bulkhead, fallback) para Java 21+ puro, con código generado en tiempo de compilación. **Quédate en Resilience4j** si necesitas algo de esto, que resilience4cata todavía no tiene:
 
 - integración con Spring Boot 3, CDI o AspectJ (resilience4cata se integra solo con Spring Boot 4.1+, [más abajo](#spring-boot));
 - operadores de Reactor, RxJava o corrutinas de Kotlin (resilience4cata solo admite `CompletionStage` / `CompletableFuture`);
@@ -20,7 +20,7 @@ resilience4cata cubre seis políticas (retry, circuit breaker, rate limiter, tim
 |---|---|---|
 | Dónde viven las políticas | decoradores (`Decorators.ofSupplier(…)`, `Retry.decorateSupplier(…)`) o aspectos de Spring AOP alrededor de un bean | una clase generada en tiempo de compilación: `<Interface>$Resilient` envuelve tu implementación, o `<Class>$Resilient` extiende tu clase |
 | Cuándo se detecta un error de configuración | al arrancar o en la primera llamada | en su mayoría al compilar ([códigos de error](../errors.md)) |
-| Orden de las políticas | el orden en que compones los decoradores; con Spring, un orden fijo de aspectos (configurable) | fijo: Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead → método |
+| Orden de las políticas | el orden en que compones los decoradores; con Spring, un orden fijo de aspectos (configurable) | fijo: Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → método |
 | Registries | uno por política (`CircuitBreakerRegistry`, `RetryRegistry`, …) | un solo `ResilienceRegistry` para todas las políticas |
 | Instancias | se buscan por nombre | una por método anotado de forma predeterminada; los métodos con el mismo `name` comparten una |
 
@@ -122,7 +122,7 @@ La semántica difiere: en Resilience4j gana el primer intento que **termina**, a
 
 ### El orden es fijo :id=order
 
-Fallback → Retry (o Hedge) → CircuitBreaker → RateLimiter → Timeout → Bulkhead → método, sin importar el orden de las anotaciones. Coincide con el orden predeterminado de aspectos de Spring en Resilience4j para las políticas que ambas tienen. No hay `@Order` ni reordenamiento por método; para otro orden, usa dos interfaces o un [`Pipeline`](../guides/pipeline.md) dentro de un método envuelto.
+Fallback → Retry (o Hedge) → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → método, sin importar el orden de las anotaciones. Coincide con el orden predeterminado de aspectos de Spring en Resilience4j para las políticas que ambas tienen. No hay `@Order` ni reordenamiento por método; para otro orden, usa dos interfaces o un [`Pipeline`](../guides/pipeline.md) dentro de un método envuelto.
 
 ### Un breaker abierto detiene los retries :id=open-breaker
 
@@ -253,7 +253,7 @@ proxies; el procesador de anotaciones genera las clases protegidas y la integrac
 | `resilience4j.<module>.configs.default.<key>` | `resilience4cata.defaults.<policy>.<attribute>` |
 | `resilience4j.<module>.configs.<name>.<key>` | `resilience4cata.configs.<name>.<policy>.<attribute>`, usada por `@Retry(config = "<name>")` y similares |
 | `baseConfig: <name>` | `resilience4cata.configs.<config>.extends: <name>`; una anotación elige su config con `config = "<name>"` |
-| propiedades `<module>AspectOrder` | ninguna: el orden es fijo (Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead) |
+| propiedades `<module>AspectOrder` | ninguna: el orden es fijo (Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead) |
 | beans `CircuitBreakerConfigCustomizer`, `RetryConfigCustomizer`… | beans `ResilienceRegistryCustomizer` |
 | beans `RegistryEventConsumer`, `getEventPublisher()` | beans `EventListener<…>` |
 | `/actuator/circuitbreakers`, `/actuator/retries`, `/actuator/ratelimiters`… | `/actuator/resilience4cata` (todas las políticas, solo lectura) |

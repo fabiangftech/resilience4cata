@@ -207,7 +207,8 @@ tasks.withType(JavaCompile).configureEach {
 ### R4C-ATR-001
 
 **Trigger:** a duration attribute (`delay`, `maxDelay`, `maxDuration`, `slowCallDuration`, `waitInOpen`,
-`maxWaitInHalfOpen`, `maxWait`, `period`, or the value of `@Timeout`) is not a valid duration.
+`maxWaitInHalfOpen`, `maxWait`, `period`, `budgetWindow`, `window`, or the value of `@Timeout`) is not a valid
+duration.
 
 **Wrong:**
 
@@ -271,7 +272,7 @@ public interface PriceClient {
 ### R4C-ATR-003
 
 **Trigger:** a count is less than 1: `maxAttempts`, `windowSize`, `minimumCalls`, `halfOpenCalls`,
-`maxConcurrent` or `permits`.
+`maxConcurrent`, `permits`, `initialLimit`, `minLimit` or `maxLimit`.
 
 **Wrong:**
 
@@ -455,6 +456,39 @@ import java.util.concurrent.CompletableFuture;
 public interface QuoteClient {
     @Hedge(maxAttempts = 2, delay = "50ms")
     CompletableFuture<String> quote(String sku);
+}
+```
+
+### R4C-ATR-009
+
+**Trigger:** the bounds of `@AdaptiveLimit` are out of order (`minLimit` above `maxLimit`, or `initialLimit`
+outside them), or its `window` is shorter than 10 ms or longer than 1 h. Only the bounds set on the annotation
+are compared; a bound that comes from a named or external configuration is checked when the registry resolves
+it ([R4C-REG-003](#r4c-reg-003)).
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.AdaptiveLimit;
+
+public interface OrderClient {
+    @AdaptiveLimit(minLimit = 50, maxLimit = 20)
+    String place(String order);
+}
+```
+
+**Fix:** keep `minLimit <= initialLimit <= maxLimit`, and a `window` from `"10ms"` to `"1h"`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.AdaptiveLimit;
+
+public interface OrderClient {
+    @AdaptiveLimit(minLimit = 20, maxLimit = 50)
+    String place(String order);
 }
 ```
 

@@ -6,7 +6,7 @@
 
 | Anotación | Posición | Tipos de retorno | Valores por defecto |
 |---|---|---|---|
-| `@Retry` | 2 de 6, dentro de Fallback | sync y `CompletionStage` | 3 intentos, backoff exponencial de 200 ms ×2 hasta 10 s, jitter completo, reintenta `Exception` |
+| `@Retry` | 2 de 7, dentro de Fallback | sync y `CompletionStage` | 3 intentos, backoff exponencial de 200 ms ×2 hasta 10 s, jitter completo, reintenta `Exception` |
 
 </div>
 

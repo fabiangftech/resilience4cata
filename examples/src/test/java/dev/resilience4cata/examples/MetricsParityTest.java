@@ -53,7 +53,7 @@ class MetricsParityTest {
             fromOpenTelemetry.put(metric.getName(), metric.getDescription());
         }
 
-        assertThat(fromMicrometer).as("every metric of the specification").hasSize(17);
+        assertThat(fromMicrometer).as("every metric of the specification").hasSize(20);
         assertThat(fromOpenTelemetry).isEqualTo(fromMicrometer);
         provider.close();
     }
@@ -110,6 +110,17 @@ class MetricsParityTest {
         CompletableFuture<String> skipped = rare.executeAsync(() -> CompletableFuture.failedFuture(new IOException("down")));
         clock.advance(Duration.ZERO); // the budget is asked when the hedge would start
         assertThat(skipped).isCompletedExceptionally();
+
+        // An adaptive limit that rejects and moves its limit: rejections, limit changes, gauges.
+        Pipeline<String> adaptive = Pipeline.builder(registry, "orders", String.class)
+                .adaptiveLimit(a -> a.algorithm(dev.resilience4cata.AdaptiveLimitConfig.Algorithm.AIMD).initialLimit(1)
+                        .minWindowSamples(1))
+                .build();
+        adaptive.execute(() -> {
+            assertThatThrownBy(() -> adaptive.execute(() -> "nested")).isInstanceOf(dev.resilience4cata.LimitExceededException.class);
+            clock.advance(Duration.ofSeconds(1));
+            return "o";
+        });
 
         // Bulkhead and rate limiter gauges.
         Pipeline.builder(registry, "reports", String.class).bulkhead(b -> b.maxConcurrent(1)).build().execute(() -> "r");

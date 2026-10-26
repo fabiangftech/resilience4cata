@@ -3,10 +3,12 @@ package dev.resilience4cata.examples;
 import dev.resilience4cata.Classifier;
 import dev.resilience4cata.FallbackContext;
 import dev.resilience4cata.FallbackHandler;
+import dev.resilience4cata.annotation.AdaptiveLimit;
 import dev.resilience4cata.annotation.Bulkhead;
 import dev.resilience4cata.annotation.CircuitBreaker;
 import dev.resilience4cata.annotation.Fallback;
 import dev.resilience4cata.annotation.Jitter;
+import dev.resilience4cata.annotation.LimitAlgorithm;
 import dev.resilience4cata.annotation.RateLimiter;
 import dev.resilience4cata.annotation.Retry;
 import dev.resilience4cata.annotation.Timeout;
@@ -30,6 +32,9 @@ public interface PipelineEquivalentClient {
 
     @RateLimiter(permits = 2, period = "1h")
     String limited(String order) throws IOException;
+
+    @AdaptiveLimit(algorithm = LimitAlgorithm.AIMD, initialLimit = 10, dropOn = IOException.class)
+    String adaptive(String order) throws IOException;
 
     @Fallback(Pending.class)
     @Retry(maxAttempts = 3, delay = "0", jitter = Jitter.NONE)

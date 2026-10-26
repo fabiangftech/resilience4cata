@@ -6,7 +6,7 @@
 
 | Anotación | Posición | Tipos de retorno | Valores por defecto |
 |---|---|---|---|
-| `@Bulkhead` | 6 de 6, la más interna, alrededor del método | sync y `CompletionStage` | 25 llamadas concurrentes, sin espera |
+| `@Bulkhead` | 7 de 7, la más interna, alrededor del método | sync y `CompletionStage` | 25 llamadas concurrentes, sin espera |
 
 </div>
 

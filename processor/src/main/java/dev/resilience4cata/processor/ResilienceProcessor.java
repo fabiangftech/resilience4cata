@@ -1,5 +1,6 @@
 package dev.resilience4cata.processor;
 
+import dev.resilience4cata.annotation.AdaptiveLimit;
 import dev.resilience4cata.annotation.Bulkhead;
 import dev.resilience4cata.annotation.CircuitBreaker;
 import dev.resilience4cata.annotation.Fallback;
@@ -51,9 +52,10 @@ import javax.tools.StandardLocation;
  * {@code <Interface>$Resilient} that implements the interface, delegates every method, and applies
  * the declared policies. {@code Resilient.of(...)} in the core module finds it by that name.
  *
- * <p>Policies are nested in the default order, outermost first: Fallback, Retry, CircuitBreaker, RateLimiter,
- * Timeout, Bulkhead. Each attempt is recorded by the breaker, an open breaker stops the retries, calls
- * rejected by the breaker use no rate-limiter permit, the timeout
+ * <p>Policies are nested in the default order, outermost first: Fallback, Retry (or Hedge), CircuitBreaker,
+ * RateLimiter, AdaptiveLimit, Timeout, Bulkhead. Each attempt is recorded by the breaker, an open breaker stops the
+ * retries, calls rejected by the breaker use no rate-limiter permit, the adaptive limit sees the timeouts and the
+ * bulkhead's rejections as drops, the timeout
  * applies to each attempt (including the wait for a bulkhead slot), and a bulkhead slot is held only
  * while the method runs. The fallback sees the final outcome, rejections included; when the method also
  * retries, the fallback runs where the retry loop gives up, so that it knows the number of attempts. The public method holds the outermost layer; every inner layer is a private method
@@ -83,6 +85,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 "circuitBreakerPolicy", "dev.resilience4cata.CircuitBreakerConfig"),
         RATE_LIMITER(RateLimiter.class, "rateLimiter", "dev.resilience4cata.generated.RateLimiterPolicy",
                 "rateLimiterPolicy", "dev.resilience4cata.RateLimiterConfig"),
+        ADAPTIVE_LIMIT(AdaptiveLimit.class, "adaptiveLimit", "dev.resilience4cata.generated.AdaptiveLimitPolicy",
+                "adaptiveLimitPolicy", "dev.resilience4cata.AdaptiveLimitConfig"),
         TIMEOUT(Timeout.class, "timeout", "dev.resilience4cata.generated.TimeoutPolicy", "timeoutPolicy",
                 "dev.resilience4cata.TimeoutConfig"),
         BULKHEAD(Bulkhead.class, "bulkhead", "dev.resilience4cata.generated.BulkheadPolicy", "bulkheadPolicy",
@@ -521,9 +525,10 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         overrides.add(attribute + "(" + number + ")");
                     }
                 }
-                case "retryOn", "abortOn", "recordOn", "ignoreOn", "hedgeOn" ->
+                case "retryOn", "abortOn", "recordOn", "ignoreOn", "hedgeOn", "dropOn" ->
                         overrides.add(attribute + "(java.util.List.of(" + classList(value) + "))");
-                case "windowSize", "minimumCalls", "halfOpenCalls", "maxConcurrent", "permits" -> {
+                case "windowSize", "minimumCalls", "halfOpenCalls", "maxConcurrent", "permits", "initialLimit", "minLimit",
+                        "maxLimit" -> {
                     int number = (Integer) value;
                     if (number < 1) {
                         valid = invalid(method, ProcessorError.COUNT_BELOW_ONE, label + " must be at least 1, was " + number);
@@ -573,6 +578,17 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         overrides.add(attribute + "(" + number + ")");
                     }
                 }
+                case "window" -> {
+                    long nanos = durationNanos(method, label + " = \"" + value + "\"", value);
+                    if (nanos < 0) {
+                        valid = false;
+                    } else if (nanos < 10_000_000L || nanos > 3_600_000_000_000L) {
+                        valid = invalid(method, ProcessorError.ADAPTIVE_LIMIT_RANGE, label + " must be between 10ms and 1h, was \""
+                                + value + "\"");
+                    } else {
+                        overrides.add("window(java.time.Duration.ofNanos(" + nanos + "L))");
+                    }
+                }
                 case "budgetWindow" -> {
                     long nanos = durationNanos(method, label + " = \"" + value + "\"", value);
                     if (nanos < 0) {
@@ -594,6 +610,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 case "backoff" -> overrides.add("backoff(" + kind.configType + ".Backoff." + constant(value) + ")");
                 case "jitter" -> overrides.add("jitter(" + kind.configType + ".Jitter." + constant(value) + ")");
                 case "windowType" -> overrides.add("windowType(" + kind.configType + ".WindowType." + constant(value) + ")");
+                case "algorithm" -> overrides.add("algorithm(" + kind.configType + ".Algorithm." + constant(value) + ")");
                 default -> valid = invalid(method, ProcessorError.UNKNOWN_ATTRIBUTE, "Unknown attribute " + label
                         + ". The processor and the annotations jar have different versions.");
             }
@@ -607,6 +624,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         + (kind == Kind.RETRY ? "abortOn" : "ignoreOn") + " still applies before the classifier.)");
             }
         }
+        if (kind == Kind.ADAPTIVE_LIMIT) {
+            valid &= limitsInOrder(method, annotation, values);
+        }
         if (values.containsKey("onExhaustedResult") && !values.containsKey("classifier")) {
             valid = invalid(method, ProcessorError.EXHAUSTED_WITHOUT_CLASSIFIER, annotation + ".onExhaustedResult needs " + annotation + ".classifier: only a"
                     + " classifier can reject a result. Add a classifier, or remove onExhaustedResult.");
@@ -616,6 +636,27 @@ public final class ResilienceProcessor extends AbstractProcessor {
         }
         String instanceId = iface.getQualifiedName() + "#" + method.getSimpleName() + "(" + erasedParameters(type) + ")";
         return new PolicyModel(instanceId, name, config, overrides, classifier, throwOnExhaustedResult);
+    }
+
+    /**
+     * Checks {@code minLimit <= initialLimit <= maxLimit} among the bounds that the annotation sets; a bound
+     * left to the configuration is checked when the registry resolves it. Returns false after reporting.
+     */
+    private boolean limitsInOrder(ExecutableElement method, String annotation, Map<String, AnnotationValue> values) {
+        String[] names = {"minLimit", "initialLimit", "maxLimit"};
+        for (int i = 0; i < names.length; i++) {
+            for (int j = i + 1; j < names.length; j++) {
+                AnnotationValue low = values.get(names[i]);
+                AnnotationValue high = values.get(names[j]);
+                if (low != null && high != null && (Integer) low.getValue() > (Integer) high.getValue()) {
+                    return invalid(method, ProcessorError.ADAPTIVE_LIMIT_RANGE, annotation + "." + names[i] + " ("
+                            + low.getValue() + ") must not be greater than " + annotation + "." + names[j] + " ("
+                            + high.getValue() + "): the limit stays between minLimit and maxLimit and starts at"
+                            + " initialLimit.");
+                }
+            }
+        }
+        return true;
     }
 
     /**
@@ -1610,6 +1651,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     : classifiedCircuitBreaker(index, call, isVoid, returnType, model.policies().get(kind).classifier(),
                             classifierField(model, kind, index), model.policies().containsKey(Kind.RETRY));
             case RATE_LIMITER -> rateLimiter(index, call, isVoid);
+            case ADAPTIVE_LIMIT -> adaptiveLimit(index, call, isVoid, returnType);
             case TIMEOUT -> timeout(index, call, isVoid, returnType);
             case BULKHEAD -> bulkhead(index, call, isVoid);
         };
@@ -1961,6 +2003,24 @@ public final class ResilienceProcessor extends AbstractProcessor {
         } else {
             lines.add("return " + call + ";");
         }
+        return lines;
+    }
+
+    private static List<String> adaptiveLimit(int index, String call, boolean isVoid, String returnType) {
+        List<String> lines = new ArrayList<>();
+        lines.add("final " + Kind.ADAPTIVE_LIMIT.policyType + " r4c$adaptiveLimit = this." + Kind.ADAPTIVE_LIMIT.field + index + ";");
+        lines.add("final long r4c$start = r4c$adaptiveLimit.acquire();");
+        if (!isVoid) {
+            lines.add("final " + returnType + " r4c$result;");
+        }
+        lines.add("try {");
+        lines.add("    " + (isVoid ? "" : "r4c$result = ") + call + ";");
+        lines.add("} catch (java.lang.Throwable r4c$e) {");
+        lines.add("    r4c$adaptiveLimit.onFailure(r4c$start, r4c$e);");
+        lines.add("    throw r4c$e;");
+        lines.add("}");
+        lines.add("r4c$adaptiveLimit.onSuccess(r4c$start);");
+        lines.add(isVoid ? "return;" : "return r4c$result;");
         return lines;
     }
 

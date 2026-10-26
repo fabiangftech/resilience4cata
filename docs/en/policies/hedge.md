@@ -6,7 +6,7 @@
 
 | Annotation | Position | Return types | Defaults |
 |---|---|---|---|
-| `@Hedge` | 2 of 6, in Retry's place (not both on one method) | `CompletionStage` only | 2 attempts, 1 s delay, hedges on `Exception`, budget 10 % + 1/s over 10 s |
+| `@Hedge` | 2 of 7, in Retry's place (not both on one method) | `CompletionStage` only | 2 attempts, 1 s delay, hedges on `Exception`, budget 10 % + 1/s over 10 s |
 
 </div>
 

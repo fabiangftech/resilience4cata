@@ -16,10 +16,11 @@ import java.util.List;
  * @param timeouts every timeout
  * @param bulkheads every bulkhead
  * @param hedges every hedge
+ * @param adaptiveLimits every adaptive limit
  */
 public record ResilienceSnapshot(List<CircuitBreakerSnapshot> circuitBreakers, List<RetrySnapshot> retries,
         List<RateLimiterSnapshot> rateLimiters, List<TimeoutSnapshot> timeouts, List<BulkheadSnapshot> bulkheads,
-        List<HedgeSnapshot> hedges) {
+        List<HedgeSnapshot> hedges, List<AdaptiveLimitSnapshot> adaptiveLimits) {
 
     /** Copies the lists. */
     public ResilienceSnapshot {
@@ -29,6 +30,24 @@ public record ResilienceSnapshot(List<CircuitBreakerSnapshot> circuitBreakers, L
         timeouts = List.copyOf(timeouts);
         bulkheads = List.copyOf(bulkheads);
         hedges = List.copyOf(hedges);
+        adaptiveLimits = List.copyOf(adaptiveLimits);
+    }
+
+    /**
+     * A snapshot without adaptive limits: the constructor of 0.4.0 and 0.5.0, kept so that code that calls it
+     * still compiles.
+     *
+     * @param circuitBreakers every circuit breaker
+     * @param retries every retry
+     * @param rateLimiters every rate limiter
+     * @param timeouts every timeout
+     * @param bulkheads every bulkhead
+     * @param hedges every hedge
+     */
+    public ResilienceSnapshot(List<CircuitBreakerSnapshot> circuitBreakers, List<RetrySnapshot> retries,
+            List<RateLimiterSnapshot> rateLimiters, List<TimeoutSnapshot> timeouts, List<BulkheadSnapshot> bulkheads,
+            List<HedgeSnapshot> hedges) {
+        this(circuitBreakers, retries, rateLimiters, timeouts, bulkheads, hedges, List.of());
     }
 
     /**
@@ -42,6 +61,6 @@ public record ResilienceSnapshot(List<CircuitBreakerSnapshot> circuitBreakers, L
      */
     public ResilienceSnapshot(List<CircuitBreakerSnapshot> circuitBreakers, List<RetrySnapshot> retries,
             List<RateLimiterSnapshot> rateLimiters, List<TimeoutSnapshot> timeouts, List<BulkheadSnapshot> bulkheads) {
-        this(circuitBreakers, retries, rateLimiters, timeouts, bulkheads, List.of());
+        this(circuitBreakers, retries, rateLimiters, timeouts, bulkheads, List.of(), List.of());
     }
 }

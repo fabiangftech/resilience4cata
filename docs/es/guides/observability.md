@@ -27,6 +27,8 @@ Cada evento implementa la interfaz sellada `dev.resilience4cata.event.Resilience
 | Rate limiter | `RateLimiterEvent.Rejected` | ninguno | una llamada es rechazada con `RateLimitExceededException` |
 | Timeout | `TimeoutEvent.TimedOut` | `Duration timeout` | una llamada excede su timeout |
 | Bulkhead | `BulkheadEvent.Rejected` | `int maxConcurrent` | una llamada es rechazada con `BulkheadFullException` |
+| Adaptive limit | `AdaptiveLimitEvent.Rejected` | `int limit` | una llamada es rechazada con `LimitExceededException` |
+| Adaptive limit | `AdaptiveLimitEvent.LimitChanged` | `int from`, `int to`, `long windowLatencyNanos` | terminó una ventana y el [adaptive limit](../policies/adaptive-limit.md) movió su límite |
 | Fallback | `FallbackEvent.Applied` | `Throwable failure` | un fallback está por ejecutarse para `failure`; no se publica cuando la falla se relanza porque ningún fallback la recibe (`skipOn`, o ningún método hermano acepta su tipo) |
 
 Un retry con `enabled = false` no publica nada. Un primer fallo que no es reintentable publica `GaveUp` con `attempts = 1` y `NOT_RETRYABLE`.
@@ -91,6 +93,7 @@ for (RateLimiterSnapshot r : snapshot.rateLimiters()) {
 |---|---|
 | `CircuitBreakerSnapshot` | `instance`, `state`, `failureRate` y `slowCallRate` (porcentaje, o `-1` hasta que la ventana contenga `minimumCalls` llamadas, `halfOpenCalls` mientras está semiabierto; `slowCallRate` también es `-1` cuando la detección de llamadas lentas está desactivada), `bufferedCalls`, `failedCalls`, `slowCalls` (llamadas en la ventana actual: la ventana deslizante mientras está cerrado, las pruebas mientras está semiabierto, ninguna mientras está abierto, forzado a abierto o desactivado) |
 | `BulkheadSnapshot` | `instance`, `concurrentCalls`, `waitingCalls`, `maxConcurrent`, y el método `availableSlots()` |
+| `AdaptiveLimitSnapshot` | `instance`, `algorithm`, `limit`, `inFlight`, `minLimit`, `maxLimit`, `windows` (terminadas hasta ahora), `windowLatency` (el promedio de la última ventana), `longTermLatency` (el promedio de largo plazo de Gradient2), y el método `availableSlots()` |
 | `RateLimiterSnapshot` | `instance`, `availablePermits`, `permits` |
 | `RetrySnapshot` | `instance`, `config` (el `RetryConfig` resuelto) |
 | `HedgeSnapshot` | `instance`, `config` (el `HedgeConfig` resuelto), `budget` (`calls`, `hedges`, `allowedHedges` en la ventana del presupuesto; `null` sin presupuesto) |
@@ -106,8 +109,9 @@ Los handles leen una instancia en vivo, y el del breaker además puede cambiar s
 | `registry.circuitBreakers()` | todos los handles de breaker, ordenados por id |
 | `registry.rateLimiter(id)` | `RateLimiterHandle`: `id()`, `config()`, `availablePermits()`, `snapshot()` |
 | `registry.bulkhead(id)` | `BulkheadHandle`: `id()`, `config()`, `concurrentCalls()`, `waitingCalls()`, `snapshot()` |
+| `registry.adaptiveLimit(id)` | `AdaptiveLimitHandle`: `id()`, `config()`, `limit()`, `inFlight()`, `snapshot()` |
 
-Una instancia existe solo cuando su interfaz ya fue envuelta (`Resilient.of`, `Resilient.create`) o su `Pipeline` ya fue construido; antes de eso, o para un id que no existe, la búsqueda lanza `IllegalArgumentException` [R4C-REG-009](../errors.md#r4c-reg-009) con el id más cercano. Retry y timeout no tienen handle; su configuración está en el snapshot. No hay método de listado para bulkheads y rate limiters: enuméralos a través de `registry.snapshot()`.
+Una instancia existe solo cuando su interfaz ya fue envuelta (`Resilient.of`, `Resilient.create`) o su `Pipeline` ya fue construido; antes de eso, o para un id que no existe, la búsqueda lanza `IllegalArgumentException` [R4C-REG-009](../errors.md#r4c-reg-009) con el id más cercano. Retry y timeout no tienen handle; su configuración está en el snapshot. No hay método de listado para bulkheads, rate limiters y adaptive limits: enuméralos a través de `registry.snapshot()`.
 
 ## Métricas :id=metrics
 
@@ -119,7 +123,7 @@ Los nombres van en minúsculas y separados por puntos, como recomienda Micromete
 
 | Meter | Tipo | Tags | Origen |
 |---|---|---|---|
-| `r4c.calls.rejected` | counter | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `bulkhead` | `CallNotPermitted`, `RateLimiterEvent.Rejected`, `BulkheadEvent.Rejected` |
+| `r4c.calls.rejected` | counter | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CallNotPermitted`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
 | `r4c.circuitbreaker.transitions` | counter | `instance`, `from`, `to` (estados en minúsculas) | `StateTransition` |
 | `r4c.retry.retries` | counter | `instance` | `Retrying` |
 | `r4c.retry.gave.up` | counter | `instance`, `reason` (`Reason` en minúsculas) | `GaveUp` |
@@ -127,12 +131,14 @@ Los nombres van en minúsculas y separados por puntos, como recomienda Micromete
 | `r4c.hedge.won` | counter | `instance` | `Won` |
 | `r4c.hedge.skipped` | counter | `instance`, `reason` = `budget_exhausted` \| `rejected` \| `aborted` | `Skipped` |
 | `r4c.hedge.failed` | counter | `instance` | `Failed` |
+| `r4c.adaptivelimit.limit.changes` | counter | `instance` | `LimitChanged` |
 | `r4c.timeout.timed.out` | counter | `instance` | `TimedOut` |
 | `r4c.fallback.applied` | counter | `instance` | `Applied` |
 | `r4c.circuitbreaker.state` | gauge | `instance`, `state`: 1 para el estado actual, 0 para los demás | `state()` |
 | `r4c.circuitbreaker.failure.rate`, `r4c.circuitbreaker.slow.call.rate` | gauge (porcentaje) | `instance` | `snapshot()`; NaN hasta que la ventana contenga `minimumCalls` llamadas |
 | `r4c.bulkhead.concurrent.calls`, `r4c.bulkhead.waiting.calls`, `r4c.bulkhead.max.concurrent` | gauge | `instance` | `BulkheadHandle` |
 | `r4c.ratelimiter.available.permits` | gauge | `instance` | `RateLimiterHandle` |
+| `r4c.adaptivelimit.limit`, `r4c.adaptivelimit.concurrent.calls` | gauge | `instance` | `AdaptiveLimitHandle` |
 
 ### Otra librería de métricas :id=diy
 

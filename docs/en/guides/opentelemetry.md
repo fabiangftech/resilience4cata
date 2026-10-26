@@ -71,7 +71,7 @@ Every metric has an `instance` attribute: the policy instance id (the `name` in 
 
 | Name | OpenTelemetry instrument | Unit | Attributes | Source |
 |---|---|---|---|---|
-| `r4c.calls.rejected` | `LongCounter` | `{call}` | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `bulkhead` | `CircuitBreakerEvent.CallNotPermitted`, `RateLimiterEvent.Rejected`, `BulkheadEvent.Rejected` |
+| `r4c.calls.rejected` | `LongCounter` | `{call}` | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CircuitBreakerEvent.CallNotPermitted`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
 | `r4c.circuitbreaker.transitions` | `LongCounter` | `{transition}` | `instance`, `from`, `to` (`closed`, `open`, `half_open`, `forced_open`, `disabled`) | `CircuitBreakerEvent.StateTransition` |
 | `r4c.retry.retries` | `LongCounter` | `{retry}` | `instance` | `RetryEvent.Retrying` |
 | `r4c.retry.gave.up` | `LongCounter` | `{call}` | `instance`, `reason` (`max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`) | `RetryEvent.GaveUp` |
@@ -79,6 +79,7 @@ Every metric has an `instance` attribute: the policy instance id (the `name` in 
 | `r4c.hedge.won` | `LongCounter` | `{call}` | `instance` | `HedgeEvent.Won` |
 | `r4c.hedge.skipped` | `LongCounter` | `{attempt}` | `instance`, `reason` (`budget_exhausted`, `rejected`, `aborted`) | `HedgeEvent.Skipped` |
 | `r4c.hedge.failed` | `LongCounter` | `{call}` | `instance` | `HedgeEvent.Failed` |
+| `r4c.adaptivelimit.limit.changes` | `LongCounter` | `{window}` | `instance` | `AdaptiveLimitEvent.LimitChanged` |
 | `r4c.timeout.timed.out` | `LongCounter` | `{call}` | `instance` | `TimeoutEvent.TimedOut` |
 | `r4c.fallback.applied` | `LongCounter` | `{call}` | `instance` | `FallbackEvent.Applied` |
 | `r4c.circuitbreaker.state` | `ObservableLongGauge` | none | `instance`, `state`: 1 for the current state, 0 for the other four | snapshot `state` |
@@ -88,6 +89,8 @@ Every metric has an `instance` attribute: the policy instance id (the `name` in 
 | `r4c.bulkhead.waiting.calls` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `waitingCalls` |
 | `r4c.bulkhead.max.concurrent` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `maxConcurrent` |
 | `r4c.ratelimiter.available.permits` | `ObservableLongGauge` | `{permit}` | `instance` | snapshot `availablePermits` |
+| `r4c.adaptivelimit.limit` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `limit` |
+| `r4c.adaptivelimit.concurrent.calls` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `inFlight` |
 
 - **Rates are percentages** (0 to 100) with unit `%`, as in the snapshot and the Micrometer module, not ratios (0 to 1) with unit `1`.
 - **A rate has no point until it means something.** The snapshot reports `-1` until the breaker's window holds `minimumCalls` calls (`halfOpenCalls` while half-open), while the breaker is open, forced open or disabled (there is no window), and, for `slow.call.rate`, when slow-call detection is off. OpenTelemetry points cannot be NaN, so the module records no point for that instance at that collection: the series has a gap.

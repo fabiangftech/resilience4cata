@@ -1,6 +1,7 @@
 package dev.resilience4cata;
 
 import dev.resilience4cata.generated.AsyncCall;
+import dev.resilience4cata.generated.AdaptiveLimitPolicy;
 import dev.resilience4cata.generated.BulkheadPolicy;
 import dev.resilience4cata.generated.CircuitBreakerPolicy;
 import dev.resilience4cata.generated.ClassifierFailure;
@@ -38,7 +39,7 @@ import org.jspecify.annotations.Nullable;
  * }</pre>
  *
  * <p>Every policy is optional. They nest in the same order as in generated code, outermost first:
- * fallback, retry or hedge, circuit breaker, rate limiter, timeout, bulkhead, then the call. The order in
+ * fallback, retry or hedge, circuit breaker, rate limiter, adaptive limit, timeout, bulkhead, then the call. The order in
  * which the builder's methods are called does not matter. A hedge ({@link Builder#hedge()}) only works with
  * {@link #executeAsync}, and cannot be combined with a retry. A {@link Classifier} can decide what the retry
  * retries and what the breaker records, results included ({@link Builder#classifier}).
@@ -47,13 +48,13 @@ import org.jspecify.annotations.Nullable;
  * annotated methods: its policies are created by the registry under that id, so that
  * {@code registry.circuitBreaker("payments")} finds the breaker, and two pipelines (or a pipeline and an
  * annotation with {@code name = "payments"}) with the same id and configuration share their circuit
- * breaker, rate limiter, bulkhead and retry instances. The same id with a different configuration is an
+ * breaker, rate limiter, adaptive limit, bulkhead and retry instances. The same id with a different configuration is an
  * error, as for annotations.
  *
  * <p><b>Exceptions.</b> {@link #execute} declares the checked exception of the call, and throws the
  * call's own failure once retries give up, or the policies' unchecked rejections
- * ({@link CallNotPermittedException}, {@link RateLimitExceededException}, {@link CallTimeoutException},
- * {@link BulkheadFullException}), or a {@link ResultRejectedException} for a result that the retry's
+ * ({@link CallNotPermittedException}, {@link RateLimitExceededException}, {@link LimitExceededException},
+ * {@link CallTimeoutException}, {@link BulkheadFullException}), or a {@link ResultRejectedException} for a result that the retry's
  * classifier rejected, with {@link Builder#onExhaustedResult onExhaustedResult(THROW)}. A fallback may return a result, rethrow the failure it was given, or
  * throw an unchecked exception; any other checked exception it throws is wrapped in an
  * {@link java.lang.reflect.UndeclaredThrowableException}.
@@ -85,6 +86,7 @@ public final class Pipeline<T> {
     private final @Nullable CircuitBreakerPolicy circuitBreaker;
     private final @Nullable Classifier<? super T> circuitBreakerClassifier;
     private final @Nullable RateLimiterPolicy rateLimiter;
+    private final @Nullable AdaptiveLimitPolicy adaptiveLimit;
     private final @Nullable TimeoutPolicy timeout;
     private final @Nullable BulkheadPolicy bulkhead;
 
@@ -103,6 +105,9 @@ public final class Pipeline<T> {
         Step<RateLimiterConfig.Builder> rateLimiterStep = builder.rateLimiter;
         this.rateLimiter = rateLimiterStep == null ? null
                 : registry.rateLimiterPolicy(id, "", rateLimiterStep.config(), rateLimiterStep.overrides());
+        Step<AdaptiveLimitConfig.Builder> adaptiveLimitStep = builder.adaptiveLimit;
+        this.adaptiveLimit = adaptiveLimitStep == null ? null
+                : registry.adaptiveLimitPolicy(id, "", adaptiveLimitStep.config(), adaptiveLimitStep.overrides());
         Step<TimeoutConfig.Builder> timeoutStep = builder.timeout;
         this.timeout = timeoutStep == null ? null
                 : registry.timeoutPolicy(id, "", timeoutStep.config(), timeoutStep.overrides());
@@ -441,7 +446,26 @@ public final class Pipeline<T> {
         if (limiter != null && !limiter.tryAcquire()) {
             throw limiter.rejection();
         }
-        return timeoutLayer(call);
+        return adaptiveLimitLayer(call);
+    }
+
+    // java:S1181: a resilience layer must see every failure the call throws, Errors included, and relay it unchanged
+    @SuppressWarnings("java:S1181")
+    private <X extends Throwable> T adaptiveLimitLayer(PipelineCall<? extends T, X> call) throws X {
+        AdaptiveLimitPolicy limit = this.adaptiveLimit;
+        if (limit == null) {
+            return timeoutLayer(call);
+        }
+        long start = limit.acquire();
+        T result;
+        try {
+            result = timeoutLayer(call);
+        } catch (Throwable e) {
+            limit.onFailure(start, e);
+            throw e;
+        }
+        limit.onSuccess(start);
+        return result;
     }
 
     // java:S1181: a resilience layer must see every failure the call throws, Errors included, and relay it unchanged
@@ -504,6 +528,12 @@ public final class Pipeline<T> {
         if (timeoutPolicy != null) {
             AsyncCall<T> inner = next;
             outer = () -> timeoutPolicy.executeAsync(inner);
+            next = outer;
+        }
+        AdaptiveLimitPolicy limitPolicy = this.adaptiveLimit;
+        if (limitPolicy != null) {
+            AsyncCall<T> inner = next;
+            outer = () -> limitPolicy.executeAsync(inner);
             next = outer;
         }
         RateLimiterPolicy limiter = this.rateLimiter;
@@ -597,6 +627,9 @@ public final class Pipeline<T> {
         if (rateLimiter != null) {
             text.append(", rateLimiter");
         }
+        if (adaptiveLimit != null) {
+            text.append(", adaptiveLimit");
+        }
         if (timeout != null) {
             text.append(", timeout");
         }
@@ -638,6 +671,7 @@ public final class Pipeline<T> {
         private @Nullable Step<HedgeConfig.Builder> hedge;
         private @Nullable Step<CircuitBreakerConfig.Builder> circuitBreaker;
         private @Nullable Step<RateLimiterConfig.Builder> rateLimiter;
+        private @Nullable Step<AdaptiveLimitConfig.Builder> adaptiveLimit;
         private @Nullable Step<TimeoutConfig.Builder> timeout;
         private @Nullable Step<BulkheadConfig.Builder> bulkhead;
         private @Nullable Classifier<? super T> classifier;
@@ -828,6 +862,48 @@ public final class Pipeline<T> {
         public Builder<T> rateLimiter(String config, @Nullable Consumer<RateLimiterConfig.Builder> overrides) {
             once(rateLimiter, "rateLimiter");
             rateLimiter = new Step<>(Objects.requireNonNull(config, CONFIG), overrides);
+            return this;
+        }
+
+        /**
+         * Adds an adaptive limit with the registry's defaults.
+         *
+         * @return this builder
+         */
+        public Builder<T> adaptiveLimit() {
+            return adaptiveLimit("", null);
+        }
+
+        /**
+         * Adds an adaptive limit with a named configuration.
+         *
+         * @param config the name of a configuration registered with {@code ResilienceRegistry.Builder.adaptiveLimit}
+         * @return this builder
+         */
+        public Builder<T> adaptiveLimit(String config) {
+            return adaptiveLimit(config, null);
+        }
+
+        /**
+         * Adds an adaptive limit with the registry's defaults and overrides.
+         *
+         * @param overrides applied to a builder that starts from the defaults
+         * @return this builder
+         */
+        public Builder<T> adaptiveLimit(Consumer<AdaptiveLimitConfig.Builder> overrides) {
+            return adaptiveLimit("", Objects.requireNonNull(overrides, OVERRIDES));
+        }
+
+        /**
+         * Adds an adaptive limit with a named configuration and overrides.
+         *
+         * @param config the name of a configuration, or {@code ""} for the defaults
+         * @param overrides applied to a builder that starts from that configuration; {@code null} for none
+         * @return this builder
+         */
+        public Builder<T> adaptiveLimit(String config, @Nullable Consumer<AdaptiveLimitConfig.Builder> overrides) {
+            once(adaptiveLimit, "adaptiveLimit");
+            adaptiveLimit = new Step<>(Objects.requireNonNull(config, CONFIG), overrides);
             return this;
         }
 

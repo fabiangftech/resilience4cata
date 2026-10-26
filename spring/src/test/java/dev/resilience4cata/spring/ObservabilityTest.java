@@ -103,8 +103,15 @@ class ObservabilityTest {
                     assertThat(one.retries()).isEmpty();
                     assertThat(endpoint.instance("nobody")).as("404").isNull();
 
-                    String json = JsonMapper.builder().build().writeValueAsString(all);
-                    assertThat(json).contains("\"instance\":\"payments\"", "\"state\":\"CLOSED\"", "\"maxAttempts\":3");
+                    dev.resilience4cata.ResilienceRegistry registry = context.getBean(dev.resilience4cata.ResilienceRegistry.class);
+                    registry.adaptiveLimitPolicy("Orders#place()", "orders", "", null);
+                    registry.hedgePolicy("Quotes#get()", "quotes", "", null);
+                    assertThat(endpoint.instance("orders")).isNotNull().satisfies(o -> assertThat(o.adaptiveLimits()).hasSize(1));
+                    assertThat(endpoint.instance("quotes")).isNotNull().satisfies(q -> assertThat(q.hedges()).hasSize(1));
+
+                    String json = JsonMapper.builder().build().writeValueAsString(endpoint.snapshot());
+                    assertThat(json).contains("\"instance\":\"payments\"", "\"state\":\"CLOSED\"", "\"maxAttempts\":3",
+                            "\"adaptiveLimits\":[{\"instance\":\"orders\",\"algorithm\":\"GRADIENT2\",\"limit\":20");
                 });
     }
 

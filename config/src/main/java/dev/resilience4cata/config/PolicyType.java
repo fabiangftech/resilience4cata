@@ -1,5 +1,6 @@
 package dev.resilience4cata.config;
 
+import dev.resilience4cata.AdaptiveLimitConfig;
 import dev.resilience4cata.BulkheadConfig;
 import dev.resilience4cata.CircuitBreakerConfig;
 import dev.resilience4cata.HedgeConfig;
@@ -110,8 +111,29 @@ final class PolicyType<B, C> {
                     Attribute.duration("period", RateLimiterConfig.Builder::period),
                     Attribute.duration("maxWait", RateLimiterConfig.Builder::maxWait)));
 
+    static final PolicyType<AdaptiveLimitConfig.Builder, AdaptiveLimitConfig> ADAPTIVE_LIMIT = new PolicyType<>(
+            "adaptiveLimit", AdaptiveLimitConfig.DEFAULTS, AdaptiveLimitConfig::toBuilder, AdaptiveLimitConfig.Builder::build,
+            ResilienceRegistry.Builder::adaptiveLimitDefaults, ResilienceRegistry.Builder::adaptiveLimitOverlay,
+            ResilienceRegistry.Builder::adaptiveLimitInstance, List.of(
+                    Attribute.bool(ENABLED, AdaptiveLimitConfig.Builder::enabled),
+                    Attribute.enumeration("algorithm", AdaptiveLimitConfig.Algorithm.class,
+                            AdaptiveLimitConfig.Builder::algorithm),
+                    Attribute.integer("initialLimit", AdaptiveLimitConfig.Builder::initialLimit),
+                    Attribute.integer("minLimit", AdaptiveLimitConfig.Builder::minLimit),
+                    Attribute.integer("maxLimit", AdaptiveLimitConfig.Builder::maxLimit),
+                    Attribute.duration("window", AdaptiveLimitConfig.Builder::window),
+                    Attribute.integer("minWindowSamples", AdaptiveLimitConfig.Builder::minWindowSamples),
+                    Attribute.classes("dropOn", AdaptiveLimitConfig.Builder::dropOn),
+                    Attribute.classes("ignoreOn", AdaptiveLimitConfig.Builder::ignoreOn),
+                    Attribute.real("smoothing", AdaptiveLimitConfig.Builder::smoothing),
+                    Attribute.real("rttTolerance", AdaptiveLimitConfig.Builder::rttTolerance),
+                    Attribute.integer("longWindow", AdaptiveLimitConfig.Builder::longWindow),
+                    Attribute.integer("queueSize", AdaptiveLimitConfig.Builder::queueSize),
+                    Attribute.real("backoffRatio", AdaptiveLimitConfig.Builder::backoffRatio)));
+
     /** Every configurable policy, in nesting order. */
-    static final List<PolicyType<?, ?>> ALL = List.of(RETRY, HEDGE, CIRCUIT_BREAKER, RATE_LIMITER, TIMEOUT, BULKHEAD);
+    static final List<PolicyType<?, ?>> ALL = List.of(RETRY, HEDGE, CIRCUIT_BREAKER, RATE_LIMITER, ADAPTIVE_LIMIT, TIMEOUT,
+            BULKHEAD);
 
     final String name;
     private final C builtIn;

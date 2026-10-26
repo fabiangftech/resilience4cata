@@ -1,5 +1,6 @@
 package dev.resilience4cata.micronaut;
 
+import dev.resilience4cata.AdaptiveLimitSnapshot;
 import dev.resilience4cata.BulkheadSnapshot;
 import dev.resilience4cata.CircuitBreakerSnapshot;
 import dev.resilience4cata.HedgeConfig;
@@ -37,7 +38,8 @@ import org.jspecify.annotations.Nullable;
  */
 @Introspected(classes = {ResilienceSnapshot.class, CircuitBreakerSnapshot.class, RetrySnapshot.class,
         RetrySnapshot.Budget.class, RateLimiterSnapshot.class, TimeoutSnapshot.class, BulkheadSnapshot.class,
-        HedgeSnapshot.class, HedgeSnapshot.Budget.class, RetryConfig.class, TimeoutConfig.class, HedgeConfig.class})
+        HedgeSnapshot.class, HedgeSnapshot.Budget.class, AdaptiveLimitSnapshot.class, RetryConfig.class, TimeoutConfig.class,
+        HedgeConfig.class})
 final class Snapshots {
 
     private Snapshots() {

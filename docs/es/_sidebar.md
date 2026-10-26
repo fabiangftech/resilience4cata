@@ -8,6 +8,7 @@
   - [Hedge](/es/policies/hedge.md)
   - [Circuit breaker](/es/policies/circuit-breaker.md)
   - [Rate limiter](/es/policies/rate-limiter.md)
+  - [Adaptive limit](/es/policies/adaptive-limit.md)
   - [Timeout](/es/policies/timeout.md)
   - [Bulkhead](/es/policies/bulkhead.md)
   - [Fallback](/es/policies/fallback.md)

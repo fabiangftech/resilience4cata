@@ -163,6 +163,34 @@ class OpenTelemetryMetricsTest {
     }
 
     @Test
+    void adaptiveLimitGaugesRejectionsAndLimitChanges() throws Exception {
+        ResilienceRegistry registry = metrics.register(ResilienceTesting.registry(clock)).build();
+        metrics.bindTo(registry);
+        Pipeline<String> pipeline = Pipeline.builder(registry, "orders", String.class)
+                .adaptiveLimit(a -> a.algorithm(dev.resilience4cata.AdaptiveLimitConfig.Algorithm.AIMD).initialLimit(1)
+                        .minWindowSamples(1))
+                .build();
+
+        String result = pipeline.execute(() -> {
+            collect(); // inside the call: the only slot taken
+            assertThatThrownBy(() -> pipeline.execute(() -> "nested"))
+                    .isInstanceOf(dev.resilience4cata.LimitExceededException.class);
+            clock.advance(Duration.ofSeconds(1)); // the window ends when this call does: AIMD adds one
+            return "done";
+        });
+        assertThat(result).isEqualTo("done");
+        assertThat(gauge("r4c.adaptivelimit.concurrent.calls", instance("orders"))).contains(1.0);
+        assertThat(gauge("r4c.adaptivelimit.limit", instance("orders"))).contains(1.0);
+
+        collect();
+        assertThat(gauge("r4c.adaptivelimit.concurrent.calls", instance("orders"))).contains(0.0);
+        assertThat(gauge("r4c.adaptivelimit.limit", instance("orders"))).contains(2.0);
+        assertThat(metric("r4c.adaptivelimit.limit").getType()).isEqualTo(MetricDataType.LONG_GAUGE);
+        assertThat(counter("r4c.calls.rejected", attrs("instance", "orders", "kind", "adaptivelimit"))).isEqualTo(1);
+        assertThat(counter("r4c.adaptivelimit.limit.changes", attrs("instance", "orders"))).isEqualTo(1);
+    }
+
+    @Test
     void rateLimiterGaugeAndRejections() throws Exception {
         ResilienceRegistry registry = metrics.register(ResilienceTesting.registry(clock)).build();
         metrics.bindTo(registry);

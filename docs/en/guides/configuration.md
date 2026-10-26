@@ -117,7 +117,7 @@ profiles.<profile>.<any key above>=…            # applies only while <profile>
 profiles.active=<profile>,<profile>             # comma-separated; later profiles win
 ```
 
-- **Policies:** `retry`, `circuitBreaker`, `rateLimiter`, `timeout`, `bulkhead`. There are no `fallback` keys.
+- **Policies:** `retry`, `hedge`, `circuitBreaker`, `rateLimiter`, `adaptiveLimit`, `timeout`, `bulkhead`. There are no `fallback` keys.
 - **Attributes** are the annotation's, with the same names (`maxAttempts`, `waitInOpen`, …). The timeout's duration is `timeout.value`. `name`, `config`, `classifier` and `onExhaustedResult` can only be set in annotations.
 - **Spelling:** camelCase and kebab-case are both accepted (`circuitBreaker.waitInOpen` = `circuit-breaker.wait-in-open`). Setting the same key twice in one source, even under two spellings, is an error ([`R4C-CFG-005`](../errors.md#r4c-cfg-005)).
 - **Prefix:** any key may start with `r4c.` or `resilience4cata.`. In system properties the prefix is **required**, and system properties without it are ignored.

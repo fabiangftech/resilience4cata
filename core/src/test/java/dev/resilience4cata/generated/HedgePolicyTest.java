@@ -435,6 +435,8 @@ class HedgePolicyTest {
         assertThat(hedge.verdictForTest(new CallNotPermittedException("cb"))).isEqualTo(HedgePolicy.Verdict.REJECTED);
         assertThat(hedge.verdictForTest(new dev.resilience4cata.BulkheadFullException("b")))
                 .isEqualTo(HedgePolicy.Verdict.REJECTED);
+        assertThat(hedge.verdictForTest(new dev.resilience4cata.LimitExceededException("a")))
+                .as("a full adaptive limit stops the hedges too").isEqualTo(HedgePolicy.Verdict.REJECTED);
     }
 
     // ---- the production timer

@@ -2,6 +2,7 @@ package dev.resilience4cata.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.resilience4cata.AdaptiveLimitConfig;
 import dev.resilience4cata.BulkheadConfig;
 import dev.resilience4cata.CircuitBreakerConfig;
 import dev.resilience4cata.HedgeConfig;
@@ -47,6 +48,7 @@ class ConfigurationReferenceTest {
             "hedge", r -> r.hedgeConfig(""),
             "circuitBreaker", r -> r.circuitBreakerConfig(""),
             "rateLimiter", r -> r.rateLimiterConfig(""),
+            "adaptiveLimit", r -> r.adaptiveLimitConfig(""),
             "timeout", r -> r.timeoutConfig(""),
             "bulkhead", r -> r.bulkheadConfig(""));
     private static final Map<String, Object> BUILT_IN = Map.of(
@@ -54,6 +56,7 @@ class ConfigurationReferenceTest {
             "hedge", HedgeConfig.DEFAULTS,
             "circuitBreaker", CircuitBreakerConfig.DEFAULTS,
             "rateLimiter", RateLimiterConfig.DEFAULTS,
+            "adaptiveLimit", AdaptiveLimitConfig.DEFAULTS,
             "timeout", TimeoutConfig.DEFAULTS,
             "bulkhead", BulkheadConfig.DEFAULTS);
 

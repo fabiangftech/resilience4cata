@@ -123,7 +123,7 @@ final class HttpCatalog implements CatalogApi {
 
 ### Los retries se detienen en cuanto el breaker se abre :id=open-breaker-stops-retries
 
-Es el comportamiento por defecto, a propósito. El retry está fuera del circuit breaker (orden: Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead), y un retry nunca reintenta una `CallNotPermittedException`: una vez que el breaker rechaza un intento, reintentar solo sería rechazado otra vez. El retry se rinde con `GaveUp(reason = NOT_RETRYABLE)` y vuelve a lanzar la `CallNotPermittedException` (o se ejecuta el fallback).
+Es el comportamiento por defecto, a propósito. El retry está fuera del circuit breaker (orden: Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead), y un retry nunca reintenta una `CallNotPermittedException`: una vez que el breaker rechaza un intento, reintentar solo sería rechazado otra vez. El retry se rinde con `GaveUp(reason = NOT_RETRYABLE)` y vuelve a lanzar la `CallNotPermittedException` (o se ejecuta el fallback).
 
 Esto vale digan lo que digan `abortOn` y `retryOn`, y también con un classifier; no es una entrada de `abortOn`, así que definir tu propia lista no lo quita. Consulta [Retry](../policies/retry.md) y [Circuit breaker](../policies/circuit-breaker.md).
 

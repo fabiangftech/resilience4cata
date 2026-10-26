@@ -6,7 +6,7 @@
 
 | Annotation | Position | Return types | Defaults |
 |---|---|---|---|
-| `@CircuitBreaker` | 3 of 6, inside Retry | sync and `CompletionStage` | window of 100 calls, opens at 50% failures after 100 calls, 60 s open, 10 probes, slow-call detection off |
+| `@CircuitBreaker` | 3 of 7, inside Retry | sync and `CompletionStage` | window of 100 calls, opens at 50% failures after 100 calls, 60 s open, 10 probes, slow-call detection off |
 
 </div>
 

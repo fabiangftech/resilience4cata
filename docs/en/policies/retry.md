@@ -6,7 +6,7 @@
 
 | Annotation | Position | Return types | Defaults |
 |---|---|---|---|
-| `@Retry` | 2 of 6, inside Fallback | sync and `CompletionStage` | 3 attempts, 200 ms exponential backoff ×2 up to 10 s, full jitter, retries `Exception` |
+| `@Retry` | 2 of 7, inside Fallback | sync and `CompletionStage` | 3 attempts, 200 ms exponential backoff ×2 up to 10 s, full jitter, retries `Exception` |
 
 </div>
 

@@ -4,6 +4,17 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Unreleased] :id=unreleased
+
+### Agregado
+
+- **`@AdaptiveLimit`: límites de concurrencia adaptativos**, sync y async, en interfaces, clases anotadas y `Pipeline.adaptiveLimit(...)`. Como un bulkhead, limita las llamadas que corren al mismo tiempo, pero mueve el límite por sí mismo, entre `minLimit` y `maxLimit`, según la latencia de las llamadas: `GRADIENT2` (el valor por defecto) compara la latencia promedio de cada ventana con un promedio de largo plazo, `AIMD` crece de a uno y retrocede por `backoffRatio` después de un descarte; los dos siguen concurrency-limits de Netflix. Un fallo de `dropOn` (por defecto una `CallTimeoutException`, una `BulkheadFullException` o una `TimeoutException` de las políticas de adentro) cuenta como descarte; los demás fallos no son muestras. Un límite lleno rechaza enseguida con la nueva `LimitExceededException`. El límite se recalcula una vez por ventana (`window`, al menos `minWindowSamples` llamadas) en el hilo que termina una llamada después de que la ventana terminó: sin hilo de fondo, sin asignaciones en el camino de éxito. Está entre el rate limiter y el timeout: `Fallback → Retry | Hedge → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead`. API nueva: `AdaptiveLimitConfig` (con el ajuste de los algoritmos: `smoothing`, `rttTolerance`, `longWindow`, `queueSize`, `backoffRatio`), `AdaptiveLimitHandle` desde `registry.adaptiveLimit(id)`, `AdaptiveLimitSnapshot` en `registry.snapshot().adaptiveLimits()`, `AdaptiveLimitEvent.Rejected` y `LimitChanged`, `adaptiveLimitDefaults`, `adaptiveLimit`, `adaptiveLimitOverlay` y `adaptiveLimitInstance` en el builder del registry, claves de configuración externa `*.adaptiveLimit.*`, y las métricas `r4c.adaptivelimit.limit`, `r4c.adaptivelimit.concurrent.calls`, `r4c.adaptivelimit.limit.changes` y `r4c.calls.rejected{kind=adaptivelimit}` en los dos módulos de métricas. Nuevo error del procesador [R4C-ATR-009](errors.md#r4c-atr-009). Consulta [Adaptive limit](policies/adaptive-limit.md).
+- `@Hedge` deja de lanzar intentos cuando un adaptive limit rechaza uno, como con un breaker abierto o un bulkhead lleno.
+
+### Corregido
+
+- El endpoint `resilience4cata` del actuator de Spring Boot ahora incluye los hedges cuando reporta una sola instancia (`/actuator/resilience4cata/{instance}`).
+
 ## [0.5.0] - 2026-10-26 :id=0.5.0
 
 ### Agregado

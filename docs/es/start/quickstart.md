@@ -164,12 +164,12 @@ La segunda llamada tarda hasta unos cientos de milisegundos: entre intentos, el 
 - **La primera llamada** falló con `IOException`, así que el retry esperó y volvió a intentar; el segundo intento devolvió `9.99`.
 - **El segundo wrapper** siempre falla, así que después de tres intentos respondió el fallback `unknownPrice` con `0`.
 - **El breaker** registró cada intento, cinco llamadas con cuatro fallas, pero siguió `CLOSED`: por defecto solo evalúa cuando su ventana tiene 100 llamadas (`minimumCalls`).
-- Las políticas se anidan en un orden fijo, de afuera hacia adentro: `Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead → method`. Por eso el fallback ve el resultado final y cada intento del retry tiene su propio timeout de dos segundos.
+- Las políticas se anidan en un orden fijo, de afuera hacia adentro: `Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method`. Por eso el fallback ve el resultado final y cada intento del retry tiene su propio timeout de dos segundos.
 
 ## Próximos pasos
 
 - [Cómo funciona](how-it-works.md): qué genera el procesador, los ids de instancia, de dónde viene la configuración.
-- [Políticas](../policies/README.md): cada atributo de las seis políticas, con sus valores por defecto.
+- [Políticas](../policies/README.md): cada atributo de cada política, con sus valores por defecto.
 - [Configuración](../guides/configuration.md): ajusta el mismo código desde un archivo properties, variables de entorno o propiedades del sistema.
 - [Tests](../guides/testing.md): ejecuta este ejemplo sobre un `ManualClock`, sin esperas reales.
 - [Métodos async](../guides/async.md): devuelve un `CompletableFuture` y nada se bloquea.

@@ -71,7 +71,7 @@ Cada métrica tiene un atributo `instance`: el id de la instancia de la polític
 
 | Nombre | Instrumento de OpenTelemetry | Unidad | Atributos | Origen |
 |---|---|---|---|---|
-| `r4c.calls.rejected` | `LongCounter` | `{call}` | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `bulkhead` | `CircuitBreakerEvent.CallNotPermitted`, `RateLimiterEvent.Rejected`, `BulkheadEvent.Rejected` |
+| `r4c.calls.rejected` | `LongCounter` | `{call}` | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CircuitBreakerEvent.CallNotPermitted`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
 | `r4c.circuitbreaker.transitions` | `LongCounter` | `{transition}` | `instance`, `from`, `to` (`closed`, `open`, `half_open`, `forced_open`, `disabled`) | `CircuitBreakerEvent.StateTransition` |
 | `r4c.retry.retries` | `LongCounter` | `{retry}` | `instance` | `RetryEvent.Retrying` |
 | `r4c.retry.gave.up` | `LongCounter` | `{call}` | `instance`, `reason` (`max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`) | `RetryEvent.GaveUp` |
@@ -79,6 +79,7 @@ Cada métrica tiene un atributo `instance`: el id de la instancia de la polític
 | `r4c.hedge.won` | `LongCounter` | `{call}` | `instance` | `HedgeEvent.Won` |
 | `r4c.hedge.skipped` | `LongCounter` | `{attempt}` | `instance`, `reason` (`budget_exhausted`, `rejected`, `aborted`) | `HedgeEvent.Skipped` |
 | `r4c.hedge.failed` | `LongCounter` | `{call}` | `instance` | `HedgeEvent.Failed` |
+| `r4c.adaptivelimit.limit.changes` | `LongCounter` | `{window}` | `instance` | `AdaptiveLimitEvent.LimitChanged` |
 | `r4c.timeout.timed.out` | `LongCounter` | `{call}` | `instance` | `TimeoutEvent.TimedOut` |
 | `r4c.fallback.applied` | `LongCounter` | `{call}` | `instance` | `FallbackEvent.Applied` |
 | `r4c.circuitbreaker.state` | `ObservableLongGauge` | ninguna | `instance`, `state`: 1 para el estado actual, 0 para los otros cuatro | `state` del snapshot |
@@ -88,6 +89,8 @@ Cada métrica tiene un atributo `instance`: el id de la instancia de la polític
 | `r4c.bulkhead.waiting.calls` | `ObservableLongGauge` | `{call}` | `instance` | `waitingCalls` del snapshot |
 | `r4c.bulkhead.max.concurrent` | `ObservableLongGauge` | `{call}` | `instance` | `maxConcurrent` del snapshot |
 | `r4c.ratelimiter.available.permits` | `ObservableLongGauge` | `{permit}` | `instance` | `availablePermits` del snapshot |
+| `r4c.adaptivelimit.limit` | `ObservableLongGauge` | `{call}` | `instance` | `limit` del snapshot |
+| `r4c.adaptivelimit.concurrent.calls` | `ObservableLongGauge` | `{call}` | `instance` | `inFlight` del snapshot |
 
 - **Las tasas son porcentajes** (de 0 a 100) con unidad `%`, como en el snapshot y en el módulo de Micrometer, no proporciones (de 0 a 1) con unidad `1`.
 - **Una tasa no tiene punto hasta que significa algo.** El snapshot reporta `-1` hasta que la ventana del breaker contiene `minimumCalls` llamadas (`halfOpenCalls` mientras está semiabierto), mientras el breaker está abierto, forzado abierto o deshabilitado (no hay ventana) y, para `slow.call.rate`, cuando la detección de llamadas lentas está desactivada. Los puntos de OpenTelemetry no pueden ser NaN, así que el módulo no registra ningún punto para esa instancia en esa recolección: la serie tiene un hueco.

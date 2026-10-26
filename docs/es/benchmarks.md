@@ -385,6 +385,25 @@ Un refactor del mismo cambio también movió el callback async del bulkhead a un
 
 Cuando el hedge salta, el tiempo es la espera más la precisión del timer de cada librería: el nuestro trabaja en ticks de un dieciseisavo de la espera, al menos 1 ms, y salta hasta unos dos ticks tarde, así que una espera de 1 ms hace el hedge después de unos 2 ms; el executor programado de Resilience4j salta a tiempo pero deja encolada cada espera cancelada, que es donde se va la mayor parte de su costo en el camino común. Las subclases generadas sin `final` no cambiaron nada medible (`SubclassBenchmark` dentro del ruido).
 
+## Adaptive limit, 0.6.0 (2026-10-26, AWS Graviton3)
+
+Base: `67e1ebd` (0.5.0 más docs). Nueva: la integración de `@AdaptiveLimit`. Mismo método que arriba (`infra/bench.sh`, `c7g.xlarge`, 3 forks; calibración 20.47–20.50 ns en 19 máquinas). `AdaptiveLimitBenchmark` es nuevo, así que no tiene base; ns/op y B/op, 1 / 4 hilos, todos los hilos sobre el mismo limitador (ajustes de equidad en el Javadoc del benchmark: los mismos límites, la tolerancia y las ventanas por defecto de Netflix, y `minRttThreshold(0)` para que Netflix registre cada muestra, como hace `@AdaptiveLimit`):
+
+| Benchmark | ns/op, 1 / 4 hilos | B/op, 1 / 4 hilos |
+|---|---:|---:|
+| `@AdaptiveLimit` (Gradient2, límite nunca alcanzado) | 86.3 / 380 | 0 / 0 |
+| ídem, async sobre un stage ya completo | 108.7 / 565 | 48 / 48 |
+| ídem, cada llamada rechazada (límite lleno) | 2.1 / 2.1 | 0 / 0 |
+| `@Bulkhead` fijo con el mismo límite | 20.5 / 284 | 0 / 0 |
+| concurrency-limits 0.5.4 de Netflix, `SimpleLimiter` + `Gradient2Limit` con ventanas | 118.0 / 1087 | 40 / 95 |
+| Netflix, cada llamada rechazada | 3.0 / 2.9 | 0 / 0 |
+
+- **La diferencia con el bulkhead fijo es el reloj.** Un límite adaptativo tiene que medir cada llamada, así que lee `System.nanoTime()` dos veces. En esta máquina una lectura cuesta unos 33 ns (el rate limiter agotado, que la lee una vez y hace poco más, tarda 34.6 ns), así que las dos lecturas explican los 66 ns entre `@AdaptiveLimit` y `@Bulkhead` con un hilo; el trabajo propio del limitador (el lugar, la muestra en la franja del hilo, el chequeo de la ventana) queda dentro del ruido de eso.
+- **Contra el limitador de Netflix:** 27 % más rápido con un hilo y 2.9 veces más rápido con cuatro, sin asignar memoria. Netflix asigna el `Optional` y el listener de cada llamada, y su muestra por ventana la comparten todos los hilos, mientras que `@AdaptiveLimit` escribe cada muestra en la franja del hilo que llama y solo el hilo que cierra la ventana las lee todas.
+- **Los rechazos solo leen:** 2.1 ns sea cual sea el número de hilos.
+
+El resto de la suite no se movió, salvo `Pipeline`: un pipeline construido sin `adaptiveLimit` ahora revisa un campo nulo más por llamada, +0.2 ns (`pipelineRetryCircuitBreaker` 3.0 → 3.2 ns; el código generado no cambia). Cuatro benchmarks de 4 hilos se movieron entre 15 y 48 % en la primera corrida (`CircuitBreakerBenchmark.resilience4cataMixed`, `PipelineBenchmark.pipelineFour`, `BulkheadBenchmark.resilience4cataWaiting`, `HedgeBenchmark.resilience4cataPending`) aunque su código no cambió; con 6 forks cada uno, los rangos de base y nueva se superponen por completo (−7 % a +5 %), así que era ruido.
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos (`-f 1 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`, unos 4 minutos) y falla si alguno asigna su presupuesto + 1 B/op o más, o si falta en los resultados. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.

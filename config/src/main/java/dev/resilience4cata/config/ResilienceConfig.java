@@ -1,5 +1,6 @@
 package dev.resilience4cata.config;
 
+import dev.resilience4cata.AdaptiveLimitSnapshot;
 import dev.resilience4cata.BulkheadSnapshot;
 import dev.resilience4cata.CircuitBreakerSnapshot;
 import dev.resilience4cata.HedgeSnapshot;
@@ -48,8 +49,8 @@ import org.jspecify.annotations.Nullable;
  * profiles.test.configs.external.retry.maxAttempts=1    # applied only when the profile is active
  * profiles.active=test                                  # comma-separated, later profiles win
  * </pre>
- * Policies are {@code retry}, {@code circuitBreaker}, {@code rateLimiter}, {@code timeout} and
- * {@code bulkhead}; attributes are those of the annotation with the same name ({@code @Timeout}'s
+ * Policies are {@code retry}, {@code hedge}, {@code circuitBreaker}, {@code rateLimiter}, {@code adaptiveLimit},
+ * {@code timeout} and {@code bulkhead}; attributes are those of the annotation with the same name ({@code @Timeout}'s
  * duration is {@code timeout.value}). Policy and attribute names may be written in camelCase or
  * kebab-case ({@code circuit-breaker.wait-in-open}). Config and profile names are lowercase letters
  * and digits separated by single hyphens. An instance id is the policy's {@code name}, or the derived
@@ -199,6 +200,7 @@ public final class ResilienceConfig {
         known.put(PolicyType.CIRCUIT_BREAKER, ids(snapshot.circuitBreakers(), CircuitBreakerSnapshot::instance));
         known.put(PolicyType.RATE_LIMITER, ids(snapshot.rateLimiters(), RateLimiterSnapshot::instance));
         known.put(PolicyType.TIMEOUT, ids(snapshot.timeouts(), TimeoutSnapshot::instance));
+        known.put(PolicyType.ADAPTIVE_LIMIT, ids(snapshot.adaptiveLimits(), AdaptiveLimitSnapshot::instance));
         known.put(PolicyType.BULKHEAD, ids(snapshot.bulkheads(), BulkheadSnapshot::instance));
         Problems problems = new Problems();
         instances.forEach((id, policies) -> policies.forEach((policy, settings) -> {

@@ -5,6 +5,7 @@ import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.HedgeCancelledException;
 import dev.resilience4cata.HedgeConfig;
 import dev.resilience4cata.HedgeSnapshot;
+import dev.resilience4cata.LimitExceededException;
 import dev.resilience4cata.RateLimitExceededException;
 import dev.resilience4cata.Ticker;
 import dev.resilience4cata.event.HedgeEvent;
@@ -268,7 +269,8 @@ public final class HedgePolicy {
                 }
             }
             if (CallNotPermittedException.class.isAssignableFrom(type) || BulkheadFullException.class.isAssignableFrom(type)
-                    || RateLimitExceededException.class.isAssignableFrom(type)) {
+                    || RateLimitExceededException.class.isAssignableFrom(type)
+                    || LimitExceededException.class.isAssignableFrom(type)) {
                 return Verdict.REJECTED;
             }
             for (Class<? extends Throwable> hedge : hedgeOn) {

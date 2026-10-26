@@ -15,6 +15,9 @@
     "name" : "resilience4cata.defaults.rate-limiter",
     "description" : "Defaults of every rate limiter: each annotation and named config starts from them."
   }, {
+    "name" : "resilience4cata.defaults.adaptive-limit",
+    "description" : "Defaults of every adaptive limit: each annotation and named config starts from them."
+  }, {
     "name" : "resilience4cata.defaults.timeout",
     "description" : "Defaults of every timeout: each annotation and named config starts from them."
   }, {
@@ -204,6 +207,75 @@
     "defaultValue" : "0",
     "description" : "Default maxWait of every rate limiter (a duration such as 250ms, 2s or PT2S)."
   }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.enabled",
+    "type" : "java.lang.Boolean",
+    "defaultValue" : true,
+    "description" : "Default enabled of every adaptive limit (true or false)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.algorithm",
+    "type" : "java.lang.String",
+    "defaultValue" : "gradient2",
+    "description" : "Default algorithm of every adaptive limit (one of the listed values)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.initial-limit",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 20,
+    "description" : "Default initialLimit of every adaptive limit (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.min-limit",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 1,
+    "description" : "Default minLimit of every adaptive limit (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.max-limit",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 200,
+    "description" : "Default maxLimit of every adaptive limit (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.window",
+    "type" : "java.time.Duration",
+    "defaultValue" : "1s",
+    "description" : "Default window of every adaptive limit (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.min-window-samples",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 10,
+    "description" : "Default minWindowSamples of every adaptive limit (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.drop-on",
+    "type" : "java.util.List<java.lang.Class<? extends java.lang.Throwable>>",
+    "defaultValue" : [ "dev.resilience4cata.CallTimeoutException", "dev.resilience4cata.BulkheadFullException", "java.util.concurrent.TimeoutException" ],
+    "description" : "Default dropOn of every adaptive limit (exception class names)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.ignore-on",
+    "type" : "java.util.List<java.lang.Class<? extends java.lang.Throwable>>",
+    "description" : "Default ignoreOn of every adaptive limit (exception class names)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.smoothing",
+    "type" : "java.lang.Double",
+    "defaultValue" : 0.2,
+    "description" : "Default smoothing of every adaptive limit (a number)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.rtt-tolerance",
+    "type" : "java.lang.Double",
+    "defaultValue" : 1.5,
+    "description" : "Default rttTolerance of every adaptive limit (a number)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.long-window",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 600,
+    "description" : "Default longWindow of every adaptive limit (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.queue-size",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 4,
+    "description" : "Default queueSize of every adaptive limit (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.backoff-ratio",
+    "type" : "java.lang.Double",
+    "defaultValue" : 0.9,
+    "description" : "Default backoffRatio of every adaptive limit (a number)."
+  }, {
     "name" : "resilience4cata.defaults.timeout.enabled",
     "type" : "java.lang.Boolean",
     "defaultValue" : true,
@@ -263,6 +335,13 @@
       "value" : "count"
     }, {
       "value" : "time"
+    } ]
+  }, {
+    "name" : "resilience4cata.defaults.adaptive-limit.algorithm",
+    "values" : [ {
+      "value" : "gradient2"
+    }, {
+      "value" : "aimd"
     } ]
   } ]
 }

@@ -6,7 +6,7 @@
 
 | Annotation | Position | Return types | Defaults |
 |---|---|---|---|
-| `@Timeout` | 5 of 6, inside RateLimiter | sync and `CompletionStage` | 1 s per attempt |
+| `@Timeout` | 6 of 7, inside AdaptiveLimit | sync and `CompletionStage` | 1 s per attempt |
 
 </div>
 

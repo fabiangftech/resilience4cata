@@ -1,5 +1,6 @@
 package dev.resilience4cata;
 
+import dev.resilience4cata.generated.AdaptiveLimitPolicy;
 import dev.resilience4cata.generated.BulkheadPolicy;
 import dev.resilience4cata.generated.CircuitBreakerPolicy;
 import dev.resilience4cata.generated.EventDispatcher;
@@ -50,6 +51,7 @@ public final class ResilienceRegistry {
     private static final String RATE_LIMITER_NAME = "rateLimiter";
     private static final String TIMEOUT_NAME = "timeout";
     private static final String BULKHEAD_NAME = "bulkhead";
+    private static final String ADAPTIVE_LIMIT_NAME = "adaptiveLimit";
     private static final String DEFAULTS = "defaults";
     private static final String CONFIG_QUOTE = " config '";
     private static final String CONFIG = "config";
@@ -70,6 +72,8 @@ public final class ResilienceRegistry {
             new PolicyKind<>(TIMEOUT_NAME, TimeoutConfig::toBuilder, TimeoutConfig.Builder::build);
     private static final PolicyKind<BulkheadConfig, BulkheadConfig.Builder> BULKHEAD_KIND =
             new PolicyKind<>(BULKHEAD_NAME, BulkheadConfig::toBuilder, BulkheadConfig.Builder::build);
+    private static final PolicyKind<AdaptiveLimitConfig, AdaptiveLimitConfig.Builder> ADAPTIVE_LIMIT_KIND =
+            new PolicyKind<>(ADAPTIVE_LIMIT_NAME, AdaptiveLimitConfig::toBuilder, AdaptiveLimitConfig.Builder::build);
 
     private final RetryConfig retryDefaults;
     private final Map<String, RetryConfig> retryConfigs;
@@ -89,6 +93,9 @@ public final class ResilienceRegistry {
     private final BulkheadConfig bulkheadDefaults;
     private final Map<String, BulkheadConfig> bulkheadConfigs;
     private final ConcurrentHashMap<String, BulkheadPolicy> bulkheads = new ConcurrentHashMap<>();
+    private final AdaptiveLimitConfig adaptiveLimitDefaults;
+    private final Map<String, AdaptiveLimitConfig> adaptiveLimitConfigs;
+    private final ConcurrentHashMap<String, AdaptiveLimitPolicy> adaptiveLimits = new ConcurrentHashMap<>();
     private final PolicyEnvironment environment;
     private final Instances instances;
     /** {@link #onInstanceCreated} actions; read only when an instance is created, never on a call. */
@@ -98,7 +105,7 @@ public final class ResilienceRegistry {
     @SuppressWarnings("java:S107")
     private ResilienceRegistry(Configs<RetryConfig> retry, Configs<HedgeConfig> hedge,
             Configs<CircuitBreakerConfig> circuitBreaker, Configs<RateLimiterConfig> rateLimiter,
-            Configs<TimeoutConfig> timeout, Configs<BulkheadConfig> bulkhead,
+            Configs<TimeoutConfig> timeout, Configs<BulkheadConfig> bulkhead, Configs<AdaptiveLimitConfig> adaptiveLimit,
             PolicyEnvironment environment, Instances instances) {
         this.retryDefaults = retry.defaults();
         this.retryConfigs = Map.copyOf(retry.named());
@@ -112,6 +119,8 @@ public final class ResilienceRegistry {
         this.timeoutConfigs = Map.copyOf(timeout.named());
         this.bulkheadDefaults = bulkhead.defaults();
         this.bulkheadConfigs = Map.copyOf(bulkhead.named());
+        this.adaptiveLimitDefaults = adaptiveLimit.defaults();
+        this.adaptiveLimitConfigs = Map.copyOf(adaptiveLimit.named());
         this.environment = environment;
         this.instances = instances;
     }
@@ -130,7 +139,8 @@ public final class ResilienceRegistry {
             Map<String, Consumer<CircuitBreakerConfig.Builder>> circuitBreaker,
             Map<String, Consumer<RateLimiterConfig.Builder>> rateLimiter,
             Map<String, Consumer<TimeoutConfig.Builder>> timeout,
-            Map<String, Consumer<BulkheadConfig.Builder>> bulkhead) {
+            Map<String, Consumer<BulkheadConfig.Builder>> bulkhead,
+            Map<String, Consumer<AdaptiveLimitConfig.Builder>> adaptiveLimit) {
         Instances {
             retry = Map.copyOf(retry);
             hedge = Map.copyOf(hedge);
@@ -138,6 +148,7 @@ public final class ResilienceRegistry {
             rateLimiter = Map.copyOf(rateLimiter);
             timeout = Map.copyOf(timeout);
             bulkhead = Map.copyOf(bulkhead);
+            adaptiveLimit = Map.copyOf(adaptiveLimit);
         }
     }
 
@@ -256,6 +267,17 @@ public final class ResilienceRegistry {
      */
     public BulkheadConfig bulkheadConfig(String config) {
         return lookup(config, bulkheadDefaults, bulkheadConfigs, BULKHEAD_NAME);
+    }
+
+    /**
+     * Returns a named adaptive limit configuration.
+     *
+     * @param config the name; {@code ""} or {@code "default"} means the defaults
+     * @return the resolved configuration
+     * @throws IllegalArgumentException if no configuration has that name
+     */
+    public AdaptiveLimitConfig adaptiveLimitConfig(String config) {
+        return lookup(config, adaptiveLimitDefaults, adaptiveLimitConfigs, ADAPTIVE_LIMIT_NAME);
     }
 
     private static <C> C lookup(String config, C defaults, Map<String, C> named, String kind) {
@@ -453,6 +475,45 @@ public final class ResilienceRegistry {
     }
 
     /**
+     * Returns the adaptive limit for one call site, creating it on first use. Used by generated code; not
+     * intended to be called directly.
+     *
+     * @param instanceId derived id of the call site, used when {@code name} is empty
+     * @param name explicit instance name from the annotation, or {@code ""}
+     * @param config named configuration to start from, or {@code ""}
+     * @param overrides values set in the annotations, or {@code null}
+     * @return the adaptive limit
+     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
+     */
+    public AdaptiveLimitPolicy adaptiveLimitPolicy(String instanceId, String name, String config,
+            @Nullable Consumer<AdaptiveLimitConfig.Builder> overrides) {
+        String key = name.isEmpty() ? instanceId : name;
+        AdaptiveLimitConfig resolved = resolve(adaptiveLimitConfig(config), overrides, instances.adaptiveLimit().get(key),
+                ADAPTIVE_LIMIT_KIND, key, config);
+        AdaptiveLimitPolicy policy = instance(adaptiveLimits, key, k -> new AdaptiveLimitPolicy(k, resolved, environment));
+        if (!policy.config().equals(resolved)) {
+            throw conflict("Adaptive limit", key, policy.config(), resolved);
+        }
+        return policy;
+    }
+
+    /**
+     * Returns an adaptive limit, to inspect it. Adaptive limits are created when an annotated interface is
+     * wrapped.
+     *
+     * @param id the adaptive limit's {@code name}, or its derived id {@code <interface>#<method>(<parameter types>)}
+     * @return the adaptive limit
+     * @throws IllegalArgumentException if no adaptive limit has that id
+     */
+    public AdaptiveLimitHandle adaptiveLimit(String id) {
+        AdaptiveLimitHandle handle = adaptiveLimits.get(id);
+        if (handle == null) {
+            throw unknownInstance("adaptive limit", id, adaptiveLimits.keySet());
+        }
+        return handle;
+    }
+
+    /**
      * Returns a rate limiter, to inspect it. Rate limiters are created when an annotated interface is wrapped.
      *
      * @param id the rate limiter's {@code name}, or its derived id {@code <interface>#<method>(<parameter types>)}
@@ -583,7 +644,8 @@ public final class ResilienceRegistry {
                         TimeoutSnapshot::instance),
                 sorted(bulkheads, BulkheadPolicy::snapshot, BulkheadSnapshot::instance),
                 sorted(hedges, (String id, HedgePolicy hedge) -> new HedgeSnapshot(id, hedge.config(),
-                        hedge.budgetSnapshot()), HedgeSnapshot::instance));
+                        hedge.budgetSnapshot()), HedgeSnapshot::instance),
+                sorted(adaptiveLimits, AdaptiveLimitPolicy::snapshot, AdaptiveLimitSnapshot::instance));
     }
 
     private static <P, S> List<S> sorted(Map<String, P> policies, java.util.function.Function<P, S> snapshot,
@@ -625,6 +687,10 @@ public final class ResilienceRegistry {
         private final Map<String, Consumer<TimeoutConfig.Builder>> timeoutInstances = new LinkedHashMap<>();
         private final Map<String, Consumer<BulkheadConfig.Builder>> bulkheadOverlays = new LinkedHashMap<>();
         private final Map<String, Consumer<BulkheadConfig.Builder>> bulkheadInstances = new LinkedHashMap<>();
+        private @Nullable Consumer<AdaptiveLimitConfig.Builder> adaptiveLimitDefaults;
+        private final Map<String, Consumer<AdaptiveLimitConfig.Builder>> adaptiveLimitConfigs = new LinkedHashMap<>();
+        private final Map<String, Consumer<AdaptiveLimitConfig.Builder>> adaptiveLimitOverlays = new LinkedHashMap<>();
+        private final Map<String, Consumer<AdaptiveLimitConfig.Builder>> adaptiveLimitInstances = new LinkedHashMap<>();
         private final List<EventDispatcher.Subscription> listeners = new ArrayList<>();
         private @Nullable Ticker ticker;
         private @Nullable RandomGenerator random;
@@ -1046,6 +1112,68 @@ public final class ResilienceRegistry {
         }
 
         /**
+         * Changes the adaptive limit defaults, which every named configuration and annotation starts from.
+         *
+         * @param defaults applied to a builder that starts from {@link AdaptiveLimitConfig#DEFAULTS}
+         * @return this builder
+         */
+        public Builder adaptiveLimitDefaults(Consumer<AdaptiveLimitConfig.Builder> defaults) {
+            this.adaptiveLimitDefaults = Objects.requireNonNull(defaults, DEFAULTS);
+            return this;
+        }
+
+        /**
+         * Registers a named adaptive limit configuration, referenced from {@code @AdaptiveLimit(config = "name")}.
+         *
+         * @param name the name; must not be empty or {@code "default"}
+         * @param config applied to a builder that starts from the adaptive limit defaults
+         * @return this builder
+         */
+        public Builder adaptiveLimit(String name, Consumer<AdaptiveLimitConfig.Builder> config) {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(config, CONFIG);
+            register(adaptiveLimitConfigs, name, config, ADAPTIVE_LIMIT_NAME);
+            return this;
+        }
+
+        /**
+         * Overrides attributes of the named adaptive limit configuration {@code name}: applied after
+         * {@link #adaptiveLimit(String, Consumer)} whatever the order of the calls or, if {@code name} is not
+         * registered with it, on top of the adaptive limit defaults, which defines {@code name}. Several calls
+         * for the same name apply in call order. Meant for external configuration, which overrides code
+         * attribute by attribute: {@code ResilienceConfig.applyTo(...)} registers {@code configs.<name>.*}
+         * with it.
+         *
+         * @param name the name; must not be empty or {@code "default"}
+         * @param overlay applied after the programmatic configuration of {@code name}, if any
+         * @return this builder
+         */
+        public Builder adaptiveLimitOverlay(String name, Consumer<AdaptiveLimitConfig.Builder> overlay) {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(overlay, OVERLAY);
+            compose(adaptiveLimitOverlays, checkedName(name, ADAPTIVE_LIMIT_NAME, OVERLAY_METHOD), overlay);
+            return this;
+        }
+
+        /**
+         * Overrides attributes of one adaptive limit instance, after its named configuration and the values set
+         * in its annotation (or pipeline step). Applied once, when the instance is created; an id that no
+         * instance uses is ignored. Several calls for the same id apply in call order, so calls made
+         * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
+         *
+         * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
+         *     derived {@code <interface>#<method>(<parameter types>)}
+         * @param overrides applied last when the instance's configuration is resolved
+         * @return this builder
+         */
+        public Builder adaptiveLimitInstance(String id, Consumer<AdaptiveLimitConfig.Builder> overrides) {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(overrides, OVERRIDES);
+            compose(adaptiveLimitInstances, checkedId(id, ADAPTIVE_LIMIT_NAME), overrides);
+            return this;
+        }
+
+        /**
          * Replaces the system clock, {@code Thread.sleep} and the library's timer threads with
          * {@code ticker} for every policy this registry creates. Meant for tests: the
          * {@code resilience4cata-testkit} module's {@code ManualClock} makes retries with backoff,
@@ -1143,12 +1271,17 @@ public final class ResilienceRegistry {
             BulkheadConfig bulkhead = bulkhead(BulkheadConfig.DEFAULTS, bulkheadDefaults, DEFAULT);
             Map<String, BulkheadConfig> bulkheads = new LinkedHashMap<>();
             withOverlays(bulkheadConfigs, bulkheadOverlays).forEach((name, config) -> bulkheads.put(name, bulkhead(bulkhead, config, name)));
+            AdaptiveLimitConfig adaptiveLimit = adaptiveLimit(AdaptiveLimitConfig.DEFAULTS, adaptiveLimitDefaults, DEFAULT);
+            Map<String, AdaptiveLimitConfig> adaptiveLimits = new LinkedHashMap<>();
+            withOverlays(adaptiveLimitConfigs, adaptiveLimitOverlays)
+                    .forEach((name, config) -> adaptiveLimits.put(name, adaptiveLimit(adaptiveLimit, config, name)));
             return new ResilienceRegistry(new Configs<>(retry, retries), new Configs<>(hedge, hedges),
                     new Configs<>(circuitBreaker, circuitBreakers),
                     new Configs<>(rateLimiter, rateLimiters), new Configs<>(timeout, timeouts),
-                    new Configs<>(bulkhead, bulkheads), PolicyEnvironment.of(ticker, random).withEvents(EventDispatcher.of(listeners)),
+                    new Configs<>(bulkhead, bulkheads), new Configs<>(adaptiveLimit, adaptiveLimits),
+                    PolicyEnvironment.of(ticker, random).withEvents(EventDispatcher.of(listeners)),
                     new Instances(retryInstances, hedgeInstances, circuitBreakerInstances, rateLimiterInstances, timeoutInstances,
-                            bulkheadInstances));
+                            bulkheadInstances, adaptiveLimitInstances));
         }
 
         private static IllegalArgumentException invalidNamed(String kind, String name, IllegalArgumentException e) {
@@ -1186,6 +1319,20 @@ public final class ResilienceRegistry {
                 return builder.build();
             } catch (IllegalArgumentException e) {
                 throw invalidNamed(BULKHEAD_NAME, name, e);
+            }
+        }
+
+        private static AdaptiveLimitConfig adaptiveLimit(AdaptiveLimitConfig base,
+                @Nullable Consumer<AdaptiveLimitConfig.Builder> config, String name) {
+            if (config == null) {
+                return base;
+            }
+            AdaptiveLimitConfig.Builder builder = base.toBuilder();
+            config.accept(builder);
+            try {
+                return builder.build();
+            } catch (IllegalArgumentException e) {
+                throw invalidNamed(ADAPTIVE_LIMIT_NAME, name, e);
             }
         }
 

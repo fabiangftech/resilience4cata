@@ -27,7 +27,9 @@ class InstanceCreatedTest {
         registry.bulkheadPolicy("A#m()", "", "", null);
         registry.timeoutPolicy("A#m()", "", "", t -> t.timeout(Duration.ofSeconds(1)));
         registry.timeoutPolicy("A#m()", "", "", t -> t.timeout(Duration.ofSeconds(1))); // same id: no run
-        assertThat(seen).hasSize(5);
+        registry.adaptiveLimitPolicy("A#m()", "", "", null);
+        assertThat(seen).hasSize(6);
+        assertThat(seen.get(5).adaptiveLimits()).hasSize(1);
         ResilienceSnapshot last = seen.get(4);
         assertThat(last.retries()).hasSize(1);
         assertThat(last.rateLimiters()).hasSize(1);

@@ -47,6 +47,11 @@ class PipelineEquivalenceTest {
             }
 
             @Override
+            public String adaptive(String order) throws IOException {
+                return gateway.charge(order);
+            }
+
+            @Override
             public String everything(String order) throws IOException {
                 return gateway.charge(order);
             }
@@ -146,6 +151,42 @@ class PipelineEquivalenceTest {
         List<String> actual = trace(3, () -> pipeline.execute(() -> forPipeline.charge("o")));
 
         assertThat(actual).isEqualTo(expected).last().isEqualTo("RateLimitExceededException");
+    }
+
+    @Test
+    void anAdaptiveLimitMovesItsLimitTheSameWay() {
+        dev.resilience4cata.testkit.ManualClock clock = new dev.resilience4cata.testkit.ManualClock();
+        ResilienceRegistry timed = dev.resilience4cata.testkit.ResilienceTesting.registry(clock)
+                .adaptiveLimitDefaults(a -> a.minWindowSamples(1)).build();
+        java.util.function.IntPredicate fails = call -> call == 3 || call == 4 || call == 7;
+        PipelineEquivalentClient client = generated(new PipelineLegacyGateway(fails), timed);
+        PipelineLegacyGateway forPipeline = new PipelineLegacyGateway(fails);
+        Pipeline<String> pipeline = Pipeline.builder(timed, "adaptive", String.class)
+                .adaptiveLimit(a -> a.algorithm(dev.resilience4cata.AdaptiveLimitConfig.Algorithm.AIMD).initialLimit(10)
+                        .dropOn(List.of(IOException.class)))
+                .build();
+
+        // One call per window: each ends the window it completes in.
+        List<String> expected = trace(8, () -> {
+            clock.advance(Duration.ofSeconds(1));
+            return outcome(() -> client.adaptive("o")) + ", limit "
+                    + timed.adaptiveLimit(PREFIX + "adaptive(java.lang.String)").limit();
+        });
+        List<String> actual = trace(8, () -> {
+            clock.advance(Duration.ofSeconds(1));
+            return outcome(() -> pipeline.execute(() -> forPipeline.charge("o"))) + ", limit "
+                    + timed.adaptiveLimit("adaptive").limit();
+        });
+
+        assertThat(actual).isEqualTo(expected).contains("IOException, limit 9", "IOException, limit 8", "IOException, limit 7");
+    }
+
+    private static String outcome(Step step) {
+        try {
+            return step.run();
+        } catch (Exception e) {
+            return e.getClass().getSimpleName();
+        }
     }
 
     @Test

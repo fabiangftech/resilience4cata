@@ -124,6 +124,30 @@ class MicrometerMetricsTest {
     }
 
     @Test
+    void adaptiveLimitGaugesRejectionsAndLimitChanges() throws Exception {
+        metrics.bindTo(registry);
+        Pipeline<String> limited = Pipeline.builder(registry, "orders", String.class)
+                .adaptiveLimit(a -> a.algorithm(dev.resilience4cata.AdaptiveLimitConfig.Algorithm.AIMD).initialLimit(1)
+                        .minWindowSamples(1))
+                .build();
+
+        assertThat(gauge("r4c.adaptivelimit.limit", "orders").value()).isEqualTo(1.0);
+        String inside = limited.execute(() -> {
+            assertThat(gauge("r4c.adaptivelimit.concurrent.calls", "orders").value()).isEqualTo(1.0);
+            assertThatThrownBy(() -> limited.execute(() -> "nested"))
+                    .isInstanceOf(dev.resilience4cata.LimitExceededException.class);
+            clock.advance(Duration.ofSeconds(1)); // the window ends when this call does: AIMD adds one
+            return "done";
+        });
+        assertThat(inside).isEqualTo("done");
+        assertThat(gauge("r4c.adaptivelimit.concurrent.calls", "orders").value()).isEqualTo(0.0);
+        assertThat(gauge("r4c.adaptivelimit.limit", "orders").value()).isEqualTo(2.0);
+        assertThat(counters()).isEqualTo(Map.of(
+                "r4c.calls.rejected{instance=orders,kind=adaptivelimit}", 1.0,
+                "r4c.adaptivelimit.limit.changes{instance=orders}", 1.0));
+    }
+
+    @Test
     void bulkheadAndRateLimiterGaugesAndRejections() throws Exception {
         metrics.bindTo(registry);
         Pipeline<String> bulkheaded = Pipeline.builder(registry, "reports", String.class)

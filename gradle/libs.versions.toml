@@ -9,6 +9,7 @@ jspecify = "1.0.1"
 jmh = "1.37"
 jcstress = "0.16"
 resilience4j = "2.4.0"
+concurrencyLimits = "0.5.4"
 # api of the micrometer module; the Prometheus registry is test-only (examples), for the sample scrape in the docs.
 micrometer = "1.17.1"
 # The opentelemetry module: the API is an api dependency, the SDK is test-only.
@@ -55,6 +56,8 @@ resilience4j-timelimiter = { module = "io.github.resilience4j:resilience4j-timel
 resilience4j-bulkhead = { module = "io.github.resilience4j:resilience4j-bulkhead", version.ref = "resilience4j" }
 resilience4j-ratelimiter = { module = "io.github.resilience4j:resilience4j-ratelimiter", version.ref = "resilience4j" }
 resilience4j-hedge = { module = "io.github.resilience4j:resilience4j-hedge", version.ref = "resilience4j" }
+# Netflix concurrency-limits: only the benchmark module uses it, to compare @AdaptiveLimit with SimpleLimiter.
+concurrency-limits-core = { module = "com.netflix.concurrency-limits:concurrency-limits-core", version.ref = "concurrencyLimits" }
 micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
 opentelemetry-api = { module = "io.opentelemetry:opentelemetry-api", version.ref = "opentelemetry" }
 opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "opentelemetry" }

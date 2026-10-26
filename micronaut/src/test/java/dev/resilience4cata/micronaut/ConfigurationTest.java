@@ -50,6 +50,17 @@ class ConfigurationTest {
     }
 
     @Test
+    void adaptiveLimitKeysBind() {
+        try (ApplicationContext context = ApplicationContext.run(Map.of(
+                "resilience4cata.defaults.adaptive-limit.max-limit", "30",
+                "resilience4cata.configs.backend.adaptive-limit.window", "2s"), "config")) {
+            ResilienceRegistry registry = context.getBean(ResilienceRegistry.class);
+            assertThat(registry.adaptiveLimitConfig("").maxLimit()).isEqualTo(30);
+            assertThat(registry.adaptiveLimitConfig("backend").window()).isEqualTo(Duration.ofSeconds(2));
+        }
+    }
+
+    @Test
     void environmentVariablesUseTheConfigGrammarAtTheirMicronautPosition() {
         try (ApplicationContext context = ApplicationContext.run(
                 Map.of("resilience4cata.instances.payments.retry.delay", "30ms"), "config")) {

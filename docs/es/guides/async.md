@@ -42,6 +42,7 @@ La llamada devuelve un future de inmediato. El primer intento corre en el thread
 | [Hedge](../policies/hedge.md) | No soportado (error de compilación [`R4C-HDG-001`](../errors.md#r4c-hdg-001)) | Vuelve a lanzar la llamada tras `delay` sin resultado, o enseguida tras una falla; el primer éxito completa el future y los demás intentos se cancelan |
 | Circuit breaker | Registra la llamada cuando devuelve o lanza | Registra la llamada cuando su stage se completa |
 | Rate limiter con `maxWait` | Duerme hasta que el permiso esté disponible | Empieza la llamada cuando el permiso está disponible, sin bloquear a quien llama |
+| [Adaptive limit](../policies/adaptive-limit.md) | Conserva el lugar mientras el método corre, y mide su latencia | Conserva el lugar hasta que el stage se completa, y mide la latencia hasta esa finalización |
 | Timeout | Interrumpe el thread de quien llama al vencer el plazo | Hace fallar el future devuelto con `CallTimeoutException` al vencer el plazo, y cancela el stage tardío si es un `Future` (a través de las políticas internas, que sueltan lo que tienen de inmediato: ver [cancelación](#cancelación)) |
 | Bulkhead | Ocupa el lugar mientras corre el método; con `maxWait`, espera en un semáforo | Ocupa el lugar hasta que el stage se completa; con `maxWait`, encola la llamada sin bloquear un thread |
 | Fallback | Devuelve un valor | Devuelve un valor o un stage |
@@ -50,7 +51,7 @@ Reglas que valen para todas las políticas:
 
 - **Un método que lanza una excepción en lugar de devolver un stage** se trata como un stage fallido: las políticas ven la excepción y, si nada la recupera, el future devuelto falla con ella. Un método que devuelve `null` en lugar de un stage falla de la misma forma con una `NullPointerException`.
 - **Las fallas se desenvuelven.** Un stage que falla con `CompletionException` o `ExecutionException` se juzga por su causa, así que `retryOn`, `recordOn`, los classifiers y las firmas de los fallbacks ven tu excepción (`IOException` en el ejemplo), no el envoltorio.
-- **Los rechazos hacen fallar el future.** Un breaker abierto, un bulkhead lleno o un rate limiter agotado hacen fallar el future devuelto con `CallNotPermittedException`, `BulkheadFullException` o `RateLimitExceededException`.
+- **Los rechazos hacen fallar el future.** Un breaker abierto, un bulkhead lleno, un adaptive limit lleno o un rate limiter agotado hacen fallar el future devuelto con `CallNotPermittedException`, `BulkheadFullException`, `LimitExceededException` o `RateLimitExceededException`.
 - **Los callbacks no corren en el timer.** Los reintentos diferidos, los hedges, las esperas del rate limiter y los timeouts se disparan en un timer de la librería, que pasa el trabajo a un thread virtual nuevo. Por eso los intentos posteriores al primero (un reintento, un hedge) corren sin los `ThreadLocal` ni el MDC de quien llama.
 
 Una llamada que vence su timeout, del mismo test:
@@ -76,6 +77,7 @@ Cancelar el future que devuelve un método async (con `cancel(...)`, o con `comp
 | Hedge | No empieza más intentos: la espera pendiente se cancela, y todos los intentos en curso también. Un hedge cancela también a sus propios perdedores de la misma forma, con una `HedgeCancelledException` |
 | Circuit breaker | No registra nada, como una llamada ignorada: un permiso de half-open se devuelve |
 | Rate limiter con `maxWait` | Una llamada que todavía espera su permiso nunca empieza, y el permiso se devuelve (como cuando se interrumpe una espera sincrónica). Una llamada que ya empezó conserva su permiso |
+| Adaptive limit | Libera el lugar en cuanto el stage termina, sin muestra: una llamada cancelada no dice nada de la dependencia |
 | Timeout | Cancela su plazo: no hay `CallTimeoutException` ni evento `TimedOut` |
 | Bulkhead | Libera el lugar en cuanto termina el stage, que para un `CompletableFuture` es de inmediato. Una llamada todavía encolada (`maxWait`) sale de la cola y nunca empieza |
 | Fallback | No corre: nadie espera un resultado alternativo |

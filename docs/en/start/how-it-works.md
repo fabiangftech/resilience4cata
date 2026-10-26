@@ -151,7 +151,7 @@ Whatever order you write the annotations in, the policies nest in this fixed ord
 
 ```mermaid
 flowchart LR
-    caller([caller]) --> F[Fallback] --> R[Retry] --> CB[CircuitBreaker] --> RL[RateLimiter] --> T[Timeout] --> B[Bulkhead] --> M([your method])
+    caller([caller]) --> F[Fallback] --> R[Retry | Hedge] --> CB[CircuitBreaker] --> RL[RateLimiter] --> AL[AdaptiveLimit] --> T[Timeout] --> B[Bulkhead] --> M([your method])
 ```
 
 - **The fallback is outermost**, so it sees the final outcome, including rejections such as an open breaker or a full bulkhead.

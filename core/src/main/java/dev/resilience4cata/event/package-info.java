@@ -1,6 +1,7 @@
 /**
  * Typed events published by the resilience policies: circuit breaker transitions and rejections,
- * retries, timeouts, bulkhead and rate limiter rejections, and fallbacks.
+ * retries, timeouts, bulkhead, rate limiter and adaptive limit rejections, adaptive limit changes, and
+ * fallbacks.
  *
  * <p>Listeners are registered on {@code ResilienceRegistry.builder()} with
  * {@code listen(EventType.class, listener)} or {@code listen(instance, EventType.class, listener)}.

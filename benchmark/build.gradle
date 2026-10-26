@@ -2,7 +2,7 @@ plugins {
     id 'r4c.jmh'
 }
 
-description = 'JMH benchmarks against Resilience4j. Not published.'
+description = 'JMH benchmarks against Resilience4j (and Netflix concurrency-limits for the adaptive limit). Not published.'
 
 dependencies {
     implementation project(':core')
@@ -14,4 +14,5 @@ dependencies {
     implementation libs.resilience4j.bulkhead
     implementation libs.resilience4j.ratelimiter
     implementation libs.resilience4j.hedge
+    implementation libs.concurrency.limits.core
 }

@@ -42,6 +42,7 @@ The call returns a future at once. The first attempt runs on the caller's thread
 | [Hedge](../policies/hedge.md) | Not supported (compile error [`R4C-HDG-001`](../errors.md#r4c-hdg-001)) | Starts the call again after `delay` without a result, or at once after a failure; the first success completes the future and the other attempts are cancelled |
 | Circuit breaker | Records the call when it returns or throws | Records the call when its stage completes |
 | Rate limiter with `maxWait` | Sleeps until the permit is due | Starts the call when the permit is due, without blocking the caller |
+| [Adaptive limit](../policies/adaptive-limit.md) | Holds the slot while the method runs, and measures its latency | Holds the slot until the stage completes, and measures the latency to that completion |
 | Timeout | Interrupts the caller's thread at the deadline | Fails the returned future with `CallTimeoutException` at the deadline, and cancels the late stage if it is a `Future` (through the policies inside, which let go at once: see [cancellation](#cancellation)) |
 | Bulkhead | Holds the slot while the method runs; with `maxWait`, waits on a semaphore | Holds the slot until the stage completes; with `maxWait`, queues the call without blocking a thread |
 | Fallback | Returns a value | Returns a value or a stage |
@@ -50,7 +51,7 @@ Rules that hold for every policy:
 
 - **A method that throws instead of returning a stage** is treated like a failed stage: the policies see the exception, and if nothing recovers, the returned future fails with it. A method that returns `null` instead of a stage fails with a `NullPointerException` the same way.
 - **Failures are unwrapped.** A stage that fails with `CompletionException` or `ExecutionException` is judged by its cause, so `retryOn`, `recordOn`, classifiers and fallback signatures see your exception (`IOException` in the example), not the wrapper.
-- **Rejections fail the future.** An open breaker, a full bulkhead or an exhausted rate limiter fails the returned future with `CallNotPermittedException`, `BulkheadFullException` or `RateLimitExceededException`.
+- **Rejections fail the future.** An open breaker, a full bulkhead, a full adaptive limit or an exhausted rate limiter fails the returned future with `CallNotPermittedException`, `BulkheadFullException`, `LimitExceededException` or `RateLimitExceededException`.
 - **Callbacks don't run on the timer.** Delayed retries, hedges, rate-limiter waits and timeouts fire on a library timer, which hands the work to a new virtual thread. So attempts after the first (a retry, a hedge) run without the caller's `ThreadLocal`s or MDC.
 
 A timed-out call, from the same test:
@@ -76,6 +77,7 @@ Cancelling the future that an async method returns (with `cancel(...)`, or `comp
 | Hedge | Starts no further attempt: the pending delay is cancelled, and every attempt in flight is cancelled. A hedge also cancels its own losers the same way, with a `HedgeCancelledException` |
 | Circuit breaker | Records nothing, like an ignored call: a half-open permit is given back |
 | Rate limiter with `maxWait` | A call still waiting for its permit never starts, and the permit is given back (as when a synchronous wait is interrupted). A call that already started keeps its permit |
+| Adaptive limit | Frees the slot as soon as the stage ends, without a sample: a cancelled call says nothing about the dependency |
 | Timeout | Cancels its deadline: no `CallTimeoutException`, no `TimedOut` event |
 | Bulkhead | Frees the slot as soon as the stage ends, which for a `CompletableFuture` is at once. A call still queued (`maxWait`) leaves the queue and never starts |
 | Fallback | Does not run: nobody waits for an alternative result |

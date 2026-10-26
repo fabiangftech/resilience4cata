@@ -1,0 +1,266 @@
+package dev.resilience4cata;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.TimeoutException;
+
+/**
+ * Immutable adaptive limit configuration. Built with {@link #builder()} or {@link #toBuilder()}.
+ *
+ * <p>An adaptive limit caps the calls running at the same time, like a bulkhead, but moves the cap by
+ * itself: after each window of {@code window} (and at least {@code minWindowSamples} completed calls), it
+ * compares the window's average latency with what it has seen before and raises the limit while latency
+ * holds, or lowers it when latency grows or calls are dropped ({@code dropOn}). The cap always stays
+ * between {@code minLimit} and {@code maxLimit}.
+ *
+ * @param enabled whether calls are limited at all
+ * @param algorithm how the limit is recomputed at the end of each window
+ * @param initialLimit the limit before the first window ends; between {@code minLimit} and {@code maxLimit}
+ * @param minLimit the lowest the limit goes; at least 1
+ * @param maxLimit the highest the limit goes; at least {@code minLimit}
+ * @param window how long a window lasts at least; between 10 ms and 1 h
+ * @param minWindowSamples completed calls a window needs before it ends; a window that is over but has fewer
+ *     is extended by one more {@code window} and keeps its calls, which count when it ends; at least 1
+ * @param dropOn failures that mean the dependency is overloaded (a timeout, a full bulkhead): they count as
+ *     a sample with a drop, which makes {@link Algorithm#AIMD} back off. Any other failure is ignored: the
+ *     slot is freed and the call is not a sample
+ * @param ignoreOn failures that are never samples, even if listed in {@code dropOn}; they win over it
+ * @param smoothing {@link Algorithm#GRADIENT2}: how much of each new estimate is kept, above 0 and at most 1
+ * @param rttTolerance {@link Algorithm#GRADIENT2}: how many times the long-term latency the window's latency
+ *     may reach before the limit goes down; finite, at least 1
+ * @param longWindow {@link Algorithm#GRADIENT2}: windows averaged into the long-term latency; at least 1
+ * @param queueSize {@link Algorithm#GRADIENT2}: calls the limit leaves room for above the estimated
+ *     concurrency, so that it can grow; at least 0
+ * @param backoffRatio {@link Algorithm#AIMD}: what a drop multiplies the limit by; at least 0.5 and below 1
+ */
+public record AdaptiveLimitConfig(
+        boolean enabled,
+        Algorithm algorithm,
+        int initialLimit,
+        int minLimit,
+        int maxLimit,
+        Duration window,
+        int minWindowSamples,
+        List<Class<? extends Throwable>> dropOn,
+        List<Class<? extends Throwable>> ignoreOn,
+        double smoothing,
+        double rttTolerance,
+        int longWindow,
+        int queueSize,
+        double backoffRatio) {
+
+    /** How the limit is recomputed at the end of each window. */
+    public enum Algorithm {
+        /**
+         * Compares the window's average latency with a long-term average (Netflix's {@code Gradient2Limit}):
+         * the limit grows by {@code queueSize} while latency stays within {@code rttTolerance} of the
+         * long-term average, and shrinks in proportion when it rises above it. Drops count only through
+         * their latency. The default.
+         */
+        GRADIENT2,
+        /**
+         * Additive increase, multiplicative decrease (Netflix's {@code AIMDLimit}): one more slot after each
+         * window without a drop in which at least half the limit was in use, and the limit times
+         * {@code backoffRatio} after a window with a drop. Latency itself is not used.
+         */
+        AIMD
+    }
+
+    private static final Duration MIN_WINDOW = Duration.ofMillis(10);
+    private static final Duration MAX_WINDOW = Duration.ofHours(1);
+
+    /**
+     * Built-in defaults: {@link Algorithm#GRADIENT2}, a limit starting at 20 and kept between 1 and 200 (Netflix's
+     * minimum is 20; 1 lets {@link Algorithm#AIMD} go as low as the dependency needs, while Gradient2's practical
+     * floor comes from {@code queueSize}),
+     * windows of at least 1 s and 10 calls, drops on {@link CallTimeoutException}, {@link BulkheadFullException}
+     * and {@link TimeoutException}, nothing ignored; Gradient2 smoothing 0.2, tolerance 1.5, long-term average
+     * over 600 windows, queue size 4; AIMD backoff ratio 0.9.
+     */
+    public static final AdaptiveLimitConfig DEFAULTS = new AdaptiveLimitConfig(true, Algorithm.GRADIENT2, 20, 1, 200,
+            Duration.ofSeconds(1), 10, List.of(CallTimeoutException.class, BulkheadFullException.class,
+                    TimeoutException.class), List.of(), 0.2, 1.5, 600, 4, 0.9);
+
+    /** The policy name in validation messages. */
+    private static final String POLICY = "adaptiveLimit";
+
+    /** Validates every value and copies the exception lists. */
+    public AdaptiveLimitConfig {
+        Objects.requireNonNull(algorithm, "algorithm");
+        Objects.requireNonNull(window, "window");
+        dropOn = List.copyOf(dropOn);
+        ignoreOn = List.copyOf(ignoreOn);
+        if (minLimit < 1) {
+            throw ErrorCode.invalidValue(POLICY, "minLimit must be at least 1, was " + minLimit);
+        }
+        if (maxLimit < minLimit) {
+            throw ErrorCode.invalidValue(POLICY, "maxLimit must be at least minLimit (" + minLimit + "), was " + maxLimit);
+        }
+        if (initialLimit < minLimit || initialLimit > maxLimit) {
+            throw ErrorCode.invalidValue(POLICY, "initialLimit must be between minLimit (" + minLimit + ") and maxLimit ("
+                    + maxLimit + "), was " + initialLimit);
+        }
+        if (window.compareTo(MIN_WINDOW) < 0 || window.compareTo(MAX_WINDOW) > 0) {
+            throw ErrorCode.invalidValue(POLICY, "window must be between 10ms and 1h, was " + window);
+        }
+        if (minWindowSamples < 1) {
+            throw ErrorCode.invalidValue(POLICY, "minWindowSamples must be at least 1, was " + minWindowSamples);
+        }
+        if (!(smoothing > 0 && smoothing <= 1)) {
+            throw ErrorCode.invalidValue(POLICY, "smoothing must be above 0 and at most 1, was " + smoothing);
+        }
+        if (!(rttTolerance >= 1) || Double.isInfinite(rttTolerance)) {
+            throw ErrorCode.invalidValue(POLICY, "rttTolerance must be a finite number >= 1, was " + rttTolerance);
+        }
+        if (longWindow < 1) {
+            throw ErrorCode.invalidValue(POLICY, "longWindow must be at least 1, was " + longWindow);
+        }
+        if (queueSize < 0) {
+            throw ErrorCode.invalidValue(POLICY, "queueSize must not be negative, was " + queueSize);
+        }
+        if (!(backoffRatio >= 0.5 && backoffRatio < 1)) {
+            throw ErrorCode.invalidValue(POLICY, "backoffRatio must be at least 0.5 and below 1, was " + backoffRatio);
+        }
+    }
+
+    /** Returns a builder that starts from {@link #DEFAULTS}. */
+    public static Builder builder() {
+        return new Builder(DEFAULTS);
+    }
+
+    /** Returns a builder that starts from this configuration. */
+    public Builder toBuilder() {
+        return new Builder(this);
+    }
+
+    /** Mutable builder for {@link AdaptiveLimitConfig}. Values are validated by {@link #build()}. */
+    public static final class Builder {
+        private boolean enabled;
+        private Algorithm algorithm;
+        private int initialLimit;
+        private int minLimit;
+        private int maxLimit;
+        private Duration window;
+        private int minWindowSamples;
+        private List<Class<? extends Throwable>> dropOn;
+        private List<Class<? extends Throwable>> ignoreOn;
+        private double smoothing;
+        private double rttTolerance;
+        private int longWindow;
+        private int queueSize;
+        private double backoffRatio;
+
+        private Builder(AdaptiveLimitConfig from) {
+            enabled = from.enabled;
+            algorithm = from.algorithm;
+            initialLimit = from.initialLimit;
+            minLimit = from.minLimit;
+            maxLimit = from.maxLimit;
+            window = from.window;
+            minWindowSamples = from.minWindowSamples;
+            dropOn = from.dropOn;
+            ignoreOn = from.ignoreOn;
+            smoothing = from.smoothing;
+            rttTolerance = from.rttTolerance;
+            longWindow = from.longWindow;
+            queueSize = from.queueSize;
+            backoffRatio = from.backoffRatio;
+        }
+
+        /** @param enabled whether calls are limited at all @return this builder */
+        public Builder enabled(boolean enabled) {
+            this.enabled = enabled;
+            return this;
+        }
+
+        /** @param algorithm how the limit is recomputed at the end of each window @return this builder */
+        public Builder algorithm(Algorithm algorithm) {
+            this.algorithm = Objects.requireNonNull(algorithm, "algorithm");
+            return this;
+        }
+
+        /** @param initialLimit the limit before the first window ends @return this builder */
+        public Builder initialLimit(int initialLimit) {
+            this.initialLimit = initialLimit;
+            return this;
+        }
+
+        /** @param minLimit the lowest the limit goes, at least 1 @return this builder */
+        public Builder minLimit(int minLimit) {
+            this.minLimit = minLimit;
+            return this;
+        }
+
+        /** @param maxLimit the highest the limit goes @return this builder */
+        public Builder maxLimit(int maxLimit) {
+            this.maxLimit = maxLimit;
+            return this;
+        }
+
+        /** @param window how long a window lasts at least, 10 ms to 1 h @return this builder */
+        public Builder window(Duration window) {
+            this.window = Objects.requireNonNull(window, "window");
+            return this;
+        }
+
+        /** @param minWindowSamples completed calls a window needs before it ends @return this builder */
+        public Builder minWindowSamples(int minWindowSamples) {
+            this.minWindowSamples = minWindowSamples;
+            return this;
+        }
+
+        /** @param dropOn failures that count as a drop: the dependency is overloaded @return this builder */
+        public Builder dropOn(List<Class<? extends Throwable>> dropOn) {
+            this.dropOn = List.copyOf(dropOn);
+            return this;
+        }
+
+        /** @param ignoreOn failures that are never samples; they win over {@code dropOn} @return this builder */
+        public Builder ignoreOn(List<Class<? extends Throwable>> ignoreOn) {
+            this.ignoreOn = List.copyOf(ignoreOn);
+            return this;
+        }
+
+        /** @param smoothing Gradient2: how much of each new estimate is kept, in (0, 1] @return this builder */
+        public Builder smoothing(double smoothing) {
+            this.smoothing = smoothing;
+            return this;
+        }
+
+        /** @param rttTolerance Gradient2: latency growth tolerated before the limit goes down, at least 1 @return this builder */
+        public Builder rttTolerance(double rttTolerance) {
+            this.rttTolerance = rttTolerance;
+            return this;
+        }
+
+        /** @param longWindow Gradient2: windows averaged into the long-term latency @return this builder */
+        public Builder longWindow(int longWindow) {
+            this.longWindow = longWindow;
+            return this;
+        }
+
+        /** @param queueSize Gradient2: room left above the estimated concurrency @return this builder */
+        public Builder queueSize(int queueSize) {
+            this.queueSize = queueSize;
+            return this;
+        }
+
+        /** @param backoffRatio AIMD: what a drop multiplies the limit by, in [0.5, 1) @return this builder */
+        public Builder backoffRatio(double backoffRatio) {
+            this.backoffRatio = backoffRatio;
+            return this;
+        }
+
+        /**
+         * Validates the values and builds the configuration.
+         *
+         * @return the configuration
+         * @throws IllegalArgumentException if a value is invalid
+         */
+        public AdaptiveLimitConfig build() {
+            return new AdaptiveLimitConfig(enabled, algorithm, initialLimit, minLimit, maxLimit, window,
+                    minWindowSamples, dropOn, ignoreOn, smoothing, rttTolerance, longWindow, queueSize, backoffRatio);
+        }
+    }
+}

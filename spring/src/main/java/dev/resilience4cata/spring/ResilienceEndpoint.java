@@ -54,9 +54,11 @@ public final class ResilienceEndpoint {
         ResilienceSnapshot all = registry.snapshot();
         ResilienceSnapshot one = new ResilienceSnapshot(only(all.circuitBreakers(), instance, s -> s.instance()),
                 only(all.retries(), instance, s -> s.instance()), only(all.rateLimiters(), instance, s -> s.instance()),
-                only(all.timeouts(), instance, s -> s.instance()), only(all.bulkheads(), instance, s -> s.instance()));
+                only(all.timeouts(), instance, s -> s.instance()), only(all.bulkheads(), instance, s -> s.instance()),
+                only(all.hedges(), instance, s -> s.instance()), only(all.adaptiveLimits(), instance, s -> s.instance()));
         boolean empty = one.circuitBreakers().isEmpty() && one.retries().isEmpty() && one.rateLimiters().isEmpty()
-                && one.timeouts().isEmpty() && one.bulkheads().isEmpty();
+                && one.timeouts().isEmpty() && one.bulkheads().isEmpty() && one.hedges().isEmpty()
+                && one.adaptiveLimits().isEmpty();
         return empty ? null : one;
     }
 

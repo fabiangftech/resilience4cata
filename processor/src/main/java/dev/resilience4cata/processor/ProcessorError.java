@@ -26,6 +26,7 @@ enum ProcessorError {
     INVALID_ENABLED("R4C-ATR-006", "enabled must be \"\", \"true\" or \"false\""),
     INVALID_BUDGET("R4C-ATR-007", "retry or hedge budget value out of range"),
     HEDGE_ATTEMPTS("R4C-ATR-008", "hedge maxAttempts must be between 2 and 10"),
+    ADAPTIVE_LIMIT_RANGE("R4C-ATR-009", "adaptive limit bounds out of order, or window outside 10ms to 1h"),
 
     BUNDLE_NOT_MARKED("R4C-CMP-001", "composed annotation not marked with @ResiliencePolicy"),
     BUNDLE_CONFLICT("R4C-CMP-002", "two composed annotations set an attribute to different values"),

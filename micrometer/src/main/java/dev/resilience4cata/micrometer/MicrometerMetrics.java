@@ -1,5 +1,7 @@
 package dev.resilience4cata.micrometer;
 
+import dev.resilience4cata.AdaptiveLimitHandle;
+import dev.resilience4cata.AdaptiveLimitSnapshot;
 import dev.resilience4cata.BulkheadHandle;
 import dev.resilience4cata.BulkheadSnapshot;
 import dev.resilience4cata.CircuitBreakerHandle;
@@ -28,7 +30,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Micrometer metrics for resilience4cata: counters fed by the registry's events, and gauges that read
- * the circuit breakers, bulkheads and rate limiters when the meters are collected.
+ * the circuit breakers, bulkheads, rate limiters and adaptive limits when the meters are collected.
  *
  * <pre>{@code
  * MicrometerMetrics metrics = MicrometerMetrics.create(meterRegistry);
@@ -38,15 +40,16 @@ import org.jspecify.annotations.Nullable;
  *
  * <p><b>Counters</b> ({@code r4c.calls.rejected}, {@code r4c.circuitbreaker.transitions},
  * {@code r4c.retry.retries}, {@code r4c.retry.gave.up}, {@code r4c.hedge.hedged}, {@code r4c.hedge.won},
- * {@code r4c.hedge.skipped}, {@code r4c.hedge.failed}, {@code r4c.timeout.timed.out},
- * {@code r4c.fallback.applied}) come from an event listener that {@link #register} adds to the
+ * {@code r4c.hedge.skipped}, {@code r4c.hedge.failed}, {@code r4c.adaptivelimit.limit.changes},
+ * {@code r4c.timeout.timed.out}, {@code r4c.fallback.applied}) come from an event listener that {@link #register} adds to the
  * builder. A counter is registered with Micrometer at its first event and cached, so later events
  * only look it up and increment it. Successful calls publish no events, so they cost nothing.
  *
  * <p><b>Gauges</b> ({@code r4c.circuitbreaker.state}, {@code r4c.circuitbreaker.failure.rate},
  * {@code r4c.circuitbreaker.slow.call.rate}, {@code r4c.bulkhead.concurrent.calls},
  * {@code r4c.bulkhead.waiting.calls}, {@code r4c.bulkhead.max.concurrent},
- * {@code r4c.ratelimiter.available.permits}) are registered by {@link #bindTo} for every instance
+ * {@code r4c.ratelimiter.available.permits}, {@code r4c.adaptivelimit.limit},
+ * {@code r4c.adaptivelimit.concurrent.calls}) are registered by {@link #bindTo} for every instance
  * that exists then and, through {@link ResilienceRegistry#onInstanceCreated}, for every instance the
  * registry creates later. They read the policy only when Micrometer collects them.
  *
@@ -107,7 +110,8 @@ public final class MicrometerMetrics implements AutoCloseable {
     }
 
     /**
-     * Registers the gauges of {@code registry}'s circuit breakers, bulkheads and rate limiters: those
+     * Registers the gauges of {@code registry}'s circuit breakers, bulkheads, rate limiters and adaptive
+     * limits: those
      * that exist now, and those it creates later (when an interface is wrapped or a pipeline is built).
      * Binding the same registry again does nothing; several registries can be bound. Does nothing
      * after {@link #close()}.
@@ -165,7 +169,7 @@ public final class MicrometerMetrics implements AutoCloseable {
                     bindCircuitBreaker(breaker);
                 }
             }
-            ResilienceSnapshot snapshot = registry.snapshot(); // the only list of bulkheads and rate limiters
+            ResilienceSnapshot snapshot = registry.snapshot(); // the only list of bulkheads, rate limiters and adaptive limits
             for (BulkheadSnapshot bulkhead : snapshot.bulkheads()) {
                 if (bound.add("bulkhead " + bulkhead.instance())) {
                     bindBulkhead(registry.bulkhead(bulkhead.instance()));
@@ -174,6 +178,11 @@ public final class MicrometerMetrics implements AutoCloseable {
             for (RateLimiterSnapshot limiter : snapshot.rateLimiters()) {
                 if (bound.add("ratelimiter " + limiter.instance())) {
                     bindRateLimiter(registry.rateLimiter(limiter.instance()));
+                }
+            }
+            for (AdaptiveLimitSnapshot limit : snapshot.adaptiveLimits()) {
+                if (bound.add("adaptivelimit " + limit.instance())) {
+                    bindAdaptiveLimit(registry.adaptiveLimit(limit.instance()));
                 }
             }
         } finally {
@@ -207,6 +216,13 @@ public final class MicrometerMetrics implements AutoCloseable {
     private void bindRateLimiter(RateLimiterHandle limiter) {
         gauge("r4c.ratelimiter.available.permits", "Permits the rate limiter can grant now",
                 limiter.id(), limiter, RateLimiterHandle::availablePermits, null);
+    }
+
+    private void bindAdaptiveLimit(AdaptiveLimitHandle limit) {
+        gauge("r4c.adaptivelimit.limit", "The adaptive limit's current limit",
+                limit.id(), limit, AdaptiveLimitHandle::limit, null);
+        gauge("r4c.adaptivelimit.concurrent.calls", "Calls running in the adaptive limit",
+                limit.id(), limit, AdaptiveLimitHandle::inFlight, null);
     }
 
     private <T> void gauge(String name, String description, String instance, T policy, ToDoubleFunction<T> value,

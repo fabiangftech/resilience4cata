@@ -209,7 +209,8 @@ tasks.withType(JavaCompile).configureEach {
 ### R4C-ATR-001
 
 **Causa:** un atributo de duración (`delay`, `maxDelay`, `maxDuration`, `slowCallDuration`, `waitInOpen`,
-`maxWaitInHalfOpen`, `maxWait`, `period`, o el valor de `@Timeout`) no es una duración válida.
+`maxWaitInHalfOpen`, `maxWait`, `period`, `budgetWindow`, `window`, o el valor de `@Timeout`) no es una
+duración válida.
 
 **Incorrecto:**
 
@@ -273,7 +274,7 @@ public interface PriceClient {
 ### R4C-ATR-003
 
 **Causa:** un conteo es menor que 1: `maxAttempts`, `windowSize`, `minimumCalls`, `halfOpenCalls`,
-`maxConcurrent` o `permits`.
+`maxConcurrent`, `permits`, `initialLimit`, `minLimit` o `maxLimit`.
 
 **Incorrecto:**
 
@@ -458,6 +459,39 @@ import java.util.concurrent.CompletableFuture;
 public interface QuoteClient {
     @Hedge(maxAttempts = 2, delay = "50ms")
     CompletableFuture<String> quote(String sku);
+}
+```
+
+### R4C-ATR-009
+
+**Causa:** los límites de `@AdaptiveLimit` están desordenados (`minLimit` por encima de `maxLimit`, o
+`initialLimit` fuera de ellos), o su `window` dura menos de 10 ms o más de 1 h. Solo se comparan los límites
+puestos en la anotación; uno que viene de una configuración con nombre o externa se revisa cuando el registry la
+resuelve ([R4C-REG-003](#r4c-reg-003)).
+
+**Incorrecto:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.AdaptiveLimit;
+
+public interface OrderClient {
+    @AdaptiveLimit(minLimit = 50, maxLimit = 20)
+    String place(String order);
+}
+```
+
+**Corrección:** mantén `minLimit <= initialLimit <= maxLimit`, y una `window` de `"10ms"` a `"1h"`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.AdaptiveLimit;
+
+public interface OrderClient {
+    @AdaptiveLimit(minLimit = 20, maxLimit = 50)
+    String place(String order);
 }
 ```
 

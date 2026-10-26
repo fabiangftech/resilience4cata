@@ -66,7 +66,7 @@ Los nombres y tags son los de [Observabilidad](observability.md#metric-names); l
 
 | Meter | Tipo | Tags | En Prometheus |
 |---|---|---|---|
-| `r4c.calls.rejected` | counter | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `bulkhead` | `r4c_calls_rejected_total` |
+| `r4c.calls.rejected` | counter | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `r4c_calls_rejected_total` |
 | `r4c.circuitbreaker.transitions` | counter | `instance`, `from`, `to` | `r4c_circuitbreaker_transitions_total` |
 | `r4c.retry.retries` | counter | `instance` | `r4c_retry_retries_total` |
 | `r4c.retry.gave.up` | counter | `instance`, `reason` | `r4c_retry_gave_up_total` |
@@ -74,6 +74,7 @@ Los nombres y tags son los de [Observabilidad](observability.md#metric-names); l
 | `r4c.hedge.won` | counter | `instance` | `r4c_hedge_won_total` |
 | `r4c.hedge.skipped` | counter | `instance`, `reason` | `r4c_hedge_skipped_total` |
 | `r4c.hedge.failed` | counter | `instance` | `r4c_hedge_failed_total` |
+| `r4c.adaptivelimit.limit.changes` | counter | `instance` | `r4c_adaptivelimit_limit_changes_total` |
 | `r4c.timeout.timed.out` | counter | `instance` | `r4c_timeout_timed_out_total` |
 | `r4c.fallback.applied` | counter | `instance` | `r4c_fallback_applied_total` |
 | `r4c.circuitbreaker.state` | gauge | `instance`, `state` | `r4c_circuitbreaker_state` |
@@ -83,13 +84,15 @@ Los nombres y tags son los de [Observabilidad](observability.md#metric-names); l
 | `r4c.bulkhead.waiting.calls` | gauge | `instance` | `r4c_bulkhead_waiting_calls` |
 | `r4c.bulkhead.max.concurrent` | gauge | `instance` | `r4c_bulkhead_max_concurrent` |
 | `r4c.ratelimiter.available.permits` | gauge | `instance` | `r4c_ratelimiter_available_permits` |
+| `r4c.adaptivelimit.limit` | gauge | `instance` | `r4c_adaptivelimit_limit` |
+| `r4c.adaptivelimit.concurrent.calls` | gauge | `instance` | `r4c_adaptivelimit_concurrent_calls` |
 
 Los valores de los tags van en minúsculas: estados `closed`, `open`, `half_open`, `forced_open`, `disabled`; motivos del retry `max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`; motivos del hedge `delay`, `failure` (`hedged`) y `budget_exhausted`, `rejected`, `aborted` (`skipped`) (un motivo agregado en una versión posterior aparece solo).
 
 Cuándo aparece cada meter:
 
 - **Los counters** se registran en su primer evento: un servicio que nunca reintentó todavía no tiene serie `r4c_retry_retries_total`. En PromQL, `… or vector(0)` llena el hueco cuando necesitas un cero.
-- **Los gauges** se registran al conectar la instancia: las cinco series `state` del circuit breaker (una vale 1, las demás 0), sus dos tasas, los tres gauges del bulkhead y el del rate limiter. Los retries, hedges, timeouts y fallbacks no tienen gauges.
+- **Los gauges** se registran al conectar la instancia: las cinco series `state` del circuit breaker (una vale 1, las demás 0), sus dos tasas, los tres gauges del bulkhead, el del rate limiter y los dos del adaptive limit. Los retries, hedges, timeouts y fallbacks no tienen gauges.
 - **Las tasas son NaN** hasta que la ventana del breaker contiene `minimumCalls` llamadas, mientras el breaker está abierto, forzado abierto o desactivado (entonces no hay ventana) y, para la tasa de llamadas lentas, cuando la detección de llamadas lentas está apagada (sin `slowCallDuration`). Prometheus guarda NaN como un valor; los gráficos muestran un hueco.
 
 ## Lo que muestra Prometheus :id=prometheus

@@ -6,7 +6,7 @@
 
 | Annotation | Position | Return types | Defaults |
 |---|---|---|---|
-| `@Bulkhead` | 6 of 6, innermost, around the method | sync and `CompletionStage` | 25 concurrent calls, no waiting |
+| `@Bulkhead` | 7 of 7, innermost, around the method | sync and `CompletionStage` | 25 concurrent calls, no waiting |
 
 </div>
 

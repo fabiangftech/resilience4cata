@@ -17,7 +17,7 @@ Each table lists the `defaults.<policy>.<attribute>` form. The same `<policy>.<a
 | `profiles.<profile>.<any key above>` | only while the profile is active | `profiles.test.defaults.retry.maxAttempts=1` |
 | `profiles.active=<a>,<b>` | the active profiles, later ones win | `profiles.active=test` |
 
-- Policies: `retry`, `hedge`, `circuitBreaker`, `rateLimiter`, `timeout`, `bulkhead`. `@Fallback` has no keys.
+- Policies: `retry`, `hedge`, `circuitBreaker`, `rateLimiter`, `adaptiveLimit`, `timeout`, `bulkhead`. `@Fallback` has no keys.
 - Policy and attribute names may be written in camelCase or kebab-case: `circuit-breaker.wait-in-open` is `circuitBreaker.waitInOpen`.
 - Config and profile names are lowercase letters and digits separated by single hyphens (`slow-external`).
 - An instance id is case-sensitive. It must be in double quotes unless it is made only of letters, digits, `_` and `-`. A derived id is `<type>#<method>(<parameter types>)`, with fully qualified, erased parameter types separated by commas without spaces, for example `com.acme.CatalogClient#price(java.lang.String,int)`.
@@ -128,6 +128,27 @@ Everything is resolved once, when an instance is created. Nothing is reloaded af
 | `defaults.rateLimiter.permits` | `R4C_DEFAULTS_RATELIMITER_PERMITS` | int | `50` | ≥ 1 | Calls per `period`, and the largest burst. |
 | `defaults.rateLimiter.period` | `R4C_DEFAULTS_RATELIMITER_PERIOD` | duration | `1s` | > 0 and ≥ `permits` ns | Length of the period; permits are spaced `period / permits` apart. |
 | `defaults.rateLimiter.maxWait` | `R4C_DEFAULTS_RATELIMITER_MAXWAIT` | duration | `0` | ≥ 0; `0` = reject at once | How long a call may wait for a permit before `RateLimitExceededException`. |
+
+## Adaptive limit :id=adaptive-limit
+
+`@AdaptiveLimit` attributes, plus the algorithms' tuning, which has no annotation attribute (`minWindowSamples`, `smoothing`, `rttTolerance`, `longWindow`, `queueSize`, `backoffRatio`). See [Adaptive limit](../policies/adaptive-limit.md).
+
+| Key | Environment variable | Type | Default | Valid values | Meaning |
+|---|---|---|---|---|---|
+| `defaults.adaptiveLimit.enabled` | `R4C_DEFAULTS_ADAPTIVELIMIT_ENABLED` | boolean | `true` | `true`, `false` | `false` does not limit concurrent calls. |
+| `defaults.adaptiveLimit.algorithm` | `R4C_DEFAULTS_ADAPTIVELIMIT_ALGORITHM` | enum | `gradient2` | `gradient2`, `aimd` | `gradient2`: compares each window's latency with a long-term average. `aimd`: one more slot after a busy window, times `backoffRatio` after a drop. |
+| `defaults.adaptiveLimit.initialLimit` | `R4C_DEFAULTS_ADAPTIVELIMIT_INITIALLIMIT` | int | `20` | `minLimit` to `maxLimit` | The limit before the first window ends. |
+| `defaults.adaptiveLimit.minLimit` | `R4C_DEFAULTS_ADAPTIVELIMIT_MINLIMIT` | int | `1` | ≥ 1 | The lowest the limit goes. |
+| `defaults.adaptiveLimit.maxLimit` | `R4C_DEFAULTS_ADAPTIVELIMIT_MAXLIMIT` | int | `200` | ≥ `minLimit` | The highest the limit goes. |
+| `defaults.adaptiveLimit.window` | `R4C_DEFAULTS_ADAPTIVELIMIT_WINDOW` | duration | `1s` | 10ms to 1h | How long a window lasts at least; the limit is recomputed at its end. |
+| `defaults.adaptiveLimit.minWindowSamples` | `R4C_DEFAULTS_ADAPTIVELIMIT_MINWINDOWSAMPLES` | int | `10` | ≥ 1 | Completed calls a window needs before it ends; a window with fewer is extended by one more `window`, keeping its calls. |
+| `defaults.adaptiveLimit.dropOn` | `R4C_DEFAULTS_ADAPTIVELIMIT_DROPON` | class list | `dev.resilience4cata.CallTimeoutException, dev.resilience4cata.BulkheadFullException, java.util.concurrent.TimeoutException` | exception classes | Failures that mean the dependency is overloaded: samples with a drop (`aimd` backs off). Any other failure is not a sample. |
+| `defaults.adaptiveLimit.ignoreOn` | `R4C_DEFAULTS_ADAPTIVELIMIT_IGNOREON` | class list | — | exception classes | Failures that are never samples; they win over `dropOn`. |
+| `defaults.adaptiveLimit.smoothing` | `R4C_DEFAULTS_ADAPTIVELIMIT_SMOOTHING` | decimal | `0.2` | > 0 and ≤ 1 | `gradient2`: how much of each new estimate is kept. |
+| `defaults.adaptiveLimit.rttTolerance` | `R4C_DEFAULTS_ADAPTIVELIMIT_RTTTOLERANCE` | decimal | `1.5` | finite, ≥ 1 | `gradient2`: how many times the long-term latency a window may reach before the limit goes down. |
+| `defaults.adaptiveLimit.longWindow` | `R4C_DEFAULTS_ADAPTIVELIMIT_LONGWINDOW` | int | `600` | ≥ 1 | `gradient2`: windows averaged into the long-term latency. |
+| `defaults.adaptiveLimit.queueSize` | `R4C_DEFAULTS_ADAPTIVELIMIT_QUEUESIZE` | int | `4` | ≥ 0 | `gradient2`: room the limit leaves above the estimated concurrency, so that it can grow. Latency alone does not take the limit much below twice this value. |
+| `defaults.adaptiveLimit.backoffRatio` | `R4C_DEFAULTS_ADAPTIVELIMIT_BACKOFFRATIO` | decimal | `0.9` | ≥ 0.5 and < 1 | `aimd`: what a window with a drop multiplies the limit by. |
 
 ## Timeout :id=timeout
 

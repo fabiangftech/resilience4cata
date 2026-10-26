@@ -67,7 +67,7 @@ public sealed interface HedgeEvent extends ResilienceEvent {
         BUDGET_EXHAUSTED,
         /**
          * An attempt was rejected by a policy inside the hedge (an open circuit breaker, a full bulkhead, a
-         * rate limit): the dependency has no capacity for more attempts.
+         * rate limit, a full adaptive limit): the dependency has no capacity for more attempts.
          */
         REJECTED,
         /** An attempt failed with a failure in {@code abortOn}, or not in {@code hedgeOn}: the call ends. */

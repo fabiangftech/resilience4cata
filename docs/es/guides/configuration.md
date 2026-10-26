@@ -117,7 +117,7 @@ profiles.<profile>.<any key above>=…            # applies only while <profile>
 profiles.active=<profile>,<profile>             # comma-separated; later profiles win
 ```
 
-- **Políticas:** `retry`, `circuitBreaker`, `rateLimiter`, `timeout`, `bulkhead`. No hay claves de `fallback`.
+- **Políticas:** `retry`, `hedge`, `circuitBreaker`, `rateLimiter`, `adaptiveLimit`, `timeout`, `bulkhead`. No hay claves de `fallback`.
 - **Atributos:** son los de la anotación, con los mismos nombres (`maxAttempts`, `waitInOpen`, …). La duración del timeout es `timeout.value`. `name`, `config`, `classifier` y `onExhaustedResult` solo se pueden definir en las anotaciones.
 - **Escritura:** se aceptan camelCase y kebab-case (`circuitBreaker.waitInOpen` = `circuit-breaker.wait-in-open`). Definir la misma clave dos veces en una fuente, aunque sea con dos escrituras distintas, es un error ([`R4C-CFG-005`](../errors.md#r4c-cfg-005)).
 - **Prefijo:** cualquier clave puede empezar con `r4c.` o `resilience4cata.`. En las propiedades del sistema el prefijo es **obligatorio**, y las propiedades del sistema sin él se ignoran.

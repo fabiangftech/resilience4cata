@@ -4,7 +4,7 @@ How Resilience4j's registries, configs, decorators and Spring annotations map to
 
 ## Should you migrate? :id=when
 
-resilience4cata covers six policies (retry, circuit breaker, rate limiter, timeout, bulkhead, fallback) for plain Java 21+, with code generated at compile time. **Stay on Resilience4j** if you need any of these, which resilience4cata does not have yet:
+resilience4cata covers eight policies (retry, hedge, circuit breaker, rate limiter, adaptive limit, timeout, bulkhead, fallback) for plain Java 21+, with code generated at compile time. **Stay on Resilience4j** if you need any of these, which resilience4cata does not have yet:
 
 - Spring Boot 3, CDI or AspectJ integration (resilience4cata integrates with Spring Boot 4.1+ only, [below](#spring-boot));
 - Reactor, RxJava or Kotlin coroutine operators (resilience4cata supports `CompletionStage` / `CompletableFuture` only);
@@ -20,7 +20,7 @@ resilience4cata covers six policies (retry, circuit breaker, rate limiter, timeo
 |---|---|---|
 | Where the policies live | decorators (`Decorators.ofSupplier(…)`, `Retry.decorateSupplier(…)`) or Spring AOP aspects around a bean | a class generated at compile time: `<Interface>$Resilient` wraps your implementation, or `<Class>$Resilient` subclasses your class |
 | When misconfiguration is found | at startup or at the first call | most of it when you compile ([error codes](../errors.md)) |
-| Order of policies | the order you compose decorators; with Spring, a fixed aspect order (configurable) | fixed: Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead → method |
+| Order of policies | the order you compose decorators; with Spring, a fixed aspect order (configurable) | fixed: Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method |
 | Registries | one per policy (`CircuitBreakerRegistry`, `RetryRegistry`, …) | one `ResilienceRegistry` for every policy |
 | Instances | looked up by name | one per annotated method by default; methods with the same `name` share one |
 
@@ -122,7 +122,7 @@ The semantics differ: in Resilience4j the first attempt to **complete** wins, so
 
 ### The order is fixed :id=order
 
-Fallback → Retry (or Hedge) → CircuitBreaker → RateLimiter → Timeout → Bulkhead → method, whatever the order of the annotations. It matches Resilience4j's default Spring aspect order for the policies both have. There is no `@Order` or per-method reordering; for another order, use two interfaces or a [`Pipeline`](../guides/pipeline.md) inside a wrapped method.
+Fallback → Retry (or Hedge) → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method, whatever the order of the annotations. It matches Resilience4j's default Spring aspect order for the policies both have. There is no `@Order` or per-method reordering; for another order, use two interfaces or a [`Pipeline`](../guides/pipeline.md) inside a wrapped method.
 
 ### An open breaker stops retries :id=open-breaker
 
@@ -253,7 +253,7 @@ annotation processor generates the protected classes, and the integration makes 
 | `resilience4j.<module>.configs.default.<key>` | `resilience4cata.defaults.<policy>.<attribute>` |
 | `resilience4j.<module>.configs.<name>.<key>` | `resilience4cata.configs.<name>.<policy>.<attribute>`, used by `@Retry(config = "<name>")` and the like |
 | `baseConfig: <name>` | `resilience4cata.configs.<config>.extends: <name>`; an annotation picks its config with `config = "<name>"` |
-| `<module>AspectOrder` properties | none: the order is fixed (Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead) |
+| `<module>AspectOrder` properties | none: the order is fixed (Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead) |
 | `CircuitBreakerConfigCustomizer`, `RetryConfigCustomizer`… beans | `ResilienceRegistryCustomizer` beans |
 | `RegistryEventConsumer` beans, `getEventPublisher()` | `EventListener<…>` beans |
 | `/actuator/circuitbreakers`, `/actuator/retries`, `/actuator/ratelimiters`… | `/actuator/resilience4cata` (every policy, read-only) |

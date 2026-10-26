@@ -1,11 +1,13 @@
 package dev.resilience4cata.opentelemetry;
 
+import dev.resilience4cata.AdaptiveLimitSnapshot;
 import dev.resilience4cata.BulkheadSnapshot;
 import dev.resilience4cata.CircuitBreakerSnapshot;
 import dev.resilience4cata.CircuitBreakerState;
 import dev.resilience4cata.RateLimiterSnapshot;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.ResilienceSnapshot;
+import dev.resilience4cata.event.AdaptiveLimitEvent;
 import dev.resilience4cata.event.BulkheadEvent;
 import dev.resilience4cata.event.CircuitBreakerEvent;
 import dev.resilience4cata.event.EventListener;
@@ -49,9 +51,10 @@ import org.jspecify.annotations.Nullable;
  * <p>The metrics have the same names, attributes and values as the Micrometer module's, so dashboards
  * built on one work with the other. Counters: {@value #CALLS_REJECTED}, {@value #TRANSITIONS},
  * {@value #RETRIES}, {@value #GAVE_UP}, {@value #HEDGED}, {@value #HEDGE_WON}, {@value #HEDGE_SKIPPED},
- * {@value #HEDGE_FAILED}, {@value #TIMED_OUT}, {@value #FALLBACK_APPLIED}. Gauges:
+ * {@value #HEDGE_FAILED}, {@value #LIMIT_CHANGES}, {@value #TIMED_OUT}, {@value #FALLBACK_APPLIED}. Gauges:
  * {@value #STATE}, {@value #FAILURE_RATE}, {@value #SLOW_CALL_RATE}, {@value #CONCURRENT_CALLS},
- * {@value #WAITING_CALLS}, {@value #MAX_CONCURRENT}, {@value #AVAILABLE_PERMITS}. Every metric has an
+ * {@value #WAITING_CALLS}, {@value #MAX_CONCURRENT}, {@value #AVAILABLE_PERMITS}, {@value #LIMIT},
+ * {@value #LIMIT_CONCURRENT_CALLS}. Every metric has an
  * {@code instance} attribute (the policy instance id); attribute values are lowercase.
  *
  * <p>Counters cost nothing on success paths: the listener runs only when a policy publishes an event,
@@ -66,7 +69,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     /** The instrumentation scope name. */
     public static final String SCOPE = "dev.resilience4cata";
 
-    /** Counter: calls rejected by a circuit breaker, rate limiter or bulkhead; attribute {@code kind}. */
+    /** Counter: calls rejected by a circuit breaker, rate limiter, adaptive limit or bulkhead; attribute {@code kind}. */
     public static final String CALLS_REJECTED = "r4c.calls.rejected";
     /** Counter: circuit breaker state changes; attributes {@code from} and {@code to}. */
     public static final String TRANSITIONS = "r4c.circuitbreaker.transitions";
@@ -85,6 +88,8 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     public static final String HEDGE_SKIPPED = "r4c.hedge.skipped";
     /** Counter: hedged calls that failed. */
     public static final String HEDGE_FAILED = "r4c.hedge.failed";
+    /** Counter: windows after which an adaptive limit moved its limit. */
+    public static final String LIMIT_CHANGES = "r4c.adaptivelimit.limit.changes";
     /** Counter: calls that timed out. */
     public static final String TIMED_OUT = "r4c.timeout.timed.out";
     /** Counter: fallbacks applied. */
@@ -103,6 +108,10 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     public static final String MAX_CONCURRENT = "r4c.bulkhead.max.concurrent";
     /** Gauge: permits the rate limiter would grant now. */
     public static final String AVAILABLE_PERMITS = "r4c.ratelimiter.available.permits";
+    /** Gauge: the adaptive limit's current limit. */
+    public static final String LIMIT = "r4c.adaptivelimit.limit";
+    /** Gauge: calls inside the adaptive limit. */
+    public static final String LIMIT_CONCURRENT_CALLS = "r4c.adaptivelimit.concurrent.calls";
 
     static final AttributeKey<String> INSTANCE = AttributeKey.stringKey("instance");
     static final AttributeKey<String> KIND = AttributeKey.stringKey("kind");
@@ -129,6 +138,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     private final LongCounter hedgeWon;
     private final LongCounter hedgeSkipped;
     private final LongCounter hedgeFailed;
+    private final LongCounter limitChanges;
     private final LongCounter timedOut;
     private final LongCounter fallbacks;
 
@@ -137,6 +147,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     private final ConcurrentHashMap<String, Attributes> breakerRejections = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Attributes> limiterRejections = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Attributes> bulkheadRejections = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Attributes> adaptiveLimitRejections = new ConcurrentHashMap<>();
     /** Per instance, indexed by {@code from.ordinal() * STATES.length + to.ordinal()}. */
     private final ConcurrentHashMap<String, Attributes[]> transitionAttributes = new ConcurrentHashMap<>();
     /** Per instance, indexed by reason ordinal. */
@@ -153,7 +164,8 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
 
     private OpenTelemetryMetrics(Meter meter) {
         this.meter = meter;
-        rejected = counter(CALLS_REJECTED, CALL_UNIT, "Calls rejected by a circuit breaker, rate limiter or bulkhead");
+        rejected = counter(CALLS_REJECTED, CALL_UNIT,
+                "Calls rejected by a circuit breaker, rate limiter, adaptive limit or bulkhead");
         transitionCounter = counter(TRANSITIONS, "{transition}", "Circuit breaker state changes");
         retryCounter = counter(RETRIES, "{retry}", "Attempts that failed and will be retried");
         gaveUp = counter(GAVE_UP, CALL_UNIT, "Retries that stopped without a success, by reason");
@@ -161,6 +173,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
         hedgeWon = counter(HEDGE_WON, CALL_UNIT, "Calls won by a hedged attempt rather than the first one");
         hedgeSkipped = counter(HEDGE_SKIPPED, ATTEMPT_UNIT, "Hedged attempts not started, by reason");
         hedgeFailed = counter(HEDGE_FAILED, CALL_UNIT, "Hedged calls that failed");
+        limitChanges = counter(LIMIT_CHANGES, "{window}", "Windows after which an adaptive limit moved its limit");
         timedOut = counter(TIMED_OUT, CALL_UNIT, "Calls that timed out");
         fallbacks = counter(FALLBACK_APPLIED, CALL_UNIT, "Failures answered by a fallback");
     }
@@ -227,14 +240,18 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
         ObservableLongMeasurement waiting = longGauge(WAITING_CALLS, CALL_UNIT, "Calls waiting for a place in the bulkhead");
         ObservableLongMeasurement maxConcurrent = longGauge(MAX_CONCURRENT, CALL_UNIT, "The bulkhead's maxConcurrent");
         ObservableLongMeasurement permits = longGauge(AVAILABLE_PERMITS, "{permit}", "Permits the rate limiter can grant now");
-        Gauges gauges = new Gauges(state, failureRate, slowCallRate, concurrent, waiting, maxConcurrent, permits);
+        ObservableLongMeasurement limit = longGauge(LIMIT, CALL_UNIT, "The adaptive limit's current limit");
+        ObservableLongMeasurement limitConcurrent = longGauge(LIMIT_CONCURRENT_CALLS, CALL_UNIT,
+                "Calls running in the adaptive limit");
+        Gauges gauges = new Gauges(state, failureRate, slowCallRate, concurrent, waiting, maxConcurrent, permits, limit,
+                limitConcurrent);
         Runnable observe = () -> gauges.observe(registry.snapshot());
         synchronized (callbacks) { // cold: once per bind, never on a call path
             if (closed) {
                 throw new IllegalStateException("These OpenTelemetryMetrics are closed: create new ones to bind a registry.");
             }
             callbacks.add(meter.batchCallback(observe, state, failureRate, slowCallRate, concurrent, waiting,
-                    maxConcurrent, permits));
+                    maxConcurrent, permits, limit, limitConcurrent));
         }
     }
 
@@ -261,13 +278,16 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
         private final ObservableLongMeasurement waiting;
         private final ObservableLongMeasurement maxConcurrent;
         private final ObservableLongMeasurement permits;
+        private final ObservableLongMeasurement limit;
+        private final ObservableLongMeasurement limitConcurrent;
 
         // java:S107: one parameter per gauge, called once per bind
         @SuppressWarnings("java:S107")
         Gauges(ObservableLongMeasurement state, ObservableDoubleMeasurement failureRate,
                 ObservableDoubleMeasurement slowCallRate, ObservableLongMeasurement concurrent,
                 ObservableLongMeasurement waiting, ObservableLongMeasurement maxConcurrent,
-                ObservableLongMeasurement permits) {
+                ObservableLongMeasurement permits, ObservableLongMeasurement limit,
+                ObservableLongMeasurement limitConcurrent) {
             this.state = state;
             this.failureRate = failureRate;
             this.slowCallRate = slowCallRate;
@@ -275,6 +295,8 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
             this.waiting = waiting;
             this.maxConcurrent = maxConcurrent;
             this.permits = permits;
+            this.limit = limit;
+            this.limitConcurrent = limitConcurrent;
         }
 
         void observe(ResilienceSnapshot snapshot) {
@@ -287,6 +309,11 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
             }
             for (RateLimiterSnapshot limiter : snapshot.rateLimiters()) {
                 permits.record(limiter.availablePermits(), attributes(limiter.instance()));
+            }
+            for (AdaptiveLimitSnapshot adaptive : snapshot.adaptiveLimits()) {
+                Attributes instance = attributes(adaptive.instance());
+                limit.record(adaptive.limit(), instance);
+                limitConcurrent.record(adaptive.inFlight(), instance);
             }
         }
 
@@ -345,6 +372,8 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
                 case CircuitBreakerEvent.CallNotPermitted r -> rejected.add(1, breakerRejection(id));
                 case RateLimiterEvent.Rejected r -> rejected.add(1, limiterRejection(id));
                 case BulkheadEvent.Rejected r -> rejected.add(1, bulkheadRejection(id));
+                case AdaptiveLimitEvent.Rejected r -> rejected.add(1, adaptiveLimitRejection(id));
+                case AdaptiveLimitEvent.LimitChanged c -> limitChanges.add(1, attributes(id));
                 case RetryEvent.Retrying r -> retryCounter.add(1, attributes(id));
                 case RetryEvent.GaveUp g -> gaveUp.add(1, reasons(id)[g.reason().ordinal()]);
                 case TimeoutEvent.TimedOut t -> timedOut.add(1, attributes(id));
@@ -366,6 +395,10 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
 
         private Attributes bulkheadRejection(String id) {
             return cached(bulkheadRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "bulkhead"));
+        }
+
+        private Attributes adaptiveLimitRejection(String id) {
+            return cached(adaptiveLimitRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "adaptivelimit"));
         }
 
         private Attributes[] transitions(String id) {

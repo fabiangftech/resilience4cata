@@ -6,7 +6,7 @@
 
 | Anotación | Posición | Tipos de retorno | Valores por defecto |
 |---|---|---|---|
-| `@CircuitBreaker` | 3 de 6, dentro de Retry | sync y `CompletionStage` | ventana de 100 llamadas, abre con 50% de fallas tras 100 llamadas, 60 s abierto, 10 pruebas, detección de llamadas lentas desactivada |
+| `@CircuitBreaker` | 3 de 7, dentro de Retry | sync y `CompletionStage` | ventana de 100 llamadas, abre con 50% de fallas tras 100 llamadas, 60 s abierto, 10 pruebas, detección de llamadas lentas desactivada |
 
 </div>
 

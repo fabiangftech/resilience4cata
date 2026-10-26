@@ -3,6 +3,7 @@ package dev.resilience4cata.micrometer;
 import static dev.resilience4cata.micrometer.MicrometerMetrics.lower;
 
 import dev.resilience4cata.CircuitBreakerState;
+import dev.resilience4cata.event.AdaptiveLimitEvent;
 import dev.resilience4cata.event.BulkheadEvent;
 import dev.resilience4cata.event.CircuitBreakerEvent;
 import dev.resilience4cata.event.EventListener;
@@ -43,7 +44,9 @@ final class EventCounters implements EventListener<ResilienceEvent> {
     private static final int HEDGE_FAILED = HEDGE_WON + 1;
     private static final int HEDGED = HEDGE_FAILED + 1;
     private static final int HEDGE_SKIPPED = HEDGED + HEDGE_REASONS.length;
-    private static final int SLOTS = HEDGE_SKIPPED + SKIP_REASONS.length;
+    private static final int REJECTED_ADAPTIVE_LIMIT = HEDGE_SKIPPED + SKIP_REASONS.length;
+    private static final int LIMIT_CHANGES = REJECTED_ADAPTIVE_LIMIT + 1;
+    private static final int SLOTS = LIMIT_CHANGES + 1;
 
     private static final String CALLS_REJECTED = "r4c.calls.rejected";
 
@@ -66,6 +69,9 @@ final class EventCounters implements EventListener<ResilienceEvent> {
                     count(r, REJECTED_CIRCUIT_BREAKER, CALLS_REJECTED, "kind", "circuitbreaker");
             case RateLimiterEvent.Rejected r -> count(r, REJECTED_RATE_LIMITER, CALLS_REJECTED, "kind", "ratelimiter");
             case BulkheadEvent.Rejected r -> count(r, REJECTED_BULKHEAD, CALLS_REJECTED, "kind", "bulkhead");
+            case AdaptiveLimitEvent.Rejected r ->
+                    count(r, REJECTED_ADAPTIVE_LIMIT, CALLS_REJECTED, "kind", "adaptivelimit");
+            case AdaptiveLimitEvent.LimitChanged c -> count(c, LIMIT_CHANGES, "r4c.adaptivelimit.limit.changes");
             case RetryEvent.Retrying r -> count(r, RETRIES, "r4c.retry.retries");
             case RetryEvent.GaveUp g -> gaveUp(g);
             case TimeoutEvent.TimedOut t -> count(t, TIMED_OUT, "r4c.timeout.timed.out");
@@ -164,7 +170,7 @@ final class EventCounters implements EventListener<ResilienceEvent> {
     }
 
     private static final Map<String, String> DESCRIPTIONS = Map.ofEntries(
-            Map.entry(CALLS_REJECTED, "Calls rejected by a circuit breaker, rate limiter or bulkhead"),
+            Map.entry(CALLS_REJECTED, "Calls rejected by a circuit breaker, rate limiter, adaptive limit or bulkhead"),
             Map.entry("r4c.circuitbreaker.transitions", "Circuit breaker state changes"),
             Map.entry("r4c.retry.retries", "Attempts that failed and will be retried"),
             Map.entry("r4c.retry.gave.up", "Retries that stopped without a success, by reason"),
@@ -172,6 +178,7 @@ final class EventCounters implements EventListener<ResilienceEvent> {
             Map.entry("r4c.hedge.won", "Calls won by a hedged attempt rather than the first one"),
             Map.entry("r4c.hedge.skipped", "Hedged attempts not started, by reason"),
             Map.entry("r4c.hedge.failed", "Hedged calls that failed"),
+            Map.entry("r4c.adaptivelimit.limit.changes", "Windows after which an adaptive limit moved its limit"),
             Map.entry("r4c.timeout.timed.out", "Calls that timed out"),
             Map.entry("r4c.fallback.applied", "Failures answered by a fallback"));
 

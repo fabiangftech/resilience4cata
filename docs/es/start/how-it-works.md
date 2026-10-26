@@ -151,7 +151,7 @@ Sin importar en qué orden escribas las anotaciones, las políticas se anidan en
 
 ```mermaid
 flowchart LR
-    caller([caller]) --> F[Fallback] --> R[Retry] --> CB[CircuitBreaker] --> RL[RateLimiter] --> T[Timeout] --> B[Bulkhead] --> M([your method])
+    caller([caller]) --> F[Fallback] --> R[Retry | Hedge] --> CB[CircuitBreaker] --> RL[RateLimiter] --> AL[AdaptiveLimit] --> T[Timeout] --> B[Bulkhead] --> M([your method])
 ```
 
 - **El fallback es el más externo**, así que ve el resultado final, incluidos los rechazos como un breaker abierto o un bulkhead lleno.

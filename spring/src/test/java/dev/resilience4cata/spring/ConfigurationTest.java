@@ -100,6 +100,17 @@ class ConfigurationTest {
     }
 
     @Test
+    void adaptiveLimitKeysBindInKebabCase() {
+        runner.withPropertyValues("resilience4cata.defaults.adaptive-limit.algorithm=aimd",
+                "resilience4cata.configs.backend.adaptive-limit.max-limit=40").run(context -> {
+                    ResilienceRegistry registry = context.getBean(ResilienceRegistry.class);
+                    assertThat(registry.adaptiveLimitConfig("").algorithm())
+                            .isEqualTo(dev.resilience4cata.AdaptiveLimitConfig.Algorithm.AIMD);
+                    assertThat(registry.adaptiveLimitConfig("backend").maxLimit()).isEqualTo(40);
+                });
+    }
+
+    @Test
     void anInvalidConfigurationFailsTheStartupWithFileAndLine() {
         runner.withInitializer(new ConfigDataApplicationContextInitializer())
                 .withPropertyValues("spring.config.name=broken-test").run(context -> {
