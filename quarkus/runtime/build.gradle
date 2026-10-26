@@ -23,3 +23,7 @@ dependencies {
 tasks.named('compileJava') {
     options.compilerArgs.add('-parameters')
 }
+
+// No module-info: the API package that apiCompatibility compares (dev.resilience4cata.quarkus.runtime holds the
+// extension's beans and config roots, not API).
+r4cApi.packages = ['dev.resilience4cata.quarkus']

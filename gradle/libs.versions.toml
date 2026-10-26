@@ -8,6 +8,9 @@ assertj = "3.27.7"
 jspecify = "1.0.1"
 jmh = "1.37"
 jcstress = "0.16"
+# The API compatibility check of every published module (apiCompatibility in r4c.publish), run through Gradle's
+# Worker API: no third-party Gradle plugin.
+japicmp = "0.26.3"
 resilience4j = "2.4.0"
 concurrencyLimits = "0.5.4"
 # api of the micrometer module; the Prometheus registry is test-only (examples), for the sample scrape in the docs.
@@ -49,6 +52,7 @@ assertj = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }
 jmh-annprocess = { module = "org.openjdk.jmh:jmh-generator-annprocess", version.ref = "jmh" }
+japicmp = { module = "com.github.siom79.japicmp:japicmp", version.ref = "japicmp" }
 jcstress-core = { module = "org.openjdk.jcstress:jcstress-core", version.ref = "jcstress" }
 resilience4j-retry = { module = "io.github.resilience4j:resilience4j-retry", version.ref = "resilience4j" }
 resilience4j-circuitbreaker = { module = "io.github.resilience4j:resilience4j-circuitbreaker", version.ref = "resilience4j" }

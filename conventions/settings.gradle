@@ -3,6 +3,12 @@ dependencyResolutionManagement {
         gradlePluginPortal()
         mavenCentral()
     }
+    // The main build's catalog, so build logic and modules share one version of each library.
+    versionCatalogs {
+        libs {
+            from(files('../gradle/libs.versions.toml'))
+        }
+    }
 }
 
 rootProject.name = 'conventions'
