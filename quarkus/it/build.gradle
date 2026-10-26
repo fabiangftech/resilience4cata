@@ -1,0 +1,92 @@
+plugins {
+    id 'r4c.java-library'
+    // The official Quarkus Gradle plugin: the second documented exception to "no third-party Gradle plugins"
+    // (CLAUDE.md). Only this unpublished project applies it: @QuarkusTest and QuarkusExtensionTest need the
+    // application model it provides, and it builds the guide's application, also as a native image.
+    alias(libs.plugins.quarkus)
+}
+
+description = 'Tests of the Quarkus extension: the guide application (src/main) with @QuarkusTest (src/test), and QuarkusExtensionTest applications (src/extensionTest). Not published.'
+
+// QuarkusExtensionTest (one small application per test class, failures at build time included) cannot run in the
+// same JVM as @QuarkusTest, and its fixtures must stay out of the @QuarkusTest application, which indexes every
+// test class: so they have their own source set and Test task.
+sourceSets {
+    extensionTest {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+configurations {
+    micrometerJar {
+        canBeConsumed = false
+        transitive = false
+    }
+    extensionTestImplementation.extendsFrom implementation, testImplementation
+    extensionTestRuntimeOnly.extendsFrom runtimeOnly, testRuntimeOnly
+    extensionTestCompileOnly.extendsFrom testCompileOnly
+    extensionTestAnnotationProcessor.extendsFrom testAnnotationProcessor
+}
+
+dependencies {
+    implementation enforcedPlatform(libs.quarkus.bom)
+    implementation project(':quarkus:runtime')
+    implementation libs.quarkus.arc
+    implementation libs.quarkus.rest
+    implementation libs.quarkus.rest.client
+    implementation libs.quarkus.smallrye.health
+    implementation libs.quarkus.micrometer.registry.prometheus
+    // resilience4cata-micrometer as a jar file, not a project: Quarkus loads the application's own project
+    // dependencies in its reloadable class loader, which the extension's classes (in the base class loader) cannot see.
+    // An application gets the module from a repository, which Quarkus loads with the extension.
+    micrometerJar project(':micrometer')
+    implementation files(configurations.micrometerJar)
+    compileOnly project(':annotations')
+    annotationProcessor project(':processor')
+
+    testImplementation libs.quarkus.junit
+    testImplementation libs.rest.assured
+    testImplementation project(':testkit')
+    // R4C-QK-001 and R4C-QK-002 need SmallRye Fault Tolerance and Narayana. They are test dependencies, not
+    // extensionTest ones: QuarkusExtensionTest builds its applications from the test source set's application model.
+    testImplementation libs.quarkus.smallrye.fault.tolerance
+    testImplementation libs.quarkus.narayana.jta
+    testCompileOnly project(':annotations')
+    testAnnotationProcessor project(':processor')
+
+    extensionTestImplementation libs.quarkus.junit.internal
+    // QuarkusExtensionTest builds its applications with the deployment modules on the test class path, as in an
+    // extension's own deployment module.
+    extensionTestImplementation project(':quarkus:deployment')
+}
+
+def extensionTest = tasks.register('extensionTest', Test) {
+    description = 'Runs the QuarkusExtensionTest applications.'
+    group = 'verification'
+    testClassesDirs = sourceSets.extensionTest.output.classesDirs
+    classpath = sourceSets.extensionTest.runtimeClasspath
+    mustRunAfter tasks.named('test')
+    // One JVM per test class: SmallRye Context Propagation (brought by Fault Tolerance and Narayana) keeps static
+    // state that does not survive a second Quarkus application in the same JVM.
+    forkEvery = 1
+    include '**/*Test.class'
+    // ErrorCodeTest checks the error codes against the error reference pages.
+    inputs.files('../../docs/en/errors.md', '../../docs/es/errors.md').withPropertyName('errorPages')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+tasks.named('check') {
+    dependsOn extensionTest
+}
+// A random HTTP port: other builds on the machine (and CI's parallel jobs) may hold Quarkus's default test port.
+tasks.withType(Test).configureEach {
+    systemProperty 'quarkus.http.test-port', '0'
+}
+
+// The Quarkus plugin finds the deployment module through META-INF/quarkus-extension.properties of the runtime jar,
+// by its published coordinates; in this build they are projects.
+configurations.configureEach {
+    resolutionStrategy.dependencySubstitution {
+        substitute module('dev.resilience4cata:resilience4cata-quarkus') using project(':quarkus:runtime')
+        substitute module('dev.resilience4cata:resilience4cata-quarkus-deployment') using project(':quarkus:deployment')
+    }
+}

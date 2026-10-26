@@ -1,0 +1,20 @@
+plugins {
+    id 'r4c.java-library'
+    id 'r4c.publish'
+    id 'r4c.quarkus-extension'
+}
+
+description = 'Quarkus extension (runtime): the registry from application.properties, generated classes as CDI beans, metrics and health.'
+
+dependencies {
+    api project(':core')
+    api project(':config')
+    // Compiled against the oldest supported Quarkus (explicit versions, no BOM); the application's Quarkus BOM wins.
+    api libs.quarkus.arc.minimum
+    // Optional integrations, each registered by the deployment module only when the application has them.
+    compileOnly project(':micrometer')
+    compileOnly project(':opentelemetry')
+    compileOnly libs.microprofile.health.api.minimum
+    // Config roots, javadoc-based config documentation and META-INF/quarkus-*.list files.
+    annotationProcessor libs.quarkus.extension.processor.minimum
+}

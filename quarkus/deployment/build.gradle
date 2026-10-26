@@ -1,0 +1,14 @@
+plugins {
+    id 'r4c.java-library'
+    id 'r4c.publish'
+    id 'r4c.quarkus-extension'
+}
+
+description = 'Quarkus extension (deployment): the build steps of resilience4cata-quarkus. Applications never depend on it directly.'
+
+dependencies {
+    api project(':quarkus:runtime')
+    api libs.quarkus.arc.deployment.minimum
+    // The build-step list (META-INF/quarkus-build-steps.list) and config metadata.
+    annotationProcessor libs.quarkus.extension.processor.minimum
+}

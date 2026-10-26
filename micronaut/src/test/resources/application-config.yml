@@ -1,0 +1,19 @@
+resilience4cata:
+  defaults:
+    retry:
+      delay: 10ms
+      retry-on:
+        - java.io.IOException
+        - java.lang.IllegalStateException
+  configs:
+    external:
+      circuit-breaker:
+        minimum-calls: 50
+        wait-in-open: 10s
+  instances:
+    payments:
+      retry.max-attempts: 5
+    '"dev.resilience4cata.micronaut.fixtures.Shipping#track(java.lang.String)"':
+      timeout.value: 4s
+  micronaut:
+    verify-instances: "off"

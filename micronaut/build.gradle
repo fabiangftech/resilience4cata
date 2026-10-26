@@ -1,0 +1,77 @@
+plugins {
+    id 'r4c.java-library'
+    id 'r4c.publish'
+}
+
+description = 'Micronaut 5 integration: the registry from application configuration, protected beans, metrics, health and a management endpoint.'
+
+// Micronaut 5 requires Java 25: the documented exception to the Java 21 baseline (core and config stay on 21).
+r4cJava.release = 25
+
+configurations {
+    // ProcessorCoexistenceTest compiles sources in memory with Micronaut's processors and ours, in both orders.
+    processorPath {
+        canBeConsumed = false
+    }
+}
+
+dependencies {
+    api project(':core')
+    api project(':config')
+    // Compiled against the oldest supported Micronaut (explicit versions, no BOM); the application's own, newer
+    // Micronaut wins at resolution.
+    api libs.micronaut.inject.minimum
+    // Optional integrations, each behind @Requires(classes = ...): the application brings them if it wants them.
+    compileOnly project(':micrometer')
+    compileOnly libs.micronaut.management.minimum
+    // Micronaut's bean definitions for this module's beans.
+    annotationProcessor libs.micronaut.inject.java.minimum
+
+    // Tests run on the latest Micronaut, through its platform BOM, with both processors: Micronaut's and ours.
+    testImplementation platform(libs.micronaut.platform)
+    testImplementation libs.micronaut.inject
+    testImplementation libs.micronaut.management
+    testImplementation libs.micronaut.micrometer.core
+    testImplementation libs.micronaut.http.server.netty
+    testImplementation libs.micronaut.http.client
+    testImplementation libs.micronaut.serde.jackson
+    testImplementation libs.micronaut.test.junit5
+    testImplementation libs.micronaut.data.tx
+    testRuntimeOnly libs.snakeyaml
+    testImplementation libs.logback.classic
+    testImplementation project(':micrometer')
+    testImplementation project(':testkit')
+    testCompileOnly project(':annotations')
+    testAnnotationProcessor platform(libs.micronaut.platform)
+    testAnnotationProcessor libs.micronaut.inject.java
+    testAnnotationProcessor project(':processor')
+
+    processorPath platform(libs.micronaut.platform)
+    processorPath libs.micronaut.inject.java
+    processorPath project(':processor')
+    processorPath project(':annotations')
+    processorPath project(':core')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    // Micronaut's classes carry annotations of libraries it does not depend on (JetBrains' @Contract, Jackson 3's
+    // @JsonDeserialize): javac's classfile lint would ask for those jars on the class path.
+    options.compilerArgs.add('-Xlint:-classfile')
+}
+
+tasks.named('compileTestJava') {
+    // Annotated classes become Micronaut beans: their generated subclasses carry the class's scope and
+    // @Replaces(C.class) (the setup the Micronaut guide recommends).
+    options.compilerArgs.add('-Ar4c.inject=micronaut')
+}
+
+tasks.named('jar') {
+    // Micronaut is not modular: an automatic module, like Micronaut's own jars.
+    manifest.attributes('Automatic-Module-Name': 'dev.resilience4cata.micronaut')
+}
+
+tasks.named('test') {
+    jvmArgumentProviders.add(new dev.resilience4cata.build.ClasspathProperty('test.processorPath', configurations.processorPath))
+    // ErrorCodeTest checks the error codes against the error reference pages.
+    inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
+}

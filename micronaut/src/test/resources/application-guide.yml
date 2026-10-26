@@ -1,0 +1,19 @@
+# The configuration of the Micronaut guide (docs/en/guides/micronaut.md), active in the "guide" environment.
+# tag::micronaut-yaml[]
+resilience4cata:
+  defaults:
+    retry:
+      delay: 50ms
+    circuit-breaker:
+      minimum-calls: 20
+  configs:
+    slow:
+      retry.delay: 500ms
+  instances:
+    orders:
+      circuit-breaker.failure-rate-threshold: 25
+    '"dev.resilience4cata.micronaut.guide.StockClient#available(java.lang.String)"':
+      timeout.value: 3s
+# end::micronaut-yaml[]
+invoices:
+  url: https://invoices.example.com

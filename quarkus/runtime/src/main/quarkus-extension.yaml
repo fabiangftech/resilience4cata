@@ -1,0 +1,20 @@
+---
+artifact: "@artifact@"
+name: "resilience4cata"
+description: "Annotation-driven resilience (retry, circuit breaker, rate limiter, timeout, bulkhead, fallback, hedge) generated at compile time: no interceptors on the call path."
+metadata:
+  keywords:
+    - "resilience"
+    - "fault-tolerance"
+    - "retry"
+    - "circuit-breaker"
+    - "rate-limiter"
+    - "bulkhead"
+    - "timeout"
+  guide: "https://resilience4cata.dev/#/en/guides/quarkus"
+  categories:
+    - "cloud"
+  status: "preview"
+  built-with-quarkus-core: "@quarkusCoreVersion@"
+  requires-quarkus-core: "[@quarkusCoreVersion@,)"
+  minimum-java-version: "@minimumJavaVersion@"
