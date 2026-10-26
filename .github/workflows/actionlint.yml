@@ -1,0 +1,30 @@
+# Lints every workflow file with actionlint (syntax, expressions, action inputs, shell in run steps).
+# The one CI step that is not a Gradle command; locally:
+#   docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.7
+name: actionlint
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/**']
+  pull_request:
+    paths: ['.github/workflows/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Pinned by digest, like the actions above (rhysd/actionlint 1.7.7).
+      - name: Lint workflows
+        uses: docker://rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+        with:
+          args: -color

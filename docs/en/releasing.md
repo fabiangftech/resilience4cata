@@ -60,7 +60,7 @@ Keep secrets in `~/.gradle/gradle.properties` or the environment, never in the r
 
 1. Set the release version in `gradle.properties`: `version=0.1.0`. Commit (`release 0.1.0`) and tag: `git tag v0.1.0`, then push the commit and the tag.
 2. Build the bundle, either:
-   - in CI: run the **release** workflow (`.github/workflows/release.yml`) on tag `v0.1.0`. It builds, signs, checks, archives `central-bundle.zip` as a workflow artifact, and uploads it if the token secrets are set; or
+   - in CI: run the **release** workflow (`.github/workflows/release.yml`) on tag `v0.1.0`. It first runs the whole build on JDK 21 and 25 (the same `build` workflow as CI, on the tagged commit), and only then builds, signs, checks, archives `central-bundle.zip` as a workflow artifact, and uploads it if the token secrets are set; or
    - locally: `./gradlew build centralBundle --no-configuration-cache` with the signing properties set.
 3. Upload, if CI did not: `./gradlew centralUpload -x centralBundle`, or in the portal **Publish Component**, choose `build/central-bundle.zip`.
 4. In the portal, open **Deployments**, wait for *Validated*, review the files, then press **Publish** (or **Drop** to discard it). Artifacts reach Maven Central within about 30 minutes.

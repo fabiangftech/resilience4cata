@@ -60,7 +60,7 @@ Guarda los secretos en `~/.gradle/gradle.properties` o en el entorno, nunca en e
 
 1. Fija la versión en `gradle.properties`: `version=0.1.0`. Haz commit (`release 0.1.0`) y el tag: `git tag v0.1.0`; luego sube el commit y el tag.
 2. Arma el bundle, de una de dos formas:
-   - en CI: ejecuta el workflow **release** (`.github/workflows/release.yml`) sobre el tag `v0.1.0`. Compila, firma, verifica, guarda `central-bundle.zip` como artefacto del workflow y lo sube si están los secretos del token; o
+   - en CI: ejecuta el workflow **release** (`.github/workflows/release.yml`) sobre el tag `v0.1.0`. Primero corre el build completo con JDK 21 y 25 (el mismo workflow `build` del CI, sobre el commit del tag), y solo después compila, firma, verifica, guarda `central-bundle.zip` como artefacto del workflow y lo sube si están los secretos del token; o
    - en local: `./gradlew build centralBundle --no-configuration-cache` con las propiedades de firma definidas.
 3. Sube el bundle, si CI no lo hizo: `./gradlew centralUpload -x centralBundle`, o en el portal **Publish Component** y elige `build/central-bundle.zip`.
 4. En el portal, abre **Deployments**, espera el estado *Validated*, revisa los archivos y pulsa **Publish** (o **Drop** para descartarlo). Los artefactos llegan a Maven Central en unos 30 minutos.

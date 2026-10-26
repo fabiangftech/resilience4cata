@@ -6,6 +6,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # The project adopts a release only once it is at least two weeks old (CLAUDE.md).
+    cooldown:
+      default-days: 14
     ignore:
       # The oldest JUnit that resilience4cata-junit supports (junitMinimum, junitPlatformMinimum in
       # gradle/libs.versions.toml): the module compiles against it and minimumJUnitTest runs on it. The rest of
@@ -34,6 +37,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # The project adopts a release only once it is at least two weeks old (CLAUDE.md).
+    cooldown:
+      default-days: 14
     groups:
       actions:
         patterns: ['*']

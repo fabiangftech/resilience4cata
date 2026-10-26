@@ -16,7 +16,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The whole build on JDK 21 and 25 (the same workflow as CI) must pass on the tagged commit first:
+  # the bundle step below only builds on JDK 21, so a JDK 25 failure would otherwise not stop a release.
+  tests:
+    uses: ./.github/workflows/build.yml
+
   bundle:
+    needs: tests
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # The signing and Central Portal secrets live in this environment, not at repository level.

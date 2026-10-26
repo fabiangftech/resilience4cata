@@ -7,6 +7,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # release.yml runs this workflow on the tagged commit before it builds the bundle.
+  workflow_call:
 
 permissions:
   contents: read
