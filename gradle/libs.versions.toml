@@ -22,7 +22,7 @@ springBootMinimum = "4.1.0"
 # The Spring Framework of springBootMinimum, for the spring module's compile-only spring-tx (same Dependabot rule).
 springFrameworkMinimum = "7.0.8"
 # Compile-only in the spring module: javac reads Jackson annotations on Spring Boot's health classes.
-jacksonAnnotations = "2.21"
+jacksonAnnotations = "2.22"
 
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
