@@ -10,7 +10,7 @@ jmh = "1.37"
 jcstress = "0.16"
 resilience4j = "2.4.0"
 # api of the micrometer module; the Prometheus registry is test-only (examples), for the sample scrape in the docs.
-micrometer = "1.17.1"
+micrometer = "1.17.2"
 # The opentelemetry module: the API is an api dependency, the SDK is test-only.
 opentelemetry = "1.67.0"
 # Test-only, in examples: the Prometheus exporter of docs/en/guides/opentelemetry.md (published only as -alpha).
