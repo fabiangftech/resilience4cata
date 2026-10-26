@@ -14,7 +14,13 @@ Java 21 or later, at compile time and at runtime. The library is compiled with `
 
 ### Does it work with Spring, Quarkus, Micronaut or Jakarta CDI? :id=frameworks
 
-It does not integrate with any of them, and it does not need to: generated classes are plain Java, so you create the wrapped object yourself (`Resilient.of(…)`) and register it as a bean the way your framework does it. There is no auto-configuration, no AOP and no annotation scanning at runtime.
+| Framework | Integration |
+|---|---|
+| Spring Boot 4.1+ | `resilience4cata-spring` (from 0.4.0): annotated classes are instantiated as their generated subclass, beans of annotated interfaces are wrapped, the registry is configured from `application.yml`, plus health, an actuator endpoint and metrics. No AOP. [Spring Boot guide](guides/spring.md) |
+| Spring Boot 3 | not supported |
+| Quarkus, Micronaut, Jakarta CDI | none yet, and none needed: generated classes are plain Java, so create the object yourself (`Resilient.of(…)` or `new C$Resilient(registry, …)`) and register it as a bean the way your framework does it. The generated constructors of annotated classes copy `@Inject` and qualifiers, so a container can also instantiate `C$Resilient` directly |
+
+There is no runtime proxy, no AOP and no annotation scanning at runtime in any case.
 
 ### Is it a fork of Resilience4j? :id=fork
 
@@ -92,7 +98,7 @@ On AWS Graviton3, a retry whose first attempt succeeds costs 1.2 ns and a circui
 
 ### What is not supported yet? :id=not-supported
 
-Hedging, adaptive concurrency limits, caching and thread-pool bulkheads; reactive types; `? super` async types; changing the policy order; runtime reconfiguration; framework integration modules. See [Design decisions](design.md) for what is planned and what is excluded by decision.
+Adaptive concurrency limits, caching and thread-pool bulkheads; synchronous hedging (`@Hedge` works on async methods); reactive types; `? super` async types; changing the policy order; runtime reconfiguration; integration modules for frameworks other than Spring Boot. See [Design decisions](design.md) for what is planned and what is excluded by decision.
 
 ### What is on the roadmap? :id=roadmap
 
@@ -100,13 +106,13 @@ Planned, not promised; names and scope can change:
 
 | Feature | Tier | Notes |
 |---|---|---|
-| Hedging (`@Hedge`) | v1 | Resilience4j has `resilience4j-hedge` (async, programmatic only); ours would be an annotation |
+| Hedging (`@Hedge`) | done in 0.4.0 | async methods and `Pipeline.executeAsync` ([Hedge](policies/hedge.md)); synchronous hedging later. Resilience4j has `resilience4j-hedge` (async, programmatic only) |
 | Adaptive concurrency limit (`@AdaptiveLimit`: AIMD, Vegas, Gradient2) | v1 | |
 | OpenTelemetry tracing | later | metrics are in `resilience4cata-opentelemetry` since 0.3.0 ([guide](guides/opentelemetry.md)) |
 | YAML configuration | v1 | separate module, so `core` stays dependency-free |
 | Configurable execution order (`@Order`) | v1 | |
 | `locked` attribute (an instance that external configuration cannot override) | v1 | |
-| `@Cached`, reactive types, Kotlin coroutines, fault injection, deadline propagation, framework integrations | later | |
+| `@Cached`, reactive types, Kotlin coroutines, fault injection, deadline propagation, Quarkus/Micronaut/CDI integrations | later | |
 
 Until then, [testkit](guides/testing.md) covers tests.
 

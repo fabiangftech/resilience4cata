@@ -70,6 +70,10 @@ The names and tags are the ones in [Observability](observability.md#metric-names
 | `r4c.circuitbreaker.transitions` | counter | `instance`, `from`, `to` | `r4c_circuitbreaker_transitions_total` |
 | `r4c.retry.retries` | counter | `instance` | `r4c_retry_retries_total` |
 | `r4c.retry.gave.up` | counter | `instance`, `reason` | `r4c_retry_gave_up_total` |
+| `r4c.hedge.hedged` | counter | `instance`, `reason` | `r4c_hedge_hedged_total` |
+| `r4c.hedge.won` | counter | `instance` | `r4c_hedge_won_total` |
+| `r4c.hedge.skipped` | counter | `instance`, `reason` | `r4c_hedge_skipped_total` |
+| `r4c.hedge.failed` | counter | `instance` | `r4c_hedge_failed_total` |
 | `r4c.timeout.timed.out` | counter | `instance` | `r4c_timeout_timed_out_total` |
 | `r4c.fallback.applied` | counter | `instance` | `r4c_fallback_applied_total` |
 | `r4c.circuitbreaker.state` | gauge | `instance`, `state` | `r4c_circuitbreaker_state` |
@@ -80,12 +84,12 @@ The names and tags are the ones in [Observability](observability.md#metric-names
 | `r4c.bulkhead.max.concurrent` | gauge | `instance` | `r4c_bulkhead_max_concurrent` |
 | `r4c.ratelimiter.available.permits` | gauge | `instance` | `r4c_ratelimiter_available_permits` |
 
-Tag values are lowercase: states `closed`, `open`, `half_open`, `forced_open`, `disabled`; reasons `max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed` (a reason added in a later version appears on its own).
+Tag values are lowercase: states `closed`, `open`, `half_open`, `forced_open`, `disabled`; retry reasons `max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`; hedge reasons `delay`, `failure` (`hedged`) and `budget_exhausted`, `rejected`, `aborted` (`skipped`) (a reason added in a later version appears on its own).
 
 When each meter appears:
 
 - **Counters** are registered at their first event: a service that never retried has no `r4c_retry_retries_total` series yet. In PromQL, `… or vector(0)` fills the gap when you need a zero.
-- **Gauges** are registered when the instance is bound: the circuit breaker's five `state` series (one is 1, the others 0), its two rates, the bulkhead's three gauges and the rate limiter's one. Retries, timeouts and fallbacks have no gauges.
+- **Gauges** are registered when the instance is bound: the circuit breaker's five `state` series (one is 1, the others 0), its two rates, the bulkhead's three gauges and the rate limiter's one. Retries, hedges, timeouts and fallbacks have no gauges.
 - **The rates are NaN** until the breaker's window holds `minimumCalls` calls, while the breaker is open, forced open or disabled (there is no window then), and, for the slow-call rate, when slow-call detection is off (no `slowCallDuration`). Prometheus stores NaN as a value; graphs show a gap.
 
 ## What Prometheus shows :id=prometheus
@@ -137,6 +141,7 @@ Every series carries `instance`, and its other tags have a fixed set of values, 
 
 - a circuit breaker: 7 gauge series, plus up to 25 `transitions` series (in practice the handful of transitions that happen) and one `rejected`;
 - a retry: one `retries` series and one `gave.up` series per reason that occurred;
+- a hedge: up to two `hedged` series, one `won`, one `failed`, and one `skipped` series per reason that occurred;
 - a bulkhead: 3 gauges and one `rejected`; a rate limiter: 1 gauge and one `rejected`; a timeout or a fallback: one counter.
 
 Keep instance ids bounded: they come from your code (an annotation `name`, a method, a pipeline id), so they are, unless you build pipeline ids from request data. Never do that, for metrics and for the policies themselves, which would then never share state. Prefer a `name` shared by the methods that call the same dependency: one series per dependency is easier to read than one per method. Don't add the exception class or message as a tag yourself: they are unbounded in practice.

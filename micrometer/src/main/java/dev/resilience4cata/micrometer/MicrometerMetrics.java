@@ -37,7 +37,8 @@ import org.jspecify.annotations.Nullable;
  * }</pre>
  *
  * <p><b>Counters</b> ({@code r4c.calls.rejected}, {@code r4c.circuitbreaker.transitions},
- * {@code r4c.retry.retries}, {@code r4c.retry.gave.up}, {@code r4c.timeout.timed.out},
+ * {@code r4c.retry.retries}, {@code r4c.retry.gave.up}, {@code r4c.hedge.hedged}, {@code r4c.hedge.won},
+ * {@code r4c.hedge.skipped}, {@code r4c.hedge.failed}, {@code r4c.timeout.timed.out},
  * {@code r4c.fallback.applied}) come from an event listener that {@link #register} adds to the
  * builder. A counter is registered with Micrometer at its first event and cached, so later events
  * only look it up and increment it. Successful calls publish no events, so they cost nothing.

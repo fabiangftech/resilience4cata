@@ -13,7 +13,7 @@ package dev.resilience4cata.event;
  * }</pre>
  */
 public sealed interface ResilienceEvent
-        permits CircuitBreakerEvent, RetryEvent, TimeoutEvent, BulkheadEvent, RateLimiterEvent, FallbackEvent {
+        permits CircuitBreakerEvent, RetryEvent, HedgeEvent, TimeoutEvent, BulkheadEvent, RateLimiterEvent, FallbackEvent {
 
     /** Id of the policy instance: its {@code name}, or the derived {@code <interface>#<method>(<parameter types>)}. */
     String instance();

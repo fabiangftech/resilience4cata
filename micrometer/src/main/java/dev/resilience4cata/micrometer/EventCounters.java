@@ -7,6 +7,7 @@ import dev.resilience4cata.event.BulkheadEvent;
 import dev.resilience4cata.event.CircuitBreakerEvent;
 import dev.resilience4cata.event.EventListener;
 import dev.resilience4cata.event.FallbackEvent;
+import dev.resilience4cata.event.HedgeEvent;
 import dev.resilience4cata.event.RateLimiterEvent;
 import dev.resilience4cata.event.ResilienceEvent;
 import dev.resilience4cata.event.RetryEvent;
@@ -26,6 +27,8 @@ final class EventCounters implements EventListener<ResilienceEvent> {
 
     private static final RetryEvent.Reason[] REASONS = RetryEvent.Reason.values();
     private static final CircuitBreakerState[] STATES = CircuitBreakerState.values();
+    private static final HedgeEvent.Reason[] HEDGE_REASONS = HedgeEvent.Reason.values();
+    private static final HedgeEvent.SkipReason[] SKIP_REASONS = HedgeEvent.SkipReason.values();
 
     // Slots of Instance.counters. Reasons and states are indexed by ordinal, so new constants get slots.
     private static final int RETRIES = 0;
@@ -36,7 +39,11 @@ final class EventCounters implements EventListener<ResilienceEvent> {
     private static final int REJECTED_BULKHEAD = 5;
     private static final int GAVE_UP = 6;
     private static final int TRANSITIONS = GAVE_UP + REASONS.length;
-    private static final int SLOTS = TRANSITIONS + STATES.length * STATES.length;
+    private static final int HEDGE_WON = TRANSITIONS + STATES.length * STATES.length;
+    private static final int HEDGE_FAILED = HEDGE_WON + 1;
+    private static final int HEDGED = HEDGE_FAILED + 1;
+    private static final int HEDGE_SKIPPED = HEDGED + HEDGE_REASONS.length;
+    private static final int SLOTS = HEDGE_SKIPPED + SKIP_REASONS.length;
 
     private static final String CALLS_REJECTED = "r4c.calls.rejected";
 
@@ -63,6 +70,10 @@ final class EventCounters implements EventListener<ResilienceEvent> {
             case RetryEvent.GaveUp g -> gaveUp(g);
             case TimeoutEvent.TimedOut t -> count(t, TIMED_OUT, "r4c.timeout.timed.out");
             case FallbackEvent.Applied f -> count(f, FALLBACK, "r4c.fallback.applied");
+            case HedgeEvent.Hedged h -> hedged(h);
+            case HedgeEvent.Won w -> count(w, HEDGE_WON, "r4c.hedge.won");
+            case HedgeEvent.Skipped k -> skipped(k);
+            case HedgeEvent.Failed f -> count(f, HEDGE_FAILED, "r4c.hedge.failed");
         }
     }
 
@@ -80,6 +91,24 @@ final class EventCounters implements EventListener<ResilienceEvent> {
         Counter counter = instance(g.instance()).counters.get(slot);
         if (counter == null) { // the lowercase tag value is computed only here, not per event
             counter = create(g, slot, "r4c.retry.gave.up", "reason", lower(g.reason()));
+        }
+        counter.increment();
+    }
+
+    private void hedged(HedgeEvent.Hedged h) {
+        int slot = HEDGED + h.reason().ordinal();
+        Counter counter = instance(h.instance()).counters.get(slot);
+        if (counter == null) {
+            counter = create(h, slot, "r4c.hedge.hedged", "reason", lower(h.reason()));
+        }
+        counter.increment();
+    }
+
+    private void skipped(HedgeEvent.Skipped k) {
+        int slot = HEDGE_SKIPPED + k.reason().ordinal();
+        Counter counter = instance(k.instance()).counters.get(slot);
+        if (counter == null) {
+            counter = create(k, slot, "r4c.hedge.skipped", "reason", lower(k.reason()));
         }
         counter.increment();
     }
@@ -134,13 +163,17 @@ final class EventCounters implements EventListener<ResilienceEvent> {
         return Map.copyOf(instances);
     }
 
-    private static final Map<String, String> DESCRIPTIONS = Map.of(
-            CALLS_REJECTED, "Calls rejected by a circuit breaker, rate limiter or bulkhead",
-            "r4c.circuitbreaker.transitions", "Circuit breaker state changes",
-            "r4c.retry.retries", "Attempts that failed and will be retried",
-            "r4c.retry.gave.up", "Retries that stopped without a success, by reason",
-            "r4c.timeout.timed.out", "Calls that timed out",
-            "r4c.fallback.applied", "Failures answered by a fallback");
+    private static final Map<String, String> DESCRIPTIONS = Map.ofEntries(
+            Map.entry(CALLS_REJECTED, "Calls rejected by a circuit breaker, rate limiter or bulkhead"),
+            Map.entry("r4c.circuitbreaker.transitions", "Circuit breaker state changes"),
+            Map.entry("r4c.retry.retries", "Attempts that failed and will be retried"),
+            Map.entry("r4c.retry.gave.up", "Retries that stopped without a success, by reason"),
+            Map.entry("r4c.hedge.hedged", "Hedged attempts started, by reason"),
+            Map.entry("r4c.hedge.won", "Calls won by a hedged attempt rather than the first one"),
+            Map.entry("r4c.hedge.skipped", "Hedged attempts not started, by reason"),
+            Map.entry("r4c.hedge.failed", "Hedged calls that failed"),
+            Map.entry("r4c.timeout.timed.out", "Calls that timed out"),
+            Map.entry("r4c.fallback.applied", "Failures answered by a fallback"));
 
     /** The counters of one instance id, by slot. */
     private static final class Instance {

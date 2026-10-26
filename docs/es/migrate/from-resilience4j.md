@@ -6,7 +6,7 @@ Cómo se corresponden los registries, configs, decoradores y anotaciones de Spri
 
 resilience4cata cubre seis políticas (retry, circuit breaker, rate limiter, timeout, bulkhead, fallback) para Java 21+ puro, con código generado en tiempo de compilación. **Quédate en Resilience4j** si necesitas algo de esto, que resilience4cata todavía no tiene:
 
-- autoconfiguración de Spring Boot, endpoints de actuator, binding de `application.yml` o anotaciones de Spring AOP (resilience4cata no tiene integración con Spring, CDI ni AspectJ);
+- integración con Spring Boot 3, CDI o AspectJ (resilience4cata se integra solo con Spring Boot 4.1+, [más abajo](#spring-boot));
 - operadores de Reactor, RxJava o corrutinas de Kotlin (resilience4cata solo admite `CompletionStage` / `CompletableFuture`);
 - un bulkhead con pool de threads, una caché o un time limiter para futures arbitrarios;
 - cambiar la configuración de una política en tiempo de ejecución (resilience4cata resuelve la configuración una sola vez, por diseño);
@@ -45,6 +45,7 @@ resilience4cata cubre seis políticas (retry, circuit breaker, rate limiter, tim
 | `failAfterMaxAttempts(true)` (`MaxRetriesExceededException`) | `@Retry(onExhaustedResult = THROW)` (`ResultRejectedException`) |
 | `IntervalFunction.ofExponentialBackoff(…)`, `ofExponentialRandomBackoff(…)` | `backoff`, `multiplier`, `maxDelay`, `jitter` |
 | `TimeLimiter` + un executor para código bloqueante | `@Timeout` en el thread de quien llama |
+| `resilience4j-hedge`: `Hedge.of(config).decorateCompletionStage(…)` | [`@Hedge`](../policies/hedge.md) en un método que devuelve un `CompletableFuture`, o `Pipeline…hedge(…)` con `executeAsync` ([correspondencia](#map-hedge)) |
 | `ThreadPoolBulkhead`, `Cache`, operadores de Reactor/RxJava/Kotlin | sin equivalente |
 
 ## Correspondencia de configuración :id=config-mapping
@@ -101,11 +102,27 @@ Los métodos de los builders de Resilience4j (las properties de Spring Boot usan
 > [!WARNING]
 > Tres valores predeterminados suelen sorprender: el retry de resilience4cata usa **backoff exponencial con jitter completo desde 200 ms**, no un valor fijo de 500 ms; su rate limiter **rechaza de inmediato** en lugar de esperar hasta 5 s; y su breaker **no cronometra las llamadas** a menos que configures `slowCallDuration`. Configúralos explícitamente al migrar.
 
+### Hedge :id=map-hedge
+
+El módulo `resilience4j-hedge` de Resilience4j (2.x) es programático y solo async, como el nuestro (sin anotación de Spring), y lanza como mucho un hedge.
+
+| Resilience4j | resilience4cata | Notas |
+|---|---|---|
+| `HedgeConfig.Builder.preconfiguredDuration(d)` | `@Hedge(delay = "…")` | El nuestro vale 1 s por defecto; `"0"` lanza todos los intentos a la vez |
+| `averagePlusPercentageDuration(…)`, `averagePlusAmountDuration(…)` | sin equivalente | Solo una espera fija; ponla cerca del p95 de la dependencia |
+| un hedge, siempre | `@Hedge(maxAttempts = 2)` (el valor por defecto) | Hasta 10 intentos |
+| `withMaxConcurrency(n)` (tamaño base del pool de threads del hedge) | sin equivalente | Los hedges empiezan en virtual threads nuevos; el [presupuesto de hedge](../policies/hedge.md#el-presupuesto-de-hedge) limita su número en su lugar |
+| `withContextPropagators(…)` | sin equivalente | Los intentos 2+ corren sin los `ThreadLocal` de quien llama |
+| `submit(callable, executor)` para código bloqueante | sin equivalente | Los métodos sincrónicos son un error de compilación ([R4C-HDG-001](../errors.md#r4c-hdg-001)): devuelve un `CompletableFuture` |
+| `HedgeOnPrimarySuccessEvent`, `…OnSecondarySuccessEvent`, `…Failure…` | `HedgeEvent.Hedged`, `Won`, `Skipped`, `Failed` | Un primer intento que gana antes de la espera no publica nada |
+
+La semántica difiere: en Resilience4j gana el primer intento que **termina**, así que una falla rápida de cualquiera de los dos hace fallar la llamada; en resilience4cata gana el primer **éxito**, una falla de `hedgeOn` lanza el siguiente intento enseguida, y la llamada solo falla cuando todos los intentos han fallado (o uno falla con una falla de `abortOn`). El perdedor se cancela, y el circuit breaker, el bulkhead y el timeout dentro del hedge liberan lo que tenía.
+
 ## Diferencias de comportamiento :id=differences
 
 ### El orden es fijo :id=order
 
-Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead → método, sin importar el orden de las anotaciones. Coincide con el orden predeterminado de aspectos de Spring en Resilience4j para las políticas que ambas tienen. No hay `@Order` ni reordenamiento por método; para otro orden, usa dos interfaces o un [`Pipeline`](../guides/pipeline.md) dentro de un método envuelto.
+Fallback → Retry (o Hedge) → CircuitBreaker → RateLimiter → Timeout → Bulkhead → método, sin importar el orden de las anotaciones. Coincide con el orden predeterminado de aspectos de Spring en Resilience4j para las políticas que ambas tienen. No hay `@Order` ni reordenamiento por método; para otro orden, usa dos interfaces o un [`Pipeline`](../guides/pipeline.md) dentro de un método envuelto.
 
 ### Un breaker abierto detiene los retries :id=open-breaker
 
@@ -224,9 +241,50 @@ defaults.circuitBreaker.failureRateThreshold=40
 
 Cárgalo con `ResilienceConfig.load()` (como `resilience4cata.properties` en el classpath) o con `ResilienceConfig.builder().classpath(…)`, y luego `config.applyTo(ResilienceRegistry.builder())`. Consulta [Configuración](../guides/configuration.md).
 
+## Desde resilience4j-spring-boot3 :id=spring-boot
+
+`resilience4cata-spring` reemplaza a `resilience4j-spring-boot3` en Spring Boot 4.1 o posterior
+([guía de Spring Boot](../guides/spring.md)). Quita `spring-boot-starter-aop`: no se teje ni se envuelve nada con
+proxies; el procesador de anotaciones genera las clases protegidas y la integración hace que Spring las instancie.
+
+| resilience4j-spring-boot3 | resilience4cata-spring |
+|---|---|
+| `resilience4j.<module>.instances.<name>.<key>` | `resilience4cata.instances.<name>.<policy>.<attribute>` (`circuit-breaker`, `retry`, `rate-limiter`, `timeout`, `bulkhead`) |
+| `resilience4j.<module>.configs.default.<key>` | `resilience4cata.defaults.<policy>.<attribute>` |
+| `resilience4j.<module>.configs.<name>.<key>` | `resilience4cata.configs.<name>.<policy>.<attribute>`, usada por `@Retry(config = "<name>")` y similares |
+| `baseConfig: <name>` | `resilience4cata.configs.<config>.extends: <name>`; una anotación elige su config con `config = "<name>"` |
+| propiedades `<module>AspectOrder` | ninguna: el orden es fijo (Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead) |
+| beans `CircuitBreakerConfigCustomizer`, `RetryConfigCustomizer`… | beans `ResilienceRegistryCustomizer` |
+| beans `RegistryEventConsumer`, `getEventPublisher()` | beans `EventListener<…>` |
+| `/actuator/circuitbreakers`, `/actuator/retries`, `/actuator/ratelimiters`… | `/actuator/resilience4cata` (todas las políticas, solo lectura) |
+| `/actuator/circuitbreakerevents` y los demás endpoints de eventos | ninguno: no se guarda historial de eventos; usa beans listener o métricas |
+| indicadores de salud, desactivados por defecto (`registerHealthIndicator`) | el indicador `resilience4cata`, activo pero UP con breakers abiertos salvo los listados en `resilience4cata.spring.health.down-when-open` |
+| métricas `resilience4j.circuitbreaker.*`… | métricas `r4c.*` ([Micrometer](../guides/micrometer.md)), con `resilience4cata-micrometer` |
+| `fallbackMethod = "f"` resuelto por reflexión | `@Fallback(method = "f")`, comprobado al compilar |
+
+Las mismas claves en `application.yml`:
+
+```yaml
+# resilience4j.circuitbreaker.instances.inventory.sliding-window-size: 50
+# resilience4j.circuitbreaker.configs.default.failure-rate-threshold: 40
+# resilience4j.retry.instances.inventory.max-attempts: 5
+resilience4cata:
+  defaults:
+    circuit-breaker:
+      failure-rate-threshold: 40
+  instances:
+    inventory:
+      circuit-breaker:
+        window-size: 50
+      retry:
+        max-attempts: 5
+```
+
+Las erratas detienen el arranque con el fichero y la línea de la clave, en lugar de ignorarse.
+
 ## Paso a paso :id=steps
 
-1. Agrega las dependencias, incluido el procesador en el processor path ([Instalación](../start/installation.md)).
+1. Agrega las dependencias, incluido el procesador en el processor path ([Instalación](../start/installation.md)); con Spring Boot, `resilience4cata-spring` ([más arriba](#spring-boot)).
 2. Para cada llamada decorada, pon la llamada detrás de una interfaz (o anota la clase) y traduce la configuración con las tablas anteriores. Define `backoff`, `jitter` y `maxWait` explícitamente donde los valores predeterminados difieren.
 3. Reemplaza `Decorators`/las anotaciones de Spring por las anotaciones de resilience4cata y `Resilient.of` (o `Resilient.create` para clases anotadas). Las llamadas que no puedas poner detrás de una interfaz pasan por un [`Pipeline`](../guides/pipeline.md).
 4. Mueve los consumidores de eventos a `ResilienceRegistry.Builder.listen(…)`, y las métricas al [módulo de Micrometer](../guides/micrometer.md).

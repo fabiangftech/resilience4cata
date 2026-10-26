@@ -142,7 +142,7 @@ Para un método que devuelve `CompletionStage<T>` o `CompletableFuture<T>`, un r
 CompletableFuture<String> geocodeAsync(String address);
 ```
 
-Ver [Métodos async](../guides/async.md).
+Cancelar el future de una llamada que todavía espera su permiso devuelve el permiso, y la llamada nunca arranca; una llamada que ya arrancó conserva su permiso ([cancelación](../guides/async.md#cancelación)). Ver [Métodos async](../guides/async.md).
 
 ## Lo mismo con `Pipeline`
 

@@ -14,6 +14,7 @@ Add four artifacts to your build: the BOM, `core`, the annotations and the annot
 | `resilience4cata-processor` | The annotation processor that generates the code. **Mandatory** when you use the annotations: there is no reflection fallback | `annotationProcessor` (Gradle), `annotationProcessorPaths` (Maven). Never on the runtime class path |
 | `resilience4cata-config` | Optional. External configuration: properties files, environment variables, system properties ([configuration guide](../guides/configuration.md)) | `implementation` / default scope |
 | `resilience4cata-micrometer` | Optional, from 0.3.0. Micrometer metrics: counters from events, gauges for breakers, bulkheads and rate limiters ([Micrometer guide](../guides/micrometer.md)). Brings in `micrometer-core` | `implementation` / default scope |
+| `resilience4cata-spring` | Optional, from 0.4.0. Spring Boot 4.1+ auto-configuration: the registry from `application.yml`, annotated beans protected, health indicator, actuator endpoint, metrics ([Spring Boot guide](../guides/spring.md)). Brings `core` and `config` | `implementation` / default scope |
 | `resilience4cata-testkit` | Optional. `ManualClock` and `ResilienceTesting` for deterministic tests ([testing guide](../guides/testing.md)). Does not depend on JUnit | `testImplementation` / `test` |
 | `resilience4cata-junit` | Optional, since 0.3.0. JUnit Jupiter extension (`@ResilienceTest`): a fresh `ManualClock` and a registry on it for each test, as parameters ([testing guide](../guides/testing.md#junit)). Brings testkit; needs JUnit 5.10 or newer, JUnit 6 included | `testImplementation` / `test` |
 
@@ -158,6 +159,57 @@ Nothing to add: the `maven-compiler-plugin` configuration applies to `testCompil
 
 <!-- tabs:end -->
 
+## Spring Boot
+
+For a Spring Boot 4.1+ application, depend on `resilience4cata-spring` instead of `core` (it brings `core` and `config`); the annotations and the processor stay as above. The [Spring Boot guide](../guides/spring.md) covers the rest.
+
+<!-- tabs:start -->
+
+#### **Gradle**
+
+```groovy
+dependencies {
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.4.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.4.0')
+
+    implementation 'dev.resilience4cata:resilience4cata-spring'           // brings core and config
+    compileOnly 'dev.resilience4cata:resilience4cata-annotations'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
+}
+```
+
+#### **Gradle (Kotlin)**
+
+```kotlin
+dependencies {
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:0.4.0")
+    implementation(r4cBom)
+    annotationProcessor(r4cBom)
+
+    implementation("dev.resilience4cata:resilience4cata-spring")           // brings core and config
+    compileOnly("dev.resilience4cata:resilience4cata-annotations")
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor")
+}
+```
+
+#### **Maven**
+
+```xml
+<!-- with resilience4cata-bom imported in <dependencyManagement> -->
+<dependency>
+  <groupId>dev.resilience4cata</groupId>
+  <artifactId>resilience4cata-spring</artifactId>
+</dependency>
+<dependency>
+  <groupId>dev.resilience4cata</groupId>
+  <artifactId>resilience4cata-annotations</artifactId>
+  <scope>provided</scope>
+</dependency>
+<!-- and resilience4cata-processor in annotationProcessorPaths, as above -->
+```
+
+<!-- tabs:end -->
+
 ## Verify that it works
 
 Annotate one method of an interface (the [quickstart](quickstart.md) has one) and compile. Next to the interface, the processor writes `<Interface>$Resilient.java`:
@@ -272,6 +324,30 @@ Builds that turn every warning into an error work. `javac` warns ("No processor 
 
 > [!TIP]
 > Declare each annotated interface in its own file. An annotated interface written as a second, non-public top-level type in another type's file makes the generated class trigger `javac`'s `auxiliaryclass` lint warning, which `-Werror` turns into an error.
+
+## Native image
+
+GraalVM Native Image needs no configuration of your own; the jars bring it:
+
+- **The processor writes reachability metadata for every generated class**, in the class output next to it: `META-INF/native-image/dev.resilience4cata.generated/<generated class>/reachability-metadata.json`. It registers the class's public constructors for reflection, which is what `Resilient.of` and `Resilient.create` use to find them (once per instance, never per call). Native Image reads every file of that name under `META-INF/native-image` on the class path. For `com.acme.PaymentClient`:
+
+  ```json
+  {
+    "reflection": [
+      {
+        "condition": {"typeReached": "com.acme.PaymentClient"},
+        "type": "com.acme.PaymentClient$Resilient",
+        "allPublicConstructors": true
+      }
+    ]
+  }
+  ```
+
+  For an interface, the entry applies once the interface is reached (an implementation of it has been initialized, which `Resilient.of` needs anyway). For an annotated class, the condition is `dev.resilience4cata.Resilient`, because `Resilient.create(C.class, ...)` can run before `C` is initialized; the array types of varargs constructors are registered too.
+- **`core` initializes its background threads at run time.** The timeout watchdog, the async timeout timer and the async delay timer are started by lazy holder classes; `core` ships `META-INF/native-image/dev.resilience4cata/resilience4cata-core/native-image.properties` with `--initialize-at-run-time` for those holders, so a framework that initializes classes at build time (Quarkus does by default) never puts a started thread in the image. Create the `ResilienceRegistry` and the wrapped services at run time, not in a static initializer that runs during the image build.
+- Calling the generated constructor directly (`new StockService$Resilient(registry, warehouse)`) uses no reflection at all.
+
+The metadata uses the single-file format of GraalVM for JDK 23 and later (see [Reachability Metadata](https://www.graalvm.org/latest/reference-manual/native-image/metadata/)). With an older GraalVM, register each `…$Resilient` class with its public constructors in your own `reflect-config.json`. Native builds are not part of the test suite yet.
 
 ## Troubleshooting
 

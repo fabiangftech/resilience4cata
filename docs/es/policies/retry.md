@@ -231,7 +231,7 @@ Un método que devuelve `CompletionStage<T>` o `CompletableFuture<T>` obtiene la
 CompletableFuture<Integer> stock(String sku);
 ```
 
-El primer intento corre en el thread de quien llama. Un stage fallido se reintenta después de la espera sin bloquear ningún thread: el siguiente intento arranca en un virtual thread nuevo. El future devuelto se completa con el primer resultado exitoso o falla con la última falla, desenvuelta de `CompletionException`. Ver [Métodos async](../guides/async.md).
+El primer intento corre en el thread de quien llama. Un stage fallido se reintenta después de la espera sin bloquear ningún thread: el siguiente intento arranca en un virtual thread nuevo. El future devuelto se completa con el primer resultado exitoso o falla con la última falla, desenvuelta de `CompletionException`. Cancelar el future devuelto cancela el intento en curso o el backoff pendiente, y no arranca más intentos ([cancelación](../guides/async.md#cancelación)). Ver [Métodos async](../guides/async.md).
 
 ## Lo mismo con `Pipeline`
 

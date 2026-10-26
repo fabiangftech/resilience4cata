@@ -74,7 +74,11 @@ Every metric has an `instance` attribute: the policy instance id (the `name` in 
 | `r4c.calls.rejected` | `LongCounter` | `{call}` | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `bulkhead` | `CircuitBreakerEvent.CallNotPermitted`, `RateLimiterEvent.Rejected`, `BulkheadEvent.Rejected` |
 | `r4c.circuitbreaker.transitions` | `LongCounter` | `{transition}` | `instance`, `from`, `to` (`closed`, `open`, `half_open`, `forced_open`, `disabled`) | `CircuitBreakerEvent.StateTransition` |
 | `r4c.retry.retries` | `LongCounter` | `{retry}` | `instance` | `RetryEvent.Retrying` |
-| `r4c.retry.gave.up` | `LongCounter` | `{call}` | `instance`, `reason` (`max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`) | `RetryEvent.GaveUp` |
+| `r4c.retry.gave.up` | `LongCounter` | `{call}` | `instance`, `reason` (`max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`) | `RetryEvent.GaveUp` |
+| `r4c.hedge.hedged` | `LongCounter` | `{attempt}` | `instance`, `reason` (`delay`, `failure`) | `HedgeEvent.Hedged` |
+| `r4c.hedge.won` | `LongCounter` | `{call}` | `instance` | `HedgeEvent.Won` |
+| `r4c.hedge.skipped` | `LongCounter` | `{attempt}` | `instance`, `reason` (`budget_exhausted`, `rejected`, `aborted`) | `HedgeEvent.Skipped` |
+| `r4c.hedge.failed` | `LongCounter` | `{call}` | `instance` | `HedgeEvent.Failed` |
 | `r4c.timeout.timed.out` | `LongCounter` | `{call}` | `instance` | `TimeoutEvent.TimedOut` |
 | `r4c.fallback.applied` | `LongCounter` | `{call}` | `instance` | `FallbackEvent.Applied` |
 | `r4c.circuitbreaker.state` | `ObservableLongGauge` | none | `instance`, `state`: 1 for the current state, 0 for the other four | snapshot `state` |

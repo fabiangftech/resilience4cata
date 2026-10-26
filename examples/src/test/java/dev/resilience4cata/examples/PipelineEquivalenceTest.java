@@ -8,6 +8,8 @@ import dev.resilience4cata.PipelineCall;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
 import dev.resilience4cata.RetryConfig;
+import dev.resilience4cata.testkit.ManualClock;
+import dev.resilience4cata.testkit.ResilienceTesting;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -182,5 +184,38 @@ class PipelineEquivalenceTest {
 
         assertThat(pipeline.execute(call)).isEqualTo(client.everything("o"))
                 .isEqualTo("pending after 1: CallNotPermittedException");
+    }
+
+    @Test
+    void aHedgeStartsAndCancelsTheSameAttempts() {
+        ManualClock pipelineClock = new ManualClock();
+        ResilienceRegistry pipelineRegistry = ResilienceTesting.registry(pipelineClock).build();
+        HedgeEndToEndTest.Replicas pipelineReplicas = new HedgeEndToEndTest.Replicas();
+        Pipeline<String> pipeline = Pipeline.builder(pipelineRegistry, "price", String.class)
+                .hedge(h -> h.delay(Duration.ofMillis(50)).maxAttempts(3).budgetPercent(0))
+                .circuitBreaker(cb -> cb.windowSize(10).minimumCalls(10))
+                .timeout(t -> t.timeout(Duration.ofMillis(200)))
+                .fallbackAsyncHandler(new HedgeClient.Cached())
+                .build();
+
+        ManualClock clock = new ManualClock();
+        HedgeEndToEndTest.Replicas replicas = new HedgeEndToEndTest.Replicas();
+        HedgeClient client = Resilient.of(HedgeClient.class, replicas, ResilienceTesting.registry(clock).build());
+        CompletableFuture<String> generated = client.price("sku");
+        CompletableFuture<String> programmatic = pipeline.executeAsync(() -> pipelineReplicas.price("sku"));
+        clock.advance(Duration.ofMillis(50));
+        pipelineClock.advance(Duration.ofMillis(50));
+        replicas.attempts.get(0).completeExceptionally(new IOException("down"));
+        pipelineReplicas.attempts.get(0).completeExceptionally(new IOException("down"));
+        clock.advance(Duration.ZERO);
+        pipelineClock.advance(Duration.ZERO);
+        assertThat(pipelineReplicas.attempts).hasSameSizeAs(replicas.attempts).hasSize(3);
+        replicas.attempts.get(2).complete("third");
+        pipelineReplicas.attempts.get(2).complete("third");
+
+        assertThat(programmatic).isCompletedWithValue("third");
+        assertThat(generated).isCompletedWithValue("third");
+        assertThat(pipelineReplicas.attempts.get(1)).isCancelled();
+        assertThat(replicas.attempts.get(1)).isCancelled();
     }
 }

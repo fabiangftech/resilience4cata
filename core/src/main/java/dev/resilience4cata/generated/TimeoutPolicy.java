@@ -282,6 +282,7 @@ public final class TimeoutPolicy {
      * timer: never early, at most about two ticks late (a tick is a sixteenth of the
      * shortest async timeout, between 1 ms and 50 ms). The timeout is completed on a new virtual thread,
      * never on the timer thread. A stage that is already complete when the call returns needs no timer.
+     * Cancelling the returned future cancels the deadline and the stage.
      *
      * @param call the next layer
      * @param <T> the result type
@@ -294,12 +295,14 @@ public final class TimeoutPolicy {
         TimeoutTimer.Lane deadlines = lane;
         Ticker time = manual;
         if (deadlines == null && time == null) {
-            CompletableFuture<T> result = new CompletableFuture<>();
+            LinkedFuture<T> result = new LinkedFuture<>(stage);
             AsyncSupport.relay(stage, result);
             return result;
         }
-        // Exact class only: subclasses (such as minimal stages) may not support state().
-        if (stage.getClass() == CompletableFuture.class) {
+        // Exact classes only: subclasses (such as minimal stages) may not support state(). A LinkedFuture is
+        // the future of an inner policy (a bulkhead, say), which supports it like a plain one.
+        Class<?> type = stage.getClass();
+        if (type == CompletableFuture.class || type == LinkedFuture.class) {
             CompletableFuture<T> future = (CompletableFuture<T>) stage;
             Future.State state = future.state();
             if (state == Future.State.SUCCESS) {
@@ -309,8 +312,7 @@ public final class TimeoutPolicy {
                 return CompletableFuture.failedFuture(AsyncSupport.unwrap(future.exceptionNow()));
             }
         }
-        CompletableFuture<T> result = new CompletableFuture<>();
-        Expiry<T> expiry = new Expiry<>(this, stage, result);
+        Expiry<T> expiry = new Expiry<>(this, stage);
         if (deadlines != null) {
             deadlines.timer.schedule(expiry, deadlines);
         } else if (time != null) {
@@ -324,27 +326,31 @@ public final class TimeoutPolicy {
             stage.whenComplete((value, failure) -> task.cancel(false));
         }
         stage.whenComplete(expiry);
-        return result;
+        return expiry.result;
     }
 
-    /** The deadline of one async call; also the callback that cancels it when the stage completes. */
-    private static final class Expiry<T> extends TimerEntry implements BiConsumer<T, Throwable> {
+    /**
+     * The deadline of one async call; also the callback that cancels it when the stage completes, and the
+     * link of the call's future, so that cancelling the future cancels the deadline and then the stage.
+     */
+    private static final class Expiry<T> extends TimerEntry
+            implements BiConsumer<T, Throwable>, LinkedFuture.OnCancel {
         private final TimeoutPolicy policy;
         private final CompletionStage<T> stage;
-        private final CompletableFuture<T> result;
+        final LinkedFuture<T> result;
 
-        Expiry(TimeoutPolicy policy, CompletionStage<T> stage, CompletableFuture<T> result) {
+        Expiry(TimeoutPolicy policy, CompletionStage<T> stage) {
             this.policy = policy;
             this.stage = stage;
-            this.result = result;
+            this.result = new LinkedFuture<>(this);
         }
 
         /** The deadline passed; runs on a new virtual thread. */
         @Override
         public void run() {
-            if (result.completeExceptionally(new CallTimeoutException(policy.id, policy.config.timeout(), null))) {
+            if (result.fail(new CallTimeoutException(policy.id, policy.config.timeout(), null))) {
                 policy.publishTimedOut(); // only when the timeout won against the stage's completion
-                AsyncSupport.cancel(stage);
+                LinkedFuture.cancelInner(stage);
             }
         }
 
@@ -355,8 +361,15 @@ public final class TimeoutPolicy {
             if (failure == null) {
                 result.complete(value);
             } else {
-                result.completeExceptionally(AsyncSupport.unwrap(failure));
+                result.fail(AsyncSupport.unwrap(failure));
             }
+        }
+
+        /** The caller cancelled the call's future: the deadline is no longer needed, nor is the stage. */
+        @Override
+        public void cancelled() {
+            cancel();
+            LinkedFuture.cancelInner(stage);
         }
     }
 }

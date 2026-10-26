@@ -2,7 +2,6 @@ package dev.resilience4cata.generated;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import org.jspecify.annotations.Nullable;
@@ -71,7 +70,7 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
     }
 
     /** An asynchronous call waiting for a slot. Its {@link #run()} is the timeout. */
-    static final class Waiter<T> implements Runnable {
+    static final class Waiter<T> implements Runnable, LinkedFuture.OnCancel {
 
         private static final VarHandle STATE;
         private static final VarHandle TIMER;
@@ -90,7 +89,8 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
         private static final int CLAIMED = 1;
 
         final AsyncCall<T> call;
-        final CompletableFuture<T> result = new CompletableFuture<>();
+        /** Linked to this waiter while it waits, so that a cancel takes it out of the queue ({@link #cancelled()}). */
+        final LinkedFuture<T> result = new LinkedFuture<>(this);
         private final BulkheadWaiters owner;
         private final BulkheadPolicy policy;
 
@@ -146,7 +146,20 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
             if (claim()) {
                 owner.queue.remove(this); // so that waiters timing out on a stuck bulkhead do not pile up
                 policy.rejected();
-                result.completeExceptionally(policy.rejection());
+                result.fail(policy.rejection());
+            }
+        }
+
+        /**
+         * The caller cancelled the waiter's future. If it still waits, it leaves the queue and its timer is
+         * cancelled; it held no slot, so none is released. If a hand-off claimed it first, the slot it was
+         * given is released by the granted run, which finds the future cancelled ({@link LinkedFuture#STARTING}).
+         */
+        @Override
+        public void cancelled() {
+            if (claim()) {
+                owner.queue.remove(this);
+                cancelTimer();
             }
         }
     }

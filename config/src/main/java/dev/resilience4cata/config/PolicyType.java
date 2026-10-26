@@ -2,6 +2,7 @@ package dev.resilience4cata.config;
 
 import dev.resilience4cata.BulkheadConfig;
 import dev.resilience4cata.CircuitBreakerConfig;
+import dev.resilience4cata.HedgeConfig;
 import dev.resilience4cata.RateLimiterConfig;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.RetryConfig;
@@ -53,6 +54,19 @@ final class PolicyType<B, C> {
                     Attribute.integer("budgetMinRetriesPerSecond", RetryConfig.Builder::budgetMinRetriesPerSecond),
                     Attribute.duration("budgetWindow", RetryConfig.Builder::budgetWindow)));
 
+    static final PolicyType<HedgeConfig.Builder, HedgeConfig> HEDGE = new PolicyType<>("hedge",
+            HedgeConfig.DEFAULTS, HedgeConfig::toBuilder, HedgeConfig.Builder::build,
+            ResilienceRegistry.Builder::hedgeDefaults, ResilienceRegistry.Builder::hedgeOverlay,
+            ResilienceRegistry.Builder::hedgeInstance, List.of(
+                    Attribute.bool(ENABLED, HedgeConfig.Builder::enabled),
+                    Attribute.integer("maxAttempts", HedgeConfig.Builder::maxAttempts),
+                    Attribute.duration("delay", HedgeConfig.Builder::delay),
+                    Attribute.classes("hedgeOn", HedgeConfig.Builder::hedgeOn),
+                    Attribute.classes("abortOn", HedgeConfig.Builder::abortOn),
+                    Attribute.real("budgetPercent", HedgeConfig.Builder::budgetPercent),
+                    Attribute.integer("budgetMinHedgesPerSecond", HedgeConfig.Builder::budgetMinHedgesPerSecond),
+                    Attribute.duration("budgetWindow", HedgeConfig.Builder::budgetWindow)));
+
     static final PolicyType<CircuitBreakerConfig.Builder, CircuitBreakerConfig> CIRCUIT_BREAKER = new PolicyType<>(
             "circuitBreaker", CircuitBreakerConfig.DEFAULTS, CircuitBreakerConfig::toBuilder,
             CircuitBreakerConfig.Builder::build, ResilienceRegistry.Builder::circuitBreakerDefaults,
@@ -97,7 +111,7 @@ final class PolicyType<B, C> {
                     Attribute.duration("maxWait", RateLimiterConfig.Builder::maxWait)));
 
     /** Every configurable policy, in nesting order. */
-    static final List<PolicyType<?, ?>> ALL = List.of(RETRY, CIRCUIT_BREAKER, RATE_LIMITER, TIMEOUT, BULKHEAD);
+    static final List<PolicyType<?, ?>> ALL = List.of(RETRY, HEDGE, CIRCUIT_BREAKER, RATE_LIMITER, TIMEOUT, BULKHEAD);
 
     final String name;
     private final C builtIn;

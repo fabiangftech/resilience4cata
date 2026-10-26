@@ -204,6 +204,8 @@ public final class FallbackPolicy {
      * Runs an asynchronous call and, if it fails with a failure this policy {@link #handles handles},
      * completes with the recovery's result instead. Used when the method has no retry; with a retry, the
      * recovery is passed to {@link RetryPolicy#executeAsync(AsyncCall, FallbackPolicy, Recovery)}.
+     * Cancelling the returned future cancels the call's stage (or the recovery's), and the recovery
+     * does not run.
      *
      * @param call the next layer
      * @param recovery the generated fallback
@@ -211,8 +213,9 @@ public final class FallbackPolicy {
      * @return a future that completes with the call's or the fallback's outcome
      */
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Recovery<T> recovery) {
-        CompletableFuture<T> result = new CompletableFuture<>();
-        AsyncSupport.call(call).whenComplete((value, failure) -> {
+        CompletionStage<T> stage = AsyncSupport.call(call);
+        LinkedFuture<T> result = new LinkedFuture<>(stage);
+        stage.whenComplete((value, failure) -> {
             if (failure == null) {
                 result.complete(value);
             } else {
@@ -222,25 +225,33 @@ public final class FallbackPolicy {
         return result;
     }
 
-    /** Completes {@code result} with the recovery's outcome if this policy handles the failure, else with the failure. */
+    /**
+     * Completes {@code result} with the recovery's outcome if this policy handles the failure, else with the
+     * failure. Does nothing if the caller cancelled {@code result}: nobody waits for an alternative result, so
+     * the fallback does not run (and publishes no event).
+     */
     // java:S2583: user code can return null despite the contract; this check turns it into a clear failure
     @SuppressWarnings("java:S2583")
-    <T> void recoverOrFail(Throwable failure, int attempts, Recovery<T> recovery, CompletableFuture<T> result) {
+    <T> void recoverOrFail(Throwable failure, int attempts, Recovery<T> recovery, LinkedFuture<T> result) {
+        if (result.cancelling()) {
+            return;
+        }
         if (!handles(failure)) {
-            result.completeExceptionally(failure);
+            result.fail(failure);
             return;
         }
         @Nullable CompletionStage<T> stage; // user code may return null: checked below
         try {
             stage = recovery.recover(failure, attempts);
         } catch (Throwable fallbackFailure) {
-            result.completeExceptionally(fallbackFailure);
+            result.fail(fallbackFailure);
             return;
         }
         if (stage == null) {
-            result.completeExceptionally(new NullPointerException("The fallback of " + instanceId + " returned null"));
+            result.fail(new NullPointerException("The fallback of " + instanceId + " returned null"));
             return;
         }
+        result.link(stage); // a cancel from now on cancels the fallback's stage
         AsyncSupport.relay(stage, result);
     }
 }

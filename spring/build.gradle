@@ -1,0 +1,58 @@
+plugins {
+    id 'r4c.java-library'
+    id 'r4c.publish'
+}
+
+description = 'Spring Boot 4 auto-configuration: the registry from application properties, generated classes as beans, metrics, health and an actuator endpoint.'
+
+dependencies {
+    api project(':core')
+    api project(':config')
+    // Compiled against the oldest supported Spring Boot (explicit versions, no BOM: the build's BOM is the latest);
+    // the application's own, newer Boot wins at resolution.
+    api libs.spring.boot.autoconfigure.minimum
+    // Optional integrations, each behind @ConditionalOnClass: the application brings them if it wants them.
+    compileOnly project(':micrometer')
+    compileOnly libs.spring.boot.health.minimum
+    compileOnly libs.spring.boot.actuator.minimum
+    compileOnly libs.spring.boot.actuator.autoconfigure.minimum
+    // Annotations on Boot's health classes, read by javac.
+    compileOnly libs.jackson.annotations
+    // Condition metadata (spring-autoconfigure-metadata.properties) and configuration metadata for the IDEs.
+    annotationProcessor libs.spring.boot.autoconfigure.processor.minimum
+    annotationProcessor libs.spring.boot.configuration.processor.minimum
+
+    // Tests run on the latest Spring Boot, through its BOM.
+    testImplementation platform(libs.spring.boot.dependencies)
+    testImplementation libs.spring.boot.autoconfigure
+    testImplementation libs.spring.boot.health
+    testImplementation libs.spring.boot.actuator
+    testImplementation libs.spring.boot.actuator.autoconfigure
+    testImplementation libs.spring.boot.micrometer.metrics
+    testImplementation libs.spring.boot.test
+    testImplementation libs.spring.test
+    testImplementation libs.spring.core.test
+    testImplementation libs.jackson.databind
+    testImplementation libs.snakeyaml
+    testImplementation project(':micrometer')
+    testImplementation project(':testkit')
+    testCompileOnly project(':annotations')
+    testAnnotationProcessor project(':processor')
+}
+
+tasks.named('compileJava') {
+    // The configuration processor merges META-INF/additional-spring-configuration-metadata.json from the resources.
+    inputs.files(tasks.named('processResources')).withPropertyName('resources').withPathSensitivity(PathSensitivity.RELATIVE)
+    // It takes the descriptions from the Javadoc of the sources it compiles: an incremental compile would drop them.
+    options.incremental = false
+}
+
+tasks.named('compileTestJava') {
+    // As Spring Boot's Gradle plugin does: Spring matches constructor parameters by name.
+    options.compilerArgs.add('-parameters')
+}
+
+tasks.named('test') {
+    // ErrorCodeTest checks the error codes against the error reference pages.
+    inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
+}

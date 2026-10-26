@@ -1,0 +1,268 @@
+{
+  "groups" : [ {
+    "name" : "resilience4cata",
+    "description" : "Policy configuration, read by resilience4cata-config. See https://resilience4cata.dev/#/en/reference/configuration"
+  }, {
+    "name" : "resilience4cata.defaults.retry",
+    "description" : "Defaults of every retry: each annotation and named config starts from them."
+  }, {
+    "name" : "resilience4cata.defaults.hedge",
+    "description" : "Defaults of every hedge: each annotation and named config starts from them."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker",
+    "description" : "Defaults of every circuit breaker: each annotation and named config starts from them."
+  }, {
+    "name" : "resilience4cata.defaults.rate-limiter",
+    "description" : "Defaults of every rate limiter: each annotation and named config starts from them."
+  }, {
+    "name" : "resilience4cata.defaults.timeout",
+    "description" : "Defaults of every timeout: each annotation and named config starts from them."
+  }, {
+    "name" : "resilience4cata.defaults.bulkhead",
+    "description" : "Defaults of every bulkhead: each annotation and named config starts from them."
+  } ],
+  "properties" : [ {
+    "name" : "resilience4cata.defaults.retry.enabled",
+    "type" : "java.lang.Boolean",
+    "defaultValue" : true,
+    "description" : "Default enabled of every retry (true or false)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.max-attempts",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 3,
+    "description" : "Default maxAttempts of every retry (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.delay",
+    "type" : "java.time.Duration",
+    "defaultValue" : "200ms",
+    "description" : "Default delay of every retry (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.backoff",
+    "type" : "java.lang.String",
+    "defaultValue" : "exponential",
+    "description" : "Default backoff of every retry (one of the listed values)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.multiplier",
+    "type" : "java.lang.Double",
+    "defaultValue" : 2.0,
+    "description" : "Default multiplier of every retry (a number)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.max-delay",
+    "type" : "java.time.Duration",
+    "defaultValue" : "10s",
+    "description" : "Default maxDelay of every retry (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.jitter",
+    "type" : "java.lang.String",
+    "defaultValue" : "full",
+    "description" : "Default jitter of every retry (one of the listed values)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.max-duration",
+    "type" : "java.time.Duration",
+    "defaultValue" : "0",
+    "description" : "Default maxDuration of every retry (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.retry-on",
+    "type" : "java.util.List<java.lang.Class<? extends java.lang.Throwable>>",
+    "defaultValue" : [ "java.lang.Exception" ],
+    "description" : "Default retryOn of every retry (exception class names)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.abort-on",
+    "type" : "java.util.List<java.lang.Class<? extends java.lang.Throwable>>",
+    "description" : "Default abortOn of every retry (exception class names)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.budget-percent",
+    "type" : "java.lang.Double",
+    "defaultValue" : 0.0,
+    "description" : "Default budgetPercent of every retry (a number)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.budget-min-retries-per-second",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 10,
+    "description" : "Default budgetMinRetriesPerSecond of every retry (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.retry.budget-window",
+    "type" : "java.time.Duration",
+    "defaultValue" : "10s",
+    "description" : "Default budgetWindow of every retry (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.hedge.enabled",
+    "type" : "java.lang.Boolean",
+    "defaultValue" : true,
+    "description" : "Default enabled of every hedge (true or false)."
+  }, {
+    "name" : "resilience4cata.defaults.hedge.max-attempts",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 2,
+    "description" : "Default maxAttempts of every hedge (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.hedge.delay",
+    "type" : "java.time.Duration",
+    "defaultValue" : "1s",
+    "description" : "Default delay of every hedge (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.hedge.hedge-on",
+    "type" : "java.util.List<java.lang.Class<? extends java.lang.Throwable>>",
+    "defaultValue" : [ "java.lang.Exception" ],
+    "description" : "Default hedgeOn of every hedge (exception class names)."
+  }, {
+    "name" : "resilience4cata.defaults.hedge.abort-on",
+    "type" : "java.util.List<java.lang.Class<? extends java.lang.Throwable>>",
+    "description" : "Default abortOn of every hedge (exception class names)."
+  }, {
+    "name" : "resilience4cata.defaults.hedge.budget-percent",
+    "type" : "java.lang.Double",
+    "defaultValue" : 10.0,
+    "description" : "Default budgetPercent of every hedge (a number)."
+  }, {
+    "name" : "resilience4cata.defaults.hedge.budget-min-hedges-per-second",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 1,
+    "description" : "Default budgetMinHedgesPerSecond of every hedge (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.hedge.budget-window",
+    "type" : "java.time.Duration",
+    "defaultValue" : "10s",
+    "description" : "Default budgetWindow of every hedge (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.enabled",
+    "type" : "java.lang.Boolean",
+    "defaultValue" : true,
+    "description" : "Default enabled of every circuit breaker (true or false)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.window-type",
+    "type" : "java.lang.String",
+    "defaultValue" : "count",
+    "description" : "Default windowType of every circuit breaker (one of the listed values)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.window-size",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 100,
+    "description" : "Default windowSize of every circuit breaker (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.minimum-calls",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 100,
+    "description" : "Default minimumCalls of every circuit breaker (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.failure-rate-threshold",
+    "type" : "java.lang.Float",
+    "defaultValue" : 50.0,
+    "description" : "Default failureRateThreshold of every circuit breaker (a number)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.slow-call-rate-threshold",
+    "type" : "java.lang.Float",
+    "defaultValue" : 100.0,
+    "description" : "Default slowCallRateThreshold of every circuit breaker (a number)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.slow-call-duration",
+    "type" : "java.time.Duration",
+    "defaultValue" : "0",
+    "description" : "Default slowCallDuration of every circuit breaker (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.wait-in-open",
+    "type" : "java.time.Duration",
+    "defaultValue" : "1m",
+    "description" : "Default waitInOpen of every circuit breaker (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.half-open-calls",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 10,
+    "description" : "Default halfOpenCalls of every circuit breaker (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.max-wait-in-half-open",
+    "type" : "java.time.Duration",
+    "defaultValue" : "0",
+    "description" : "Default maxWaitInHalfOpen of every circuit breaker (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.record-on",
+    "type" : "java.util.List<java.lang.Class<? extends java.lang.Throwable>>",
+    "defaultValue" : [ "java.lang.Exception" ],
+    "description" : "Default recordOn of every circuit breaker (exception class names)."
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.ignore-on",
+    "type" : "java.util.List<java.lang.Class<? extends java.lang.Throwable>>",
+    "description" : "Default ignoreOn of every circuit breaker (exception class names)."
+  }, {
+    "name" : "resilience4cata.defaults.rate-limiter.enabled",
+    "type" : "java.lang.Boolean",
+    "defaultValue" : true,
+    "description" : "Default enabled of every rate limiter (true or false)."
+  }, {
+    "name" : "resilience4cata.defaults.rate-limiter.permits",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 50,
+    "description" : "Default permits of every rate limiter (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.rate-limiter.period",
+    "type" : "java.time.Duration",
+    "defaultValue" : "1s",
+    "description" : "Default period of every rate limiter (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.rate-limiter.max-wait",
+    "type" : "java.time.Duration",
+    "defaultValue" : "0",
+    "description" : "Default maxWait of every rate limiter (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.timeout.enabled",
+    "type" : "java.lang.Boolean",
+    "defaultValue" : true,
+    "description" : "Default enabled of every timeout (true or false)."
+  }, {
+    "name" : "resilience4cata.defaults.timeout.value",
+    "type" : "java.time.Duration",
+    "defaultValue" : "1s",
+    "description" : "Default value of every timeout (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.defaults.bulkhead.enabled",
+    "type" : "java.lang.Boolean",
+    "defaultValue" : true,
+    "description" : "Default enabled of every bulkhead (true or false)."
+  }, {
+    "name" : "resilience4cata.defaults.bulkhead.max-concurrent",
+    "type" : "java.lang.Integer",
+    "defaultValue" : 25,
+    "description" : "Default maxConcurrent of every bulkhead (an integer)."
+  }, {
+    "name" : "resilience4cata.defaults.bulkhead.max-wait",
+    "type" : "java.time.Duration",
+    "defaultValue" : "0",
+    "description" : "Default maxWait of every bulkhead (a duration such as 250ms, 2s or PT2S)."
+  }, {
+    "name" : "resilience4cata.configs",
+    "type" : "java.util.Map<java.lang.String,java.lang.String>",
+    "description" : "Named configs: configs.<name>.<policy>.<attribute>, and configs.<name>.extends to inherit another config."
+  }, {
+    "name" : "resilience4cata.instances",
+    "type" : "java.util.Map<java.lang.String,java.lang.String>",
+    "description" : "Per-instance overrides: instances.<id>.<policy>.<attribute>, applied over the annotation. Put an id other than letters, digits, _ and - in brackets: instances[com.acme.Api#get(java.lang.String)].timeout.value."
+  }, {
+    "name" : "resilience4cata.profiles.active",
+    "type" : "java.util.List<java.lang.String>",
+    "description" : "resilience4cata profiles to apply (profiles.<name>.* keys), later ones winning."
+  } ],
+  "hints" : [ {
+    "name" : "resilience4cata.defaults.retry.backoff",
+    "values" : [ {
+      "value" : "fixed"
+    }, {
+      "value" : "exponential"
+    } ]
+  }, {
+    "name" : "resilience4cata.defaults.retry.jitter",
+    "values" : [ {
+      "value" : "none"
+    }, {
+      "value" : "full"
+    }, {
+      "value" : "equal"
+    } ]
+  }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.window-type",
+    "values" : [ {
+      "value" : "count"
+    }, {
+      "value" : "time"
+    } ]
+  } ]
+}

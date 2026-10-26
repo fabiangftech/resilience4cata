@@ -10,6 +10,7 @@ import dev.resilience4cata.event.BulkheadEvent;
 import dev.resilience4cata.event.CircuitBreakerEvent;
 import dev.resilience4cata.event.EventListener;
 import dev.resilience4cata.event.FallbackEvent;
+import dev.resilience4cata.event.HedgeEvent;
 import dev.resilience4cata.event.RateLimiterEvent;
 import dev.resilience4cata.event.ResilienceEvent;
 import dev.resilience4cata.event.RetryEvent;
@@ -47,7 +48,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>The metrics have the same names, attributes and values as the Micrometer module's, so dashboards
  * built on one work with the other. Counters: {@value #CALLS_REJECTED}, {@value #TRANSITIONS},
- * {@value #RETRIES}, {@value #GAVE_UP}, {@value #TIMED_OUT}, {@value #FALLBACK_APPLIED}. Gauges:
+ * {@value #RETRIES}, {@value #GAVE_UP}, {@value #HEDGED}, {@value #HEDGE_WON}, {@value #HEDGE_SKIPPED},
+ * {@value #HEDGE_FAILED}, {@value #TIMED_OUT}, {@value #FALLBACK_APPLIED}. Gauges:
  * {@value #STATE}, {@value #FAILURE_RATE}, {@value #SLOW_CALL_RATE}, {@value #CONCURRENT_CALLS},
  * {@value #WAITING_CALLS}, {@value #MAX_CONCURRENT}, {@value #AVAILABLE_PERMITS}. Every metric has an
  * {@code instance} attribute (the policy instance id); attribute values are lowercase.
@@ -72,6 +74,17 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     public static final String RETRIES = "r4c.retry.retries";
     /** Counter: retries that stopped without a success; attribute {@code reason}. */
     public static final String GAVE_UP = "r4c.retry.gave.up";
+    /** Counter: hedged attempts started (attempt 2 or later); attribute {@code reason} ({@code delay}, {@code failure}). */
+    public static final String HEDGED = "r4c.hedge.hedged";
+    /** Counter: calls won by a hedged attempt (attempt 2 or later) rather than the first one. */
+    public static final String HEDGE_WON = "r4c.hedge.won";
+    /**
+     * Counter: hedged attempts not started; attribute {@code reason} ({@code budget_exhausted}, {@code rejected},
+     * {@code aborted}).
+     */
+    public static final String HEDGE_SKIPPED = "r4c.hedge.skipped";
+    /** Counter: hedged calls that failed. */
+    public static final String HEDGE_FAILED = "r4c.hedge.failed";
     /** Counter: calls that timed out. */
     public static final String TIMED_OUT = "r4c.timeout.timed.out";
     /** Counter: fallbacks applied. */
@@ -102,6 +115,9 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(OpenTelemetryMetrics.class.getName());
     private static final CircuitBreakerState[] STATES = CircuitBreakerState.values();
     private static final RetryEvent.Reason[] REASONS = RetryEvent.Reason.values();
+    private static final HedgeEvent.Reason[] HEDGE_REASONS = HedgeEvent.Reason.values();
+    private static final HedgeEvent.SkipReason[] SKIP_REASONS = HedgeEvent.SkipReason.values();
+    private static final String ATTEMPT_UNIT = "{attempt}";
     private static final @Nullable String VERSION = readVersion();
 
     private final Meter meter;
@@ -109,6 +125,10 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     private final LongCounter transitionCounter;
     private final LongCounter retryCounter;
     private final LongCounter gaveUp;
+    private final LongCounter hedged;
+    private final LongCounter hedgeWon;
+    private final LongCounter hedgeSkipped;
+    private final LongCounter hedgeFailed;
     private final LongCounter timedOut;
     private final LongCounter fallbacks;
 
@@ -121,6 +141,10 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     private final ConcurrentHashMap<String, Attributes[]> transitionAttributes = new ConcurrentHashMap<>();
     /** Per instance, indexed by reason ordinal. */
     private final ConcurrentHashMap<String, Attributes[]> reasonAttributes = new ConcurrentHashMap<>();
+    /** Per instance, indexed by hedge reason ordinal. */
+    private final ConcurrentHashMap<String, Attributes[]> hedgeReasonAttributes = new ConcurrentHashMap<>();
+    /** Per instance, indexed by skip reason ordinal. */
+    private final ConcurrentHashMap<String, Attributes[]> skipReasonAttributes = new ConcurrentHashMap<>();
     /** Per instance, indexed by state ordinal. */
     private final ConcurrentHashMap<String, Attributes[]> stateAttributes = new ConcurrentHashMap<>();
 
@@ -133,6 +157,10 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
         transitionCounter = counter(TRANSITIONS, "{transition}", "Circuit breaker state changes");
         retryCounter = counter(RETRIES, "{retry}", "Attempts that failed and will be retried");
         gaveUp = counter(GAVE_UP, CALL_UNIT, "Retries that stopped without a success, by reason");
+        hedged = counter(HEDGED, ATTEMPT_UNIT, "Hedged attempts started, by reason");
+        hedgeWon = counter(HEDGE_WON, CALL_UNIT, "Calls won by a hedged attempt rather than the first one");
+        hedgeSkipped = counter(HEDGE_SKIPPED, ATTEMPT_UNIT, "Hedged attempts not started, by reason");
+        hedgeFailed = counter(HEDGE_FAILED, CALL_UNIT, "Hedged calls that failed");
         timedOut = counter(TIMED_OUT, CALL_UNIT, "Calls that timed out");
         fallbacks = counter(FALLBACK_APPLIED, CALL_UNIT, "Failures answered by a fallback");
     }
@@ -321,6 +349,10 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
                 case RetryEvent.GaveUp g -> gaveUp.add(1, reasons(id)[g.reason().ordinal()]);
                 case TimeoutEvent.TimedOut t -> timedOut.add(1, attributes(id));
                 case FallbackEvent.Applied f -> fallbacks.add(1, attributes(id));
+                case HedgeEvent.Hedged h -> hedged.add(1, hedgeReasons(id)[h.reason().ordinal()]);
+                case HedgeEvent.Won w -> hedgeWon.add(1, attributes(id));
+                case HedgeEvent.Skipped k -> hedgeSkipped.add(1, skipReasons(id)[k.reason().ordinal()]);
+                case HedgeEvent.Failed f -> hedgeFailed.add(1, attributes(id));
             }
         }
 
@@ -344,6 +376,26 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
                         all[from.ordinal() * STATES.length + to.ordinal()] =
                                 Attributes.of(INSTANCE, i, FROM, lower(from), TO, lower(to));
                     }
+                }
+                return all;
+            });
+        }
+
+        private Attributes[] hedgeReasons(String id) {
+            return cached(hedgeReasonAttributes, id, i -> {
+                Attributes[] all = new Attributes[HEDGE_REASONS.length];
+                for (HedgeEvent.Reason reason : HEDGE_REASONS) {
+                    all[reason.ordinal()] = Attributes.of(INSTANCE, i, REASON, lower(reason));
+                }
+                return all;
+            });
+        }
+
+        private Attributes[] skipReasons(String id) {
+            return cached(skipReasonAttributes, id, i -> {
+                Attributes[] all = new Attributes[SKIP_REASONS.length];
+                for (HedgeEvent.SkipReason reason : SKIP_REASONS) {
+                    all[reason.ordinal()] = Attributes.of(INSTANCE, i, REASON, lower(reason));
                 }
                 return all;
             });

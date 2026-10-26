@@ -3,6 +3,7 @@ package dev.resilience4cata.processor;
 import dev.resilience4cata.annotation.Bulkhead;
 import dev.resilience4cata.annotation.CircuitBreaker;
 import dev.resilience4cata.annotation.Fallback;
+import dev.resilience4cata.annotation.Hedge;
 import dev.resilience4cata.annotation.RateLimiter;
 import dev.resilience4cata.annotation.Retry;
 import dev.resilience4cata.annotation.Timeout;
@@ -43,6 +44,7 @@ import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
+import javax.tools.StandardLocation;
 
 /**
  * Generates, for every interface that uses resilience annotations, a class named
@@ -74,6 +76,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
         FALLBACK(Fallback.class, "fallback", "dev.resilience4cata.generated.FallbackPolicy", "", ""),
         RETRY(Retry.class, "retry", "dev.resilience4cata.generated.RetryPolicy", "retryPolicy",
                 "dev.resilience4cata.RetryConfig"),
+        /** Takes Retry's place (the two are exclusive on one method); asynchronous methods only. */
+        HEDGE(Hedge.class, "hedge", "dev.resilience4cata.generated.HedgePolicy", "hedgePolicy",
+                "dev.resilience4cata.HedgeConfig"),
         CIRCUIT_BREAKER(CircuitBreaker.class, "circuitBreaker", "dev.resilience4cata.generated.CircuitBreakerPolicy",
                 "circuitBreakerPolicy", "dev.resilience4cata.CircuitBreakerConfig"),
         RATE_LIMITER(RateLimiter.class, "rateLimiter", "dev.resilience4cata.generated.RateLimiterPolicy",
@@ -284,6 +289,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             }
             boolean annotated = !policies.isEmpty() || fallback != null || effective(Kind.FALLBACK, iface,
                     typeLevel.get(Kind.FALLBACK), method).isPresent();
+            valid &= checkHedge(iface, method, type, asyncResult, typeLevel);
             if (annotated && asyncResult != null && asyncResult.getKind() == TypeKind.NONE) {
                 error(method, ProcessorError.UNSUPPORTED_ASYNC_TYPE, "An asynchronous method must return CompletionStage<T> or CompletableFuture<T>, where T"
                         + " may also be ? or ? extends X (not ? super X), to use resilience annotations; it returns "
@@ -304,6 +310,34 @@ public final class ResilienceProcessor extends AbstractProcessor {
             return;
         }
         write(iface, binaryName, methods);
+    }
+
+    /**
+     * {@code @Hedge} needs an asynchronous method, and cannot be combined with {@code @Retry}. Returns
+     * false after reporting an error.
+     */
+    private boolean checkHedge(TypeElement iface, ExecutableElement method, ExecutableType type, TypeMirror asyncResult,
+            Map<Kind, Optional<Map<String, AnnotationValue>>> typeLevel) {
+        if (effective(Kind.HEDGE, iface, typeLevel.get(Kind.HEDGE), method).isEmpty()) {
+            return true;
+        }
+        boolean valid = true;
+        if (asyncResult == null) {
+            String result = TypePrinter.print(boxed(type.getReturnType()));
+            valid = invalid(method, ProcessorError.HEDGE_NOT_ASYNC, "@Hedge needs an asynchronous method: a hedge starts"
+                    + " the call again while the first attempt is still running. " + method.getSimpleName() + " returns "
+                    + TypePrinter.print(type.getReturnType()) + "; return java.util.concurrent.CompletableFuture<" + result
+                    + "> (or CompletionStage<" + result + ">) instead, or remove @Hedge from it. A @Hedge on the type (or in a"
+                    + " @ResiliencePolicy bundle on the type) applies to every method, synchronous ones included: annotate"
+                    + " the async methods instead of the type.");
+        }
+        if (effective(Kind.RETRY, iface, typeLevel.get(Kind.RETRY), method).isPresent()) {
+            valid = invalid(method, ProcessorError.HEDGE_WITH_RETRY, "@Hedge and @Retry cannot be combined on "
+                    + method.getSimpleName() + " (directly, on the type, or through a @ResiliencePolicy bundle). Keep one:"
+                    + " a hedge already starts a new attempt when one fails (hedgeOn), and a retry around it would"
+                    + " multiply the attempts.") && valid;
+        }
+        return valid;
     }
 
     /** Static and private interface methods cannot be wrapped. */
@@ -450,9 +484,19 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     valid &= classifier != null;
                 }
                 case "onExhaustedResult" -> throwOnExhaustedResult = constant(value).equals("THROW");
-                case "retryOn", "abortOn", "recordOn", "ignoreOn" ->
+                case "maxAttempts" -> {
+                    int number = (Integer) value;
+                    if (kind == Kind.HEDGE && (number < 2 || number > 10)) {
+                        valid = invalid(method, ProcessorError.HEDGE_ATTEMPTS, label + " must be between 2 and 10, was " + number);
+                    } else if (number < 1) {
+                        valid = invalid(method, ProcessorError.COUNT_BELOW_ONE, label + " must be at least 1, was " + number);
+                    } else {
+                        overrides.add(attribute + "(" + number + ")");
+                    }
+                }
+                case "retryOn", "abortOn", "recordOn", "ignoreOn", "hedgeOn" ->
                         overrides.add(attribute + "(java.util.List.of(" + classList(value) + "))");
-                case "maxAttempts", "windowSize", "minimumCalls", "halfOpenCalls", "maxConcurrent", "permits" -> {
+                case "windowSize", "minimumCalls", "halfOpenCalls", "maxConcurrent", "permits" -> {
                     int number = (Integer) value;
                     if (number < 1) {
                         valid = invalid(method, ProcessorError.COUNT_BELOW_ONE, label + " must be at least 1, was " + number);
@@ -494,12 +538,12 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         overrides.add("budgetPercent(" + percent + ")");
                     }
                 }
-                case "budgetMinRetriesPerSecond" -> {
+                case "budgetMinRetriesPerSecond", "budgetMinHedgesPerSecond" -> {
                     int number = (Integer) value;
                     if (number < 0) {
                         valid = invalid(method, ProcessorError.INVALID_BUDGET, label + " must not be negative, was " + number);
                     } else {
-                        overrides.add("budgetMinRetriesPerSecond(" + number + ")");
+                        overrides.add(attribute + "(" + number + ")");
                     }
                 }
                 case "budgetWindow" -> {
@@ -1141,7 +1185,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         delegateReceiver = subclass ? "super" : DELEGATE;
         if (subclass) {
             out.append("@SuppressWarnings({\"deprecation\", \"removal\", \"serial\"})\n");
-            out.append("public final class ").append(simpleName).append(typeParameters(iface.getTypeParameters()))
+            out.append("public class ").append(simpleName).append(typeParameters(iface.getTypeParameters()))
                     .append(" extends ").append(ifaceType).append(" {\n\n");
         } else {
             out.append("@SuppressWarnings({\"deprecation\", \"removal\"})\n");
@@ -1150,21 +1194,18 @@ public final class ResilienceProcessor extends AbstractProcessor {
             appendField(out, ifaceType, "delegate");
         }
         appendFields(out, methods);
-        List<SubclassWriter.Constructor> constructors = subclass ? subclasses.constructors(iface) : List.of();
         if (subclass) {
-            appendConstructorStart(out, simpleName, constructors.get(0));
+            for (SubclassWriter.Constructor constructor : subclasses.constructors(iface)) { // mirrors every constructor
+                appendConstructorStart(out, simpleName, constructor);
+                appendFieldInits(out, methods, constructor.registry());
+                out.append("    }\n");
+            }
         } else {
             out.append("\n    public ").append(simpleName).append("(").append(ifaceType).append(" delegate, ")
                     .append(REGISTRY_TYPE).append(" registry) {\n");
             out.append("        this.delegate = java.util.Objects.requireNonNull(delegate, \"delegate\");\n");
-        }
-        int initStart = out.length();
-        appendFieldInits(out, methods);
-        out.append("    }\n");
-        String init = out.substring(initStart);
-        for (int c = 1; c < constructors.size(); c++) { // the subclass mirrors every constructor of the class
-            appendConstructorStart(out, simpleName, constructors.get(c));
-            out.append(init);
+            appendFieldInits(out, methods, "registry");
+            out.append("    }\n");
         }
         for (int i = 0; i < methods.size(); i++) {
             writeMethod(out, methods.get(i), i);
@@ -1173,6 +1214,60 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
         String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
         writeSource(iface, qualifiedName, out.toString());
+        writeNativeImageMetadata(iface, binaryName, qualifiedName, subclass);
+    }
+
+    /**
+     * Writes the GraalVM reachability metadata that lets {@code Resilient.of} and {@code Resilient.create} find the
+     * generated class and its public constructors by reflection in a native image, with no user configuration:
+     * {@code META-INF/native-image/dev.resilience4cata.generated/<generated class>/reachability-metadata.json}.
+     * Native Image reads every file with that name under {@code META-INF/native-image} on the class path, so one
+     * file per generated class keeps {@code iface} its only originating element (isolating).
+     *
+     * <p>The entry is conditional: for an interface, on the interface being reached, which happens before
+     * {@code Resilient.of} can be called with an implementation of it; for a class, on {@code Resilient} itself,
+     * because {@code Resilient.create(C.class, ...)} may run before {@code C} is initialized. Array types of varargs
+     * parameters are registered too, for the array {@code Resilient.create} builds to pass the trailing arguments.
+     */
+    private void writeNativeImageMetadata(TypeElement iface, String binaryName, String generatedName, boolean subclass) {
+        String condition = subclass ? "dev.resilience4cata.Resilient" : binaryName;
+        Set<String> arrays = new TreeSet<>();
+        if (subclass) {
+            for (ExecutableElement c : ElementFilter.constructorsIn(iface.getEnclosedElements())) {
+                if (c.isVarArgs() && !c.getModifiers().contains(Modifier.PRIVATE)) {
+                    arrays.add(runtimeName(types.erasure(c.getParameters().get(c.getParameters().size() - 1).asType())));
+                }
+            }
+        }
+        StringBuilder json = new StringBuilder("{\n  \"reflection\": [\n");
+        json.append("    {\n      \"condition\": {\"typeReached\": \"").append(condition).append("\"},\n")
+                .append("      \"type\": \"").append(generatedName).append("\",\n")
+                .append("      \"allPublicConstructors\": true\n    }");
+        for (String array : arrays) {
+            json.append(",\n    {\n      \"condition\": {\"typeReached\": \"").append(condition).append("\"},\n")
+                    .append("      \"type\": \"").append(array).append("\"\n    }");
+        }
+        json.append("\n  ]\n}\n");
+        String path = "META-INF/native-image/dev.resilience4cata.generated/" + generatedName + "/reachability-metadata.json";
+        try {
+            javax.tools.FileObject file = processingEnv.getFiler().createResource(StandardLocation.CLASS_OUTPUT, "", path, iface);
+            try (Writer writer = file.openWriter()) {
+                writer.write(json.toString());
+            }
+        } catch (IOException e) {
+            error(iface, ProcessorError.WRITE_FAILED, "Could not write " + path + ", the native-image metadata of "
+                    + generatedName + ": " + e.getMessage() + ". Check that the class output directory is writable and"
+                    + " that no other processor writes the same file.");
+        }
+    }
+
+    /** The name Native Image uses for {@code type}: binary names, with {@code []} for arrays. */
+    private String runtimeName(TypeMirror type) {
+        return switch (type.getKind()) {
+            case ARRAY -> runtimeName(((javax.lang.model.type.ArrayType) type).getComponentType()) + "[]";
+            case DECLARED -> elements.getBinaryName((TypeElement) ((DeclaredType) type).asElement()).toString();
+            default -> TypePrinter.print(type);
+        };
     }
 
     /** The {@code final} fields of the generated class: per method, its fallback, handler, policies and classifiers. */
@@ -1199,12 +1294,12 @@ public final class ResilienceProcessor extends AbstractProcessor {
     }
 
     /** The constructor statements that set the fields written by {@link #appendFields}. */
-    private static void appendFieldInits(StringBuilder out, List<MethodModel> methods) {
-        out.append("        java.util.Objects.requireNonNull(registry, \"registry\");\n");
+    private static void appendFieldInits(StringBuilder out, List<MethodModel> methods, String registry) {
+        out.append("        java.util.Objects.requireNonNull(").append(registry).append(", \"registry\");\n");
         for (int i = 0; i < methods.size(); i++) {
             FallbackModel fallback = methods.get(i).fallback();
             if (fallback != null) {
-                out.append("        this.fallback").append(i).append(" = registry.fallbackPolicy(")
+                out.append("        this.fallback").append(i).append(" = ").append(registry).append(".fallbackPolicy(")
                         .append(literal(fallback.instanceId())).append(", java.util.List.of(").append(fallback.applyOn())
                         .append("), java.util.List.of(").append(fallback.skipOn()).append(")")
                         .append(fallback.taken() == null ? "" : ", java.util.List.of(" + fallback.taken() + ")")
@@ -1216,7 +1311,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             for (Map.Entry<Kind, PolicyModel> entry : methods.get(i).policies().entrySet()) {
                 Kind kind = entry.getKey();
                 PolicyModel policy = entry.getValue();
-                out.append("        this.").append(kind.field).append(i).append(" = registry.").append(kind.registryMethod)
+                out.append("        this.").append(kind.field).append(i).append(" = ").append(registry).append('.').append(kind.registryMethod)
                         .append('(').append(literal(policy.instanceId())).append(", ").append(literal(policy.name()))
                         .append(", ").append(literal(policy.config())).append(", ").append(overrides(policy.overrides()))
                         .append(");\n");
@@ -1244,8 +1339,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
     /** Opens a constructor of a generated subclass: the registry, then the class constructor's parameters. */
     private static void appendConstructorStart(StringBuilder out, String simpleName, SubclassWriter.Constructor constructor) {
-        out.append("\n    public ").append(constructor.typeVariables()).append(simpleName).append("(").append(REGISTRY_TYPE)
-                .append(" registry").append(constructor.parameters()).append(")").append(constructor.throwsClause())
+        out.append("\n    ").append(constructor.annotations()).append("public ").append(constructor.typeVariables())
+                .append(simpleName).append("(").append(REGISTRY_TYPE).append(' ').append(constructor.registry())
+                .append(constructor.parameters()).append(")").append(constructor.throwsClause())
                 .append(" {\n");
         out.append("        super(").append(constructor.arguments()).append(");\n");
     }
@@ -1358,7 +1454,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             expression.insert(0, "this." + kind.field + index + EXECUTE_ASYNC)
                     .append(asyncArguments(model, kind, index, recovery)).append(')');
         }
-        if (model.fallback() != null && !layers.contains(Kind.RETRY)) {
+        if (model.fallback() != null && !layers.contains(Kind.RETRY) && !layers.contains(Kind.HEDGE)) {
             expression.insert(0, "this.fallback" + index + EXECUTE_ASYNC).append(", ").append(recovery).append(')');
         }
         return expression.toString();
@@ -1375,8 +1471,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
         if (classifier != null) {
             return ", this." + classifier + (model.policies().containsKey(Kind.RETRY) ? ", true" : "");
         }
-        if (kind == Kind.RETRY && fallback) {
-            return ", this.fallback" + index + ", " + recovery;
+        if ((kind == Kind.RETRY || kind == Kind.HEDGE) && fallback) {
+            return ", this.fallback" + index + ", " + recovery; // the hedge, like the retry, runs it with the attempts
         }
         return "";
     }
@@ -1445,6 +1541,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return switch (kind) {
             case FALLBACK -> fallback(model.fallback(), index, call, isVoid, arguments);
             case RETRY -> retryLayer(model, index, call, isVoid, returnType, arguments);
+            case HEDGE -> throw new IllegalStateException("@Hedge on a synchronous method is reported by checkHedge");
             case CIRCUIT_BREAKER -> classifierField(model, kind, index) == null
                     ? circuitBreaker(index, call, isVoid, returnType)
                     : classifiedCircuitBreaker(index, call, isVoid, returnType, model.policies().get(kind).classifier(),

@@ -1,0 +1,16 @@
+# tag::spring-yaml[]
+resilience4cata:
+  defaults:
+    retry:
+      delay: 50ms
+    circuit-breaker:
+      minimum-calls: 20
+  configs:
+    slow:
+      retry.delay: 500ms
+  instances:
+    orders:
+      circuit-breaker.failure-rate-threshold: 25
+    "[dev.resilience4cata.spring.guide.StockClient#available(java.lang.String)]":
+      timeout.value: 3s
+# end::spring-yaml[]

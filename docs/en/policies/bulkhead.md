@@ -140,7 +140,7 @@ For a method that returns `CompletionStage<T>` or `CompletableFuture<T>`, the ca
 CompletableFuture<byte[]> thumbnailAsync(String imageId);
 ```
 
-An async call never blocks a thread while it waits: a full bulkhead with `maxWait` > 0 queues the call, and the oldest waiter gets the next released slot directly, then starts on a new virtual thread. If `maxWait` passes first, its future fails with `BulkheadFullException`. Without `maxWait`, a full bulkhead returns a failed future at once. Sync and async callers of a shared bulkhead use the same slots. See [Async methods](../guides/async.md).
+An async call never blocks a thread while it waits: a full bulkhead with `maxWait` > 0 queues the call, and the oldest waiter gets the next released slot directly, then starts on a new virtual thread. If `maxWait` passes first, its future fails with `BulkheadFullException`. Without `maxWait`, a full bulkhead returns a failed future at once. Sync and async callers of a shared bulkhead use the same slots. Cancelling the returned future cancels the stage and frees the slot at once (when the stage is a `Future`); a call still queued leaves the queue and never starts ([cancellation](../guides/async.md#cancellation)). See [Async methods](../guides/async.md).
 
 ## Same thing with `Pipeline`
 

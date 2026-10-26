@@ -17,7 +17,7 @@ Each table lists the `defaults.<policy>.<attribute>` form. The same `<policy>.<a
 | `profiles.<profile>.<any key above>` | only while the profile is active | `profiles.test.defaults.retry.maxAttempts=1` |
 | `profiles.active=<a>,<b>` | the active profiles, later ones win | `profiles.active=test` |
 
-- Policies: `retry`, `circuitBreaker`, `rateLimiter`, `timeout`, `bulkhead`. `@Fallback` has no keys.
+- Policies: `retry`, `hedge`, `circuitBreaker`, `rateLimiter`, `timeout`, `bulkhead`. `@Fallback` has no keys.
 - Policy and attribute names may be written in camelCase or kebab-case: `circuit-breaker.wait-in-open` is `circuitBreaker.waitInOpen`.
 - Config and profile names are lowercase letters and digits separated by single hyphens (`slow-external`).
 - An instance id is case-sensitive. It must be in double quotes unless it is made only of letters, digits, `_` and `-`. A derived id is `<type>#<method>(<parameter types>)`, with fully qualified, erased parameter types separated by commas without spaces, for example `com.acme.CatalogClient#price(java.lang.String,int)`.
@@ -83,6 +83,21 @@ Everything is resolved once, when an instance is created. Nothing is reloaded af
 | `defaults.retry.budgetPercent` | `R4C_DEFAULTS_RETRY_BUDGETPERCENT` | decimal | `0` | finite, ≥ 0 | Retry budget: retries allowed, in percent of the instance's calls in the last `budgetWindow`, on top of `budgetMinRetriesPerSecond`. Above `0` it turns the budget on; `0` means no budget. |
 | `defaults.retry.budgetMinRetriesPerSecond` | `R4C_DEFAULTS_RETRY_BUDGETMINRETRIESPERSECOND` | int | `10` | ≥ 0 | Retry budget: retries allowed per second of `budgetWindow`, whatever the traffic, once `budgetPercent` turns the budget on. `0` leaves the percentage alone. |
 | `defaults.retry.budgetWindow` | `R4C_DEFAULTS_RETRY_BUDGETWINDOW` | duration | `10s` | 1s to 1h | Retry budget: how far back calls and retries are counted. |
+
+## Hedge :id=hedge
+
+`@Hedge` attributes. See [Hedge](../policies/hedge.md).
+
+| Key | Environment variable | Type | Default | Valid values | Meaning |
+|---|---|---|---|---|---|
+| `defaults.hedge.enabled` | `R4C_DEFAULTS_HEDGE_ENABLED` | boolean | `true` | `true`, `false` | `false` runs every call once, with no hedge. |
+| `defaults.hedge.maxAttempts` | `R4C_DEFAULTS_HEDGE_MAXATTEMPTS` | int | `2` | 2 to 10 | Attempts in flight at most, the first one included. |
+| `defaults.hedge.delay` | `R4C_DEFAULTS_HEDGE_DELAY` | duration | `1s` | ≥ 0; `0` = all at once | How long the latest attempt runs without a result before the next one starts. |
+| `defaults.hedge.hedgeOn` | `R4C_DEFAULTS_HEDGE_HEDGEON` | class list | `java.lang.Exception` | exception classes | Failures after which the next attempt starts at once; a failure not listed ends the call. |
+| `defaults.hedge.abortOn` | `R4C_DEFAULTS_HEDGE_ABORTON` | class list | — | exception classes | Failures that end the call at once and cancel the other attempts; they win over `hedgeOn`. |
+| `defaults.hedge.budgetPercent` | `R4C_DEFAULTS_HEDGE_BUDGETPERCENT` | decimal | `10` | finite, ≥ 0 | Hedge budget: hedges allowed, in percent of the instance's calls in the last `budgetWindow`, on top of `budgetMinHedgesPerSecond`. `0` turns the budget off. |
+| `defaults.hedge.budgetMinHedgesPerSecond` | `R4C_DEFAULTS_HEDGE_BUDGETMINHEDGESPERSECOND` | int | `1` | ≥ 0 | Hedge budget: hedges allowed per second of `budgetWindow`, whatever the traffic. |
+| `defaults.hedge.budgetWindow` | `R4C_DEFAULTS_HEDGE_BUDGETWINDOW` | duration | `10s` | 1s to 1h | Hedge budget: how far back calls and hedges are counted. |
 
 ## Circuit breaker :id=circuit-breaker
 

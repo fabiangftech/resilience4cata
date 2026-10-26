@@ -9,6 +9,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -354,7 +355,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
     /** Runs a waiter's call, which now holds a slot, on a new virtual thread: never on the releasing thread. */
     private <T> void grant(BulkheadWaiters.Waiter<T> waiter) {
         waiter.cancelTimer();
-        Thread.ofVirtual().name("resilience4cata-bulkhead").start(() -> run(waiter.call, waiter.result));
+        Thread.ofVirtual().name("resilience4cata-bulkhead").start(() -> runGranted(waiter));
     }
 
     /** Number of asynchronous callers waiting for a slot; for tests. */
@@ -436,6 +437,8 @@ public final class BulkheadPolicy implements BulkheadHandle {
      * returned at once. When a slot is released, by an asynchronous or a synchronous call, it is handed
      * directly to the oldest waiter, whose call then starts on a new virtual thread. A waiter that is
      * not served within {@code maxWait} fails with {@link #rejection()} and can no longer receive a slot.
+     * Cancelling the returned future cancels the call's stage (its slot is freed when the stage ends, at
+     * once for a {@code CompletableFuture}), or takes a waiting call out of the queue.
      *
      * @param call the next layer
      * @param <T> the result type
@@ -448,14 +451,10 @@ public final class BulkheadPolicy implements BulkheadHandle {
             if (!tryEnter()) {
                 return CompletableFuture.failedFuture(rejection());
             }
-            CompletableFuture<T> result = new CompletableFuture<>();
-            run(call, result);
-            return result;
+            return run(call);
         }
         if (queued.count() == 0 && waiting.tryAcquire()) {
-            CompletableFuture<T> result = new CompletableFuture<>();
-            run(call, result);
-            return result;
+            return run(call);
         }
         BulkheadWaiters.Waiter<T> waiter = new BulkheadWaiters.Waiter<>(call, queued, this);
         queued.add(waiter);
@@ -473,6 +472,11 @@ public final class BulkheadPolicy implements BulkheadHandle {
         BulkheadWaiters.Waiter<T> waiter = new BulkheadWaiters.Waiter<>(call, queued, this);
         queued.add(waiter);
         return waiter;
+    }
+
+    /** Test seam: what a granted waiter runs on its new virtual thread, on the caller's thread. */
+    <T> void runGrantedForTest(BulkheadWaiters.Waiter<T> waiter) {
+        runGranted(waiter);
     }
 
     /** Test seam: the drain that ends a queued {@link #executeAsync}. */
@@ -493,14 +497,48 @@ public final class BulkheadPolicy implements BulkheadHandle {
         return Objects.requireNonNull(semaphore).tryAcquire();
     }
 
-    /** Calls the next layer holding a slot, and frees the slot when its stage completes. */
-    private <T> void run(AsyncCall<T> call, CompletableFuture<T> result) {
-        AsyncSupport.call(call).whenComplete((value, failure) -> {
+    /**
+     * Calls the next layer holding a slot, and frees the slot when its stage completes. Cancelling the
+     * returned future cancels the stage, which (for a {@code CompletableFuture}) completes it at once, so
+     * the slot is freed by this same callback before the cancel returns: exactly once, whichever of the
+     * cancel and the stage's own completion comes first.
+     */
+    // One method with its own callback, as before downward cancellation: splitting the callback into a shared
+    // helper (as runGranted uses) cost one more inlining level, and stacked async methods then allocated one
+    // more object per call because escape analysis no longer removed this future (AsyncBenchmark.*Stack).
+    private <T> LinkedFuture<T> run(AsyncCall<T> call) {
+        CompletionStage<T> stage = AsyncSupport.call(call);
+        LinkedFuture<T> result = new LinkedFuture<>(stage);
+        stage.whenComplete((value, failure) -> {
             exit();
             if (failure == null) {
                 result.complete(value);
             } else {
-                result.completeExceptionally(AsyncSupport.unwrap(failure));
+                result.fail(AsyncSupport.unwrap(failure));
+            }
+        });
+        return result;
+    }
+
+    /** A queued waiter got a slot; runs on a new virtual thread. A waiter cancelled meanwhile gives the slot back. */
+    private <T> void runGranted(BulkheadWaiters.Waiter<T> waiter) {
+        LinkedFuture<T> result = waiter.result;
+        if (!result.link(LinkedFuture.STARTING)) {
+            exit(); // cancelled after the hand-off claimed it: the call never starts
+            return;
+        }
+        CompletionStage<T> stage = AsyncSupport.call(waiter.call);
+        result.link(stage);
+        holdUntilComplete(stage, result);
+    }
+
+    private <T> void holdUntilComplete(CompletionStage<T> stage, LinkedFuture<T> result) {
+        stage.whenComplete((value, failure) -> {
+            exit();
+            if (failure == null) {
+                result.complete(value);
+            } else {
+                result.fail(AsyncSupport.unwrap(failure));
             }
         });
     }

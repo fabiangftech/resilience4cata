@@ -117,6 +117,16 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
                 .toList();
     }
 
+    /** The GraalVM reachability metadata the processor wrote for the generated class {@code generatedName}. */
+    String nativeImageMetadata(String generatedName) {
+        try {
+            return Files.readString(classes.resolve("META-INF/native-image/dev.resilience4cata.generated/" + generatedName
+                    + "/reachability-metadata.json"));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     String generatedSource(String qualifiedName) {
         try {
             return Files.readString(generated.resolve(qualifiedName.replace('.', '/') + ".java"));

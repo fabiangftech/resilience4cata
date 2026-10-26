@@ -15,5 +15,6 @@ dependencies {
         api project(':opentelemetry')
         api project(':junit')
         api project(':micrometer')
+        api project(':spring')
     }
 }

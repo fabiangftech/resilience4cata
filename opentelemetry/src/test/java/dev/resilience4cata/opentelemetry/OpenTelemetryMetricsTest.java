@@ -183,6 +183,41 @@ class OpenTelemetryMetricsTest {
     }
 
     @Test
+    void hedgesAreCountedByReason() {
+        ResilienceRegistry registry = metrics.register(ResilienceTesting.registry(clock)).build();
+        Pipeline<String> quotes = Pipeline.builder(registry, "quotes", String.class)
+                .hedge(h -> h.delay(Duration.ofMillis(10)).maxAttempts(3).budgetPercent(0))
+                .build();
+        Pipeline<String> strict = Pipeline.builder(registry, "strict", String.class)
+                .hedge(h -> h.abortOn(List.of(IllegalStateException.class)).budgetPercent(0))
+                .build();
+        Pipeline<String> rare = Pipeline.builder(registry, "rare", String.class)
+                .hedge(h -> h.budgetMinHedgesPerSecond(0))
+                .build();
+        CompletableFuture<String> slow = new CompletableFuture<>();
+        int[] calls = {0};
+
+        CompletableFuture<String> won = quotes.executeAsync(() -> calls[0]++ == 0 ? slow : CompletableFuture.completedFuture("fast"));
+        clock.advance(Duration.ofMillis(10));
+        quotes.executeAsync(() -> CompletableFuture.failedFuture(new IllegalArgumentException("down")));
+        strict.executeAsync(() -> CompletableFuture.failedFuture(new IllegalStateException("bad")));
+        rare.executeAsync(() -> CompletableFuture.failedFuture(new IllegalArgumentException("down")));
+        clock.advance(Duration.ZERO); // a failure starts the next attempt off the completing thread: here, at the next advance
+
+        assertThat(won).isCompletedWithValue("fast");
+        collect();
+        assertThat(counter("r4c.hedge.hedged", attrs("instance", "quotes", "reason", "delay"))).isEqualTo(1);
+        assertThat(counter("r4c.hedge.hedged", attrs("instance", "quotes", "reason", "failure"))).isEqualTo(2);
+        assertThat(counter("r4c.hedge.won", instance("quotes"))).isEqualTo(1);
+        assertThat(counter("r4c.hedge.failed", instance("quotes"))).isEqualTo(1);
+        assertThat(counter("r4c.hedge.skipped", attrs("instance", "strict", "reason", "aborted"))).isEqualTo(1);
+        assertThat(counter("r4c.hedge.skipped", attrs("instance", "rare", "reason", "budget_exhausted"))).isEqualTo(1);
+        assertThat(counter("r4c.hedge.failed", instance("rare"))).isEqualTo(1);
+        assertThat(metric("r4c.hedge.hedged").getUnit()).isEqualTo("{attempt}");
+        assertThat(metric("r4c.hedge.won").getUnit()).isEqualTo("{call}");
+    }
+
+    @Test
     void timeoutsAndFallbacksAreCounted() throws Exception {
         ResilienceRegistry registry = metrics.register(ResilienceTesting.registry(clock)).build();
         TimeoutPolicy timeout = registry.timeoutPolicy("slow", "", "", t -> t.timeout(Duration.ofSeconds(1)));

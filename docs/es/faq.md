@@ -14,7 +14,13 @@ Java 21 o posterior, al compilar y en tiempo de ejecución. La biblioteca se com
 
 ### ¿Funciona con Spring, Quarkus, Micronaut o Jakarta CDI? :id=frameworks
 
-No se integra con ninguno de ellos, y no le hace falta: las clases generadas son Java puro, así que creas tú mismo el objeto envuelto (`Resilient.of(…)`) y lo registras como bean de la forma en que lo haga tu framework. No hay autoconfiguración, ni AOP, ni escaneo de anotaciones en tiempo de ejecución.
+| Framework | Integración |
+|---|---|
+| Spring Boot 4.1+ | `resilience4cata-spring` (desde 0.4.0): las clases anotadas se instancian como su subclase generada, los beans de interfaces anotadas se envuelven, el registry se configura desde `application.yml`, más salud, un endpoint de actuator y métricas. Sin AOP. [Guía de Spring Boot](guides/spring.md) |
+| Spring Boot 3 | no soportado |
+| Quarkus, Micronaut, Jakarta CDI | ninguna todavía, y no hace falta: las clases generadas son Java puro, así que crea tú el objeto (`Resilient.of(…)` o `new C$Resilient(registry, …)`) y regístralo como bean de la forma en que lo haga tu framework. Los constructores generados de las clases anotadas copian `@Inject` y los qualifiers, así que un contenedor también puede instanciar `C$Resilient` directamente |
+
+En ningún caso hay proxies, AOP ni escaneo de anotaciones en tiempo de ejecución.
 
 ### ¿Es un fork de Resilience4j? :id=fork
 
@@ -92,7 +98,7 @@ En AWS Graviton3, un retry cuyo primer intento tiene éxito cuesta 1.2 ns y un c
 
 ### ¿Qué no se admite todavía? :id=not-supported
 
-Hedging, límites de concurrencia adaptativos, caché y bulkheads con pool de threads; tipos reactivos; tipos async `? super`; cambiar el orden de las políticas; reconfiguración en tiempo de ejecución; módulos de integración con frameworks. Consulta [Decisiones de diseño](design.md) para ver qué está planeado y qué está excluido por decisión.
+Límites de concurrencia adaptativos, caché y bulkheads con pool de threads; hedging sincrónico (`@Hedge` funciona en métodos async); tipos reactivos; tipos async `? super`; cambiar el orden de las políticas; reconfiguración en tiempo de ejecución; módulos de integración con frameworks distintos de Spring Boot. Consulta [Decisiones de diseño](design.md) para ver qué está planeado y qué está excluido por decisión.
 
 ### ¿Qué hay en la hoja de ruta? :id=roadmap
 
@@ -100,13 +106,13 @@ Planificado, no prometido; los nombres y el alcance pueden cambiar:
 
 | Funcionalidad | Nivel | Notas |
 |---|---|---|
-| Hedging (`@Hedge`) | v1 | Resilience4j tiene `resilience4j-hedge` (async, solo programático); el nuestro sería una anotación |
+| Hedging (`@Hedge`) | hecho en 0.4.0 | métodos async y `Pipeline.executeAsync` ([Hedge](policies/hedge.md)); el hedging sincrónico, más adelante. Resilience4j tiene `resilience4j-hedge` (async, solo programático) |
 | Límite de concurrencia adaptativo (`@AdaptiveLimit`: AIMD, Vegas, Gradient2) | v1 | |
 | Tracing de OpenTelemetry | más adelante | las métricas están en `resilience4cata-opentelemetry` desde 0.3.0 ([guía](guides/opentelemetry.md)) |
 | Configuración YAML | v1 | módulo separado, para que `core` siga sin dependencias |
 | Orden de ejecución configurable (`@Order`) | v1 | |
 | Atributo `locked` (una instancia que la configuración externa no puede sobrescribir) | v1 | |
-| `@Cached`, tipos reactivos, corrutinas de Kotlin, inyección de fallos, propagación de deadlines, integraciones con frameworks | más adelante | |
+| `@Cached`, tipos reactivos, corrutinas de Kotlin, inyección de fallos, propagación de deadlines, integraciones con Quarkus/Micronaut/CDI | más adelante | |
 
 Mientras tanto, [testkit](guides/testing.md) cubre las pruebas.
 

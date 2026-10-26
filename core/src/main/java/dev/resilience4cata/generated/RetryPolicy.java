@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
@@ -360,7 +361,8 @@ public final class RetryPolicy {
 
     /**
      * Runs an asynchronous call with retries. A failed attempt is retried after the backoff delay
-     * without blocking any thread: the next attempt starts on a new virtual thread.
+     * without blocking any thread: the next attempt starts on a new virtual thread. Cancelling the
+     * returned future cancels the attempt in flight or the backoff, and ends the retries silently.
      *
      * @param call one attempt: the next layer
      * @param <T> the result type
@@ -382,8 +384,8 @@ public final class RetryPolicy {
      */
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call,
             @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery) {
-        CompletableFuture<T> result = new CompletableFuture<>();
-        new AsyncAttempts<>(this, call, null, false, fallback, recovery, result, start()).run();
+        LinkedFuture<T> result = new LinkedFuture<>();
+        new AsyncAttempts<>(this, call, null, false, fallback, recovery, result, start()).first();
         return result;
     }
 
@@ -425,8 +427,8 @@ public final class RetryPolicy {
      */
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
             boolean throwOnExhaustedResult, @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery) {
-        CompletableFuture<T> result = new CompletableFuture<>();
-        new AsyncAttempts<>(this, call, classifier, throwOnExhaustedResult, fallback, recovery, result, start()).run();
+        LinkedFuture<T> result = new LinkedFuture<>();
+        new AsyncAttempts<>(this, call, classifier, throwOnExhaustedResult, fallback, recovery, result, start()).first();
         return result;
     }
 
@@ -438,14 +440,14 @@ public final class RetryPolicy {
         private final boolean throwOnExhaustedResult;
         private final @Nullable FallbackPolicy fallback;
         private final @Nullable Recovery<T> recovery;
-        private final CompletableFuture<T> result;
+        private final LinkedFuture<T> result;
         private final long start;
         private int attempts; // written by one attempt's callback before the next attempt is started
 
         // java:S107: one constructor call per async retried call; a parameter object would be one more allocation.
         @SuppressWarnings("java:S107")
         AsyncAttempts(RetryPolicy policy, AsyncCall<T> call, @Nullable Classifier<? super T> classifier,
-                boolean throwOnExhaustedResult, @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery, CompletableFuture<T> result,
+                boolean throwOnExhaustedResult, @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery, LinkedFuture<T> result,
                 long start) {
             this.policy = policy;
             this.call = call;
@@ -457,9 +459,35 @@ public final class RetryPolicy {
             this.start = start;
         }
 
+        /** Starts the first attempt, before the result is returned: nobody can have cancelled it yet. */
+        void first() {
+            CompletionStage<T> stage = AsyncSupport.call(call);
+            result.linkFirst(stage);
+            stage.whenComplete(this);
+        }
+
+        /**
+         * Starts a later attempt, after the backoff, unless the caller cancelled the call. The attempt's
+         * stage is linked to the result, so a cancel from now on cancels it.
+         */
         @Override
         public void run() {
-            AsyncSupport.call(call).whenComplete(this);
+            if (result.cancelling()) {
+                return; // cancelled during the backoff: no further attempt
+            }
+            CompletionStage<T> stage = AsyncSupport.call(call);
+            result.link(stage);
+            stage.whenComplete(this);
+        }
+
+        /**
+         * Waits {@code delay} before the next attempt; a cancel meanwhile cancels the timer. The timer is
+         * linked in place of the attempt that just failed only if that is still linked: with a short delay,
+         * the next attempt may already have started (and linked its stage) on the timer's thread.
+         */
+        private void retryAfter(long delay) {
+            Object failedAttempt = result.linked();
+            result.replace(failedAttempt, policy.environment.later(delay, this));
         }
 
         // java:S3776: the per-attempt callback, kept in one piece like the other per-call methods.
@@ -468,11 +496,14 @@ public final class RetryPolicy {
         @SuppressWarnings({"java:S3776", "java:S1181"})
         public void accept(@Nullable T value, @Nullable Throwable failure) {
             Classifier<? super T> resultClassifier = this.classifier;
+            if (failure == null && resultClassifier == null) {
+                result.complete(value);
+                return;
+            }
+            if (result.cancelling()) {
+                return; // cancelled by the caller: nothing is retried, recorded, published or recovered
+            }
             if (failure == null) {
-                if (resultClassifier == null) {
-                    result.complete(value);
-                    return;
-                }
                 Classifier.Outcome outcome;
                 try {
                     outcome = resultClassifier.classify(value, null);
@@ -482,7 +513,7 @@ public final class RetryPolicy {
                 }
                 long delay = outcome == Classifier.Outcome.FAILURE ? policy.onFailedResult(++attempts, start) : NO_RETRY;
                 if (delay >= 0) {
-                    policy.environment.later(delay, this);
+                    retryAfter(delay);
                 } else if (outcome == Classifier.Outcome.FAILURE && throwOnExhaustedResult) {
                     giveUp(policy.rejected(value, attempts), attempts);
                 } else {
@@ -509,7 +540,7 @@ public final class RetryPolicy {
                 delay = policy.onFailure(++attempts, cause, start, outcome);
             }
             if (delay >= 0) {
-                policy.environment.later(delay, this);
+                retryAfter(delay);
             } else {
                 giveUp(cause, attempts);
             }
@@ -525,7 +556,7 @@ public final class RetryPolicy {
             if (fallback != null && recovery != null) {
                 fallback.recoverOrFail(cause, attempts, recovery, result);
             } else {
-                result.completeExceptionally(cause);
+                result.fail(cause);
             }
         }
     }

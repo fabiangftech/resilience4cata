@@ -79,14 +79,16 @@ ResilienceConfig config = ResilienceConfig.builder()
 | `classpath(name)` / `optionalClasspath(name)` | Un recurso del class path; la primera forma falla ([`R4C-CFG-009`](../errors.md#r4c-cfg-009)) si no existe |
 | `file(path)` / `optionalFile(path)` | Un archivo; misma regla |
 | `properties(props)` / `properties(description, props)` | Un `java.util.Properties` que armaste tú; la descripción aparece en los mensajes de error |
+| `properties(description, map, origins)` | Un mapa de claves y valores, con dónde se fijó cada clave (`origins`), que se muestra en los mensajes de error en lugar de la descripción. Para frameworks que registran los orígenes, como Spring |
 | `environment()` / `environment(map)` | Variables de entorno (`R4C_…`), o un mapa de ellas |
 | `systemProperties()` / `systemProperties(props)` | Propiedades del sistema (`r4c.…`), o un `Properties` usado como tales |
 | `profiles(names...)` | Los perfiles activos; reemplaza a `profiles.active` |
 | `classLoader(loader)` | El class loader para los recursos y para las clases de excepción nombradas en los valores |
+| `precedenceByOrder()` | Ordena las fuentes por el orden en que se agregaron, no por su tipo (ver abajo) |
 
 Los archivos usan la sintaxis `.properties` y se leen como UTF-8. No hay soporte de YAML ni recarga: la configuración se lee una sola vez.
 
-Cuando la misma clave llega desde varias fuentes, gana la más fuerte: **recursos del class path < archivos y `Properties` < variables de entorno < propiedades del sistema**. Entre dos fuentes del mismo tipo, gana la última agregada. Una clave bajo un perfil activo gana sobre una clave sin perfil, sin importar sus fuentes.
+Cuando la misma clave llega desde varias fuentes, gana la más fuerte: **recursos del class path < archivos y `Properties` < variables de entorno < propiedades del sistema**. Entre dos fuentes del mismo tipo, gana la última agregada. Con `precedenceByOrder()`, gana la última agregada sea cual sea su tipo: la [integración con Spring Boot](spring.md) lo usa para mantener la precedencia de Spring. Una clave bajo un perfil activo gana sobre una clave sin perfil, sin importar sus fuentes.
 
 <!-- snippet: configuration-sources -->
 ```java

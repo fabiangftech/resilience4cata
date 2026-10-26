@@ -29,6 +29,7 @@ import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
+import javax.tools.StandardLocation;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -144,6 +145,14 @@ class IncrementalProcessingTest {
                 Map.entry("demo.Sub$Nested$Resilient", List.of("demo.Sub.Nested")),
                 Map.entry("demo.BaseService$Resilient", List.of("demo.BaseService")),
                 Map.entry("demo.Service$Resilient", List.of("demo.Service")));
+        String metadata = "/META-INF/native-image/dev.resilience4cata.generated/%s/reachability-metadata.json";
+        assertThat(processor.resourceOrigins).containsOnly(
+                Map.entry(metadata.formatted("demo.Client$Resilient"), List.of("demo.Client")),
+                Map.entry(metadata.formatted("demo.Base$Resilient"), List.of("demo.Base")),
+                Map.entry(metadata.formatted("demo.Sub$Resilient"), List.of("demo.Sub")),
+                Map.entry(metadata.formatted("demo.Sub$Nested$Resilient"), List.of("demo.Sub.Nested")),
+                Map.entry(metadata.formatted("demo.BaseService$Resilient"), List.of("demo.BaseService")),
+                Map.entry(metadata.formatted("demo.Service$Resilient"), List.of("demo.Service")));
     }
 
     @Test
@@ -175,6 +184,10 @@ class IncrementalProcessingTest {
                 "demo.Service$Resilient")) {
             assertThat(partial.generatedSource(generated)).isEqualTo(full.generatedSource(generated));
         }
+        for (String generated : List.of("demo.Client$Resilient", "demo.Sub$Resilient", "demo.Sub$Nested$Resilient",
+                "demo.Service$Resilient")) {
+            assertThat(partial.nativeImageMetadata(generated)).isEqualTo(full.nativeImageMetadata(generated));
+        }
         assertThat(Files.exists(partial.generated().resolve("demo/Base$Resilient.java"))).isFalse();
         assertThat(Files.exists(partial.generated().resolve("demo/BaseService$Resilient.java"))).isFalse();
         // the subclass merges what it inherits from the superclass and the interface, both read from class files
@@ -183,7 +196,7 @@ class IncrementalProcessingTest {
                 .contains("\"demo.Service#inherited()\"")
                 .contains("\"demo.Service#base()\"")
                 .contains("return this.recover(r4c$f0);")
-                .contains("public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry, java.lang.String p0)");
+                .contains("public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry, java.lang.String name)");
     }
 
     private static List<String> lines(URL url) throws IOException {
@@ -198,6 +211,7 @@ class IncrementalProcessingTest {
 
         private final ResilienceProcessor delegate = new ResilienceProcessor();
         final Map<String, List<String>> origins = new LinkedHashMap<>();
+        final Map<String, List<String>> resourceOrigins = new LinkedHashMap<>();
         final List<String> otherFilerCalls = new ArrayList<>();
 
         @Override
@@ -210,6 +224,12 @@ class IncrementalProcessingTest {
                         names.add(((TypeElement) element).getQualifiedName().toString());
                     }
                     origins.put(args[0].toString(), names);
+                } else if (method.getName().equals("createResource") && args[0] == StandardLocation.CLASS_OUTPUT) {
+                    List<String> names = new ArrayList<>();
+                    for (Element element : (Element[]) args[3]) {
+                        names.add(((TypeElement) element).getQualifiedName().toString());
+                    }
+                    resourceOrigins.put(args[1] + "/" + args[2], names);
                 } else {
                     otherFilerCalls.add(method.getName() + Arrays.toString(args));
                 }

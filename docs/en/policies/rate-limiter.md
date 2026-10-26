@@ -142,7 +142,7 @@ For a method that returns `CompletionStage<T>` or `CompletableFuture<T>`, a reje
 CompletableFuture<String> geocodeAsync(String address);
 ```
 
-See [Async methods](../guides/async.md).
+Cancelling the future of a call that still waits for its permit gives the permit back, and the call never starts; a call that already started keeps its permit ([cancellation](../guides/async.md#cancellation)). See [Async methods](../guides/async.md).
 
 ## Same thing with `Pipeline`
 

@@ -20,6 +20,10 @@ Every event implements the sealed interface `dev.resilience4cata.event.Resilienc
 | Circuit breaker | `CircuitBreakerEvent.CallNotPermitted` | `CircuitBreakerState state` | a call is rejected (`OPEN`, `FORCED_OPEN`, or `HALF_OPEN` with every probe taken) |
 | Retry | `RetryEvent.Retrying` | `int attempt`, `Duration delay`, `@Nullable Throwable failure` | an attempt failed and another one will run after `delay`; `failure` is `null` when a [classifier](classifiers.md) rejected a result |
 | Retry | `RetryEvent.GaveUp` | `int attempts`, `RetryEvent.Reason reason`, `@Nullable Throwable failure` | the retry stops without a success: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (the failure is not in `retryOn`, is in `abortOn`, or is an open breaker's `CallNotPermittedException`), `INTERRUPTED`, `CLASSIFIER_FAILED`, `BUDGET_EXHAUSTED` (the [retry budget](../policies/retry.md#retry-budget) is used up) |
+| Hedge | `HedgeEvent.Hedged` | `int attempt`, `HedgeEvent.Reason reason` | a [hedge](../policies/hedge.md) started attempt `attempt` (2 or more) next to the others: `DELAY` (no result within `delay`) or `FAILURE` (an attempt failed with a failure in `hedgeOn`) |
+| Hedge | `HedgeEvent.Won` | `int attempt` | attempt `attempt` (2 or more) succeeded first and the others were cancelled; not published when the first attempt wins |
+| Hedge | `HedgeEvent.Skipped` | `int attempt`, `HedgeEvent.SkipReason reason` | a hedge that would have started did not: `BUDGET_EXHAUSTED` (the hedge budget is used up), `REJECTED` (an inner policy rejected an attempt), `ABORTED` (a failure in `abortOn`, or not in `hedgeOn`, ended the call) |
+| Hedge | `HedgeEvent.Failed` | `int attempts`, `Throwable failure` | the hedged call fails with `failure` after `attempts` attempts |
 | Rate limiter | `RateLimiterEvent.Rejected` | none | a call is rejected with `RateLimitExceededException` |
 | Timeout | `TimeoutEvent.TimedOut` | `Duration timeout` | a call times out |
 | Bulkhead | `BulkheadEvent.Rejected` | `int maxConcurrent` | a call is rejected with `BulkheadFullException` |
@@ -86,6 +90,7 @@ for (RateLimiterSnapshot r : snapshot.rateLimiters()) {
 | `BulkheadSnapshot` | `instance`, `concurrentCalls`, `waitingCalls`, `maxConcurrent`, and the method `availableSlots()` |
 | `RateLimiterSnapshot` | `instance`, `availablePermits`, `permits` |
 | `RetrySnapshot` | `instance`, `config` (the resolved `RetryConfig`) |
+| `HedgeSnapshot` | `instance`, `config` (the resolved `HedgeConfig`), `budget` (`calls`, `hedges`, `allowedHedges` in the budget's window; `null` without a budget) |
 | `TimeoutSnapshot` | `instance`, `config` (the resolved `TimeoutConfig`) |
 
 ## Handles :id=handles
@@ -115,6 +120,10 @@ Names are lowercase and dotted, as Micrometer recommends (Prometheus shows them 
 | `r4c.circuitbreaker.transitions` | counter | `instance`, `from`, `to` (lowercase states) | `StateTransition` |
 | `r4c.retry.retries` | counter | `instance` | `Retrying` |
 | `r4c.retry.gave.up` | counter | `instance`, `reason` (lowercase `Reason`) | `GaveUp` |
+| `r4c.hedge.hedged` | counter | `instance`, `reason` = `delay` \| `failure` | `Hedged` |
+| `r4c.hedge.won` | counter | `instance` | `Won` |
+| `r4c.hedge.skipped` | counter | `instance`, `reason` = `budget_exhausted` \| `rejected` \| `aborted` | `Skipped` |
+| `r4c.hedge.failed` | counter | `instance` | `Failed` |
 | `r4c.timeout.timed.out` | counter | `instance` | `TimedOut` |
 | `r4c.fallback.applied` | counter | `instance` | `Applied` |
 | `r4c.circuitbreaker.state` | gauge | `instance`, `state`: 1 for the current state, 0 for the others | `state()` |

@@ -663,4 +663,39 @@ class ResilienceConfigTest {
         assertThat(failure(text("a=\\u00")).problems().get(0)).startsWith("[R4C-CFG-009] cannot read test.properties")
                 .contains("line 1");
     }
+
+    @Test
+    void mapPropertiesReportTheOriginOfEachKey() {
+        ConfigException e = failure(ResilienceConfig.builder().properties("application",
+                Map.of("resilience4cata.defaults.retry.maxAtempts", "3", "resilience4cata.defaults.retry.delay", "soon"),
+                key -> key.endsWith("delay") ? "'" + key + "' (application.yml - 4:12)" : null));
+        assertThat(e.problems()).anySatisfy(p -> assertThat(p).startsWith("[R4C-CFG-001]")
+                        .contains("'resilience4cata.defaults.retry.maxAtempts' (application)"))
+                .anySatisfy(p -> assertThat(p).startsWith("[R4C-CFG-002]").contains("(application.yml - 4:12)"));
+    }
+
+    @Test
+    void sourcesRankByKindUnlessPrecedenceIsByOrder() {
+        Properties system = new Properties();
+        system.setProperty("resilience4cata.defaults.retry.maxAttempts", "2");
+        Map<String, String> later = Map.of("resilience4cata.defaults.retry.maxAttempts", "7");
+
+        ResilienceConfig byKind = ResilienceConfig.builder().systemProperties(system)
+                .properties("later", later, key -> null).build();
+        ResilienceConfig byOrder = ResilienceConfig.builder().precedenceByOrder().systemProperties(system)
+                .properties("later", later, key -> null).build();
+
+        assertThat(byKind.toRegistry().retryConfig("").maxAttempts()).isEqualTo(2);
+        assertThat(byOrder.toRegistry().retryConfig("").maxAttempts()).isEqualTo(7);
+    }
+
+    @Test
+    void precedenceByOrderStillLetsProfilesWin() {
+        ResilienceConfig config = ResilienceConfig.builder().precedenceByOrder()
+                .properties("low", Map.of("profiles.test.defaults.retry.maxAttempts", "5", "profiles.active", "test"),
+                        key -> null)
+                .properties("high", Map.of("defaults.retry.maxAttempts", "9"), key -> null).build();
+
+        assertThat(config.toRegistry().retryConfig("").maxAttempts()).isEqualTo(5);
+    }
 }

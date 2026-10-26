@@ -49,6 +49,38 @@ StockService stock = new StockService$Resilient(registry, warehouse);   // check
 
 `Resilient.create` elige el constructor como lo haría el compilador, las coincidencias exactas antes que los varargs. Si ningún constructor encaja, falla con [`R4C-RT-009`](../errors.md#r4c-rt-009); si encaja más de uno (por ejemplo, al pasar `null` a constructores sobrecargados), con [`R4C-RT-010`](../errors.md#r4c-rt-010). Los dos mensajes sugieren la llamada `new …$Resilient(registry, …)` que conviene usar en su lugar.
 
+## Constructores e inyección de dependencias :id=constructor-injection
+
+Cada constructor replicado conserva los nombres de parámetro del original y copia sus anotaciones y las de cada parámetro, así que un contenedor de inyección de dependencias que construye `StockService$Resilient` ve los mismos metadatos que en `StockService`: `@Autowired` o `@Inject` en uno de varios constructores, `@Qualifier("…")`, `@Named("…")` o `@Value("${…}")` en un parámetro.
+
+<!-- not-compiled: needs Spring on the class path -->
+```java
+public class ReportService {
+    @Autowired
+    public ReportService(@Qualifier("reportsDb") DataSource dataSource, @Value("${reports.limit}") int limit) { … }
+    …
+}
+```
+
+<!-- not-compiled: generated code -->
+```java
+public class ReportService$Resilient extends ReportService {
+    @org.springframework.beans.factory.annotation.Autowired
+    public ReportService$Resilient(dev.resilience4cata.ResilienceRegistry registry,
+            @org.springframework.beans.factory.annotation.Qualifier("reportsDb") javax.sql.DataSource dataSource,
+            @org.springframework.beans.factory.annotation.Value("${reports.limit}") int limit) {
+        super(dataSource, limit);
+        …
+    }
+}
+```
+
+- Solo se copian las anotaciones que quedan en los class files (retención `CLASS` o `RUNTIME`); las de retención `SOURCE`, como las de Lombok, no. Las anotaciones de uso de tipo (`@Nullable` de JSpecify) tampoco se repiten.
+- El parámetro `ResilienceRegistry` no lleva anotación: los contenedores lo inyectan por tipo, así que la aplicación necesita exactamente un bean `ResilienceRegistry`.
+- Si un parámetro del constructor de la clase ya se llama `registry`, el generado se llama `r4c$registry`. Los parámetros llamados `java` o `dev` se renombran a `r4c$p<índice>`, porque esos nombres ocultarían los paquetes que usa el constructor generado.
+- `@ConstructorProperties` lista un nombre por parámetro, así que la copia generada empieza por el del registry.
+- Los nombres de parámetro son los del código fuente, así que un contenedor que empareja beans por nombre de parámetro (Spring, compilando con `-parameters`) ve los mismos nombres en las dos clases.
+
 ## ¿Interfaz o clase?
 
 | | Interfaz anotada | Clase anotada |
@@ -146,7 +178,7 @@ Además:
 
 - **Los métodos fallback hermanos se llaman sobre `this`**, así que no pueden ser `private` (ni package-private en una superclase de otro paquete). `protected` funciona.
 - **Los métodos que el constructor llama sobre `this` se ejecutan antes de que las políticas estén configuradas**, porque los campos de la subclase se asignan después de que `super(...)` retorna. No anotes métodos que los constructores llaman.
-- **La subclase generada es `final`.** Extiende tu propia clase, no la generada.
+- **La subclase generada no es `final`**, así que los frameworks pueden crear proxies de ella (CGLIB para `@Transactional`, proxies con scope). Sus overrides llaman a las políticas; una subclase tuya que los vuelva a sobrescribir se las salta. Extiende tu propia clase, no la generada.
 - `Resilient.create` rechaza una interfaz ([`R4C-RT-007`](../errors.md#r4c-rt-007)) y un tipo que no puede tener una subclase generada ([`R4C-RT-008`](../errors.md#r4c-rt-008)).
 
 ## Con Lombok

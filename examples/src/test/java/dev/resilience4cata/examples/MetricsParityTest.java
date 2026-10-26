@@ -19,6 +19,7 @@ import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -52,7 +53,7 @@ class MetricsParityTest {
             fromOpenTelemetry.put(metric.getName(), metric.getDescription());
         }
 
-        assertThat(fromMicrometer).as("every metric of the specification").hasSize(13);
+        assertThat(fromMicrometer).as("every metric of the specification").hasSize(17);
         assertThat(fromOpenTelemetry).isEqualTo(fromMicrometer);
         provider.close();
     }
@@ -92,6 +93,23 @@ class MetricsParityTest {
         assertThat(fallback.execute(() -> {
             throw new UncheckedIOException(new IOException("down"));
         })).isEqualTo("cached");
+
+        // Hedges: one that wins after the delay, one where every attempt fails, one skipped by its budget.
+        Pipeline<String> hedged = Pipeline.builder(registry, "lookups", String.class)
+                .hedge(h -> h.delay(Duration.ofMillis(10)).budgetPercent(0)).build();
+        CompletableFuture<String> slow = new CompletableFuture<>();
+        int[] calls = {0};
+        CompletableFuture<String> won = hedged.executeAsync(() -> calls[0]++ == 0 ? slow : CompletableFuture.completedFuture("fast"));
+        clock.advance(Duration.ofMillis(10));
+        assertThat(won).isCompletedWithValue("fast");
+        CompletableFuture<String> failed = hedged.executeAsync(() -> CompletableFuture.failedFuture(new IOException("down")));
+        clock.advance(Duration.ZERO); // the hedge after a failure starts at the next advance of the clock
+        assertThat(failed).isCompletedExceptionally();
+        Pipeline<String> rare = Pipeline.builder(registry, "rare", String.class)
+                .hedge(h -> h.budgetMinHedgesPerSecond(0)).build();
+        CompletableFuture<String> skipped = rare.executeAsync(() -> CompletableFuture.failedFuture(new IOException("down")));
+        clock.advance(Duration.ZERO); // the budget is asked when the hedge would start
+        assertThat(skipped).isCompletedExceptionally();
 
         // Bulkhead and rate limiter gauges.
         Pipeline.builder(registry, "reports", String.class).bulkhead(b -> b.maxConcurrent(1)).build().execute(() -> "r");

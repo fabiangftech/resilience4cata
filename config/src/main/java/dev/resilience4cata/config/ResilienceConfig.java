@@ -2,6 +2,7 @@ package dev.resilience4cata.config;
 
 import dev.resilience4cata.BulkheadSnapshot;
 import dev.resilience4cata.CircuitBreakerSnapshot;
+import dev.resilience4cata.HedgeSnapshot;
 import dev.resilience4cata.RateLimiterSnapshot;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.ResilienceSnapshot;
@@ -22,6 +23,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
@@ -79,7 +81,8 @@ import org.jspecify.annotations.Nullable;
  * without recompiling. For one
  * key, sources rank: classpath resources &lt; files and {@code Properties} &lt; environment
  * variables &lt; system properties; among sources of the same kind, the one added last wins. A
- * profile key wins over a non-profile key whatever their sources.
+ * profile key wins over a non-profile key whatever their sources. {@link Builder#precedenceByOrder()}
+ * ranks sources by the order they were added instead, for frameworks with their own precedence.
  *
  * <h2>Validation</h2>
  * Unknown keys, bad values, unknown exception classes, unknown {@code extends} targets, cycles and
@@ -192,6 +195,7 @@ public final class ResilienceConfig {
         ResilienceSnapshot snapshot = registry.snapshot();
         Map<PolicyType<?, ?>, Set<String>> known = new LinkedHashMap<>();
         known.put(PolicyType.RETRY, ids(snapshot.retries(), RetrySnapshot::instance));
+        known.put(PolicyType.HEDGE, ids(snapshot.hedges(), HedgeSnapshot::instance));
         known.put(PolicyType.CIRCUIT_BREAKER, ids(snapshot.circuitBreakers(), CircuitBreakerSnapshot::instance));
         known.put(PolicyType.RATE_LIMITER, ids(snapshot.rateLimiters(), RateLimiterSnapshot::instance));
         known.put(PolicyType.TIMEOUT, ids(snapshot.timeouts(), TimeoutSnapshot::instance));
@@ -300,6 +304,7 @@ public final class ResilienceConfig {
         private final List<Sources.Source> sources = new ArrayList<>();
         private @Nullable ClassLoader classLoader;
         private @Nullable List<String> profiles;
+        private boolean precedenceByOrder;
 
         private Builder() {
         }
@@ -391,6 +396,54 @@ public final class ResilienceConfig {
             Objects.requireNonNull(description, "description");
             Objects.requireNonNull(properties, "properties");
             sources.add(Sources.properties(description, properties));
+            return this;
+        }
+
+        /**
+         * Adds keys and values from a map, with where each key was set, for messages. They rank like a
+         * file and are copied when this method is called. Meant for frameworks that keep their own
+         * configuration sources, such as Spring's {@code Environment}, which knows the file and line of
+         * every key.
+         *
+         * @param description names the source in error messages when {@code origins} knows nothing
+         * @param properties keys (with or without the {@code resilience4cata.} or {@code r4c.} prefix)
+         *     and values
+         * @param origins where a key was set, used in error messages instead of
+         *     {@code '<key>' (<description>)}, for example
+         *     {@code 'resilience4cata.defaults.retry.delay' (class path resource [application.yml] - 3:14)};
+         *     {@code null} for a key it does not know
+         * @return this builder
+         */
+        public Builder properties(String description, Map<String, String> properties,
+                Function<String, @Nullable String> origins) {
+            Objects.requireNonNull(description, "description");
+            Objects.requireNonNull(properties, "properties");
+            Objects.requireNonNull(origins, "origins");
+            Map<String, String> snapshot = new TreeMap<>();
+            properties.forEach((key, value) -> snapshot.put(Objects.requireNonNull(key, "key"),
+                    Objects.requireNonNull(value, "value")));
+            Map<String, String> where = new HashMap<>();
+            for (String key : snapshot.keySet()) {
+                String origin = origins.apply(key);
+                if (origin != null) {
+                    where.put(key, origin);
+                }
+            }
+            sources.add(Sources.map(description, snapshot, where));
+            return this;
+        }
+
+        /**
+         * Ranks sources by the order they were added, the last one added winning, instead of by kind
+         * (classpath resources &lt; files and properties &lt; environment variables &lt; system
+         * properties). For frameworks with their own precedence rules, such as Spring Boot, where
+         * command-line arguments and test properties win over system properties: add the sources lowest
+         * first. Profile keys still win over keys without a profile.
+         *
+         * @return this builder
+         */
+        public Builder precedenceByOrder() {
+            this.precedenceByOrder = true;
             return this;
         }
 
@@ -507,10 +560,15 @@ public final class ResilienceConfig {
             return new ResilienceConfig(active, defaults, configs, instances);
         }
 
-        /** Reads every source, lowest priority first, so that later sources override earlier ones. */
+        /**
+         * Reads every source, lowest priority first (or in the order added, with {@link #precedenceByOrder()}),
+         * so that later sources override earlier ones.
+         */
         private Map<String, Setting> merge(ClassLoader loader, Problems problems) {
             List<Sources.Source> ordered = new ArrayList<>(sources);
-            ordered.sort(Comparator.comparingInt(Sources.Source::priority));
+            if (!precedenceByOrder) {
+                ordered.sort(Comparator.comparingInt(Sources.Source::priority));
+            }
             Map<String, Setting> merged = new LinkedHashMap<>();
             for (Sources.Source source : ordered) {
                 Map<String, Setting> own = new LinkedHashMap<>();

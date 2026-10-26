@@ -358,6 +358,33 @@ A retried call costs 0.1–0.3 ns more (the null check of the budget on the fail
 
 Two lessons. A compare-and-set, even uncontended on a line no other thread writes, cost about 8 ns per call on Graviton3, and the single-instruction atomic add more; the shipped counter is lossy instead (two threads that share a stripe and race can lose a call, which only lowers the budget). And taking the stripe from the low bits of the thread id put every JMH worker on one stripe (their ids were multiples of the stripe count): the compare-and-set version paid for it in contention (380 ns), the lossy one lost so many calls that the budget refused retries even with ten times the needed margin. Mixing the id first (Fibonacci hashing) fixed both. With 4 threads, a retried call is dominated by the shared retry counter and the clock read, on the failure path only.
 
+## Hedge and async cancellation, 0.4.0 (2026-10-25, AWS Graviton3)
+
+Base: `4fc079a` (0.3.0 plus docs). New: the 0.4.0 integration (downward cancellation in every async policy, `@Hedge`, generated subclasses no longer `final`). Same method as above (`infra/bench.sh`, `c7g.xlarge`; calibration 20.51–20.54 ns).
+
+**Async cancellation.** The first version linked each policy's future to its inner stage with a release store in the constructor. On Graviton3 C2 compiled that into two extra full barriers (`dmb ish`) per policy layer, about 5 ns each (async circuit breaker 24.4 → 29.1 ns); on Apple Silicon the same barriers were within noise. A plain store is enough (the future is always handed on with a happens-before) and brings the cost down to about 0.5 ns per layer (ns/op, 1 / 4 threads; allocation unchanged):
+
+| Benchmark | Base | Release store | Plain store (shipped) |
+|---|---:|---:|---:|
+| `AsyncBenchmark.resilience4cataCircuitBreaker` | 24.4 / 24.9 | 29.1 / 29.9 | 24.9 / 25.6 |
+| `AsyncBenchmark.resilience4cataRetry` | 24.1 / 24.6 | 28.9 / 29.5 | 24.7 / 25.3 |
+| `AsyncBenchmark.resilience4cataBulkhead` | 41.8 / 392 | 46.2 / 503 | 42.8 / 418 |
+| `AsyncBenchmark.resilience4cataRateLimiter` | 66.0 / 275 | 71.2 / 294 | 66.9 / 278 |
+| `AsyncBenchmark.resilience4cataStack` | 121.5 / 573 | 139.3 / 554 | 123.5 / 558 |
+
+A refactor during the same change also moved the bulkhead's async callback into a shared helper; the extra call level stopped C2 from inlining the stacked path, and escape analysis no longer removed one object (the four-policy stack went from 200 to 224 B/op). The allocation gate caught it; the callback is back in one method.
+
+**Hedge** (new, no base; ns/op and B/op, 1 / 4 threads). Resilience4j 2.4.0's `resilience4j-hedge` with the same settings (see `HedgeBenchmark`'s Javadoc for the adjustments):
+
+| Benchmark | resilience4cata | Resilience4j 2.4.0 | Hand-written `CompletableFuture` |
+|---|---:|---:|---:|
+| first attempt already complete | 9.4 / 9.7 ns, 24 B | — | — |
+| first attempt wins before the delay | 154 / 267 ns, 216 B | 3601 / 5577 ns, 1561 B | 649 / 1968 ns, 297 B |
+| same, no hedge budget | 150 / 268 ns, 216 B | | |
+| the hedge fires (1 ms delay; µs) | 2114 / 2116 µs | 1067 / 1070 µs | |
+
+When the hedge fires, the time is the delay plus each library's timer precision: ours works in ticks of a sixteenth of the delay, at least 1 ms, and fires up to about two ticks late, so a 1 ms delay hedges after about 2 ms; Resilience4j's scheduled executor fires on time but leaves every cancelled delay queued, which is where most of its cost on the common path goes. Generated subclasses without `final` changed nothing measurable (`SubclassBenchmark` within noise).
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings (`-f 1 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`, about 4 minutes) and fails if one allocates its budget + 1 B/op or more, or is missing from the results. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.

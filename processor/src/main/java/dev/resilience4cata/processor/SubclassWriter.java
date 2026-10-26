@@ -1,5 +1,6 @@
 package dev.resilience4cata.processor;
 
+import java.lang.annotation.ElementType;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,6 +20,7 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.NestingKind;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.IntersectionType;
@@ -57,9 +59,24 @@ final class SubclassWriter {
         this.messager = messager;
     }
 
-    /** A constructor of the generated class: a leading {@code ResilienceRegistry registry}, then {@code parameters}. */
-    record Constructor(String typeVariables, String parameters, String arguments, String throwsClause) {
+    /**
+     * A constructor of the generated class: {@code annotations} (each followed by a new line and indented), a
+     * leading {@code ResilienceRegistry} parameter named {@code registry}, then {@code parameters}, which carry the
+     * original names and annotations.
+     */
+    record Constructor(String annotations, String typeVariables, String registry, String parameters, String arguments,
+            String throwsClause) {
     }
+
+    /** The name of the leading registry parameter, unless one of the class constructor's parameters already has it. */
+    private static final String REGISTRY = "registry";
+
+    /**
+     * Leftmost names of the qualified expressions in the field-initialization block ({@code java.util.Objects...},
+     * {@code dev.resilience4cata.RetryConfig.Backoff...}): a parameter with one of these names would obscure the
+     * package, so it is renamed. Names starting with {@code r4c$} are the processor's own and renamed as well.
+     */
+    private static final Set<String> OBSCURING = Set.of("java", "dev");
 
     /**
      * Reports every reason why {@code type} cannot be extended by the generated subclass, and every method
@@ -221,7 +238,12 @@ final class SubclassWriter {
         return Optional.ofNullable(merged);
     }
 
-    /** The constructors to mirror: every non-private constructor of {@code type}, in declaration order. */
+    /**
+     * The constructors to mirror: every non-private constructor of {@code type}, in declaration order, with the
+     * names of its parameters and the annotations of the constructor and of each parameter, so that dependency
+     * injection frameworks see the same metadata on the generated class. The registry parameter has no annotation:
+     * frameworks inject it by type.
+     */
     List<Constructor> constructors(TypeElement type) {
         List<Constructor> constructors = new ArrayList<>();
         for (ExecutableElement c : ElementFilter.constructorsIn(type.getEnclosedElements())) {
@@ -230,6 +252,13 @@ final class SubclassWriter {
             }
             ExecutableType constructorType = member(type, c);
             List<? extends TypeMirror> parameterTypes = constructorType.getParameterTypes();
+            List<? extends VariableElement> declared = c.getParameters();
+            String registry = REGISTRY;
+            for (VariableElement parameter : declared) {
+                if (parameter.getSimpleName().contentEquals(REGISTRY)) {
+                    registry = "r4c$" + REGISTRY;
+                }
+            }
             StringBuilder parameters = new StringBuilder();
             List<String> arguments = new ArrayList<>();
             for (int i = 0; i < parameterTypes.size(); i++) {
@@ -237,11 +266,17 @@ final class SubclassWriter {
                 if (c.isVarArgs() && i == parameterTypes.size() - 1) {
                     parameterType = parameterType.substring(0, parameterType.length() - 2) + "...";
                 }
-                parameters.append(", ").append(parameterType).append(" p").append(i);
-                arguments.add("p" + i);
+                String name = declared.get(i).getSimpleName().toString();
+                if (OBSCURING.contains(name) || name.startsWith("r4c$")) {
+                    name = "r4c$p" + i;
+                }
+                parameters.append(", ").append(AnnotationPrinter.annotations(declared.get(i), ElementType.PARAMETER, " ", ""))
+                        .append(parameterType).append(' ').append(name);
+                arguments.add(name);
             }
             List<? extends TypeMirror> thrown = constructorType.getThrownTypes();
-            constructors.add(new Constructor(typeVariables(constructorType.getTypeVariables()), parameters.toString(),
+            constructors.add(new Constructor(AnnotationPrinter.annotations(c, ElementType.CONSTRUCTOR, "\n    ", registry),
+                    typeVariables(constructorType.getTypeVariables()), registry, parameters.toString(),
                     String.join(", ", arguments), thrown.isEmpty() ? "" : " throws " + TypePrinter.join(thrown, ", ")));
         }
         return constructors;

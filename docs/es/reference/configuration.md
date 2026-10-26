@@ -17,7 +17,7 @@ Cada tabla muestra la forma `defaults.<policy>.<attribute>`. La misma parte `<po
 | `profiles.<profile>.<cualquier clave anterior>` | solo mientras el perfil está activo | `profiles.test.defaults.retry.maxAttempts=1` |
 | `profiles.active=<a>,<b>` | los perfiles activos; ganan los últimos | `profiles.active=test` |
 
-- Políticas: `retry`, `circuitBreaker`, `rateLimiter`, `timeout`, `bulkhead`. `@Fallback` no tiene claves.
+- Políticas: `retry`, `hedge`, `circuitBreaker`, `rateLimiter`, `timeout`, `bulkhead`. `@Fallback` no tiene claves.
 - Los nombres de política y de atributo se pueden escribir en camelCase o kebab-case: `circuit-breaker.wait-in-open` es `circuitBreaker.waitInOpen`.
 - Los nombres de configuraciones y perfiles son letras minúsculas y dígitos separados por guiones simples (`slow-external`).
 - Un id de instancia distingue mayúsculas. Va entre comillas dobles salvo que tenga solo letras, dígitos, `_` y `-`. Un id derivado es `<type>#<method>(<parameter types>)`, con los tipos de parámetro totalmente calificados y borrados (erasure), separados por comas sin espacios, por ejemplo `com.acme.CatalogClient#price(java.lang.String,int)`.
@@ -83,6 +83,21 @@ Atributos de `@Retry`. Ver [Retry](../policies/retry.md).
 | `defaults.retry.budgetPercent` | `R4C_DEFAULTS_RETRY_BUDGETPERCENT` | decimal | `0` | finito, ≥ 0 | Presupuesto de reintentos: reintentos permitidos, en porcentaje de las llamadas de la instancia en la última `budgetWindow`, además de `budgetMinRetriesPerSecond`. Por encima de `0` activa el presupuesto; `0` significa sin presupuesto. |
 | `defaults.retry.budgetMinRetriesPerSecond` | `R4C_DEFAULTS_RETRY_BUDGETMINRETRIESPERSECOND` | int | `10` | ≥ 0 | Presupuesto de reintentos: reintentos permitidos por segundo de `budgetWindow`, sea cual sea el tráfico, una vez que `budgetPercent` activa el presupuesto. `0` deja solo el porcentaje. |
 | `defaults.retry.budgetWindow` | `R4C_DEFAULTS_RETRY_BUDGETWINDOW` | duración | `10s` | de 1s a 1h | Presupuesto de reintentos: hasta dónde hacia atrás se cuentan llamadas y reintentos. |
+
+## Hedge :id=hedge
+
+Atributos de `@Hedge`. Ver [Hedge](../policies/hedge.md).
+
+| Clave | Variable de entorno | Tipo | Por defecto | Valores válidos | Significado |
+|---|---|---|---|---|---|
+| `defaults.hedge.enabled` | `R4C_DEFAULTS_HEDGE_ENABLED` | boolean | `true` | `true`, `false` | `false` ejecuta cada llamada una vez, sin hedge. |
+| `defaults.hedge.maxAttempts` | `R4C_DEFAULTS_HEDGE_MAXATTEMPTS` | int | `2` | de 2 a 10 | Intentos en vuelo como máximo, el primero incluido. |
+| `defaults.hedge.delay` | `R4C_DEFAULTS_HEDGE_DELAY` | duración | `1s` | ≥ 0; `0` = todos a la vez | Cuánto tiempo lleva el último intento sin resultado antes de que empiece el siguiente. |
+| `defaults.hedge.hedgeOn` | `R4C_DEFAULTS_HEDGE_HEDGEON` | lista de clases | `java.lang.Exception` | clases de excepción | Fallos tras los que el siguiente intento empieza enseguida; un fallo no listado termina la llamada. |
+| `defaults.hedge.abortOn` | `R4C_DEFAULTS_HEDGE_ABORTON` | lista de clases | — | clases de excepción | Fallos que terminan la llamada enseguida y cancelan los demás intentos; ganan sobre `hedgeOn`. |
+| `defaults.hedge.budgetPercent` | `R4C_DEFAULTS_HEDGE_BUDGETPERCENT` | decimal | `10` | finito, ≥ 0 | Presupuesto de hedge: hedges permitidos, en porcentaje de las llamadas de la instancia en la última `budgetWindow`, además de `budgetMinHedgesPerSecond`. `0` apaga el presupuesto. |
+| `defaults.hedge.budgetMinHedgesPerSecond` | `R4C_DEFAULTS_HEDGE_BUDGETMINHEDGESPERSECOND` | int | `1` | ≥ 0 | Presupuesto de hedge: hedges permitidos por segundo de `budgetWindow`, sea cual sea el tráfico. |
+| `defaults.hedge.budgetWindow` | `R4C_DEFAULTS_HEDGE_BUDGETWINDOW` | duración | `10s` | de 1s a 1h | Presupuesto de hedge: hasta dónde hacia atrás se cuentan llamadas y hedges. |
 
 ## Circuit breaker :id=circuit-breaker
 

@@ -46,14 +46,14 @@ class SubclassProcessorTest {
         assertThat(result.success()).isTrue();
         String generated = result.generatedSource("demo.Service$Resilient");
         assertThat(generated)
-                .contains("public final class Service$Resilient extends demo.Service {")
+                .contains("public class Service$Resilient extends demo.Service {")
                 .contains("""
-                        public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry, java.lang.String p0, \
-                        int... p1) throws java.io.IOException {
-                                super(p0, p1);
+                        public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry, java.lang.String prefix, \
+                        int... sizes) throws java.io.IOException {
+                                super(prefix, sizes);
                         """)
                 .contains("public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry) {\n        super();\n")
-                .doesNotContain("long p0")
+                .doesNotContain("long ignored")
                 .contains("\"demo.Service#call(java.lang.String)\"")
                 .contains("return super.call(p0);")
                 .contains("return this.recover(p0, r4c$f0);")
@@ -181,7 +181,7 @@ class SubclassProcessorTest {
 
         assertThat(result.errors()).isEmpty();
         assertThat(result.generatedSource("demo.Store$Resilient"))
-                .contains("public final class Store$Resilient<K extends java.lang.Comparable<K>, V> extends demo.Store<K, V>")
+                .contains("public class Store$Resilient<K extends java.lang.Comparable<K>, V> extends demo.Store<K, V>")
                 .contains("public V get(K p0)");
         assertThat(result.generatedSource("demo.Store$Cache$Resilient"))
                 .contains("extends demo.Store.Cache {")
@@ -336,6 +336,190 @@ class SubclassProcessorTest {
         assertThat(result.generatedSource("demo.Service$Resilient"))
                 .contains("return this.recover(p0, r4c$f0);")
                 .contains("return demo.Service.fixed(p0);");
+    }
+
+    @Test
+    void mirrorsConstructorAnnotationsParameterAnnotationsAndNames() throws Exception {
+        Compilation result = Compilation.compile(workDir, Map.of(
+                "demo.Inject", """
+                        package demo;
+                        import java.lang.annotation.*;
+                        @Retention(RetentionPolicy.RUNTIME) @Target({ElementType.CONSTRUCTOR, ElementType.METHOD})
+                        public @interface Inject {}
+                        """,
+                "demo.Qualifier", """
+                        package demo;
+                        import java.lang.annotation.*;
+                        @Retention(RetentionPolicy.RUNTIME) @Target(ElementType.PARAMETER)
+                        public @interface Qualifier {
+                            String value();
+                            Mode mode() default Mode.STRICT;
+                            Class<?>[] types() default {};
+                            Tag[] tags() default {};
+                            long size() default 0;
+                            char separator() default ',';
+                            enum Mode { STRICT, LENIENT }
+                        }
+                        """,
+                "demo.Tag", """
+                        package demo;
+                        import java.lang.annotation.*;
+                        @Retention(RetentionPolicy.CLASS) @Target({})
+                        public @interface Tag { String value(); double weight() default 1; }
+                        """,
+                "demo.Marker", """
+                        package demo;
+                        import java.lang.annotation.*;
+                        @Retention(RetentionPolicy.SOURCE)
+                        public @interface Marker {}
+                        """,
+                "demo.Both", """
+                        package demo;
+                        import java.lang.annotation.*;
+                        @Retention(RetentionPolicy.RUNTIME) @Target({ElementType.PARAMETER, ElementType.TYPE_USE})
+                        public @interface Both {}
+                        """,
+                "demo.Service", """
+                        package demo;
+                        import dev.resilience4cata.annotation.Retry;
+                        import org.jspecify.annotations.Nullable;
+                        public class Service {
+                            public Service() {}
+                            @Inject @Marker @Deprecated
+                            public Service(@Qualifier(value = "primary\\\\db \\"x\\" \\u00e9", mode = Qualifier.Mode.LENIENT,
+                                    types = {String.class, int[].class, java.util.Map.Entry.class},
+                                    tags = {@Tag("a"), @Tag(value = "b", weight = 0.5)}, size = 3, separator = '\\\\')
+                                    String dataSource, @Marker @Both @Nullable String registry, int java, long r4c$x) {}
+                            @java.beans.ConstructorProperties({"name"})
+                            Service(String name) {}
+                            @SafeVarargs
+                            protected Service(java.util.List<String>... lists) {}
+                            @Retry public String call() { return ""; }
+                        }
+                        """));
+
+        assertThat(result.diagnostics()).map(d -> d.getMessage(java.util.Locale.ROOT)).isEmpty();
+        String generated = result.generatedSource("demo.Service$Resilient");
+        assertThat(generated)
+                // without annotations or parameters, the constructor is written as before
+                .contains("\n    public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry) {\n        super();\n")
+                .contains("""
+                            @demo.Inject
+                            @java.lang.Deprecated
+                            public Service$Resilient(dev.resilience4cata.ResilienceRegistry r4c$registry, \
+                        @demo.Qualifier(value = "primary\\\\db \\"x\\" \\u00e9", mode = demo.Qualifier.Mode.LENIENT, \
+                        types = {java.lang.String.class, int[].class, java.util.Map.Entry.class}, \
+                        tags = {@demo.Tag("a"), @demo.Tag(value = "b", weight = 0.5)}, size = 3L, separator = '\\\\') \
+                        java.lang.String dataSource, @demo.Both java.lang.String registry, int r4c$p2, long r4c$p3) {
+                                super(dataSource, registry, r4c$p2, r4c$p3);
+                                java.util.Objects.requireNonNull(r4c$registry, "registry");
+                                this.retry0 = r4c$registry.retryPolicy(""")
+                .contains("""
+                            @java.beans.ConstructorProperties({"registry", "name"})
+                            public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry, java.lang.String name) {
+                        """)
+                .contains("""
+                            @java.lang.SafeVarargs
+                            public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry, \
+                        java.util.List<java.lang.String>... lists) {
+                        """)
+                .doesNotContain("Marker")
+                .doesNotContain("Nullable");
+
+        // what a dependency injection framework reads at run time
+        try (java.net.URLClassLoader loader = new java.net.URLClassLoader(new java.net.URL[] {result.classes().toUri().toURL()},
+                getClass().getClassLoader())) {
+            Class<?> type = loader.loadClass("demo.Service$Resilient");
+            java.lang.reflect.Constructor<?> injected = type.getConstructor(dev.resilience4cata.ResilienceRegistry.class,
+                    String.class, String.class, int.class, long.class);
+            assertThat(injected.getAnnotations()).extracting(a -> a.annotationType().getSimpleName())
+                    .containsExactly("Inject", "Deprecated");
+            java.lang.annotation.Annotation[][] parameters = injected.getParameterAnnotations();
+            assertThat(parameters[0]).isEmpty();
+            java.lang.annotation.Annotation qualifier = parameters[1][0];
+            assertThat(qualifier.annotationType().getMethod("value").invoke(qualifier)).isEqualTo("primary\\db \"x\" \u00e9");
+            assertThat(qualifier.annotationType().getMethod("separator").invoke(qualifier)).isEqualTo('\\');
+            assertThat(qualifier.toString()).contains("mode=LENIENT").contains("size=3L");
+            assertThat(parameters[2]).extracting(a -> a.annotationType().getSimpleName()).containsExactly("Both");
+            java.beans.ConstructorProperties properties = type.getConstructor(dev.resilience4cata.ResilienceRegistry.class,
+                    String.class).getAnnotation(java.beans.ConstructorProperties.class);
+            assertThat(properties.value()).containsExactly("registry", "name");
+        }
+    }
+
+    @Test
+    void generatedSubclassesAreNotFinalSoFrameworksCanProxyThem() {
+        Compilation result = Compilation.compile(workDir, Map.of(
+                "demo.Service", """
+                        package demo;
+                        public class Service { @dev.resilience4cata.annotation.Retry public String call() { return ""; } }
+                        """,
+                "demo.Proxy", """
+                        package demo;
+                        public class Proxy extends Service$Resilient {
+                            public Proxy() { super(dev.resilience4cata.ResilienceRegistry.builder().build()); }
+                        }
+                        """));
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Service$Resilient")).contains("public class Service$Resilient extends demo.Service {");
+    }
+
+    @Test
+    void writesNativeImageMetadataForEachGeneratedClass() {
+        Compilation result = Compilation.compile(workDir, Map.of(
+                "demo.Api", """
+                        package demo;
+                        public interface Api {
+                            @dev.resilience4cata.annotation.Retry String call();
+                            interface Nested { @dev.resilience4cata.annotation.Retry String call(); }
+                        }
+                        """,
+                "demo.Service", """
+                        package demo;
+                        public class Service {
+                            public Service(String first, Api.Nested... rest) {}
+                            Service(int... sizes) {}
+                            private Service(long... ignored) {}
+                            @dev.resilience4cata.annotation.Retry public String call() { return ""; }
+                        }
+                        """));
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.nativeImageMetadata("demo.Api$Resilient")).isEqualTo("""
+                {
+                  "reflection": [
+                    {
+                      "condition": {"typeReached": "demo.Api"},
+                      "type": "demo.Api$Resilient",
+                      "allPublicConstructors": true
+                    }
+                  ]
+                }
+                """);
+        assertThat(result.nativeImageMetadata("demo.Api$Nested$Resilient"))
+                .contains("\"condition\": {\"typeReached\": \"demo.Api$Nested\"}")
+                .contains("\"type\": \"demo.Api$Nested$Resilient\"");
+        // Resilient.create(Service.class, ...) can run before Service is initialized: the condition is Resilient
+        assertThat(result.nativeImageMetadata("demo.Service$Resilient")).isEqualTo("""
+                {
+                  "reflection": [
+                    {
+                      "condition": {"typeReached": "dev.resilience4cata.Resilient"},
+                      "type": "demo.Service$Resilient",
+                      "allPublicConstructors": true
+                    },
+                    {
+                      "condition": {"typeReached": "dev.resilience4cata.Resilient"},
+                      "type": "demo.Api$Nested[]"
+                    },
+                    {
+                      "condition": {"typeReached": "dev.resilience4cata.Resilient"},
+                      "type": "int[]"
+                    }
+                  ]
+                }
+                """);
     }
 
     /** The part of the generated source that sets up the policy with this instance id. */

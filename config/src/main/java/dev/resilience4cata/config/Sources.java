@@ -138,6 +138,29 @@ final class Sources {
         };
     }
 
+    /** Keys and values from a map, with the origin of each key when known; ranks like a file. */
+    static Source map(String description, Map<String, String> snapshot, Map<String, String> origins) {
+        return new Source() {
+            @Override
+            public int priority() {
+                return FILE_PRIORITY;
+            }
+
+            @Override
+            public String description() {
+                return description;
+            }
+
+            @Override
+            public List<Raw> read(ClassLoader loader, Problems problems) {
+                List<Raw> raws = new ArrayList<>();
+                snapshot.forEach((key, value) -> raws.add(new Raw(stripPrefix(key), key, value.strip(),
+                        origins.getOrDefault(key, "'" + key + "' (" + description + ")"))));
+                return raws;
+            }
+        };
+    }
+
     static Source systemProperties(Supplier<Properties> properties) {
         return new Source() {
             @Override

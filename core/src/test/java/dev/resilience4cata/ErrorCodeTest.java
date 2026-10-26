@@ -68,6 +68,9 @@ class ErrorCodeTest {
                 .onExhaustedResult(Pipeline.ExhaustedResult.THROW).build());
         triggers.put(ErrorCode.CIRCUIT_BREAKER_CLASSIFIER_WITHOUT_CIRCUIT_BREAKER, () -> Pipeline.builder(registry, "p")
                 .retry().circuitBreakerClassifier((r, f) -> Classifier.Outcome.SUCCESS).build());
+        triggers.put(ErrorCode.HEDGE_NOT_ASYNC, () -> Pipeline.builder(registry, "hedged", String.class).hedge().build()
+                .execute(() -> "sync"));
+        triggers.put(ErrorCode.RETRY_WITH_HEDGE, () -> Pipeline.builder(registry, "p").retry().hedge().build());
         triggers.put(ErrorCode.INVALID_VALUE, () -> RetryConfig.builder().maxAttempts(0).build());
         triggers.put(ErrorCode.INVALID_NAMED_CONFIG, () -> ResilienceRegistry.builder()
                 .retry("bad", r -> r.maxAttempts(0)).build());

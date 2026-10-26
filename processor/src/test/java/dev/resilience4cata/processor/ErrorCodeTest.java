@@ -49,7 +49,7 @@ class ErrorCodeTest {
     private static final Pattern TOP_LEVEL_TYPE = Pattern.compile(
             "(?m)^(?:(?:public|final|abstract|sealed|non-sealed)\\s+)*(?:@interface|interface|class|record|enum)\\s+(\\w+)");
     /** Areas of the processor's codes; the other areas on the pages belong to core (RT) and config (CFG). */
-    private static final Set<String> AREAS = Set.of("APT", "ATR", "CMP", "ASY", "CLS", "FB", "SUB");
+    private static final Set<String> AREAS = Set.of("APT", "ATR", "CMP", "ASY", "HDG", "CLS", "FB", "SUB");
     /** Codes whose wrong example needs a classpath without resilience4cata-core. */
     private static final Set<ProcessorError> WITHOUT_CORE =
             Set.of(ProcessorError.CLASSIFIER_MISSING_CORE, ProcessorError.HANDLER_MISSING_CORE);

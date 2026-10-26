@@ -1,17 +1,18 @@
 # Políticas
 
-resilience4cata tiene seis políticas, una anotación cada una; ponlas en un método o en toda una interfaz, solas o apiladas, y el processor siempre las anida en el mismo orden.
+resilience4cata tiene siete políticas, una anotación cada una; ponlas en un método o en toda una interfaz, solas o apiladas, y el processor siempre las anida en el mismo orden.
 
 | Política | Anotación | Qué hace | Lanza cuando rechaza |
 |---|---|---|---|
 | [Fallback](fallback.md) | `@Fallback` | Responde con un resultado alternativo cuando la llamada falla o es rechazada | — |
 | [Retry](retry.md) | `@Retry` | Vuelve a llamar después de una falla, con backoff y jitter | — (relanza la última falla) |
+| [Hedge](hedge.md) | `@Hedge` | Vuelve a lanzar la misma llamada mientras la primera va lenta, y se queda con el primer éxito (solo async y llamadas idempotentes) | — (relanza la última falla) |
 | [Circuit breaker](circuit-breaker.md) | `@CircuitBreaker` | Deja de llamar a una dependencia que falla una y otra vez, y luego la prueba | `CallNotPermittedException` |
 | [Rate limiter](rate-limiter.md) | `@RateLimiter` | Deja pasar como máximo N llamadas por período | `RateLimitExceededException` |
 | [Timeout](timeout.md) | `@Timeout` | Interrumpe una llamada sync, o hace fallar una async, que tarda demasiado | `CallTimeoutException` |
 | [Bulkhead](bulkhead.md) | `@Bulkhead` | Limita cuántas llamadas corren al mismo tiempo | `BulkheadFullException` |
 
-Todas las políticas funcionan con métodos sincrónicos y con métodos que devuelven `CompletionStage<T>` o `CompletableFuture<T>` (ver [Métodos async](../guides/async.md)). Las excepciones están en el paquete `dev.resilience4cata`, extienden `RuntimeException`, no tienen stack trace y llevan el `instanceId()` de la política.
+Todas las políticas salvo Hedge funcionan con métodos sincrónicos y con métodos que devuelven `CompletionStage<T>` o `CompletableFuture<T>` (ver [Métodos async](../guides/async.md)); Hedge necesita un método asincrónico, y ocupa el lugar de Retry (las dos no se pueden combinar en un método). Las excepciones están en el paquete `dev.resilience4cata`, extienden `RuntimeException`, no tienen stack trace y llevan el `instanceId()` de la política.
 
 ## ¿Qué política necesito?
 
@@ -22,6 +23,7 @@ Todas las políticas funcionan con métodos sincrónicos y con métodos que devu
 | Una dependencia se cuelga, y tus threads se cuelgan con ella | Timeout | `@Timeout("2s")` |
 | Una API permite 10 requests por segundo | Rate limiter | `@RateLimiter(permits = 10, period = "1s")` |
 | Una dependencia lenta agota todos tus threads o conexiones | Bulkhead | `@Bulkhead(maxConcurrent = 10)` |
+| El p99 está muy por encima del p50 en una lectura idempotente de backends replicados | Hedge | `@Hedge(delay = "50ms")` en un método que devuelve `CompletableFuture` |
 | Existe una respuesta degradada razonable (caché, valor por defecto, "intenta más tarde") | Fallback | `@Fallback(method = "…")` |
 | La falla está en el resultado, no en una excepción (HTTP `503`) | Retry / circuit breaker con un [classifier](../guides/classifiers.md) | `@Retry(classifier = …)` |
 
@@ -33,13 +35,13 @@ De la más externa a la más interna:
 
 ```mermaid
 flowchart LR
-    caller(["quien llama"]) --> F["Fallback"] --> R["Retry"] --> C["CircuitBreaker"] --> L["RateLimiter"] --> T["Timeout"] --> B["Bulkhead"] --> M(["tu método"])
+    caller(["quien llama"]) --> F["Fallback"] --> R["Retry | Hedge"] --> C["CircuitBreaker"] --> L["RateLimiter"] --> T["Timeout"] --> B["Bulkhead"] --> M(["tu método"])
 ```
 
 El orden en que escribes las anotaciones no importa, y el orden no se puede cambiar. Está elegido para que cada política vea lo que debe ver:
 
 - **Fallback es la más externa**, así que ve el resultado final: la última falla cuando el retry se rinde, y cada rechazo de las políticas de adentro.
-- **Retry está fuera del circuit breaker**, así que el breaker registra cada intento, y un breaker abierto detiene los reintentos (abajo).
+- **Retry está fuera del circuit breaker**, así que el breaker registra cada intento, y un breaker abierto detiene los reintentos (abajo). **Hedge** ocupa el mismo lugar, por las mismas razones: cada intento cubierto pasa por su cuenta por el breaker, el limiter, el timeout y el bulkhead.
 - **El circuit breaker está fuera del rate limiter**, así que las llamadas que rechaza no gastan permisos.
 - **El timeout está dentro del retry**, así que se aplica por intento; `@Retry(maxDuration = …)` acota toda la operación.
 - **El bulkhead es la más interna**, así que un slot se ocupa solo mientras el método realmente corre: no durante el backoff de un retry, no mientras se espera un permiso.

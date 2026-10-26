@@ -1,17 +1,18 @@
 # Policies
 
-resilience4cata has six policies, one annotation each; put them on a method or a whole interface, alone or stacked, and the processor always nests them in the same order.
+resilience4cata has seven policies, one annotation each; put them on a method or a whole interface, alone or stacked, and the processor always nests them in the same order.
 
 | Policy | Annotation | What it does | Thrown when it rejects |
 |---|---|---|---|
 | [Fallback](fallback.md) | `@Fallback` | Answers with an alternative result when the call fails or is rejected | — |
 | [Retry](retry.md) | `@Retry` | Calls again after a failure, with backoff and jitter | — (rethrows the last failure) |
+| [Hedge](hedge.md) | `@Hedge` | Starts the same call again while the first is slow, and keeps the first success (async, idempotent calls only) | — (rethrows the last failure) |
 | [Circuit breaker](circuit-breaker.md) | `@CircuitBreaker` | Stops calling a dependency that keeps failing, then probes it | `CallNotPermittedException` |
 | [Rate limiter](rate-limiter.md) | `@RateLimiter` | Lets through at most N calls per period | `RateLimitExceededException` |
 | [Timeout](timeout.md) | `@Timeout` | Interrupts a sync call, or fails an async one, that takes too long | `CallTimeoutException` |
 | [Bulkhead](bulkhead.md) | `@Bulkhead` | Limits how many calls run at the same time | `BulkheadFullException` |
 
-Every policy works on synchronous methods and on methods that return `CompletionStage<T>` or `CompletableFuture<T>` (see [Async methods](../guides/async.md)). The exceptions are in package `dev.resilience4cata`, extend `RuntimeException`, have no stack trace, and carry the policy's `instanceId()`.
+Every policy except Hedge works on synchronous methods and on methods that return `CompletionStage<T>` or `CompletableFuture<T>` (see [Async methods](../guides/async.md)); Hedge needs an asynchronous method, and takes Retry's place (the two cannot be combined on one method). The exceptions are in package `dev.resilience4cata`, extend `RuntimeException`, have no stack trace, and carry the policy's `instanceId()`.
 
 ## Which policy do I need?
 
@@ -22,6 +23,7 @@ Every policy works on synchronous methods and on methods that return `Completion
 | A dependency hangs, and your threads hang with it | Timeout | `@Timeout("2s")` |
 | An API allows 10 requests per second | Rate limiter | `@RateLimiter(permits = 10, period = "1s")` |
 | A slow dependency uses up all your threads or connections | Bulkhead | `@Bulkhead(maxConcurrent = 10)` |
+| p99 is far above p50 on an idempotent read from replicated backends | Hedge | `@Hedge(delay = "50ms")` on a `CompletableFuture` method |
 | There is a sensible degraded answer (cache, default, "try later") | Fallback | `@Fallback(method = "…")` |
 | The failure is in the result, not an exception (HTTP `503`) | Retry / circuit breaker with a [classifier](../guides/classifiers.md) | `@Retry(classifier = …)` |
 
@@ -33,13 +35,13 @@ Outermost first:
 
 ```mermaid
 flowchart LR
-    caller(["caller"]) --> F["Fallback"] --> R["Retry"] --> C["CircuitBreaker"] --> L["RateLimiter"] --> T["Timeout"] --> B["Bulkhead"] --> M(["your method"])
+    caller(["caller"]) --> F["Fallback"] --> R["Retry | Hedge"] --> C["CircuitBreaker"] --> L["RateLimiter"] --> T["Timeout"] --> B["Bulkhead"] --> M(["your method"])
 ```
 
 The order you write the annotations in does not matter, and the order cannot be changed. It is chosen so that each policy sees what it should:
 
 - **Fallback is outermost**, so it sees the final outcome: the last failure once the retries give up, and every rejection from the policies inside.
-- **Retry is outside the circuit breaker**, so every attempt is recorded by the breaker, and an open breaker stops the retries (below).
+- **Retry is outside the circuit breaker**, so every attempt is recorded by the breaker, and an open breaker stops the retries (below). **Hedge** sits in the same place, for the same reasons: each hedged attempt goes through the breaker, limiter, timeout and bulkhead on its own.
 - **The circuit breaker is outside the rate limiter**, so calls it rejects do not use up permits.
 - **The timeout is inside the retry**, so it applies per attempt; `@Retry(maxDuration = …)` bounds the whole operation.
 - **The bulkhead is innermost**, so a slot is held only while the method actually runs: not during a retry's backoff, not while waiting for a permit.

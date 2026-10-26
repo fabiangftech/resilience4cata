@@ -231,7 +231,7 @@ A method that returns `CompletionStage<T>` or `CompletableFuture<T>` gets the no
 CompletableFuture<Integer> stock(String sku);
 ```
 
-The first attempt runs on the caller's thread. A failed stage is retried after the delay without blocking any thread: the next attempt starts on a new virtual thread. The returned future completes with the first successful result or fails with the last failure, unwrapped from `CompletionException`. See [Async methods](../guides/async.md).
+The first attempt runs on the caller's thread. A failed stage is retried after the delay without blocking any thread: the next attempt starts on a new virtual thread. The returned future completes with the first successful result or fails with the last failure, unwrapped from `CompletionException`. Cancelling the returned future cancels the attempt in flight or the pending backoff, and starts no further attempt ([cancellation](../guides/async.md#cancellation)). See [Async methods](../guides/async.md).
 
 ## Same thing with `Pipeline`
 

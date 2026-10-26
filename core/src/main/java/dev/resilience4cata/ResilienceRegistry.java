@@ -4,6 +4,7 @@ import dev.resilience4cata.generated.BulkheadPolicy;
 import dev.resilience4cata.generated.CircuitBreakerPolicy;
 import dev.resilience4cata.generated.EventDispatcher;
 import dev.resilience4cata.generated.FallbackPolicy;
+import dev.resilience4cata.generated.HedgePolicy;
 import dev.resilience4cata.generated.PolicyEnvironment;
 import dev.resilience4cata.generated.RateLimiterPolicy;
 import dev.resilience4cata.generated.RetryPolicy;
@@ -44,6 +45,7 @@ public final class ResilienceRegistry {
 
     private static final String DEFAULT = "default";
     private static final String RETRY_NAME = "retry";
+    private static final String HEDGE_NAME = "hedge";
     private static final String CIRCUIT_BREAKER_NAME = "circuitBreaker";
     private static final String RATE_LIMITER_NAME = "rateLimiter";
     private static final String TIMEOUT_NAME = "timeout";
@@ -58,6 +60,8 @@ public final class ResilienceRegistry {
 
     private static final PolicyKind<RetryConfig, RetryConfig.Builder> RETRY_KIND =
             new PolicyKind<>(RETRY_NAME, RetryConfig::toBuilder, RetryConfig.Builder::build);
+    private static final PolicyKind<HedgeConfig, HedgeConfig.Builder> HEDGE_KIND =
+            new PolicyKind<>(HEDGE_NAME, HedgeConfig::toBuilder, HedgeConfig.Builder::build);
     private static final PolicyKind<CircuitBreakerConfig, CircuitBreakerConfig.Builder> CIRCUIT_BREAKER_KIND =
             new PolicyKind<>(CIRCUIT_BREAKER_NAME, CircuitBreakerConfig::toBuilder, CircuitBreakerConfig.Builder::build);
     private static final PolicyKind<RateLimiterConfig, RateLimiterConfig.Builder> RATE_LIMITER_KIND =
@@ -70,6 +74,9 @@ public final class ResilienceRegistry {
     private final RetryConfig retryDefaults;
     private final Map<String, RetryConfig> retryConfigs;
     private final ConcurrentHashMap<String, RetryPolicy> retries = new ConcurrentHashMap<>();
+    private final HedgeConfig hedgeDefaults;
+    private final Map<String, HedgeConfig> hedgeConfigs;
+    private final ConcurrentHashMap<String, HedgePolicy> hedges = new ConcurrentHashMap<>();
     private final CircuitBreakerConfig circuitBreakerDefaults;
     private final Map<String, CircuitBreakerConfig> circuitBreakerConfigs;
     private final ConcurrentHashMap<String, CircuitBreakerPolicy> circuitBreakers = new ConcurrentHashMap<>();
@@ -87,11 +94,16 @@ public final class ResilienceRegistry {
     /** {@link #onInstanceCreated} actions; read only when an instance is created, never on a call. */
     private final CopyOnWriteArrayList<Runnable> creationListeners = new CopyOnWriteArrayList<>();
 
-    private ResilienceRegistry(Configs<RetryConfig> retry, Configs<CircuitBreakerConfig> circuitBreaker,
-            Configs<RateLimiterConfig> rateLimiter, Configs<TimeoutConfig> timeout, Configs<BulkheadConfig> bulkhead,
+    // java:S107: one resolved configuration set per policy kind, built once by the builder.
+    @SuppressWarnings("java:S107")
+    private ResilienceRegistry(Configs<RetryConfig> retry, Configs<HedgeConfig> hedge,
+            Configs<CircuitBreakerConfig> circuitBreaker, Configs<RateLimiterConfig> rateLimiter,
+            Configs<TimeoutConfig> timeout, Configs<BulkheadConfig> bulkhead,
             PolicyEnvironment environment, Instances instances) {
         this.retryDefaults = retry.defaults();
         this.retryConfigs = Map.copyOf(retry.named());
+        this.hedgeDefaults = hedge.defaults();
+        this.hedgeConfigs = Map.copyOf(hedge.named());
         this.circuitBreakerDefaults = circuitBreaker.defaults();
         this.circuitBreakerConfigs = Map.copyOf(circuitBreaker.named());
         this.rateLimiterDefaults = rateLimiter.defaults();
@@ -114,12 +126,14 @@ public final class ResilienceRegistry {
 
     /** Per-instance overrides ({@link Builder#retryInstance}, ...), by instance id. Immutable. */
     private record Instances(Map<String, Consumer<RetryConfig.Builder>> retry,
+            Map<String, Consumer<HedgeConfig.Builder>> hedge,
             Map<String, Consumer<CircuitBreakerConfig.Builder>> circuitBreaker,
             Map<String, Consumer<RateLimiterConfig.Builder>> rateLimiter,
             Map<String, Consumer<TimeoutConfig.Builder>> timeout,
             Map<String, Consumer<BulkheadConfig.Builder>> bulkhead) {
         Instances {
             retry = Map.copyOf(retry);
+            hedge = Map.copyOf(hedge);
             circuitBreaker = Map.copyOf(circuitBreaker);
             rateLimiter = Map.copyOf(rateLimiter);
             timeout = Map.copyOf(timeout);
@@ -187,6 +201,17 @@ public final class ResilienceRegistry {
      */
     public RetryConfig retryConfig(String config) {
         return lookup(config, retryDefaults, retryConfigs, RETRY_NAME);
+    }
+
+    /**
+     * Returns a named hedge configuration.
+     *
+     * @param config the name; {@code ""} or {@code "default"} means the defaults
+     * @return the resolved configuration
+     * @throws IllegalArgumentException if no configuration has that name
+     */
+    public HedgeConfig hedgeConfig(String config) {
+        return lookup(config, hedgeDefaults, hedgeConfigs, HEDGE_NAME);
     }
 
     /**
@@ -267,6 +292,29 @@ public final class ResilienceRegistry {
         RetryPolicy policy = instance(retries, key, k -> new RetryPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw conflict("Retry instance", key, policy.config(), resolved);
+        }
+        return policy;
+    }
+
+    /**
+     * Returns the hedge policy for one call site, creating it on first use. Used by generated code;
+     * not intended to be called directly. Call sites with the same {@code name} share the instance, and so
+     * its hedge budget.
+     *
+     * @param instanceId derived id of the call site, used when {@code name} is empty
+     * @param name explicit instance name from the annotation, or {@code ""}
+     * @param config named configuration to start from, or {@code ""}
+     * @param overrides values set in the annotations, or {@code null}
+     * @return the policy
+     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
+     */
+    public HedgePolicy hedgePolicy(String instanceId, String name, String config,
+            @Nullable Consumer<HedgeConfig.Builder> overrides) {
+        String key = name.isEmpty() ? instanceId : name;
+        HedgeConfig resolved = resolve(hedgeConfig(config), overrides, instances.hedge().get(key), HEDGE_KIND, key, config);
+        HedgePolicy policy = instance(hedges, key, k -> new HedgePolicy(k, resolved, environment));
+        if (!policy.config().equals(resolved)) {
+            throw conflict("Hedge instance", key, policy.config(), resolved);
         }
         return policy;
     }
@@ -533,7 +581,9 @@ public final class ResilienceRegistry {
                 sorted(rateLimiters, RateLimiterPolicy::snapshot, RateLimiterSnapshot::instance),
                 sorted(timeouts, (String id, TimeoutPolicy timeout) -> new TimeoutSnapshot(id, timeout.config()),
                         TimeoutSnapshot::instance),
-                sorted(bulkheads, BulkheadPolicy::snapshot, BulkheadSnapshot::instance));
+                sorted(bulkheads, BulkheadPolicy::snapshot, BulkheadSnapshot::instance),
+                sorted(hedges, (String id, HedgePolicy hedge) -> new HedgeSnapshot(id, hedge.config(),
+                        hedge.budgetSnapshot()), HedgeSnapshot::instance));
     }
 
     private static <P, S> List<S> sorted(Map<String, P> policies, java.util.function.Function<P, S> snapshot,
@@ -553,6 +603,10 @@ public final class ResilienceRegistry {
     public static final class Builder {
         private @Nullable Consumer<RetryConfig.Builder> retryDefaults;
         private final Map<String, Consumer<RetryConfig.Builder>> retryConfigs = new LinkedHashMap<>();
+        private @Nullable Consumer<HedgeConfig.Builder> hedgeDefaults;
+        private final Map<String, Consumer<HedgeConfig.Builder>> hedgeConfigs = new LinkedHashMap<>();
+        private final Map<String, Consumer<HedgeConfig.Builder>> hedgeOverlays = new LinkedHashMap<>();
+        private final Map<String, Consumer<HedgeConfig.Builder>> hedgeInstances = new LinkedHashMap<>();
         private @Nullable Consumer<CircuitBreakerConfig.Builder> circuitBreakerDefaults;
         private final Map<String, Consumer<CircuitBreakerConfig.Builder>> circuitBreakerConfigs = new LinkedHashMap<>();
         private @Nullable Consumer<RateLimiterConfig.Builder> rateLimiterDefaults;
@@ -677,6 +731,68 @@ public final class ResilienceRegistry {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(overrides, OVERRIDES);
             compose(retryInstances, checkedId(id, RETRY_NAME), overrides);
+            return this;
+        }
+
+        /**
+         * Changes the hedge defaults, which every named configuration and annotation starts from.
+         *
+         * @param defaults applied to a builder that starts from {@link HedgeConfig#DEFAULTS}
+         * @return this builder
+         */
+        public Builder hedgeDefaults(Consumer<HedgeConfig.Builder> defaults) {
+            this.hedgeDefaults = Objects.requireNonNull(defaults, DEFAULTS);
+            return this;
+        }
+
+        /**
+         * Registers a named hedge configuration, referenced from {@code @Hedge(config = "name")}.
+         *
+         * @param name the name; must not be empty or {@code "default"}
+         * @param config applied to a builder that starts from the hedge defaults
+         * @return this builder
+         */
+        public Builder hedge(String name, Consumer<HedgeConfig.Builder> config) {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(config, CONFIG);
+            register(hedgeConfigs, name, config, HEDGE_NAME);
+            return this;
+        }
+
+        /**
+         * Overrides attributes of the named hedge configuration {@code name}: applied after
+         * {@link #hedge(String, Consumer)} whatever the order of the calls or, if {@code name} is not
+         * registered with it, on top of the hedge defaults, which defines {@code name}. Several calls for
+         * the same name apply in call order. Meant for external configuration, which overrides code
+         * attribute by attribute: {@code ResilienceConfig.applyTo(...)} registers {@code configs.<name>.*}
+         * with it.
+         *
+         * @param name the name; must not be empty or {@code "default"}
+         * @param overlay applied after the programmatic configuration of {@code name}, if any
+         * @return this builder
+         */
+        public Builder hedgeOverlay(String name, Consumer<HedgeConfig.Builder> overlay) {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(overlay, OVERLAY);
+            compose(hedgeOverlays, checkedName(name, HEDGE_NAME, OVERLAY_METHOD), overlay);
+            return this;
+        }
+
+        /**
+         * Overrides attributes of one hedge instance, after its named configuration and the values set in
+         * its annotation (or pipeline step). Applied once, when the instance is created; an id that no
+         * instance uses is ignored. Several calls for the same id apply in call order, so calls made
+         * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
+         *
+         * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
+         *     derived {@code <interface>#<method>(<parameter types>)}
+         * @param overrides applied last when the instance's configuration is resolved
+         * @return this builder
+         */
+        public Builder hedgeInstance(String id, Consumer<HedgeConfig.Builder> overrides) {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(overrides, OVERRIDES);
+            compose(hedgeInstances, checkedId(id, HEDGE_NAME), overrides);
             return this;
         }
 
@@ -1012,6 +1128,9 @@ public final class ResilienceRegistry {
             RetryConfig retry = retry(RetryConfig.DEFAULTS, retryDefaults, DEFAULT);
             Map<String, RetryConfig> retries = new LinkedHashMap<>();
             withOverlays(retryConfigs, retryOverlays).forEach((name, config) -> retries.put(name, retry(retry, config, name)));
+            HedgeConfig hedge = hedge(HedgeConfig.DEFAULTS, hedgeDefaults, DEFAULT);
+            Map<String, HedgeConfig> hedges = new LinkedHashMap<>();
+            withOverlays(hedgeConfigs, hedgeOverlays).forEach((name, config) -> hedges.put(name, hedge(hedge, config, name)));
             CircuitBreakerConfig circuitBreaker = circuitBreaker(CircuitBreakerConfig.DEFAULTS, circuitBreakerDefaults, DEFAULT);
             Map<String, CircuitBreakerConfig> circuitBreakers = new LinkedHashMap<>();
             withOverlays(circuitBreakerConfigs, circuitBreakerOverlays).forEach((name, config) -> circuitBreakers.put(name, circuitBreaker(circuitBreaker, config, name)));
@@ -1024,10 +1143,11 @@ public final class ResilienceRegistry {
             BulkheadConfig bulkhead = bulkhead(BulkheadConfig.DEFAULTS, bulkheadDefaults, DEFAULT);
             Map<String, BulkheadConfig> bulkheads = new LinkedHashMap<>();
             withOverlays(bulkheadConfigs, bulkheadOverlays).forEach((name, config) -> bulkheads.put(name, bulkhead(bulkhead, config, name)));
-            return new ResilienceRegistry(new Configs<>(retry, retries), new Configs<>(circuitBreaker, circuitBreakers),
+            return new ResilienceRegistry(new Configs<>(retry, retries), new Configs<>(hedge, hedges),
+                    new Configs<>(circuitBreaker, circuitBreakers),
                     new Configs<>(rateLimiter, rateLimiters), new Configs<>(timeout, timeouts),
                     new Configs<>(bulkhead, bulkheads), PolicyEnvironment.of(ticker, random).withEvents(EventDispatcher.of(listeners)),
-                    new Instances(retryInstances, circuitBreakerInstances, rateLimiterInstances, timeoutInstances,
+                    new Instances(retryInstances, hedgeInstances, circuitBreakerInstances, rateLimiterInstances, timeoutInstances,
                             bulkheadInstances));
         }
 
@@ -1079,6 +1199,19 @@ public final class ResilienceRegistry {
                 return builder.build();
             } catch (IllegalArgumentException e) {
                 throw invalidNamed(TIMEOUT_NAME, name, e);
+            }
+        }
+
+        private static HedgeConfig hedge(HedgeConfig base, @Nullable Consumer<HedgeConfig.Builder> config, String name) {
+            if (config == null) {
+                return base;
+            }
+            HedgeConfig.Builder builder = base.toBuilder();
+            config.accept(builder);
+            try {
+                return builder.build();
+            } catch (IllegalArgumentException e) {
+                throw invalidNamed(HEDGE_NAME, name, e);
             }
         }
 

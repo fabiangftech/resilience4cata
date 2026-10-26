@@ -79,14 +79,16 @@ ResilienceConfig config = ResilienceConfig.builder()
 | `classpath(name)` / `optionalClasspath(name)` | A class path resource; the first form fails ([`R4C-CFG-009`](../errors.md#r4c-cfg-009)) if it is missing |
 | `file(path)` / `optionalFile(path)` | A file; same rule |
 | `properties(props)` / `properties(description, props)` | A `java.util.Properties` you built; the description appears in error messages |
+| `properties(description, map, origins)` | A map of keys and values, with where each key was set (`origins`), shown in error messages instead of the description. For frameworks that track origins, such as Spring |
 | `environment()` / `environment(map)` | Environment variables (`R4C_…`), or a map of them |
 | `systemProperties()` / `systemProperties(props)` | System properties (`r4c.…`), or a `Properties` used as such |
 | `profiles(names...)` | The active profiles; overrides `profiles.active` |
 | `classLoader(loader)` | The class loader for resources and for exception classes named in values |
+| `precedenceByOrder()` | Rank the sources by the order they were added, not by kind (below) |
 
 Files use the `.properties` syntax, read as UTF-8. There is no YAML support and no reloading: the configuration is read once.
 
-When the same key comes from several sources, the stronger source wins: **class path resources < files and `Properties` < environment variables < system properties**. Between two sources of the same kind, the one added last wins. A key under an active profile beats a key without a profile, whatever their sources.
+When the same key comes from several sources, the stronger source wins: **class path resources < files and `Properties` < environment variables < system properties**. Between two sources of the same kind, the one added last wins. With `precedenceByOrder()`, the one added last wins whatever its kind: the [Spring Boot integration](spring.md) uses it to keep Spring's precedence. A key under an active profile beats a key without a profile, whatever their sources.
 
 <!-- snippet: configuration-sources -->
 ```java

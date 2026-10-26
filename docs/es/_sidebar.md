@@ -5,6 +5,7 @@
 - **Políticas**
   - [Resumen](/es/policies/README.md)
   - [Retry](/es/policies/retry.md)
+  - [Hedge](/es/policies/hedge.md)
   - [Circuit breaker](/es/policies/circuit-breaker.md)
   - [Rate limiter](/es/policies/rate-limiter.md)
   - [Timeout](/es/policies/timeout.md)
@@ -12,6 +13,7 @@
   - [Fallback](/es/policies/fallback.md)
 - **Guías**
   - [Configuración](/es/guides/configuration.md)
+  - [Spring Boot](/es/guides/spring.md)
   - [Métodos async](/es/guides/async.md)
   - [Clases anotadas](/es/guides/annotated-classes.md)
   - [Bundles](/es/guides/bundles.md)

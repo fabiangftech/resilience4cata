@@ -5,6 +5,7 @@ import dev.resilience4cata.generated.BulkheadPolicy;
 import dev.resilience4cata.generated.CircuitBreakerPolicy;
 import dev.resilience4cata.generated.ClassifierFailure;
 import dev.resilience4cata.generated.FallbackPolicy;
+import dev.resilience4cata.generated.HedgePolicy;
 import dev.resilience4cata.generated.RateLimiterPolicy;
 import dev.resilience4cata.generated.Recovery;
 import dev.resilience4cata.generated.RetryPolicy;
@@ -37,8 +38,9 @@ import org.jspecify.annotations.Nullable;
  * }</pre>
  *
  * <p>Every policy is optional. They nest in the same order as in generated code, outermost first:
- * fallback, retry, circuit breaker, rate limiter, timeout, bulkhead, then the call. The order in which
- * the builder's methods are called does not matter. A {@link Classifier} can decide what the retry
+ * fallback, retry or hedge, circuit breaker, rate limiter, timeout, bulkhead, then the call. The order in
+ * which the builder's methods are called does not matter. A hedge ({@link Builder#hedge()}) only works with
+ * {@link #executeAsync}, and cannot be combined with a retry. A {@link Classifier} can decide what the retry
  * retries and what the breaker records, results included ({@link Builder#classifier}).
  *
  * <p><b>Instances.</b> The pipeline's id plays the part of the {@code <interface>#<method>} id of
@@ -77,6 +79,7 @@ public final class Pipeline<T> {
     private final @Nullable FallbackHandler<? extends CompletionStage<T>> asyncFallbackHandler;
     private final @Nullable Recovery<T> recovery;
     private final @Nullable RetryPolicy retry;
+    private final @Nullable HedgePolicy hedge;
     private final @Nullable Classifier<? super T> retryClassifier;
     private final boolean throwOnExhaustedResult;
     private final @Nullable CircuitBreakerPolicy circuitBreaker;
@@ -91,6 +94,9 @@ public final class Pipeline<T> {
         Step<RetryConfig.Builder> retryStep = builder.retry;
         this.retry = retryStep == null ? null
                 : registry.retryPolicy(id, "", retryStep.config(), retryStep.overrides());
+        Step<HedgeConfig.Builder> hedgeStep = builder.hedge;
+        this.hedge = hedgeStep == null ? null
+                : registry.hedgePolicy(id, "", hedgeStep.config(), hedgeStep.overrides());
         Step<CircuitBreakerConfig.Builder> circuitBreakerStep = builder.circuitBreaker;
         this.circuitBreaker = circuitBreakerStep == null ? null
                 : registry.circuitBreakerPolicy(id, "", circuitBreakerStep.config(), circuitBreakerStep.overrides());
@@ -211,10 +217,14 @@ public final class Pipeline<T> {
      * @param <X> the checked exception the call may throw
      * @return the call's result, or the fallback's
      * @throws X the call's last failure, when no fallback handles it
+     * @throws IllegalStateException if the pipeline has a hedge, which only works with {@link #executeAsync}
      */
     // java:S1181: a resilience layer must see every failure the call throws, Errors included, and relay it unchanged
     @SuppressWarnings("java:S1181")
     public <X extends Throwable> T execute(PipelineCall<? extends T, X> call) throws X {
+        if (hedge != null) {
+            throw hedgeIsAsyncOnly();
+        }
         RetryPolicy retryPolicy = this.retry;
         if (retryPolicy != null) {
             Classifier<? super T> classifier = retryClassifier;
@@ -232,6 +242,14 @@ public final class Pipeline<T> {
             }
             return fallback(e, 1);
         }
+    }
+
+    /** Cold path of {@link #execute}: a hedge needs an asynchronous call. */
+    private IllegalStateException hedgeIsAsyncOnly() {
+        return new IllegalStateException(ErrorCode.HEDGE_NOT_ASYNC.message(PIPELINE_PREFIX + id + "' has a hedge, which"
+                + " only works with executeAsync: a hedge starts the call again while the first attempt is still running,"
+                + " which needs a call that returns a CompletionStage. Call executeAsync(() -> client.callAsync(...)), or"
+                + " remove .hedge(...) from the pipeline."));
     }
 
     // java:S1181: a resilience layer must see every failure the call throws, Errors included, and relay it unchanged
@@ -464,7 +482,9 @@ public final class Pipeline<T> {
      * Runs an asynchronous call through the pipeline, using each policy's asynchronous form: no thread
      * blocks while waiting for a retry delay, a permit or a slot, and a timeout completes the result with
      * {@link CallTimeoutException} without waiting for the call. A call that throws instead of returning
-     * a stage, or that returns {@code null}, counts as a failed call.
+     * a stage, or that returns {@code null}, counts as a failed call. Cancelling the returned future
+     * cancels the call inside it through every policy (no further attempt, no fallback, nothing recorded
+     * by the breaker, the bulkhead slot freed), as for generated async methods.
      *
      * @param call starts the call to protect and returns its stage; called again by the retry, if there is one
      * @return a future that completes with the call's result, the fallback's, or the last failure
@@ -473,28 +493,33 @@ public final class Pipeline<T> {
     public CompletableFuture<T> executeAsync(PipelineCall<? extends CompletionStage<T>, ?> call) {
         Objects.requireNonNull(call, "call");
         AsyncCall<T> next = call::call;
+        Layer<T> outer = null; // the outermost policy so far, returned as is so that cancelling it reaches the call
         BulkheadPolicy bulkheadPolicy = this.bulkhead;
         if (bulkheadPolicy != null) {
             AsyncCall<T> inner = next;
-            next = () -> bulkheadPolicy.executeAsync(inner);
+            outer = () -> bulkheadPolicy.executeAsync(inner);
+            next = outer;
         }
         TimeoutPolicy timeoutPolicy = this.timeout;
         if (timeoutPolicy != null) {
             AsyncCall<T> inner = next;
-            next = () -> timeoutPolicy.executeAsync(inner);
+            outer = () -> timeoutPolicy.executeAsync(inner);
+            next = outer;
         }
         RateLimiterPolicy limiter = this.rateLimiter;
         if (limiter != null) {
             AsyncCall<T> inner = next;
-            next = () -> limiter.executeAsync(inner);
+            outer = () -> limiter.executeAsync(inner);
+            next = outer;
         }
         CircuitBreakerPolicy breaker = this.circuitBreaker;
         if (breaker != null) {
             AsyncCall<T> inner = next;
             Classifier<? super T> classifier = circuitBreakerClassifier;
             boolean insideRetry = this.retry != null;
-            next = classifier == null ? () -> breaker.executeAsync(inner)
+            outer = classifier == null ? () -> breaker.executeAsync(inner)
                     : () -> breaker.executeAsync(inner, classifier, insideRetry);
+            next = outer;
         }
         RetryPolicy retryPolicy = this.retry;
         if (retryPolicy != null) {
@@ -502,12 +527,27 @@ public final class Pipeline<T> {
             return classifier == null ? retryPolicy.executeAsync(next, fallback, recovery)
                     : retryPolicy.executeAsync(next, classifier, throwOnExhaustedResult, fallback, recovery);
         }
+        HedgePolicy hedgePolicy = this.hedge;
+        if (hedgePolicy != null) {
+            return hedgePolicy.executeAsync(next, fallback, recovery);
+        }
         FallbackPolicy fallbackPolicy = this.fallback;
         Recovery<T> recoveryCall = this.recovery;
         if (fallbackPolicy != null && recoveryCall != null) {
             return fallbackPolicy.executeAsync(next, recoveryCall);
         }
-        return start(next);
+        return outer != null ? outer.call() : start(next);
+    }
+
+    /**
+     * One policy layer of {@link #executeAsync}: an {@code AsyncCall} for the layer around it, and the
+     * policy's own future when it is the outermost one, which must reach the caller unwrapped so that
+     * cancelling it cancels the layers inside.
+     */
+    @FunctionalInterface
+    private interface Layer<T> extends AsyncCall<T> {
+        @Override
+        CompletableFuture<T> call();
     }
 
     /** Starts the outermost layer when no retry or fallback does it. */
@@ -547,6 +587,9 @@ public final class Pipeline<T> {
         }
         if (retry != null) {
             text.append(", retry");
+        }
+        if (hedge != null) {
+            text.append(", hedge");
         }
         if (circuitBreaker != null) {
             text.append(", circuitBreaker");
@@ -592,6 +635,7 @@ public final class Pipeline<T> {
         private final ResilienceRegistry registry;
         private final String id;
         private @Nullable Step<RetryConfig.Builder> retry;
+        private @Nullable Step<HedgeConfig.Builder> hedge;
         private @Nullable Step<CircuitBreakerConfig.Builder> circuitBreaker;
         private @Nullable Step<RateLimiterConfig.Builder> rateLimiter;
         private @Nullable Step<TimeoutConfig.Builder> timeout;
@@ -654,6 +698,50 @@ public final class Pipeline<T> {
         public Builder<T> retry(String config, @Nullable Consumer<RetryConfig.Builder> overrides) {
             once(retry, "retry");
             retry = new Step<>(Objects.requireNonNull(config, CONFIG), overrides);
+            return this;
+        }
+
+        /**
+         * Adds a hedge with the registry's hedge defaults: the call is started again when it has produced no
+         * result for {@code delay}, or at once when it fails, and the first success wins. Only for idempotent
+         * calls, and only with {@link Pipeline#executeAsync}; cannot be combined with a retry.
+         *
+         * @return this builder
+         */
+        public Builder<T> hedge() {
+            return hedge("", null);
+        }
+
+        /**
+         * Adds a hedge with a named configuration. See {@link #hedge()}.
+         *
+         * @param config the name of a configuration registered with {@code ResilienceRegistry.Builder.hedge}
+         * @return this builder
+         */
+        public Builder<T> hedge(String config) {
+            return hedge(config, null);
+        }
+
+        /**
+         * Adds a hedge with the registry's hedge defaults and overrides. See {@link #hedge()}.
+         *
+         * @param overrides applied to a builder that starts from the defaults
+         * @return this builder
+         */
+        public Builder<T> hedge(Consumer<HedgeConfig.Builder> overrides) {
+            return hedge("", Objects.requireNonNull(overrides, OVERRIDES));
+        }
+
+        /**
+         * Adds a hedge with a named configuration and overrides. See {@link #hedge()}.
+         *
+         * @param config the name of a configuration, or {@code ""} for the defaults
+         * @param overrides applied to a builder that starts from that configuration; {@code null} for none
+         * @return this builder
+         */
+        public Builder<T> hedge(String config, @Nullable Consumer<HedgeConfig.Builder> overrides) {
+            once(hedge, "hedge");
+            hedge = new Step<>(Objects.requireNonNull(config, CONFIG), overrides);
             return this;
         }
 
@@ -1002,7 +1090,8 @@ public final class Pipeline<T> {
          *
          * @return the pipeline
          * @throws IllegalArgumentException if a named configuration does not exist, or a configuration is invalid
-         * @throws IllegalStateException if the id is already used by an instance with a different configuration
+         * @throws IllegalStateException if the id is already used by an instance with a different configuration,
+         *     or the pipeline has both a retry and a hedge
          */
         public Pipeline<T> build() {
             if ((fallbackApplyOn.size() != 1 || fallbackApplyOn.get(0) != Throwable.class || !fallbackSkipOn.isEmpty())
@@ -1010,6 +1099,11 @@ public final class Pipeline<T> {
                 throw new IllegalStateException(ErrorCode.FALLBACK_FILTER_WITHOUT_FALLBACK.message(PIPELINE_PREFIX + id
                         + "' selects fallback failures but has no fallback. Add a fallback, or remove fallbackApplyOn and"
                         + " fallbackSkipOn."));
+            }
+            if (retry != null && hedge != null) {
+                throw new IllegalStateException(ErrorCode.RETRY_WITH_HEDGE.message(PIPELINE_PREFIX + id
+                        + "' has both a retry and a hedge. Keep one: a hedge already starts a new attempt when one fails"
+                        + " (hedgeOn), and a retry around it would multiply the attempts."));
             }
             if (classifier != null && retry == null && circuitBreaker == null) {
                 throw new IllegalStateException(ErrorCode.CLASSIFIER_WITHOUT_POLICY.message(PIPELINE_PREFIX + id

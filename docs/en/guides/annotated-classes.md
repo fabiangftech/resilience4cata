@@ -49,6 +49,38 @@ StockService stock = new StockService$Resilient(registry, warehouse);   // check
 
 `Resilient.create` picks the constructor the way the compiler would, exact matches before varargs. With no fitting constructor it fails with [`R4C-RT-009`](../errors.md#r4c-rt-009), with more than one (for example `null` passed to overloaded constructors) with [`R4C-RT-010`](../errors.md#r4c-rt-010); both messages suggest the `new …$Resilient(registry, …)` call to use instead.
 
+## Constructors and dependency injection :id=constructor-injection
+
+Each mirrored constructor keeps the parameter names of the original and copies its annotations and the annotations of each parameter, so a dependency injection container that builds `StockService$Resilient` sees the same metadata as on `StockService`: `@Autowired` or `@Inject` on one of several constructors, `@Qualifier("…")`, `@Named("…")` or `@Value("${…}")` on a parameter.
+
+<!-- not-compiled: needs Spring on the class path -->
+```java
+public class ReportService {
+    @Autowired
+    public ReportService(@Qualifier("reportsDb") DataSource dataSource, @Value("${reports.limit}") int limit) { … }
+    …
+}
+```
+
+<!-- not-compiled: generated code -->
+```java
+public class ReportService$Resilient extends ReportService {
+    @org.springframework.beans.factory.annotation.Autowired
+    public ReportService$Resilient(dev.resilience4cata.ResilienceRegistry registry,
+            @org.springframework.beans.factory.annotation.Qualifier("reportsDb") javax.sql.DataSource dataSource,
+            @org.springframework.beans.factory.annotation.Value("${reports.limit}") int limit) {
+        super(dataSource, limit);
+        …
+    }
+}
+```
+
+- Only annotations kept in class files (retention `CLASS` or `RUNTIME`) are copied; `SOURCE` annotations, such as Lombok's, are not. Type-use annotations (`@Nullable` from JSpecify) are not repeated either.
+- The `ResilienceRegistry` parameter has no annotation: containers inject it by type, so the application needs exactly one `ResilienceRegistry` bean.
+- If a parameter of the class's constructor is itself named `registry`, the generated one is named `r4c$registry`. Parameters named `java` or `dev` are renamed `r4c$p<index>`, because those names would hide the packages that the generated constructor uses.
+- `@ConstructorProperties` lists one name per parameter, so the generated copy starts with the registry's.
+- The parameter names are those of the source, so a container that matches beans by parameter name (Spring, compiled with `-parameters`) sees the same names on both classes.
+
 ## Interface or class?
 
 | | Annotated interface | Annotated class |
@@ -146,7 +178,7 @@ Also:
 
 - **Fallback siblings are called on `this`**, so they must not be `private` (and not package-private in a superclass from another package). `protected` works.
 - **Methods the constructor calls on `this` run before the policies are set up**, because the subclass's fields are assigned after `super(...)` returns. Don't annotate methods that constructors call.
-- **The generated subclass is `final`.** Extend your own class, not the generated one.
+- **The generated subclass is not `final`**, so frameworks can proxy it (CGLIB for `@Transactional`, scoped proxies). Its overrides call the policies; a subclass of your own that overrides them again bypasses them. Extend your own class, not the generated one.
 - `Resilient.create` rejects an interface ([`R4C-RT-007`](../errors.md#r4c-rt-007)) and a type that cannot have a generated subclass ([`R4C-RT-008`](../errors.md#r4c-rt-008)).
 
 ## With Lombok

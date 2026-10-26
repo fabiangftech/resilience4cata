@@ -97,7 +97,7 @@ Para un método que devuelve `CompletionStage<T>` o `CompletableFuture<T>`, no s
 CompletableFuture<String> build(String reportId);
 ```
 
-El timeout cubre el stage, no la llamada al método que lo devuelve: un método que se bloquea 5 s *antes* de devolver su stage no recibe timeout. Ver [Métodos async](../guides/async.md).
+El timeout cubre el stage, no la llamada al método que lo devuelve: un método que se bloquea 5 s *antes* de devolver su stage no recibe timeout. La cancelación pasa por las políticas que están dentro del timeout, así que un bulkhead interno libera su slot de inmediato. Cancelar el future que recibiste cancela el plazo y el stage, sin `CallTimeoutException` ni evento ([cancelación](../guides/async.md#cancelación)). Ver [Métodos async](../guides/async.md).
 
 ### La excepción
 

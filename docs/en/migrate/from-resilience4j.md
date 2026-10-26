@@ -6,7 +6,7 @@ How Resilience4j's registries, configs, decorators and Spring annotations map to
 
 resilience4cata covers six policies (retry, circuit breaker, rate limiter, timeout, bulkhead, fallback) for plain Java 21+, with code generated at compile time. **Stay on Resilience4j** if you need any of these, which resilience4cata does not have yet:
 
-- Spring Boot auto-configuration, actuator endpoints, `application.yml` binding, or Spring AOP annotations (resilience4cata has no Spring, CDI or AspectJ integration);
+- Spring Boot 3, CDI or AspectJ integration (resilience4cata integrates with Spring Boot 4.1+ only, [below](#spring-boot));
 - Reactor, RxJava or Kotlin coroutine operators (resilience4cata supports `CompletionStage` / `CompletableFuture` only);
 - a thread-pool bulkhead, a cache, or a time limiter for arbitrary futures;
 - changing a policy's configuration at runtime (resilience4cata resolves configuration once, by design);
@@ -45,6 +45,7 @@ resilience4cata covers six policies (retry, circuit breaker, rate limiter, timeo
 | `failAfterMaxAttempts(true)` (`MaxRetriesExceededException`) | `@Retry(onExhaustedResult = THROW)` (`ResultRejectedException`) |
 | `IntervalFunction.ofExponentialBackoff(…)`, `ofExponentialRandomBackoff(…)` | `backoff`, `multiplier`, `maxDelay`, `jitter` |
 | `TimeLimiter` + an executor for blocking code | `@Timeout` on the caller's thread |
+| `resilience4j-hedge`: `Hedge.of(config).decorateCompletionStage(…)` | [`@Hedge`](../policies/hedge.md) on a method that returns a `CompletableFuture`, or `Pipeline…hedge(…)` with `executeAsync` ([mapping](#map-hedge)) |
 | `ThreadPoolBulkhead`, `Cache`, Reactor/RxJava/Kotlin operators | no equivalent |
 
 ## Configuration mapping :id=config-mapping
@@ -101,11 +102,27 @@ Resilience4j builder methods (Spring Boot properties use the same names in kebab
 > [!WARNING]
 > Three defaults catch people out: resilience4cata's retry uses **exponential backoff with full jitter from 200 ms**, not a fixed 500 ms; its rate limiter **rejects at once** instead of waiting up to 5 s; and its breaker **does not time calls** unless you set `slowCallDuration`. Set them explicitly when you migrate.
 
+### Hedge :id=map-hedge
+
+Resilience4j's `resilience4j-hedge` module (2.x) is programmatic and async only, like ours (no Spring annotation), and starts at most one hedge.
+
+| Resilience4j | resilience4cata | Notes |
+|---|---|---|
+| `HedgeConfig.Builder.preconfiguredDuration(d)` | `@Hedge(delay = "…")` | Ours defaults to 1 s; `"0"` starts every attempt at once |
+| `averagePlusPercentageDuration(…)`, `averagePlusAmountDuration(…)` | no equivalent | Only a fixed delay; set it near the dependency's p95 |
+| one hedge, always | `@Hedge(maxAttempts = 2)` (the default) | Up to 10 attempts |
+| `withMaxConcurrency(n)` (core size of the hedge's thread pool) | no equivalent | Hedges start on new virtual threads; the [hedge budget](../policies/hedge.md#the-hedge-budget) caps their number instead |
+| `withContextPropagators(…)` | no equivalent | Attempts 2+ run without the caller's `ThreadLocal`s |
+| `submit(callable, executor)` for blocking code | no equivalent | Sync methods are a compile error ([R4C-HDG-001](../errors.md#r4c-hdg-001)): return a `CompletableFuture` |
+| `HedgeOnPrimarySuccessEvent`, `…OnSecondarySuccessEvent`, `…Failure…` | `HedgeEvent.Hedged`, `Won`, `Skipped`, `Failed` | A first attempt that wins before the delay publishes nothing |
+
+The semantics differ: in Resilience4j the first attempt to **complete** wins, so a fast failure of either attempt fails the call; in resilience4cata the first **success** wins, a failure in `hedgeOn` starts the next attempt at once, and the call fails only when every attempt has failed (or one fails with an `abortOn` failure). The loser is cancelled, and the circuit breaker, bulkhead and timeout inside the hedge release what it held.
+
 ## Behavioural differences :id=differences
 
 ### The order is fixed :id=order
 
-Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead → method, whatever the order of the annotations. It matches Resilience4j's default Spring aspect order for the policies both have. There is no `@Order` or per-method reordering; for another order, use two interfaces or a [`Pipeline`](../guides/pipeline.md) inside a wrapped method.
+Fallback → Retry (or Hedge) → CircuitBreaker → RateLimiter → Timeout → Bulkhead → method, whatever the order of the annotations. It matches Resilience4j's default Spring aspect order for the policies both have. There is no `@Order` or per-method reordering; for another order, use two interfaces or a [`Pipeline`](../guides/pipeline.md) inside a wrapped method.
 
 ### An open breaker stops retries :id=open-breaker
 
@@ -224,9 +241,50 @@ defaults.circuitBreaker.failureRateThreshold=40
 
 Load it with `ResilienceConfig.load()` (as `resilience4cata.properties` on the classpath) or `ResilienceConfig.builder().classpath(…)`, then `config.applyTo(ResilienceRegistry.builder())`. See [Configuration](../guides/configuration.md).
 
+## From resilience4j-spring-boot3 :id=spring-boot
+
+`resilience4cata-spring` replaces `resilience4j-spring-boot3` on Spring Boot 4.1 or newer
+([Spring Boot guide](../guides/spring.md)). Drop `spring-boot-starter-aop`: nothing is woven or proxied; the
+annotation processor generates the protected classes, and the integration makes Spring instantiate them.
+
+| resilience4j-spring-boot3 | resilience4cata-spring |
+|---|---|
+| `resilience4j.<module>.instances.<name>.<key>` | `resilience4cata.instances.<name>.<policy>.<attribute>` (`circuit-breaker`, `retry`, `rate-limiter`, `timeout`, `bulkhead`) |
+| `resilience4j.<module>.configs.default.<key>` | `resilience4cata.defaults.<policy>.<attribute>` |
+| `resilience4j.<module>.configs.<name>.<key>` | `resilience4cata.configs.<name>.<policy>.<attribute>`, used by `@Retry(config = "<name>")` and the like |
+| `baseConfig: <name>` | `resilience4cata.configs.<config>.extends: <name>`; an annotation picks its config with `config = "<name>"` |
+| `<module>AspectOrder` properties | none: the order is fixed (Fallback → Retry → CircuitBreaker → RateLimiter → Timeout → Bulkhead) |
+| `CircuitBreakerConfigCustomizer`, `RetryConfigCustomizer`… beans | `ResilienceRegistryCustomizer` beans |
+| `RegistryEventConsumer` beans, `getEventPublisher()` | `EventListener<…>` beans |
+| `/actuator/circuitbreakers`, `/actuator/retries`, `/actuator/ratelimiters`… | `/actuator/resilience4cata` (every policy, read-only) |
+| `/actuator/circuitbreakerevents` and the other event endpoints | none: no event history is kept; use listener beans or metrics |
+| health indicators, off by default (`registerHealthIndicator`) | the `resilience4cata` indicator, on but UP with open breakers unless listed in `resilience4cata.spring.health.down-when-open` |
+| metrics `resilience4j.circuitbreaker.*`… | metrics `r4c.*` ([Micrometer](../guides/micrometer.md)), with `resilience4cata-micrometer` |
+| `fallbackMethod = "f"` resolved by reflection | `@Fallback(method = "f")`, checked at compile time |
+
+The same keys in `application.yml`:
+
+```yaml
+# resilience4j.circuitbreaker.instances.inventory.sliding-window-size: 50
+# resilience4j.circuitbreaker.configs.default.failure-rate-threshold: 40
+# resilience4j.retry.instances.inventory.max-attempts: 5
+resilience4cata:
+  defaults:
+    circuit-breaker:
+      failure-rate-threshold: 40
+  instances:
+    inventory:
+      circuit-breaker:
+        window-size: 50
+      retry:
+        max-attempts: 5
+```
+
+Typos fail the startup with the file and line of the key, instead of being ignored.
+
 ## Step by step :id=steps
 
-1. Add the dependencies, including the processor on the processor path ([Installation](../start/installation.md)).
+1. Add the dependencies, including the processor on the processor path ([Installation](../start/installation.md)); with Spring Boot, `resilience4cata-spring` ([above](#spring-boot)).
 2. For each decorated call, put the call behind an interface (or annotate the class), and translate the configuration with the tables above. Set `backoff`, `jitter` and `maxWait` explicitly where the defaults differ.
 3. Replace `Decorators`/Spring annotations with resilience4cata annotations and `Resilient.of` (or `Resilient.create` for annotated classes). Calls you cannot put behind an interface go through a [`Pipeline`](../guides/pipeline.md).
 4. Move event consumers to `ResilienceRegistry.Builder.listen(…)`, and metrics to the [Micrometer module](../guides/micrometer.md).

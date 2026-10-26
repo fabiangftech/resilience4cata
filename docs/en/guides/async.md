@@ -39,9 +39,10 @@ The call returns a future at once. The first attempt runs on the caller's thread
 | Policy | Synchronous method | Asynchronous method |
 |---|---|---|
 | Retry | Sleeps on the caller's thread between attempts | Schedules the next attempt; the returned future completes when an attempt succeeds or the retry gives up |
+| [Hedge](../policies/hedge.md) | Not supported (compile error [`R4C-HDG-001`](../errors.md#r4c-hdg-001)) | Starts the call again after `delay` without a result, or at once after a failure; the first success completes the future and the other attempts are cancelled |
 | Circuit breaker | Records the call when it returns or throws | Records the call when its stage completes |
 | Rate limiter with `maxWait` | Sleeps until the permit is due | Starts the call when the permit is due, without blocking the caller |
-| Timeout | Interrupts the caller's thread at the deadline | Fails the returned future with `CallTimeoutException` at the deadline, and cancels the late stage if it is a `Future` |
+| Timeout | Interrupts the caller's thread at the deadline | Fails the returned future with `CallTimeoutException` at the deadline, and cancels the late stage if it is a `Future` (through the policies inside, which let go at once: see [cancellation](#cancellation)) |
 | Bulkhead | Holds the slot while the method runs; with `maxWait`, waits on a semaphore | Holds the slot until the stage completes; with `maxWait`, queues the call without blocking a thread |
 | Fallback | Returns a value | Returns a value or a stage |
 
@@ -50,7 +51,7 @@ Rules that hold for every policy:
 - **A method that throws instead of returning a stage** is treated like a failed stage: the policies see the exception, and if nothing recovers, the returned future fails with it. A method that returns `null` instead of a stage fails with a `NullPointerException` the same way.
 - **Failures are unwrapped.** A stage that fails with `CompletionException` or `ExecutionException` is judged by its cause, so `retryOn`, `recordOn`, classifiers and fallback signatures see your exception (`IOException` in the example), not the wrapper.
 - **Rejections fail the future.** An open breaker, a full bulkhead or an exhausted rate limiter fails the returned future with `CallNotPermittedException`, `BulkheadFullException` or `RateLimitExceededException`.
-- **Callbacks don't run on the timer.** Delayed retries, rate-limiter waits and timeouts fire on a library timer, which hands the work to a new virtual thread.
+- **Callbacks don't run on the timer.** Delayed retries, hedges, rate-limiter waits and timeouts fire on a library timer, which hands the work to a new virtual thread. So attempts after the first (a retry, a hedge) run without the caller's `ThreadLocal`s or MDC.
 
 A timed-out call, from the same test:
 
@@ -64,6 +65,29 @@ assertThatThrownBy(() -> eta.get(5, TimeUnit.SECONDS))
 ```
 
 When you `join()` or `get()` the future yourself, the JDK wraps the failure: `join()` throws `CompletionException` and `get()` throws `ExecutionException`, with the policy's exception as the cause.
+
+## Cancellation
+
+Cancelling the future that an async method returns (with `cancel(...)`, or `completeExceptionally` with a `CancellationException`) cancels the call inside it, through every layer: each policy passes the cancel to the stage it is waiting for, down to the stage your method returned, which is cancelled if it is a `Future`. What each policy does:
+
+| Policy | On cancel |
+|---|---|
+| Retry | Starts no further attempt: a pending backoff is cancelled, and the attempt in flight is cancelled |
+| Hedge | Starts no further attempt: the pending delay is cancelled, and every attempt in flight is cancelled. A hedge also cancels its own losers the same way, with a `HedgeCancelledException` |
+| Circuit breaker | Records nothing, like an ignored call: a half-open permit is given back |
+| Rate limiter with `maxWait` | A call still waiting for its permit never starts, and the permit is given back (as when a synchronous wait is interrupted). A call that already started keeps its permit |
+| Timeout | Cancels its deadline: no `CallTimeoutException`, no `TimedOut` event |
+| Bulkhead | Frees the slot as soon as the stage ends, which for a `CompletableFuture` is at once. A call still queued (`maxWait`) leaves the queue and never starts |
+| Fallback | Does not run: nobody waits for an alternative result |
+
+A cancel publishes no event: no `GaveUp`, no `Retry`, no failure, no rejection. The inner layers have let go before the callbacks you attached to the future run, so a callback can start a new call in the slot that was freed.
+
+Things to know:
+
+- **The cancel reaches the stage, not the work behind it.** Cancelling a `CompletableFuture` completes it; it does not interrupt the code that would have completed it. The bulkhead frees its slot when the stage ends, so if your stage is not a `Future`, or ignores `cancel`, the slot stays taken (and the breaker records the late outcome) until the stage completes.
+- **Cancel the future the method returned.** A future derived from it (`thenApply`, `whenComplete`, `copy()` and the like) is a new `CompletableFuture`: cancelling it does not reach the call, as in the JDK.
+- **Cancel and completion race safely.** If the call completes at the same moment, whichever comes first wins; slots and permits are released exactly once either way.
+- `Pipeline.executeAsync` behaves the same.
 
 ## Fallbacks
 

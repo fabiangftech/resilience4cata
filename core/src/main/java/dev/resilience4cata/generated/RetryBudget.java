@@ -1,15 +1,19 @@
 package dev.resilience4cata.generated;
 
+import dev.resilience4cata.HedgeConfig;
+import dev.resilience4cata.HedgeSnapshot;
 import dev.resilience4cata.RetryConfig;
 import dev.resilience4cata.RetrySnapshot;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
+import java.time.Duration;
 
 /**
  * The retry budget of one retry instance, shared by every caller of that instance: retries in the last
  * {@code budgetWindow} may not exceed {@code budgetMinRetriesPerSecond × window seconds + budgetPercent %
  * of the calls} made in that window. The ratio follows Finagle's {@code RetryBudget}
- * ({@code percentCanRetry} plus a {@code minRetriesPerSec} reserve over a ttl).
+ * ({@code percentCanRetry} plus a {@code minRetriesPerSec} reserve over a ttl). A hedge instance uses the
+ * same class for its hedge budget, with hedges in place of retries.
  *
  * <p>Cost rules. Each call (not each attempt) is counted by {@link #onCall()}: one plain read-and-write
  * (lossy: a race on a shared stripe can lose a call, which only lowers the budget) on a counter striped by
@@ -70,12 +74,28 @@ final class RetryBudget {
 
     /** Package-private, for tests: a fixed number of stripes (a power of two). */
     RetryBudget(RetryConfig config, long now, int stripes) {
-        long windowNanos = config.budgetWindow().toNanos();
+        this(config.budgetWindow(), config.budgetPercent(), config.budgetMinRetriesPerSecond(), now, stripes);
+    }
+
+    /**
+     * The budget of a hedge instance: the same window, with hedges in place of retries ({@link #onCall()} counts
+     * each call, {@link #tryAcquire(long)} takes one hedge).
+     *
+     * @param config a configuration with {@link HedgeConfig#hasBudget() a budget}
+     * @param now the current time, which starts the first tenth of the window
+     */
+    RetryBudget(HedgeConfig config, long now) {
+        this(config.budgetWindow(), config.budgetPercent(), config.budgetMinHedgesPerSecond(), now,
+                stripes(Runtime.getRuntime().availableProcessors()));
+    }
+
+    private RetryBudget(Duration window, double percent, int perSecond, long now, int stripes) {
+        long windowNanos = window.toNanos();
         this.cells = new long[(stripes + 3) * STRIDE];
         this.mask = stripes - 1;
         this.bucketNanos = Math.max(1, windowNanos / BUCKETS);
-        this.fraction = config.budgetPercent() / 100;
-        this.reserve = config.budgetMinRetriesPerSecond() * (windowNanos / 1e9);
+        this.fraction = percent / 100;
+        this.reserve = perSecond * (windowNanos / 1e9);
         this.origin = now;
         this.marks = new Marks(0, new long[BUCKETS], new long[BUCKETS]);
     }
@@ -165,6 +185,18 @@ final class RetryBudget {
 
     /** Reads the window without changing it; off the call path. */
     RetrySnapshot.Budget snapshot(long now) {
+        long[] window = window(now);
+        return new RetrySnapshot.Budget(window[0], window[1], window[2]);
+    }
+
+    /** Same as {@link #snapshot(long)}, for a hedge: hedges in place of retries. */
+    HedgeSnapshot.Budget hedgeSnapshot(long now) {
+        long[] window = window(now);
+        return new HedgeSnapshot.Budget(window[0], window[1], window[2]);
+    }
+
+    /** Calls, retries (or hedges) and allowed ones in the window; off the call path. */
+    private long[] window(long now) {
         long bucket = Math.floorDiv(now - origin, bucketNanos);
         Marks current = (Marks) MARKS.getOpaque(this);
         long callsNow = sumCalls();
@@ -180,7 +212,7 @@ final class RetryBudget {
             calls = Math.max(0, callsNow - current.calls[slot]);
             retries = Math.max(0, retriesNow - current.retries[slot]);
         }
-        return new RetrySnapshot.Budget(calls, retries, (long) (reserve + fraction * calls));
+        return new long[] {calls, retries, (long) (reserve + fraction * calls)};
     }
 
     /**

@@ -1,0 +1,17 @@
+resilience4cata:
+  defaults:
+    retry:
+      delay: 10ms
+      retry-on:
+        - java.io.IOException
+        - java.util.concurrent.TimeoutException
+  configs:
+    external:
+      circuit-breaker:
+        minimum-calls: 50
+        wait-in-open: 10s
+  instances:
+    shipping:
+      retry.max-attempts: 5
+    "[dev.resilience4cata.spring.fixtures.ShippingService#track(java.lang.String)]":
+      timeout.value: 4s

@@ -97,7 +97,7 @@ For a method that returns `CompletionStage<T>` or `CompletableFuture<T>`, nothin
 CompletableFuture<String> build(String reportId);
 ```
 
-The timeout covers the stage, not the method call that returns it: a method that blocks for 5 s *before* returning its stage is not timed out. See [Async methods](../guides/async.md).
+The timeout covers the stage, not the method call that returns it: a method that blocks for 5 s *before* returning its stage is not timed out. The cancel goes through the policies inside the timeout, so a bulkhead inside frees its slot at once. Cancelling the future you got back cancels the deadline and the stage, with no `CallTimeoutException` and no event ([cancellation](../guides/async.md#cancellation)). See [Async methods](../guides/async.md).
 
 ### The exception
 

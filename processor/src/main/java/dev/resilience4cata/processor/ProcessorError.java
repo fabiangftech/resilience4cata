@@ -5,8 +5,8 @@ package dev.resilience4cata.processor;
  * {@code docs/en/errors.md} has one section per code (what triggers it, a wrong example, the fix).
  *
  * <p>Codes are grouped by area: {@code APT} placement and general, {@code ATR} attribute values,
- * {@code CMP} composed annotations, {@code ASY} asynchronous methods, {@code CLS} classifiers, {@code FB}
- * fallbacks, {@code SUB} annotated classes. A code is never renumbered or reused: a new error takes the
+ * {@code CMP} composed annotations, {@code ASY} asynchronous methods, {@code HDG} hedges, {@code CLS}
+ * classifiers, {@code FB} fallbacks, {@code SUB} annotated classes. A code is never renumbered or reused: a new error takes the
  * next free number of its area, and a retired one stays here, marked as no longer reported.
  */
 enum ProcessorError {
@@ -15,7 +15,7 @@ enum ProcessorError {
     STATIC_OR_PRIVATE_METHOD("R4C-APT-002", "annotations on a static or private method"),
     PRIVATE_INTERFACE("R4C-APT-003", "annotations on a private interface"),
     UNKNOWN_ATTRIBUTE("R4C-APT-004", "attribute unknown to the processor: mismatched versions"),
-    WRITE_FAILED("R4C-APT-005", "the generated source file could not be written"),
+    WRITE_FAILED("R4C-APT-005", "a generated file could not be written"),
 
     INVALID_DURATION("R4C-ATR-001", "invalid duration string"),
     DURATION_NOT_POSITIVE("R4C-ATR-002", "duration must be greater than zero"),
@@ -23,12 +23,16 @@ enum ProcessorError {
     INVALID_MULTIPLIER("R4C-ATR-004", "multiplier must be a finite number >= 1"),
     INVALID_PERCENTAGE("R4C-ATR-005", "rate threshold must be a percentage > 0 and <= 100"),
     INVALID_ENABLED("R4C-ATR-006", "enabled must be \"\", \"true\" or \"false\""),
-    INVALID_BUDGET("R4C-ATR-007", "retry budget value out of range"),
+    INVALID_BUDGET("R4C-ATR-007", "retry or hedge budget value out of range"),
+    HEDGE_ATTEMPTS("R4C-ATR-008", "hedge maxAttempts must be between 2 and 10"),
 
     BUNDLE_NOT_MARKED("R4C-CMP-001", "composed annotation not marked with @ResiliencePolicy"),
     BUNDLE_CONFLICT("R4C-CMP-002", "two composed annotations set an attribute to different values"),
 
     UNSUPPORTED_ASYNC_TYPE("R4C-ASY-001", "unsupported asynchronous return type"),
+
+    HEDGE_NOT_ASYNC("R4C-HDG-001", "@Hedge on a synchronous method"),
+    HEDGE_WITH_RETRY("R4C-HDG-002", "@Hedge and @Retry on the same method"),
 
     CLASSIFIER_MISSING_CORE("R4C-CLS-001", "dev.resilience4cata.Classifier is not on the classpath"),
     CLASSIFIER_NOT_CLASS("R4C-CLS-002", "the classifier is not a class"),

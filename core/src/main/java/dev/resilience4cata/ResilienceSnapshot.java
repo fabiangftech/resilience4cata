@@ -15,9 +15,11 @@ import java.util.List;
  * @param rateLimiters every rate limiter
  * @param timeouts every timeout
  * @param bulkheads every bulkhead
+ * @param hedges every hedge
  */
 public record ResilienceSnapshot(List<CircuitBreakerSnapshot> circuitBreakers, List<RetrySnapshot> retries,
-        List<RateLimiterSnapshot> rateLimiters, List<TimeoutSnapshot> timeouts, List<BulkheadSnapshot> bulkheads) {
+        List<RateLimiterSnapshot> rateLimiters, List<TimeoutSnapshot> timeouts, List<BulkheadSnapshot> bulkheads,
+        List<HedgeSnapshot> hedges) {
 
     /** Copies the lists. */
     public ResilienceSnapshot {
@@ -26,5 +28,20 @@ public record ResilienceSnapshot(List<CircuitBreakerSnapshot> circuitBreakers, L
         rateLimiters = List.copyOf(rateLimiters);
         timeouts = List.copyOf(timeouts);
         bulkheads = List.copyOf(bulkheads);
+        hedges = List.copyOf(hedges);
+    }
+
+    /**
+     * A snapshot without hedges: the constructor of 0.3.0, kept so that code that calls it still compiles.
+     *
+     * @param circuitBreakers every circuit breaker
+     * @param retries every retry
+     * @param rateLimiters every rate limiter
+     * @param timeouts every timeout
+     * @param bulkheads every bulkhead
+     */
+    public ResilienceSnapshot(List<CircuitBreakerSnapshot> circuitBreakers, List<RetrySnapshot> retries,
+            List<RateLimiterSnapshot> rateLimiters, List<TimeoutSnapshot> timeouts, List<BulkheadSnapshot> bulkheads) {
+        this(circuitBreakers, retries, rateLimiters, timeouts, bulkheads, List.of());
     }
 }

@@ -5,7 +5,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -58,12 +57,12 @@ final class AsyncSupport {
     }
 
     /** Completes {@code result} the same way as {@code stage}, with the failure unwrapped. */
-    static <T> void relay(CompletionStage<T> stage, CompletableFuture<T> result) {
+    static <T> void relay(CompletionStage<T> stage, LinkedFuture<T> result) {
         stage.whenComplete((value, failure) -> {
             if (failure == null) {
                 result.complete(value);
             } else {
-                result.completeExceptionally(unwrap(failure));
+                result.fail(unwrap(failure));
             }
         });
     }
@@ -97,12 +96,5 @@ final class AsyncSupport {
      */
     static int queuedTimers() {
         return Timer.INSTANCE.getQueue().size() + TimeoutTimer.shared().pending();
-    }
-
-    /** Asks the producer of a stage that nobody waits for any more to stop, if it can be asked. */
-    static void cancel(CompletionStage<?> stage) {
-        if (stage instanceof Future<?> future) {
-            future.cancel(true);
-        }
     }
 }

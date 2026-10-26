@@ -8,6 +8,7 @@ import dev.resilience4cata.event.RateLimiterEvent;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.LongSupplier;
 import org.jspecify.annotations.Nullable;
@@ -248,7 +249,8 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
     /**
      * Runs an asynchronous call when a permit is available. With {@code maxWait > 0}, a call whose
      * permit comes within {@code maxWait} reserves it and starts when it is due, without blocking any
-     * thread. A rejection is a failed future.
+     * thread. A rejection is a failed future. Cancelling the returned future of a call that waits for its
+     * permit gives the permit back; once the call started, it cancels the call's stage.
      *
      * @param call the next layer
      * @param <T> the result type
@@ -259,13 +261,51 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
         if (wait < 0) {
             return CompletableFuture.failedFuture(rejection);
         }
-        CompletableFuture<T> result = new CompletableFuture<>();
         if (wait == 0) {
-            AsyncSupport.relay(AsyncSupport.call(call), result);
-        } else {
-            environment.later(wait, () -> AsyncSupport.relay(AsyncSupport.call(call), result));
+            CompletionStage<T> stage = AsyncSupport.call(call);
+            LinkedFuture<T> result = new LinkedFuture<>(stage);
+            AsyncSupport.relay(stage, result);
+            return result;
         }
-        return result;
+        DelayedStart<T> start = new DelayedStart<>(this, call);
+        environment.later(wait, start);
+        return start.result;
+    }
+
+    /**
+     * A call that waits for its reserved permit. If it is cancelled before it starts, the permit is given
+     * back (as a synchronous caller interrupted while waiting does) and the call never starts; the timer task
+     * stays queued until its due time and then does nothing. Once started, the permit was used and is kept.
+     * Exactly one of starting and cancelling wins, decided by the link of the result: {@link #run} claims
+     * the start by linking {@link LinkedFuture#STARTING} in place of this hook.
+     */
+    private static final class DelayedStart<T> implements Runnable, LinkedFuture.OnCancel {
+        private final RateLimiterPolicy policy;
+        private final AsyncCall<T> call;
+        final LinkedFuture<T> result;
+
+        DelayedStart(RateLimiterPolicy policy, AsyncCall<T> call) {
+            this.policy = policy;
+            this.call = call;
+            this.result = new LinkedFuture<>(this);
+        }
+
+        /** The permit is due; runs on a new virtual thread (or the thread advancing a manual ticker). */
+        @Override
+        public void run() {
+            if (!result.link(LinkedFuture.STARTING)) {
+                return; // cancelled first: the permit was given back
+            }
+            CompletionStage<T> stage = AsyncSupport.call(call);
+            result.link(stage);
+            AsyncSupport.relay(stage, result);
+        }
+
+        /** Cancelled before {@link #run} claimed the start: the reserved permit goes back. */
+        @Override
+        public void cancelled() {
+            policy.tat.add(-policy.interval);
+        }
     }
 
     /**

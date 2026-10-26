@@ -13,4 +13,5 @@ dependencies {
     implementation libs.resilience4j.timelimiter
     implementation libs.resilience4j.bulkhead
     implementation libs.resilience4j.ratelimiter
+    implementation libs.resilience4j.hedge
 }

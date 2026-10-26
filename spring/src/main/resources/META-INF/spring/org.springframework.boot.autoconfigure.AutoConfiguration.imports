@@ -1,0 +1,4 @@
+dev.resilience4cata.spring.autoconfigure.ResilienceAutoConfiguration
+dev.resilience4cata.spring.autoconfigure.ResilienceMetricsAutoConfiguration
+dev.resilience4cata.spring.autoconfigure.ResilienceHealthAutoConfiguration
+dev.resilience4cata.spring.autoconfigure.ResilienceEndpointAutoConfiguration

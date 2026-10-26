@@ -11,6 +11,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongSupplier;
 import org.jspecify.annotations.Nullable;
@@ -583,7 +584,8 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
 
     /**
      * Runs an asynchronous call through the breaker: the call is recorded when its stage completes, and
-     * a rejection is a failed future. Used by generated code for methods that return a stage.
+     * a rejection is a failed future. Used by generated code for methods that return a stage. Cancelling
+     * the returned future cancels the stage, and the call is not recorded (as if ignored).
      *
      * @param call the next layer
      * @param <T> the result type
@@ -595,15 +597,18 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
             return CompletableFuture.failedFuture(rejection());
         }
         long started = startTimer();
-        CompletableFuture<T> result = new CompletableFuture<>();
-        AsyncSupport.call(call).whenComplete((value, failure) -> {
+        CompletionStage<T> stage = AsyncSupport.call(call);
+        LinkedFuture<T> result = new LinkedFuture<>(stage);
+        stage.whenComplete((value, failure) -> {
             if (failure == null) {
                 onSuccess(token, started);
                 result.complete(value);
+            } else if (result.cancelling()) {
+                release(token); // cancelled by the caller: not a failure of the dependency
             } else {
                 Throwable cause = AsyncSupport.unwrap(failure);
                 onFailure(token, started, cause);
-                result.completeExceptionally(cause);
+                result.fail(cause);
             }
         });
         return result;
@@ -642,15 +647,20 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
             return CompletableFuture.failedFuture(rejection());
         }
         long started = startTimer();
-        CompletableFuture<T> result = new CompletableFuture<>();
-        AsyncSupport.call(call).whenComplete((value, failure) -> {
+        CompletionStage<T> stage = AsyncSupport.call(call);
+        LinkedFuture<T> result = new LinkedFuture<>(stage);
+        stage.whenComplete((value, failure) -> {
+            if (failure != null && result.cancelling()) {
+                release(token); // cancelled by the caller: not a failure of the dependency, nothing to classify
+                return;
+            }
             Throwable cause = failure == null ? null : AsyncSupport.unwrap(failure);
             Classifier.Outcome outcome;
             try {
                 outcome = classifier.classify(cause == null ? value : null, cause);
             } catch (Throwable classifierFailure) {
                 onResult(token, started, Classifier.Outcome.FAILURE);
-                result.completeExceptionally(insideRetry ? new ClassifierFailure(classifierFailure) : classifierFailure);
+                result.fail(insideRetry ? new ClassifierFailure(classifierFailure) : classifierFailure);
                 return;
             }
             if (cause == null) {
@@ -658,7 +668,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
                 result.complete(value);
             } else {
                 onFailure(token, started, cause, outcome);
-                result.completeExceptionally(cause);
+                result.fail(cause);
             }
         });
         return result;

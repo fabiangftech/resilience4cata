@@ -358,6 +358,33 @@ Una llamada reintentada cuesta 0,1–0,3 ns más (la comprobación de si hay pre
 
 Dos lecciones. Un compare-and-set, aun sin contención sobre una línea que ningún otro thread escribe, costó unos 8 ns por llamada en Graviton3, y la suma atómica de una instrucción más; el contador publicado es en cambio aproximado (dos threads que comparten parte y compiten pueden perder una llamada, lo que solo reduce el presupuesto). Y elegir la parte con los bits bajos del id del thread puso a todos los workers de JMH en una sola parte (sus ids eran múltiplos de la cantidad de partes): la versión con compare-and-set lo pagó en contención (380 ns), y la aproximada perdió tantas llamadas que el presupuesto rechazaba reintentos aun con diez veces el margen necesario. Mezclar el id primero (hash de Fibonacci) arregló ambas cosas. Con 4 threads, una llamada reintentada está dominada por el contador compartido de reintentos y la lectura del reloj, solo en el camino de falla.
 
+## Hedge y cancelación async, 0.4.0 (2026-10-25, AWS Graviton3)
+
+Base: `4fc079a` (0.3.0 más docs). Nueva: la integración de 0.4.0 (cancelación hacia adentro en toda política async, `@Hedge`, subclases generadas que ya no son `final`). Mismo método que arriba (`infra/bench.sh`, `c7g.xlarge`; calibración 20,51–20,54 ns).
+
+**Cancelación async.** La primera versión enlazaba el future de cada política con su stage interno mediante un store con release en el constructor. En Graviton3, C2 lo compiló como dos barreras completas extra (`dmb ish`) por capa de política, unos 5 ns cada una (circuit breaker async 24,4 → 29,1 ns); en Apple Silicon esas mismas barreras quedaban dentro del ruido. Un store plano alcanza (el future siempre se entrega con una relación happens-before) y baja el costo a unos 0,5 ns por capa (ns/op, 1 / 4 threads; asignaciones sin cambios):
+
+| Benchmark | Base | Store con release | Store plano (publicado) |
+|---|---:|---:|---:|
+| `AsyncBenchmark.resilience4cataCircuitBreaker` | 24,4 / 24,9 | 29,1 / 29,9 | 24,9 / 25,6 |
+| `AsyncBenchmark.resilience4cataRetry` | 24,1 / 24,6 | 28,9 / 29,5 | 24,7 / 25,3 |
+| `AsyncBenchmark.resilience4cataBulkhead` | 41,8 / 392 | 46,2 / 503 | 42,8 / 418 |
+| `AsyncBenchmark.resilience4cataRateLimiter` | 66,0 / 275 | 71,2 / 294 | 66,9 / 278 |
+| `AsyncBenchmark.resilience4cataStack` | 121,5 / 573 | 139,3 / 554 | 123,5 / 558 |
+
+Un refactor del mismo cambio también movió el callback async del bulkhead a un helper compartido; el nivel extra de llamada impidió que C2 inlineara el camino apilado, y el escape analysis dejó de eliminar un objeto (la pila de cuatro políticas pasó de 200 a 224 B/op). El gate de allocations lo detectó; el callback volvió a un solo método.
+
+**Hedge** (nuevo, sin base; ns/op y B/op, 1 / 4 threads). `resilience4j-hedge` de Resilience4j 2.4.0 con la misma configuración (los ajustes están en el Javadoc de `HedgeBenchmark`):
+
+| Benchmark | resilience4cata | Resilience4j 2.4.0 | Hedge a mano con `CompletableFuture` |
+|---|---:|---:|---:|
+| primer intento ya completado | 9,4 / 9,7 ns, 24 B | — | — |
+| el primer intento gana antes de la espera | 154 / 267 ns, 216 B | 3601 / 5577 ns, 1561 B | 649 / 1968 ns, 297 B |
+| igual, sin presupuesto de hedges | 150 / 268 ns, 216 B | | |
+| el hedge salta (espera de 1 ms; µs) | 2114 / 2116 µs | 1067 / 1070 µs | |
+
+Cuando el hedge salta, el tiempo es la espera más la precisión del timer de cada librería: el nuestro trabaja en ticks de un dieciseisavo de la espera, al menos 1 ms, y salta hasta unos dos ticks tarde, así que una espera de 1 ms hace el hedge después de unos 2 ms; el executor programado de Resilience4j salta a tiempo pero deja encolada cada espera cancelada, que es donde se va la mayor parte de su costo en el camino común. Las subclases generadas sin `final` no cambiaron nada medible (`SubclassBenchmark` dentro del ruido).
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos (`-f 1 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`, unos 4 minutos) y falla si alguno asigna su presupuesto + 1 B/op o más, o si falta en los resultados. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.

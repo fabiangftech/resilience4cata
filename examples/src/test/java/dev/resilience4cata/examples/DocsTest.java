@@ -21,7 +21,8 @@ import org.junit.jupiter.api.Test;
  * Keeps the documentation site ({@code docs/}) honest.
  *
  * <p>A code block on a page is preceded by {@code <!-- snippet: id -->} and must be identical to the region
- * {@code tag::id[]} … {@code end::id[]} of a file under {@code examples/src/test} (a marker is a line
+ * {@code tag::id[]} … {@code end::id[]} of a file under {@code examples/src/test}, or under {@code spring/src/test}
+ * for the Spring Boot guide, whose code needs Spring and runs in that module's own tests (a marker is a line
  * starting with {@code //}, {@code #} or {@code <!--}; marker lines are dropped and the region is dedented), so every snippet on the site compiles and runs. In the
  * user pages ({@link #CHECKED_DIRECTORIES}) every {@code java} block needs such a marker, or
  * {@code <!-- not-compiled: reason -->} when it cannot compile on purpose (a wrong example, generated code).
@@ -30,7 +31,8 @@ import org.junit.jupiter.api.Test;
 class DocsTest {
 
     private static final Path DOCS = Path.of("..", "docs");
-    private static final Path SOURCES = Path.of("src", "test");
+    /** Where the regions are: these examples, and the Spring module's tests (the Spring Boot guide's code). */
+    private static final List<Path> SOURCES = List.of(Path.of("src", "test"), Path.of("..", "spring", "src", "test"));
     private static final List<String> LANGUAGES = List.of("en", "es");
     /** Pages whose {@code java} blocks must all be compiled; the landing page is {@code README.md}. */
     private static final List<String> CHECKED_DIRECTORIES = List.of("start", "policies", "guides", "observability", "testing", "migrate");
@@ -56,7 +58,7 @@ class DocsTest {
                     }
                     String expected = regions.get(block.id());
                     if (expected == null) {
-                        problems.add(block.where() + ": no region tag::" + block.id() + "[] under examples/src/test");
+                        problems.add(block.where() + ": no region tag::" + block.id() + "[] under examples/src/test or spring/src/test");
                     } else if (!expected.equals(block.code())) {
                         problems.add(block.where() + ": snippet '" + block.id() + "' differs from its region:\n--- page\n"
                                 + block.code() + "\n--- examples\n" + expected);
@@ -150,10 +152,17 @@ class DocsTest {
         return blocks;
     }
 
-    /** Every {@code tag::id[]} region under {@code examples/src/test}, dedented, without marker lines. */
+    /** Every {@code tag::id[]} region under {@link #SOURCES}, dedented, without marker lines. */
     static Map<String, String> regions() {
         Map<String, String> regions = new LinkedHashMap<>();
-        try (Stream<Path> files = Files.walk(SOURCES)) {
+        for (Path sources : SOURCES) {
+            regions(sources, regions);
+        }
+        return regions;
+    }
+
+    private static void regions(Path sources, Map<String, String> regions) {
+        try (Stream<Path> files = Files.walk(sources)) {
             for (Path file : files.filter(Files::isRegularFile).sorted().toList()) {
                 List<String> lines = read(file);
                 Map<String, List<String>> open = new LinkedHashMap<>();
@@ -187,7 +196,6 @@ class DocsTest {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return regions;
     }
 
     private static String dedent(List<String> lines) {

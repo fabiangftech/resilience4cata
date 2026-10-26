@@ -10,6 +10,7 @@ import dev.resilience4cata.CircuitBreakerHandle;
 import dev.resilience4cata.Pipeline;
 import dev.resilience4cata.RateLimitExceededException;
 import dev.resilience4cata.ResilienceRegistry;
+import dev.resilience4cata.event.HedgeEvent;
 import dev.resilience4cata.event.RetryEvent;
 import dev.resilience4cata.testkit.ManualClock;
 import dev.resilience4cata.testkit.ResilienceTesting;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -157,6 +159,42 @@ class MicrometerMetricsTest {
     }
 
     @Test
+    void hedgesAreCountedByInstanceAndReason() {
+        Pipeline<String> quotes = Pipeline.builder(registry, "quotes", String.class)
+                .hedge(h -> h.delay(Duration.ofMillis(10)).maxAttempts(3).budgetPercent(0))
+                .build();
+        Pipeline<String> strict = Pipeline.builder(registry, "strict", String.class)
+                .hedge(h -> h.abortOn(List.of(IllegalStateException.class)).budgetPercent(0))
+                .build();
+        Pipeline<String> rare = Pipeline.builder(registry, "rare", String.class)
+                .hedge(h -> h.budgetMinHedgesPerSecond(0))
+                .build();
+        CompletableFuture<String> slow = new CompletableFuture<>();
+        int[] calls = {0};
+
+        CompletableFuture<String> won = quotes.executeAsync(() -> calls[0]++ == 0 ? slow : CompletableFuture.completedFuture("fast"));
+        clock.advance(Duration.ofMillis(10));
+        CompletableFuture<String> allFailed = quotes.executeAsync(() -> CompletableFuture.failedFuture(new IOException("down")));
+        CompletableFuture<String> aborted = strict.executeAsync(() -> CompletableFuture.failedFuture(new IllegalStateException("bad")));
+        CompletableFuture<String> noBudget = rare.executeAsync(() -> CompletableFuture.failedFuture(new IOException("down")));
+        clock.advance(Duration.ZERO); // a failure starts the next attempt off the completing thread: here, at the next advance
+
+        assertThat(won).isCompletedWithValue("fast");
+        assertThat(allFailed).isCompletedExceptionally();
+        assertThat(aborted).isCompletedExceptionally();
+        assertThat(noBudget).isCompletedExceptionally();
+        assertThat(counters()).isEqualTo(Map.of(
+                "r4c.hedge.hedged{instance=quotes,reason=delay}", 1.0,
+                "r4c.hedge.hedged{instance=quotes,reason=failure}", 2.0,
+                "r4c.hedge.won{instance=quotes}", 1.0,
+                "r4c.hedge.failed{instance=quotes}", 1.0,
+                "r4c.hedge.skipped{instance=strict,reason=aborted}", 1.0,
+                "r4c.hedge.failed{instance=strict}", 1.0,
+                "r4c.hedge.skipped{instance=rare,reason=budget_exhausted}", 1.0,
+                "r4c.hedge.failed{instance=rare}", 1.0));
+    }
+
+    @Test
     void timeoutsAndFallbacksAreCounted() throws Exception {
         Pipeline<String> pipeline = Pipeline.builder(registry, "catalog", String.class)
                 .timeout(t -> t.timeout(Duration.ofSeconds(1)))
@@ -234,14 +272,20 @@ class MicrometerMetricsTest {
         EventCounters counters = new EventCounters(meters);
         RetryEvent.Retrying retrying = new RetryEvent.Retrying("hot", 0, 1, Duration.ZERO, null);
         RetryEvent.GaveUp gaveUp = new RetryEvent.GaveUp("hot", 0, 3, RetryEvent.Reason.MAX_ATTEMPTS, null);
+        HedgeEvent.Hedged hedged = new HedgeEvent.Hedged("hot", 0, 2, HedgeEvent.Reason.DELAY);
+        HedgeEvent.Skipped skipped = new HedgeEvent.Skipped("hot", 0, 2, HedgeEvent.SkipReason.BUDGET_EXHAUSTED);
         counters.onEvent(retrying);
         counters.onEvent(gaveUp);
+        counters.onEvent(hedged);
+        counters.onEvent(skipped);
         List<Meter> registered = List.copyOf(meters.getMeters());
         com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
         long thread = Thread.currentThread().threadId();
         for (int i = 0; i < 20_000; i++) {
             counters.onEvent(retrying);
             counters.onEvent(gaveUp);
+            counters.onEvent(hedged);
+            counters.onEvent(skipped);
         }
 
         // Measured in rounds until the JIT is done (a slow CI machine may not be after the warm-up); a real
@@ -254,11 +298,13 @@ class MicrometerMetricsTest {
             for (int i = 0; i < 100_000; i++) {
                 counters.onEvent(retrying);
                 counters.onEvent(gaveUp);
+                counters.onEvent(hedged);
+                counters.onEvent(skipped);
             }
             allocated = Math.min(allocated, threads.getThreadAllocatedBytes(thread) - before);
         }
 
-        assertThat(allocated).as("bytes allocated by 200k cached events (the measurement may allocate a little)")
+        assertThat(allocated).as("bytes allocated by 400k cached events (the measurement may allocate a little)")
                 .isLessThan(1024);
         assertThat(meters.getMeters()).containsExactlyInAnyOrderElementsOf(registered);
         assertThat(meters.get("r4c.retry.retries").counter().count()).isEqualTo(20_001 + 100_000.0 * rounds);

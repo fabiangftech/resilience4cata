@@ -12,6 +12,15 @@ updates:
       # the build gets JUnit through the junit-bom entry, which these rules do not touch.
       - dependency-name: 'org.junit.jupiter:junit-jupiter-api'
       - dependency-name: 'org.junit.platform:junit-platform-testkit'
+      # The oldest Spring Boot that resilience4cata-spring supports (springBootMinimum): its main code compiles
+      # against these artifacts. Its tests get Spring Boot through the spring-boot-dependencies entry (springBoot),
+      # which these rules do not touch.
+      - dependency-name: 'org.springframework.boot:spring-boot-autoconfigure'
+      - dependency-name: 'org.springframework.boot:spring-boot-health'
+      - dependency-name: 'org.springframework.boot:spring-boot-actuator'
+      - dependency-name: 'org.springframework.boot:spring-boot-actuator-autoconfigure'
+      - dependency-name: 'org.springframework.boot:spring-boot-autoconfigure-processor'
+      - dependency-name: 'org.springframework.boot:spring-boot-configuration-processor'
     groups:
       junit:
         patterns: ['org.junit*']

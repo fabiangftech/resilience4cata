@@ -14,6 +14,7 @@ Agrega cuatro artefactos a tu build: el BOM, `core`, las anotaciones y el proces
 | `resilience4cata-processor` | El procesador de anotaciones que genera el código. **Obligatorio** cuando usas las anotaciones: no hay alternativa por reflexión | `annotationProcessor` (Gradle), `annotationProcessorPaths` (Maven). Nunca en el class path de ejecución |
 | `resilience4cata-config` | Opcional. Configuración externa: archivos properties, variables de entorno, propiedades del sistema ([guía de configuración](../guides/configuration.md)) | `implementation` / scope por defecto |
 | `resilience4cata-micrometer` | Opcional, desde 0.3.0. Métricas de Micrometer: counters a partir de eventos, gauges para breakers, bulkheads y rate limiters ([guía de Micrometer](../guides/micrometer.md)). Trae `micrometer-core` | `implementation` / scope por defecto |
+| `resilience4cata-spring` | Opcional, desde 0.4.0. Autoconfiguración para Spring Boot 4.1+: el registry desde `application.yml`, beans anotados protegidos, indicador de salud, endpoint de actuator, métricas ([guía de Spring Boot](../guides/spring.md)). Trae `core` y `config` | `implementation` / scope por defecto |
 | `resilience4cata-testkit` | Opcional. `ManualClock` y `ResilienceTesting` para tests deterministas ([guía de tests](../guides/testing.md)). No depende de JUnit | `testImplementation` / `test` |
 | `resilience4cata-junit` | Opcional, desde 0.3.0. Extensión de JUnit Jupiter (`@ResilienceTest`): un `ManualClock` nuevo y un registry sobre él para cada test, como parámetros ([guía de tests](../guides/testing.md#junit)). Trae testkit; necesita JUnit 5.10 o posterior, JUnit 6 incluido | `testImplementation` / `test` |
 
@@ -158,6 +159,57 @@ No hay nada que agregar: la configuración de `maven-compiler-plugin` también s
 
 <!-- tabs:end -->
 
+## Spring Boot
+
+En una aplicación Spring Boot 4.1+, depende de `resilience4cata-spring` en lugar de `core` (trae `core` y `config`); las anotaciones y el procesador quedan como arriba. La [guía de Spring Boot](../guides/spring.md) cubre el resto.
+
+<!-- tabs:start -->
+
+#### **Gradle**
+
+```groovy
+dependencies {
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.4.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.4.0')
+
+    implementation 'dev.resilience4cata:resilience4cata-spring'           // brings core and config
+    compileOnly 'dev.resilience4cata:resilience4cata-annotations'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
+}
+```
+
+#### **Gradle (Kotlin)**
+
+```kotlin
+dependencies {
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:0.4.0")
+    implementation(r4cBom)
+    annotationProcessor(r4cBom)
+
+    implementation("dev.resilience4cata:resilience4cata-spring")           // brings core and config
+    compileOnly("dev.resilience4cata:resilience4cata-annotations")
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor")
+}
+```
+
+#### **Maven**
+
+```xml
+<!-- with resilience4cata-bom imported in <dependencyManagement> -->
+<dependency>
+  <groupId>dev.resilience4cata</groupId>
+  <artifactId>resilience4cata-spring</artifactId>
+</dependency>
+<dependency>
+  <groupId>dev.resilience4cata</groupId>
+  <artifactId>resilience4cata-annotations</artifactId>
+  <scope>provided</scope>
+</dependency>
+<!-- and resilience4cata-processor in annotationProcessorPaths, as above -->
+```
+
+<!-- tabs:end -->
+
 ## Verifica que funciona
 
 Anota un método de una interfaz (el [inicio rápido](quickstart.md) tiene una) y compila. Junto a la interfaz, el procesador escribe `<Interfaz>$Resilient.java`:
@@ -272,6 +324,30 @@ Los builds que convierten cada advertencia en error funcionan. `javac` advierte 
 
 > [!TIP]
 > Declara cada interfaz anotada en su propio archivo. Una interfaz anotada escrita como segundo tipo de nivel superior, no público, en el archivo de otro tipo hace que la clase generada dispare la advertencia de lint `auxiliaryclass` de `javac`, que `-Werror` convierte en error.
+
+## Imagen nativa
+
+GraalVM Native Image no necesita configuración tuya; la traen los jars:
+
+- **El procesador escribe metadatos de alcanzabilidad para cada clase generada**, en la salida de clases junto a ella: `META-INF/native-image/dev.resilience4cata.generated/<clase generada>/reachability-metadata.json`. Registra los constructores públicos de la clase para reflexión, que es lo que usan `Resilient.of` y `Resilient.create` para encontrarlos (una vez por instancia, nunca por llamada). Native Image lee todos los archivos con ese nombre bajo `META-INF/native-image` en el class path. Para `com.acme.PaymentClient`:
+
+  ```json
+  {
+    "reflection": [
+      {
+        "condition": {"typeReached": "com.acme.PaymentClient"},
+        "type": "com.acme.PaymentClient$Resilient",
+        "allPublicConstructors": true
+      }
+    ]
+  }
+  ```
+
+  Para una interfaz, la entrada aplica una vez que la interfaz es alcanzada (se inicializó una implementación suya, que `Resilient.of` necesita de todos modos). Para una clase anotada, la condición es `dev.resilience4cata.Resilient`, porque `Resilient.create(C.class, ...)` puede ejecutarse antes de que `C` se inicialice; también se registran los tipos array de los constructores varargs.
+- **`core` inicializa sus hilos de fondo en tiempo de ejecución.** El watchdog de timeouts, el temporizador de timeouts async y el temporizador de esperas async los arrancan clases holder perezosas; `core` trae `META-INF/native-image/dev.resilience4cata/resilience4cata-core/native-image.properties` con `--initialize-at-run-time` para esos holders, así que un framework que inicializa clases en tiempo de build (Quarkus lo hace por defecto) nunca deja un hilo arrancado en la imagen. Crea el `ResilienceRegistry` y los servicios envueltos en tiempo de ejecución, no en un inicializador estático que corra durante el build de la imagen.
+- Llamar directamente al constructor generado (`new StockService$Resilient(registry, warehouse)`) no usa reflexión.
+
+Los metadatos usan el formato de un solo archivo de GraalVM for JDK 23 y posteriores (ver [Reachability Metadata](https://www.graalvm.org/latest/reference-manual/native-image/metadata/)). Con un GraalVM anterior, registra cada clase `…$Resilient` con sus constructores públicos en tu propio `reflect-config.json`. Los builds nativos todavía no forman parte de la suite de tests.
 
 ## Solución de problemas
 

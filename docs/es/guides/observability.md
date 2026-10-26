@@ -20,6 +20,10 @@ Cada evento implementa la interfaz sellada `dev.resilience4cata.event.Resilience
 | Circuit breaker | `CircuitBreakerEvent.CallNotPermitted` | `CircuitBreakerState state` | una llamada es rechazada (`OPEN`, `FORCED_OPEN`, o `HALF_OPEN` con todas las pruebas tomadas) |
 | Retry | `RetryEvent.Retrying` | `int attempt`, `Duration delay`, `@Nullable Throwable failure` | un intento falló y se ejecutará otro después de `delay`; `failure` es `null` cuando un [classifier](classifiers.md) rechazó un resultado |
 | Retry | `RetryEvent.GaveUp` | `int attempts`, `RetryEvent.Reason reason`, `@Nullable Throwable failure` | el retry se detiene sin un éxito: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (el fallo no está en `retryOn`, está en `abortOn`, o es la `CallNotPermittedException` de un breaker abierto), `INTERRUPTED`, `CLASSIFIER_FAILED`, `BUDGET_EXHAUSTED` (el [presupuesto de reintentos](../policies/retry.md#presupuesto-de-reintentos) se agotó) |
+| Hedge | `HedgeEvent.Hedged` | `int attempt`, `HedgeEvent.Reason reason` | un [hedge](../policies/hedge.md) inició el intento `attempt` (2 o más) junto a los demás: `DELAY` (sin resultado dentro de `delay`) o `FAILURE` (un intento falló con un fallo de `hedgeOn`) |
+| Hedge | `HedgeEvent.Won` | `int attempt` | el intento `attempt` (2 o más) tuvo éxito primero y los demás se cancelaron; no se publica cuando gana el primer intento |
+| Hedge | `HedgeEvent.Skipped` | `int attempt`, `HedgeEvent.SkipReason reason` | un hedge que habría empezado no empezó: `BUDGET_EXHAUSTED` (el presupuesto de hedges se agotó), `REJECTED` (una política interna rechazó un intento), `ABORTED` (un fallo de `abortOn`, o que no está en `hedgeOn`, terminó la llamada) |
+| Hedge | `HedgeEvent.Failed` | `int attempts`, `Throwable failure` | la llamada con hedge falla con `failure` tras `attempts` intentos |
 | Rate limiter | `RateLimiterEvent.Rejected` | ninguno | una llamada es rechazada con `RateLimitExceededException` |
 | Timeout | `TimeoutEvent.TimedOut` | `Duration timeout` | una llamada excede su timeout |
 | Bulkhead | `BulkheadEvent.Rejected` | `int maxConcurrent` | una llamada es rechazada con `BulkheadFullException` |
@@ -86,6 +90,7 @@ for (RateLimiterSnapshot r : snapshot.rateLimiters()) {
 | `BulkheadSnapshot` | `instance`, `concurrentCalls`, `waitingCalls`, `maxConcurrent`, y el método `availableSlots()` |
 | `RateLimiterSnapshot` | `instance`, `availablePermits`, `permits` |
 | `RetrySnapshot` | `instance`, `config` (el `RetryConfig` resuelto) |
+| `HedgeSnapshot` | `instance`, `config` (el `HedgeConfig` resuelto), `budget` (`calls`, `hedges`, `allowedHedges` en la ventana del presupuesto; `null` sin presupuesto) |
 | `TimeoutSnapshot` | `instance`, `config` (el `TimeoutConfig` resuelto) |
 
 ## Handles :id=handles
@@ -115,6 +120,10 @@ Los nombres van en minúsculas y separados por puntos, como recomienda Micromete
 | `r4c.circuitbreaker.transitions` | counter | `instance`, `from`, `to` (estados en minúsculas) | `StateTransition` |
 | `r4c.retry.retries` | counter | `instance` | `Retrying` |
 | `r4c.retry.gave.up` | counter | `instance`, `reason` (`Reason` en minúsculas) | `GaveUp` |
+| `r4c.hedge.hedged` | counter | `instance`, `reason` = `delay` \| `failure` | `Hedged` |
+| `r4c.hedge.won` | counter | `instance` | `Won` |
+| `r4c.hedge.skipped` | counter | `instance`, `reason` = `budget_exhausted` \| `rejected` \| `aborted` | `Skipped` |
+| `r4c.hedge.failed` | counter | `instance` | `Failed` |
 | `r4c.timeout.timed.out` | counter | `instance` | `TimedOut` |
 | `r4c.fallback.applied` | counter | `instance` | `Applied` |
 | `r4c.circuitbreaker.state` | gauge | `instance`, `state`: 1 para el estado actual, 0 para los demás | `state()` |

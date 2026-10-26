@@ -70,6 +70,10 @@ Los nombres y tags son los de [Observabilidad](observability.md#metric-names); l
 | `r4c.circuitbreaker.transitions` | counter | `instance`, `from`, `to` | `r4c_circuitbreaker_transitions_total` |
 | `r4c.retry.retries` | counter | `instance` | `r4c_retry_retries_total` |
 | `r4c.retry.gave.up` | counter | `instance`, `reason` | `r4c_retry_gave_up_total` |
+| `r4c.hedge.hedged` | counter | `instance`, `reason` | `r4c_hedge_hedged_total` |
+| `r4c.hedge.won` | counter | `instance` | `r4c_hedge_won_total` |
+| `r4c.hedge.skipped` | counter | `instance`, `reason` | `r4c_hedge_skipped_total` |
+| `r4c.hedge.failed` | counter | `instance` | `r4c_hedge_failed_total` |
 | `r4c.timeout.timed.out` | counter | `instance` | `r4c_timeout_timed_out_total` |
 | `r4c.fallback.applied` | counter | `instance` | `r4c_fallback_applied_total` |
 | `r4c.circuitbreaker.state` | gauge | `instance`, `state` | `r4c_circuitbreaker_state` |
@@ -80,12 +84,12 @@ Los nombres y tags son los de [Observabilidad](observability.md#metric-names); l
 | `r4c.bulkhead.max.concurrent` | gauge | `instance` | `r4c_bulkhead_max_concurrent` |
 | `r4c.ratelimiter.available.permits` | gauge | `instance` | `r4c_ratelimiter_available_permits` |
 
-Los valores de los tags van en minúsculas: estados `closed`, `open`, `half_open`, `forced_open`, `disabled`; motivos `max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed` (un motivo agregado en una versión posterior aparece solo).
+Los valores de los tags van en minúsculas: estados `closed`, `open`, `half_open`, `forced_open`, `disabled`; motivos del retry `max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`; motivos del hedge `delay`, `failure` (`hedged`) y `budget_exhausted`, `rejected`, `aborted` (`skipped`) (un motivo agregado en una versión posterior aparece solo).
 
 Cuándo aparece cada meter:
 
 - **Los counters** se registran en su primer evento: un servicio que nunca reintentó todavía no tiene serie `r4c_retry_retries_total`. En PromQL, `… or vector(0)` llena el hueco cuando necesitas un cero.
-- **Los gauges** se registran al conectar la instancia: las cinco series `state` del circuit breaker (una vale 1, las demás 0), sus dos tasas, los tres gauges del bulkhead y el del rate limiter. Los retries, timeouts y fallbacks no tienen gauges.
+- **Los gauges** se registran al conectar la instancia: las cinco series `state` del circuit breaker (una vale 1, las demás 0), sus dos tasas, los tres gauges del bulkhead y el del rate limiter. Los retries, hedges, timeouts y fallbacks no tienen gauges.
 - **Las tasas son NaN** hasta que la ventana del breaker contiene `minimumCalls` llamadas, mientras el breaker está abierto, forzado abierto o desactivado (entonces no hay ventana) y, para la tasa de llamadas lentas, cuando la detección de llamadas lentas está apagada (sin `slowCallDuration`). Prometheus guarda NaN como un valor; los gráficos muestran un hueco.
 
 ## Lo que muestra Prometheus :id=prometheus
@@ -137,6 +141,7 @@ Cada serie lleva `instance`, y sus otros tags tienen un conjunto fijo de valores
 
 - un circuit breaker: 7 series de gauges, más hasta 25 series de `transitions` (en la práctica, las pocas transiciones que ocurren) y una de `rejected`;
 - un retry: una serie `retries` y una serie `gave.up` por cada motivo que ocurrió;
+- un hedge: hasta dos series `hedged`, una `won`, una `failed` y una serie `skipped` por cada motivo que ocurrió;
 - un bulkhead: 3 gauges y una `rejected`; un rate limiter: 1 gauge y una `rejected`; un timeout o un fallback: un counter.
 
 Mantén acotados los ids de instancia: vienen de tu código (un `name` de anotación, un método, un id de pipeline), así que lo están, salvo que construyas ids de pipeline con datos de la request. No lo hagas nunca, ni por las métricas ni por las propias políticas, que entonces nunca compartirían estado. Prefiere un `name` compartido por los métodos que llaman a la misma dependencia: una serie por dependencia se lee mejor que una por método. No agregues tú la clase ni el mensaje de la excepción como tag: en la práctica no están acotados.

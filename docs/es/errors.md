@@ -16,12 +16,14 @@ y cómo corregirlo. Los mensajes están en inglés.
 | `R4C-ATR` | procesador de anotaciones | valores de atributos |
 | `R4C-CMP` | procesador de anotaciones | anotaciones compuestas (bundles `@ResiliencePolicy`) |
 | `R4C-ASY` | procesador de anotaciones | métodos asíncronos |
+| `R4C-HDG` | procesador de anotaciones | `@Hedge` |
 | `R4C-CLS` | procesador de anotaciones | clases `classifier` y `onExhaustedResult` |
 | `R4C-FB` | procesador de anotaciones | `@Fallback` |
 | `R4C-SUB` | procesador de anotaciones | clases anotadas (subclases generadas) |
 | `R4C-RT` | `resilience4cata-core` en ejecución | `Resilient.of`, `Resilient.create`, `Pipeline.Builder` |
 | `R4C-REG` | `resilience4cata-core` en ejecución | builders `*Config`, `ResilienceRegistry` y su builder: configuraciones con nombre, instancias |
 | `R4C-CFG` | `resilience4cata-config` en ejecución | configuración externa (`ResilienceConfig`) |
+| `R4C-SPR` | `resilience4cata-spring` al arrancar | la integración con Spring Boot: beans que no pueden protegerse como se declararon |
 | `R4C-TK` | `resilience4cata-testkit` en las pruebas | `ManualClock`, `ResilienceTesting` |
 | `R4C-JU` | `resilience4cata-junit` en las pruebas | la extensión de JUnit (`@ResilienceTest`) |
 
@@ -158,9 +160,10 @@ dependencies {
 
 ### R4C-APT-005
 
-**Causa:** el procesador no pudo escribir un archivo fuente generado: falló el `Filer` del compilador, por
-ejemplo porque el directorio de fuentes generadas no admite escritura, o porque otro procesador o un archivo
-fuente ya define `<Interface>$Resilient`.
+**Causa:** el procesador no pudo escribir un archivo fuente generado, o el archivo de metadatos de imagen
+nativa que escribe junto a él (`META-INF/native-image/dev.resilience4cata.generated/<Interface>$Resilient/reachability-metadata.json`
+en la salida de clases): falló el `Filer` del compilador, por ejemplo porque el directorio de salida no
+admite escritura, o porque otro procesador o un archivo fuente ya define `<Interface>$Resilient`.
 
 **Corrección:** revisa el directorio de fuentes generadas del build (con Gradle,
 `build/generated/sources/annotationProcessor`), asegúrate de que ninguna clase escrita a mano se llame
@@ -357,9 +360,9 @@ public interface PriceClient {
 
 ### R4C-ATR-007
 
-**Causa:** un atributo del presupuesto de reintentos está fuera de rango: `budgetPercent` es negativo,
-infinito o NaN, `budgetMinRetriesPerSecond` es negativo, o `budgetWindow` es menor que 1 s o mayor que
-1 h. (Una `budgetWindow` que ni siquiera es una duración es [R4C-ATR-001](#r4c-atr-001).)
+**Causa:** un atributo del presupuesto de reintentos o de hedge está fuera de rango: `budgetPercent` es
+negativo, infinito o NaN, `budgetMinRetriesPerSecond` (`@Retry`) o `budgetMinHedgesPerSecond` (`@Hedge`) es
+negativo, o `budgetWindow` es menor que 1 s o mayor que 1 h. (Una `budgetWindow` que ni siquiera es una duración es [R4C-ATR-001](#r4c-atr-001).)
 
 **Incorrecto:**
 
@@ -385,6 +388,41 @@ import dev.resilience4cata.annotation.Retry;
 public interface PriceClient {
     @Retry(budgetPercent = 20, budgetMinRetriesPerSecond = 1, budgetWindow = "10s")
     String price(String sku);
+}
+```
+
+### R4C-ATR-008
+
+**Causa:** `@Hedge(maxAttempts = …)` es menor que 2 o mayor que 10. `maxAttempts` cuenta todos los intentos,
+incluido el primero, así que 1 nunca lanzaría un hedge; más de 10 intentos en vuelo para una llamada no se
+admiten.
+
+**Incorrecto:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Hedge;
+import java.util.concurrent.CompletableFuture;
+
+public interface QuoteClient {
+    @Hedge(maxAttempts = 1, delay = "50ms")
+    CompletableFuture<String> quote(String sku);
+}
+```
+
+**Corrección:** usa un valor de 2 (un hedge, el valor por defecto) a 10, o quita `@Hedge` si la llamada no debe
+cubrirse.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Hedge;
+import java.util.concurrent.CompletableFuture;
+
+public interface QuoteClient {
+    @Hedge(maxAttempts = 2, delay = "50ms")
+    CompletableFuture<String> quote(String sku);
 }
 ```
 
@@ -529,6 +567,79 @@ import java.util.concurrent.CompletionStage;
 public interface PriceClient {
     @Retry
     CompletionStage<Integer> price(String sku);
+}
+```
+
+## Procesador de anotaciones: hedges (R4C-HDG)
+
+### R4C-HDG-001
+
+**Causa:** `@Hedge` se aplica a un método sincrónico: uno que no devuelve `CompletionStage<T>` ni
+`CompletableFuture<T>`. Un hedge vuelve a lanzar la llamada mientras el primer intento sigue en curso, y eso
+necesita una llamada asíncrona. Un `@Hedge` en el tipo, o en un bundle `@ResiliencePolicy`, se aplica a todos
+los métodos, así que se informa cada método sincrónico del tipo.
+
+**Incorrecto:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Hedge;
+
+public interface QuoteClient {
+    @Hedge(delay = "50ms")
+    String quote(String sku);
+}
+```
+
+**Corrección:** devuelve un `CompletableFuture` (o un `CompletionStage`), o quita `@Hedge` del método. Para un `@Hedge` en el tipo, anota los métodos async en lugar del tipo.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Hedge;
+import java.util.concurrent.CompletableFuture;
+
+public interface QuoteClient {
+    @Hedge(delay = "50ms")
+    CompletableFuture<String> quote(String sku);
+}
+```
+
+### R4C-HDG-002
+
+**Causa:** `@Hedge` y `@Retry` se aplican al mismo método, directamente, en el tipo o a través de bundles
+`@ResiliencePolicy`. Ocupan el mismo lugar en el orden de las políticas, y un retry alrededor de un hedge
+multiplicaría los intentos.
+
+**Incorrecto:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Hedge;
+import dev.resilience4cata.annotation.Retry;
+import java.util.concurrent.CompletableFuture;
+
+public interface QuoteClient {
+    @Hedge(delay = "50ms")
+    @Retry(maxAttempts = 3)
+    CompletableFuture<String> quote(String sku);
+}
+```
+
+**Corrección:** quédate con uno. Un hedge ya lanza un intento nuevo enseguida cuando uno falla con una falla de
+`hedgeOn`, así que `maxAttempts` en el hedge cubre el reintento simple.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Hedge;
+import java.util.concurrent.CompletableFuture;
+
+public interface QuoteClient {
+    @Hedge(delay = "50ms", maxAttempts = 3)
+    CompletableFuture<String> quote(String sku);
 }
 ```
 
@@ -2195,6 +2306,21 @@ en anotaciones es [R4C-CLS-012](#r4c-cls-012).
 
 **Corrección:** añade un circuit breaker, o quita el clasificador del circuit breaker.
 
+### R4C-RT-018
+
+**Causa:** se llama a `execute(...)` o `run(...)` sobre un pipeline que tiene un hedge (`IllegalStateException`).
+Un hedge vuelve a lanzar la llamada mientras el primer intento sigue en curso, y eso necesita una llamada que
+devuelva un `CompletionStage`.
+
+**Corrección:** llama a `executeAsync(() -> client.callAsync(...))`, o quita `.hedge(...)` del pipeline.
+
+### R4C-RT-019
+
+**Causa:** el pipeline tiene a la vez `.retry(...)` y `.hedge(...)` (`IllegalStateException` desde `build()`).
+
+**Corrección:** quédate con uno: un hedge ya lanza un intento nuevo cuando uno falla (`hedgeOn`), y un retry
+alrededor multiplicaría los intentos. Es el equivalente en ejecución de [R4C-HDG-002](#r4c-hdg-002).
+
 ## Ejecución: registro y configuración de políticas (R4C-REG)
 
 Los lanza `resilience4cata-core` cuando se construye la configuración de una política (`RetryConfig.builder()`
@@ -2498,6 +2624,45 @@ solo existen una vez envueltos los servicios). El mensaje sugiere el id más par
 
 **Corrección:** usa un id de instancia existente: el `name` de la política, o
 `<interface>#<method>(<parameter types>)` si no tiene.
+
+## Ejecución: integración con Spring Boot (R4C-SPR)
+
+`resilience4cata-spring` revisa los beans al arrancar y detiene el arranque con estos códigos cuando un bean
+perdería su protección sin aviso. Spring Boot muestra el mensaje como *Description* y la corrección como
+*Action* de su informe "APPLICATION FAILED TO START". Consulta la [guía de Spring Boot](guides/spring.md).
+
+### R4C-SPR-001
+
+**Causa:** un bean es una instancia de una clase anotada `C` pero no de la `C$Resilient` generada, así que
+sus políticas nunca se ejecutarían: un método `@Bean` devolvió `new C(...)`, el bean se registró con un
+supplier, o es una subclase de `C` sin anotaciones propias (`BeanCreationException`).
+
+```text
+[R4C-SPR-001] Bean 'pricing' is an instance of com.acme.PricingService, which has resilience4cata annotations, but not of the generated com.acme.PricingService$Resilient, so its policies would not run. ...
+```
+
+**Corrección:** registra la clase misma (escaneo de componentes, `@Import`), para que Spring instancie
+`C$Resilient`; o devuelve `new C$Resilient(registry, ...)` desde el método `@Bean`, con el
+`ResilienceRegistry` inyectado como parámetro; o anota la subclase. Para dejar el bean sin protección a
+propósito, pon su nombre en `resilience4cata.spring.exclude`.
+
+### R4C-SPR-002
+
+**Causa:** una clase `@Configuration` con métodos `@Bean` tiene además anotaciones de resilience4cata. Spring
+instancia su propia subclase CGLIB de una clase así, de modo que la subclase generada no puede usarse.
+
+**Corrección:** mueve los métodos anotados a una clase `@Component` o `@Service`, o declara la configuración
+con `@Configuration(proxyBeanMethods = false)`, que Spring no extiende.
+
+### R4C-SPR-003
+
+**Causa:** un bean implementa dos o más interfaces anotadas y ninguna extiende a todas las demás
+(`BeanCreationException`). El envoltorio generado de una interfaz implementa solo esa interfaz, así que el bean
+ya no podría inyectarse por las otras.
+
+**Corrección:** anota la clase en su lugar (su subclase generada conserva todas las interfaces y sigue siendo
+el tipo del bean), o declara una interfaz que extienda a las demás e implementa esa. Para envolver el bean tú
+mismo, ponlo en `resilience4cata.spring.exclude` y define un `@Bean` que devuelva `Resilient.of(...)`.
 
 ## Pruebas: testkit (R4C-TK)
 

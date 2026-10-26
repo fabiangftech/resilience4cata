@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.BulkheadConfig;
 import dev.resilience4cata.CircuitBreakerConfig;
+import dev.resilience4cata.HedgeConfig;
 import dev.resilience4cata.RateLimiterConfig;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.RetryConfig;
@@ -43,12 +44,14 @@ class ConfigurationReferenceTest {
                     Attribute.Kind.CLASSES, "lista de clases"));
     private static final Map<String, Function<ResilienceRegistry, Object>> RESOLVED = Map.of(
             "retry", r -> r.retryConfig(""),
+            "hedge", r -> r.hedgeConfig(""),
             "circuitBreaker", r -> r.circuitBreakerConfig(""),
             "rateLimiter", r -> r.rateLimiterConfig(""),
             "timeout", r -> r.timeoutConfig(""),
             "bulkhead", r -> r.bulkheadConfig(""));
     private static final Map<String, Object> BUILT_IN = Map.of(
             "retry", RetryConfig.DEFAULTS,
+            "hedge", HedgeConfig.DEFAULTS,
             "circuitBreaker", CircuitBreakerConfig.DEFAULTS,
             "rateLimiter", RateLimiterConfig.DEFAULTS,
             "timeout", TimeoutConfig.DEFAULTS,

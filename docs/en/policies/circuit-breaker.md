@@ -182,7 +182,7 @@ For a method that returns `CompletionStage<T>` or `CompletableFuture<T>`, the br
 CompletableFuture<Long> balanceAsync(String account);
 ```
 
-Slow calls are timed until the stage completes. See [Async methods](../guides/async.md).
+Slow calls are timed until the stage completes. A call whose future the caller cancels is not recorded, like an ignored call: a half-open permit is given back ([cancellation](../guides/async.md#cancellation)). See [Async methods](../guides/async.md).
 
 ## Same thing with `Pipeline`
 

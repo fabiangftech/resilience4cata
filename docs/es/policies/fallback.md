@@ -205,7 +205,7 @@ default CompletionStage<String> cachedDescription(String sku, Throwable failure)
 }
 ```
 
-Las fallas se desenvuelven de `CompletionException` antes de compararlas, así que un hermano que recibe `IOException` obtiene la `IOException`. Ver [Métodos async](../guides/async.md).
+Las fallas se desenvuelven de `CompletionException` antes de compararlas, así que un hermano que recibe `IOException` obtiene la `IOException`. Una llamada cuyo future cancela quien llama no recibe fallback, y cancelar mientras corre el stage del propio fallback cancela ese stage ([cancelación](../guides/async.md#cancelación)). Ver [Métodos async](../guides/async.md).
 
 ## Lo mismo con `Pipeline`
 

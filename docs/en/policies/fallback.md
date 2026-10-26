@@ -205,7 +205,7 @@ default CompletionStage<String> cachedDescription(String sku, Throwable failure)
 }
 ```
 
-Failures are unwrapped from `CompletionException` before matching, so a sibling taking `IOException` gets the `IOException`. See [Async methods](../guides/async.md).
+Failures are unwrapped from `CompletionException` before matching, so a sibling taking `IOException` gets the `IOException`. A call whose future the caller cancels gets no fallback, and cancelling while the fallback's own stage runs cancels that stage ([cancellation](../guides/async.md#cancellation)). See [Async methods](../guides/async.md).
 
 ## Same thing with `Pipeline`
 
