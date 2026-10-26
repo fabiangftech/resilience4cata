@@ -16,6 +16,7 @@ enum ProcessorError {
     PRIVATE_INTERFACE("R4C-APT-003", "annotations on a private interface"),
     UNKNOWN_ATTRIBUTE("R4C-APT-004", "attribute unknown to the processor: mismatched versions"),
     WRITE_FAILED("R4C-APT-005", "a generated file could not be written"),
+    INVALID_INJECT_OPTION("R4C-APT-006", "invalid -Ar4c.inject option, or Micronaut missing for it"),
 
     INVALID_DURATION("R4C-ATR-001", "invalid duration string"),
     DURATION_NOT_POSITIVE("R4C-ATR-002", "duration must be greater than zero"),

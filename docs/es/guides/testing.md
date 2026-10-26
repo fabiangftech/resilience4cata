@@ -10,7 +10,7 @@ La resiliencia trata sobre todo del tiempo: un retry espera 1 s, un breaker perm
 
 - **Las esperas con sleep avanzan el reloj en lugar de bloquear.** Un retry con una demora de 1 s retorna de inmediato, con el reloj 1 s más adelante.
 - **Las esperas se miden en él.** Un breaker permanece abierto hasta que la prueba avanza más allá de `waitInOpen`.
-- **Las tareas diferidas se ejecutan cuando el reloj pasa su plazo**, en el thread que llama a `advance`, antes de que retorne: retries async, esperas async del rate limiter, límites de espera async del bulkhead y timeouts async.
+- **Las tareas diferidas se ejecutan cuando el reloj pasa su plazo**, en el thread que llama a `advance`, antes de que retorne: retries async, esperas async del rate limiter, límites de espera async del bulkhead y timeouts async. Una tarea sin demora (un retry async con `delay = "0"`, un hedge tras una falla) también espera al siguiente `advance`: `advance(Duration.ZERO)` la ejecuta.
 - **Los timeouts sync se disparan exactamente en su plazo**, interrumpiendo el thread medido.
 - **Las esperas sync del bulkhead (`maxWait`) terminan en el reloj.**
 

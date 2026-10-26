@@ -63,7 +63,7 @@ public final class CentralConventionPlugin implements Plugin<Project> {
             String path = module.getPath() + ":" + PUBLISH_TASK;
             bundle.configure(task -> {
                 task.dependsOn(path);
-                task.getArtifactIds().add("resilience4cata-" + module.getName());
+                task.getArtifactIds().add(JavaLibraryConventionPlugin.artifactName(module));
             });
             module.getTasks().named(PUBLISH_TASK).configure(task -> task.mustRunAfter(clean));
         }));

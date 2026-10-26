@@ -14,6 +14,8 @@
 - **Guías**
   - [Configuración](/es/guides/configuration.md)
   - [Spring Boot](/es/guides/spring.md)
+  - [Micronaut](/es/guides/micronaut.md)
+  - [Quarkus](/es/guides/quarkus.md)
   - [Métodos async](/es/guides/async.md)
   - [Clases anotadas](/es/guides/annotated-classes.md)
   - [Bundles](/es/guides/bundles.md)

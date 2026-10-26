@@ -25,11 +25,26 @@ updates:
       - dependency-name: 'org.springframework.boot:spring-boot-autoconfigure-processor'
       - dependency-name: 'org.springframework.boot:spring-boot-configuration-processor'
       - dependency-name: 'org.springframework:spring-tx'
+      # The oldest Micronaut that resilience4cata-micronaut supports (micronautMinimum): its main code compiles
+      # against these artifacts. Its tests get Micronaut through the micronaut-platform entry (micronautPlatform),
+      # which these rules do not touch.
+      - dependency-name: 'io.micronaut:micronaut-inject'
+      - dependency-name: 'io.micronaut:micronaut-inject-java'
+      - dependency-name: 'io.micronaut:micronaut-management'
+      # The oldest Quarkus that resilience4cata-quarkus supports (quarkusMinimum): the extension's runtime and
+      # deployment modules compile against these artifacts. Its tests get Quarkus through the quarkus-bom entry and
+      # the io.quarkus plugin (quarkus), which these rules do not touch.
+      - dependency-name: 'io.quarkus:quarkus-arc'
+      - dependency-name: 'io.quarkus:quarkus-arc-deployment'
+      - dependency-name: 'io.quarkus:quarkus-extension-processor'
+      - dependency-name: 'org.eclipse.microprofile.health:microprofile-health-api'
     groups:
       junit:
         patterns: ['org.junit*']
       resilience4j:
         patterns: ['io.github.resilience4j:*']
+      quarkus:
+        patterns: ['io.quarkus*']
       openjdk-harnesses:
         patterns: ['org.openjdk.jmh:*', 'org.openjdk.jcstress:*']
 

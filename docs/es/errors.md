@@ -24,6 +24,8 @@ y cómo corregirlo. Los mensajes están en inglés.
 | `R4C-REG` | `resilience4cata-core` en ejecución | builders `*Config`, `ResilienceRegistry` y su builder: configuraciones con nombre, instancias |
 | `R4C-CFG` | `resilience4cata-config` en ejecución | configuración externa (`ResilienceConfig`) |
 | `R4C-SPR` | `resilience4cata-spring` al arrancar | la integración con Spring Boot: beans que no pueden protegerse como se declararon |
+| `R4C-MN` | `resilience4cata-micronaut` al arrancar o al crear un bean | la integración con Micronaut: beans que no pueden protegerse como se declararon |
+| `R4C-QK` | `resilience4cata-quarkus` mientras Quarkus construye la aplicación | la extensión de Quarkus: beans que no pueden protegerse como se declararon, o quedarían protegidos dos veces |
 | `R4C-TK` | `resilience4cata-testkit` en las pruebas | `ManualClock`, `ResilienceTesting` |
 | `R4C-JU` | `resilience4cata-junit` en las pruebas | la extensión de JUnit (`@ResilienceTest`) |
 
@@ -168,6 +170,39 @@ admite escritura, o porque otro procesador o un archivo fuente ya define `<Inter
 **Corrección:** revisa el directorio de fuentes generadas del build (con Gradle,
 `build/generated/sources/annotationProcessor`), asegúrate de que ninguna clase escrita a mano se llame
 `<Interface>$Resilient` y recompila tras `./gradlew clean`.
+
+### R4C-APT-006
+
+**Causa:** la opción del compilador `-Ar4c.inject` tiene un valor distinto de `micronaut`; o es
+`-Ar4c.inject=micronaut` pero `io.micronaut.context.annotation.Replaces` de Micronaut no está en el class path de
+compilación, así que la subclase generada de una clase anotada no puede reemplazar a la clase como bean de
+Micronaut. La opción se lee una vez por compilación; el error no tiene posición en el código.
+
+**Incorrecto** (compilado con `-Ar4c.inject=spring`):
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+public class InventoryService {
+    @Retry
+    public int stock(String sku) {
+        return 1;
+    }
+}
+```
+
+**Corrección:** usa `-Ar4c.inject=micronaut` en una aplicación Micronaut, con `io.micronaut:micronaut-inject` en el
+class path de compilación (toda aplicación Micronaut lo tiene); quita la opción con cualquier otro contenedor
+(Spring Boot no necesita ninguna: consulta la [guía de Spring Boot](guides/spring.md)). Consulta la
+[guía de Micronaut](guides/micronaut.md#classes).
+
+```groovy
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.add('-Ar4c.inject=micronaut')
+}
+```
 
 ## Procesador de anotaciones: valores de atributos (R4C-ATR)
 
@@ -2194,6 +2229,13 @@ dependencies {
 }
 ```
 
+En una imagen nativa de GraalVM, el mismo error significa que el procesador se ejecutó pero la imagen no
+alcanza la clase por reflexión: los metadatos de alcanzabilidad que escribe junto a los archivos de clase,
+`META-INF/native-image/dev.resilience4cata.generated/<type>$Resilient/reachability-metadata.json`, no estaban
+en el class path del build de la imagen, o un paso del build (shading, un filtro de recursos) los eliminó. El
+mensaje termina entonces con una frase que nombra ese archivo. Conserva la salida del procesador, metadatos
+incluidos, en el jar o directorio que lee `native-image`; ver [Imagen nativa](start/installation.md#imagen-nativa).
+
 ### R4C-RT-004
 
 **Causa:** la clase generada no tiene el constructor que espera esta versión de `resilience4cata-core`, o una
@@ -2681,6 +2723,153 @@ de un intento posterior exitoso falle con `UnexpectedRollbackException`.
 transacciones: una transacción por intento); o mueve `@Transactional` a otro bean al que llame el método
 reintentado; o, si se quiere a propósito una sola transacción compartida por todos los intentos, pon
 `resilience4cata.spring.allow-retry-inside-transaction=true`. `NOT_SUPPORTED` y `NEVER` no se reportan.
+
+## Ejecución: integración con Micronaut (R4C-MN)
+
+`resilience4cata-micronaut` revisa los beans y falla con estos códigos cuando un bean perdería su protección sin
+aviso. Los errores de `@ResilientBean` (001 a 003) detienen el arranque: cada definición de bean anotada con
+`@ResilientBean` se revisa al arrancar el contexto, antes de crear ninguna. Los demás se reportan al crear el bean,
+que es al arrancar para los beans `@Context` y en el primer uso para los demás (Micronaut crea los beans de forma
+perezosa), como una `ResilienceBeanException` dentro de la `BeanInstantiationException` de Micronaut. Consulta la
+[guía de Micronaut](guides/micronaut.md).
+
+### R4C-MN-001
+
+**Causa:** un bean anotado con `@ResilientBean(I.class)` se expone con otros tipos además de `I`, por ejemplo
+porque también declara `@Bean(typed = {I.class, Impl.class})`. `@ResilientBean` limita los tipos del bean a `I`,
+porque el envoltorio generado que reemplaza al bean solo implementa `I`: inyectarlo con otro tipo fallaría o se
+saltaría las políticas.
+
+```text
+[R4C-MN-001] Bean com.acme.HttpPayments is annotated @ResilientBean(Payments.class) but is exposed as [com.acme.HttpPayments, com.acme.Payments]. ...
+```
+
+**Corrección:** quita `@Bean(typed = ...)` (o `@Type`) del bean e inyecta la interfaz.
+
+### R4C-MN-002
+
+**Causa:** `@ResilientBean(X.class)` nombra un tipo que no es una interfaz, o una interfaz que el bean no
+implementa, así que ningún envoltorio generado puede protegerlo.
+
+**Corrección:** nombra la interfaz anotada que implementa el bean. Para una clase anotada, quita `@ResilientBean`:
+compila con `-Ar4c.inject=micronaut` para que Micronaut cree su subclase generada, o devuelve
+`new C$Resilient(registry, ...)` desde un método de un `@Factory` ([clases anotadas](guides/micronaut.md#classes)).
+
+### R4C-MN-003
+
+**Causa:** un bean anotado con `@ResilientBean` tiene un ámbito que Micronaut envuelve en un proxy
+(`@Refreshable`, `@RequestScope`, `@ThreadLocal`, cualquier `@ScopedProxy`). Ese proxy busca su destino por la
+clase del bean, y el envoltorio generado no lo es.
+
+**Corrección:** haz el bean `@Singleton`, `@Prototype` o `@Context`, o deja el bean con ámbito sin protección e
+inyéctalo en un singleton que implemente la interfaz anotada.
+
+### R4C-MN-004
+
+**Causa:** un bean es una instancia de una clase anotada `C` pero no de la `C$Resilient` generada, así que sus
+políticas nunca se ejecutarían: Micronaut creó `C` por su cuenta (tiene una anotación de ámbito o un constructor
+`@Inject`, y el código se compiló sin `-Ar4c.inject=micronaut`), o un método de un `@Factory` devolvió
+`new C(...)`.
+
+```text
+[R4C-MN-004] Bean com.acme.InventoryService is an instance of com.acme.InventoryService, which has resilience4cata annotations, but not of the generated InventoryService$Resilient, so its policies would not run. ...
+```
+
+**Corrección:** compila con `-Ar4c.inject=micronaut`, para que Micronaut cree `C$Resilient` en lugar de `C`; o quita
+la anotación de ámbito (y `@Inject`) de `C` y devuelve `new C$Resilient(registry, ...)` desde un método de un
+`@Factory` con tipo `C`. Para dejar el bean sin protección a propósito, pon el nombre de la clase en
+`resilience4cata.micronaut.exclude`.
+
+### R4C-MN-005
+
+**Causa:** una clase anotada compilada con `-Ar4c.inject=micronaut` tiene un método con `@Retry` o `@Hedge` en vigor
+que además es `@Transactional` (el de Micronaut, o el de Jakarta traducido a él) con una propagación que se une a
+una transacción o la inicia (`REQUIRED`, `SUPPORTS`, `MANDATORY`, `REQUIRES_NEW`, `NESTED`). La subclase generada
+repite `@Transactional`, así que el proxy de transacciones de Micronaut la envuelve: todos los intentos se
+ejecutarían en la misma transacción, y un intento que falla y la marca rollback-only hace que el commit de un
+intento posterior exitoso falle.
+
+```text
+[R4C-MN-005] Bean com.acme.Ledger has transactional methods that are retried or hedged: @Retry on post (REQUIRED). ...
+```
+
+**Corrección:** declara la política en una interfaz que implemente el bean y anota el bean con `@ResilientBean` (el
+envoltorio queda fuera del proxy de transacciones: una transacción por intento); o mueve `@Transactional` a otro
+bean al que llame el método reintentado; o, si se quiere a propósito una sola transacción compartida por todos los
+intentos, pon `resilience4cata.micronaut.allow-retry-inside-transaction=true`. `NOT_SUPPORTED` y `NEVER` no se
+reportan. La revisión lee el archivo de clase generado, así que una imagen nativa la omite.
+
+## Compilación: extensión de Quarkus (R4C-QK)
+
+`resilience4cata-quarkus` revisa la aplicación mientras Quarkus la construye (`quarkusBuild`, el modo dev, cada
+`@QuarkusTest`) y detiene la construcción con estos códigos cuando un bean no quedaría protegido como se declaró,
+o quedaría protegido dos veces. Quarkus los muestra entre sus "deployment problems". Consulta la
+[guía de Quarkus](guides/quarkus.md).
+
+### R4C-QK-001
+
+**Causa:** un método protegido por resilience4cata lleva además anotaciones de MicroProfile o SmallRye Fault
+Tolerance (`org.eclipse.microprofile.faulttolerance.*`, `io.smallrye.faulttolerance.api.*`), en el método o en
+su clase; para una interfaz anotada, también en el método de la clase que la implementa. Los nombres simples son
+los mismos (`@Retry`, `@CircuitBreaker`, `@Timeout`, `@Bulkhead`, `@Fallback`), así que suele ser un import
+equivocado. Con `quarkus-smallrye-fault-tolerance` instalado se aplicarían las dos bibliotecas, así que la
+construcción falla; sin él, las anotaciones de Fault Tolerance no hacen nada y el mismo mensaje se registra
+como advertencia.
+
+```text
+[R4C-QK-001] Methods protected by resilience4cata also carry MicroProfile Fault Tolerance annotations: com.acme.CatalogClient.fetch(). SmallRye Fault Tolerance would apply its interceptor as well, so both libraries would retry, time out and count the same calls. ...
+```
+
+**Corrección:** usa una sola biblioteca por método: quita la otra anotación o corrige el import. Consulta
+[SmallRye Fault Tolerance frente a resilience4cata](guides/quarkus.md#smallrye).
+
+### R4C-QK-002
+
+**Causa:** una clase anotada tiene un método con `@Retry` o `@Hedge` en vigor que además es `@Transactional`
+(Jakarta Transactions, con Narayana) con un tipo que se une a una transacción o la inicia (`REQUIRED`,
+`REQUIRES_NEW`, `MANDATORY`, `SUPPORTS`). El interceptor de transacciones envuelve la subclase generada, así
+que todos los intentos se ejecutarían en la misma transacción, y un intento que falla y la marca rollback-only
+hace que el commit de un intento posterior exitoso falle.
+
+```text
+[R4C-QK-002] Bean com.acme.Ledger has transactional methods that are retried or hedged: @Retry on post (REQUIRED). ...
+```
+
+**Corrección:** declara la política en una interfaz que implemente el bean (su envoltorio queda fuera del
+interceptor de transacciones: una transacción por intento); o mueve `@Transactional` a otro bean al que llame
+el método reintentado; o, si se quiere a propósito una sola transacción compartida por todos los intentos, pon
+`quarkus.resilience4cata.allow-retry-inside-transaction=true`. `NOT_SUPPORTED` y `NEVER` no se reportan.
+
+### R4C-QK-003
+
+**Causa:** un bean implementa dos o más interfaces anotadas y ninguna extiende a todas las demás. El envoltorio
+generado de una interfaz implementa solo esa interfaz, así que el bean solo puede inyectarse a través de un
+envoltorio.
+
+**Corrección:** declara una interfaz que extienda a las demás e implementa esa, o anota la clase en su lugar.
+Para envolver el bean tú mismo, pon su clase en `quarkus.resilience4cata.beans.exclude` y devuelve
+`Resilient.of(...)` desde un método productor.
+
+### R4C-QK-004
+
+**Causa:** una clase anotada declara métodos o campos productores (`@Produces`). La subclase generada sustituye
+a la clase como bean, y los productores de CDI no se heredan, así que desaparecerían.
+
+**Corrección:** mueve los productores a otro bean, o pon la clase en `quarkus.resilience4cata.beans.exclude`.
+
+### R4C-QK-005
+
+**Causa:** una clase anotada es un bean de ámbito normal (`@ApplicationScoped`, `@RequestScoped`,
+`@SessionScoped`) y no tiene un constructor no privado sin parámetros. El proxy de cliente que Quarkus pone
+delante de la subclase generada necesita uno, y Quarkus solo puede añadirlo a la subclase si la clase lo tiene.
+
+```text
+[R4C-QK-005] com.acme.OrderService is a normal-scoped bean (@ApplicationScoped) with resilience4cata annotations, but has no non-private constructor without parameters. ...
+```
+
+**Corrección:** añade un constructor sin parámetros (basta con que sea package-private: solo lo usa el proxy),
+o usa inyección por campo en lugar de por constructor, o haz el bean `@Singleton`, que no tiene proxy de
+cliente.
 
 ## Pruebas: testkit (R4C-TK)
 

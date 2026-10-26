@@ -23,11 +23,14 @@ dependencies {
     testAnnotationProcessor project(':processor')
 }
 
-// DocsTest reads the documentation site and checks its snippets against the examples, and against the Spring
-// module's tests for the Spring Boot guide (its code needs Spring, which the examples do not depend on).
+// DocsTest reads the documentation site and checks its snippets against the examples, and against the Spring and
+// Micronaut modules' tests and quarkus/it for their guides (that code needs the framework, which the examples do not
+// depend on).
 tasks.named('test') {
     inputs.dir('../docs').withPropertyName('docs').withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.dir('../spring/src/test').withPropertyName('springSnippets').withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir('../micronaut/src/test').withPropertyName('micronautSnippets').withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir('../quarkus/it/src').withPropertyName('quarkusSnippets').withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // The modules whose own tests and sources join the aggregated report (testCodeCoverageReport, with -Pcoverage).

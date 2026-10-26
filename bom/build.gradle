@@ -16,5 +16,8 @@ dependencies {
         api project(':junit')
         api project(':micrometer')
         api project(':spring')
+        api project(':micronaut')
+        api project(':quarkus:runtime')
+        api project(':quarkus:deployment')
     }
 }

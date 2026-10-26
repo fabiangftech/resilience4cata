@@ -32,8 +32,9 @@ jobs:
         with:
           persist-credentials: false
 
-      # JDK 21 is always needed: it is the compile toolchain (--release 21). The matrix JDK is listed
-      # last, so it becomes JAVA_HOME (Gradle itself runs on it) and runs the tests (-PtestJdk).
+      # JDK 21 is always needed: it is the compile toolchain (--release 21). JDK 25 is always needed too:
+      # the micronaut module compiles and tests on it (--release 25), even with -PtestJdk=21. The matrix JDK
+      # is listed last, so it becomes JAVA_HOME (Gradle itself runs on it) and runs the tests (-PtestJdk).
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin

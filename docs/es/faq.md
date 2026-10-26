@@ -18,7 +18,10 @@ Java 21 o posterior, al compilar y en tiempo de ejecución. La biblioteca se com
 |---|---|
 | Spring Boot 4.1+ | `resilience4cata-spring` (desde 0.4.0): las clases anotadas se instancian como su subclase generada, los beans de interfaces anotadas se envuelven, el registry se configura desde `application.yml`, más salud, un endpoint de actuator y métricas. Sin AOP. [Guía de Spring Boot](guides/spring.md) |
 | Spring Boot 3 | no soportado |
-| Quarkus, Micronaut, Jakarta CDI | ninguna todavía, y no hace falta: las clases generadas son Java puro, así que crea tú el objeto (`Resilient.of(…)` o `new C$Resilient(registry, …)`) y regístralo como bean de la forma en que lo haga tu framework. Los constructores generados de las clases anotadas copian `@Inject` y los qualifiers, así que un contenedor también puede instanciar `C$Resilient` directamente |
+| Micronaut 5.2+ (Java 25) | `resilience4cata-micronaut` (desde 0.5.0): los beans de interfaces anotadas marcados con `@ResilientBean` se envuelven, las clases anotadas compiladas con `-Ar4c.inject=micronaut` se crean como su subclase generada, el registry se configura desde `application.yml`, más salud, un endpoint de gestión y métricas. Sin AOP. [Guía de Micronaut](guides/micronaut.md) |
+| Micronaut 4 | no soportado |
+| Quarkus 3.40+ | `resilience4cata-quarkus` (desde 0.5.0), una extensión de Quarkus: las clases anotadas pasan a ser su subclase generada como bean, los beans de interfaces anotadas y los clientes REST se inyectan a través de su envoltorio, el registry se configura desde `application.properties`, más una comprobación de preparación, métricas y comprobaciones al construir (incluido un choque con SmallRye Fault Tolerance). Sin interceptores. [Guía de Quarkus](guides/quarkus.md), con [SmallRye Fault Tolerance frente a resilience4cata](guides/quarkus.md#smallrye) |
+| Jakarta CDI | ninguna todavía, y no hace falta: las clases generadas son Java puro, así que crea tú el objeto (`Resilient.of(…)` o `new C$Resilient(registry, …)`) y regístralo como bean de la forma en que lo haga tu framework. Los constructores generados de las clases anotadas copian `@Inject` y los qualifiers, así que un contenedor también puede instanciar `C$Resilient` directamente |
 
 En ningún caso hay proxies, AOP ni escaneo de anotaciones en tiempo de ejecución.
 
@@ -98,7 +101,7 @@ En AWS Graviton3, un retry cuyo primer intento tiene éxito cuesta 1.2 ns y un c
 
 ### ¿Qué no se admite todavía? :id=not-supported
 
-Límites de concurrencia adaptativos, caché y bulkheads con pool de threads; hedging sincrónico (`@Hedge` funciona en métodos async); tipos reactivos; tipos async `? super`; cambiar el orden de las políticas; reconfiguración en tiempo de ejecución; módulos de integración con frameworks distintos de Spring Boot. Consulta [Decisiones de diseño](design.md) para ver qué está planeado y qué está excluido por decisión.
+Límites de concurrencia adaptativos, caché y bulkheads con pool de threads; hedging sincrónico (`@Hedge` funciona en métodos async); tipos reactivos; tipos async `? super`; cambiar el orden de las políticas; reconfiguración en tiempo de ejecución; módulos de integración con frameworks distintos de Spring Boot, Micronaut y Quarkus. Consulta [Decisiones de diseño](design.md) para ver qué está planeado y qué está excluido por decisión.
 
 ### ¿Qué hay en la hoja de ruta? :id=roadmap
 
@@ -112,7 +115,7 @@ Planificado, no prometido; los nombres y el alcance pueden cambiar:
 | Configuración YAML | v1 | módulo separado, para que `core` siga sin dependencias |
 | Orden de ejecución configurable (`@Order`) | v1 | |
 | Atributo `locked` (una instancia que la configuración externa no puede sobrescribir) | v1 | |
-| `@Cached`, tipos reactivos, corrutinas de Kotlin, inyección de fallos, propagación de deadlines, integraciones con Quarkus/Micronaut/CDI | más adelante | |
+| `@Cached`, tipos reactivos, corrutinas de Kotlin, inyección de fallos, propagación de deadlines, integraciones con Quarkus/CDI | más adelante | |
 
 Mientras tanto, [testkit](guides/testing.md) cubre las pruebas.
 

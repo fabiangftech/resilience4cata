@@ -31,11 +31,14 @@ jobs:
           # Full history, so SonarCloud can attribute new issues to the commits that introduced them.
           fetch-depth: 0
 
+      # JDK 21 (listed last: JAVA_HOME, Gradle and the tests) and JDK 25, the micronaut module's toolchain.
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         if: env.SONAR_TOKEN != ''
         with:
           distribution: temurin
-          java-version: 21
+          java-version: |
+            25
+            21
 
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         if: env.SONAR_TOKEN != ''
@@ -44,7 +47,9 @@ jobs:
 
       - name: Build, measure coverage and analyse
         if: env.SONAR_TOKEN != ''
-        run: ./gradlew build -Pcoverage :examples:testCodeCoverageReport sonar --no-configuration-cache
+        run: >-
+          ./gradlew build -Pcoverage :examples:testCodeCoverageReport sonar --no-configuration-cache
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
 
       - name: Skipped
         if: env.SONAR_TOKEN == ''

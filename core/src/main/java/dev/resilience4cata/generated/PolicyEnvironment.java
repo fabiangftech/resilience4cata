@@ -109,16 +109,17 @@ public final class PolicyEnvironment {
     }
 
     /**
-     * Runs {@code task} after {@code delayNanos}: at once on a new virtual thread if the delay is not
-     * positive; otherwise on a new virtual thread from the shared timer, or, with a manual ticker, on the
-     * thread that advances the ticker past the delay.
+     * Runs {@code task} after {@code delayNanos}. Without a ticker: at once on a new virtual thread if the
+     * delay is not positive, otherwise on a new virtual thread from the shared timer. With a manual ticker,
+     * always on the ticker, even with no delay: on the thread that next advances the ticker (with no delay,
+     * by any amount, {@code advance(Duration.ZERO)} included), so tests stay deterministic.
      */
     @SuppressWarnings("java:S1452") // the JDK's own type for a scheduled Runnable; callers only cancel it
     @Nullable Future<?> later(long delayNanos, Runnable task) {
         Ticker time = manual;
-        if (time == null || delayNanos <= 0) {
+        if (time == null) {
             return AsyncSupport.later(delayNanos, task);
         }
-        return time.schedule(delayNanos, task);
+        return time.schedule(Math.max(delayNanos, 0), task);
     }
 }

@@ -160,11 +160,29 @@ public final class Resilient {
         try {
             return Class.forName(generatedName, true, type.getClassLoader());
         } catch (ClassNotFoundException e) {
-            throw new IllegalStateException(ErrorCode.NOT_GENERATED.message("No generated class " + generatedName
-                    + " found. Make sure that " + type.getName() + " has at least one resilience annotation, and that the"
-                    + " annotation processor runs when it is compiled. With Gradle:\n"
-                    + "    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'"), e);
+            throw new IllegalStateException(notGenerated(type, generatedName,
+                    System.getProperty("org.graalvm.nativeimage.imagecode") != null), e);
         }
+    }
+
+    /**
+     * The R4C-RT-003 message. In a native image ({@code nativeImage}: GraalVM sets the system property
+     * {@code org.graalvm.nativeimage.imagecode}, at build time and in the image), the class may have been
+     * generated but not registered for reflection, so the message also points at the metadata the processor
+     * writes. Package-private so tests can check both forms without GraalVM.
+     */
+    static String notGenerated(Class<?> type, String generatedName, boolean nativeImage) {
+        String message = ErrorCode.NOT_GENERATED.message("No generated class " + generatedName
+                + " found. Make sure that " + type.getName() + " has at least one resilience annotation, and that the"
+                + " annotation processor runs when it is compiled. With Gradle:\n"
+                + "    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'");
+        if (!nativeImage) {
+            return message;
+        }
+        return message + "\nIn a native image, also check that the image build's class path includes the"
+                + " reachability metadata the processor writes next to the class files,"
+                + " META-INF/native-image/dev.resilience4cata.generated/" + generatedName
+                + "/reachability-metadata.json, and that no build step strips it.";
     }
 
     /** A constructor of a generated subclass and the arguments to call it with, the registry first. */

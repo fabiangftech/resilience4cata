@@ -15,6 +15,8 @@ Agrega cuatro artefactos a tu build: el BOM, `core`, las anotaciones y el proces
 | `resilience4cata-config` | Opcional. Configuración externa: archivos properties, variables de entorno, propiedades del sistema ([guía de configuración](../guides/configuration.md)) | `implementation` / scope por defecto |
 | `resilience4cata-micrometer` | Opcional, desde 0.3.0. Métricas de Micrometer: counters a partir de eventos, gauges para breakers, bulkheads y rate limiters ([guía de Micrometer](../guides/micrometer.md)). Trae `micrometer-core` | `implementation` / scope por defecto |
 | `resilience4cata-spring` | Opcional, desde 0.4.0. Autoconfiguración para Spring Boot 4.1+: el registry desde `application.yml`, beans anotados protegidos, indicador de salud, endpoint de actuator, métricas ([guía de Spring Boot](../guides/spring.md)). Trae `core` y `config` | `implementation` / scope por defecto |
+| `resilience4cata-micronaut` | Opcional, desde 0.5.0. Integración con Micronaut 5.2+ (necesita Java 25, el único módulo por encima de Java 21): el registry desde `application.yml`, beans de interfaces `@ResilientBean` y clases anotadas protegidos, indicador de salud, endpoint de gestión, métricas ([guía de Micronaut](../guides/micronaut.md)). Trae `core` y `config` | `implementation` / scope por defecto |
+| `resilience4cata-quarkus` | Opcional, desde 0.5.0. Extensión para Quarkus 3.40+: el registry desde `application.properties`, beans anotados y clientes REST protegidos, comprobación de preparación, métricas, comprobaciones al construir ([guía de Quarkus](../guides/quarkus.md)). Trae `core` y `config`; Quarkus añade `resilience4cata-quarkus-deployment` al construir | `implementation` / scope por defecto |
 | `resilience4cata-testkit` | Opcional. `ManualClock` y `ResilienceTesting` para tests deterministas ([guía de tests](../guides/testing.md)). No depende de JUnit | `testImplementation` / `test` |
 | `resilience4cata-junit` | Opcional, desde 0.3.0. Extensión de JUnit Jupiter (`@ResilienceTest`): un `ManualClock` nuevo y un registry sobre él para cada test, como parámetros ([guía de tests](../guides/testing.md#junit)). Trae testkit; necesita JUnit 5.10 o posterior, JUnit 6 incluido | `testImplementation` / `test` |
 
@@ -209,6 +211,73 @@ dependencies {
 ```
 
 <!-- tabs:end -->
+
+## Micronaut
+
+En una aplicación Micronaut 5.2+ (Java 25), depende de `resilience4cata-micronaut` en lugar de `core` (trae `core`
+y `config`); las anotaciones y el procesador quedan como arriba, junto al procesador del propio Micronaut, en
+cualquier orden. La opción del compilador `-Ar4c.inject=micronaut` permite que Micronaut cree las subclases
+generadas de las clases anotadas. La [guía de Micronaut](../guides/micronaut.md) cubre el resto.
+
+<!-- tabs:start -->
+
+#### **Gradle**
+
+```groovy
+dependencies {
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.5.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.5.0')
+
+    implementation 'dev.resilience4cata:resilience4cata-micronaut'       // brings core and config
+    compileOnly 'dev.resilience4cata:resilience4cata-annotations'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.add('-Ar4c.inject=micronaut')
+}
+```
+
+#### **Gradle (Kotlin)**
+
+```kotlin
+dependencies {
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:0.5.0")
+    implementation(r4cBom)
+    annotationProcessor(r4cBom)
+
+    implementation("dev.resilience4cata:resilience4cata-micronaut")       // brings core and config
+    compileOnly("dev.resilience4cata:resilience4cata-annotations")
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.add("-Ar4c.inject=micronaut")
+}
+```
+
+#### **Maven**
+
+```xml
+<!-- with resilience4cata-bom imported in <dependencyManagement> -->
+<dependency>
+  <groupId>dev.resilience4cata</groupId>
+  <artifactId>resilience4cata-micronaut</artifactId>
+</dependency>
+<dependency>
+  <groupId>dev.resilience4cata</groupId>
+  <artifactId>resilience4cata-annotations</artifactId>
+  <scope>provided</scope>
+</dependency>
+<!-- and resilience4cata-processor in annotationProcessorPaths, after micronaut-inject-java,
+     with <compilerArgs><arg>-Ar4c.inject=micronaut</arg></compilerArgs> -->
+```
+
+<!-- tabs:end -->
+
+## Quarkus
+
+En una aplicación Quarkus 3.40+, depende de `resilience4cata-quarkus` en lugar de `core` (trae `core` y `config`); las anotaciones y el procesador quedan como arriba. La [guía de Quarkus](../guides/quarkus.md#install) tiene los fragmentos de construcción y cubre el resto.
 
 ## Verifica que funciona
 

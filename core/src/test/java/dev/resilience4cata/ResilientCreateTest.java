@@ -74,7 +74,22 @@ class ResilientCreateTest {
         assertThatIllegalStateException()
                 .isThrownBy(() -> Resilient.create(ResilientTarget.Unprocessed.class, registry))
                 .withMessageContaining("No generated class dev.resilience4cata.ResilientTarget$Unprocessed$Resilient")
-                .withMessageContaining("annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'");
+                .withMessageContaining("annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'")
+                .withMessageNotContaining("native image");
+    }
+
+    @Test
+    void inANativeImageTheMessageAlsoPointsAtTheReachabilityMetadata() {
+        String generated = "dev.resilience4cata.ResilientTarget$Unprocessed$Resilient";
+        String plain = Resilient.notGenerated(ResilientTarget.Unprocessed.class, generated, false);
+        String nativeImage = Resilient.notGenerated(ResilientTarget.Unprocessed.class, generated, true);
+
+        assertThat(plain).startsWith("[R4C-RT-003] No generated class " + generated + " found.")
+                .endsWith("annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'");
+        assertThat(nativeImage).isEqualTo(plain + "\nIn a native image, also check that the image build's class path"
+                + " includes the reachability metadata the processor writes next to the class files,"
+                + " META-INF/native-image/dev.resilience4cata.generated/" + generated + "/reachability-metadata.json,"
+                + " and that no build step strips it.");
     }
 
     @Test

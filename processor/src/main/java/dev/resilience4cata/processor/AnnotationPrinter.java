@@ -53,6 +53,27 @@ final class AnnotationPrinter {
         return annotations(method, ElementType.METHOD, separator, "", true);
     }
 
+    /**
+     * The type annotations of an annotated class to repeat on its generated subclass for a dependency injection
+     * container ({@code -Ar4c.inject}), each followed by {@code separator}: as for method overrides, minus the
+     * {@code java.lang} annotations ({@code @Deprecated}, {@code @FunctionalInterface}) and {@code skipped}, which the
+     * generated class declares itself.
+     */
+    static String typeAnnotations(TypeElement type, String skipped, String separator) {
+        StringBuilder out = new StringBuilder();
+        for (AnnotationMirror annotation : type.getAnnotationMirrors()) {
+            if (!copied(annotation, ElementType.TYPE) || !copiedOnOverride(annotation)) {
+                continue;
+            }
+            String name = ((TypeElement) annotation.getAnnotationType().asElement()).getQualifiedName().toString();
+            if (name.startsWith("java.lang.") || name.equals(skipped)) {
+                continue;
+            }
+            out.append(print(annotation)).append(separator);
+        }
+        return out.toString();
+    }
+
     /** The annotations of a parameter of an overridden method, each followed by a space; see {@link #methodAnnotations}. */
     static String parameterAnnotations(VariableElement parameter) {
         return annotations(parameter, ElementType.PARAMETER, " ", "", true);

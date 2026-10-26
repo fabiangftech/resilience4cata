@@ -225,6 +225,31 @@ class PoliciesOnManualClockTest {
     }
 
     @Test
+    void anAsyncRetryWithNoDelayWaitsForTheNextAdvance() {
+        ResilienceRegistry registry = ResilienceTesting.registry(clock)
+                .retryDefaults(r -> r.maxAttempts(3).delay(Duration.ZERO).jitter(RetryConfig.Jitter.NONE))
+                .build();
+        RetryPolicy retry = registry.retryPolicy("retry", "", "", null);
+        List<Thread> attemptThreads = new ArrayList<>();
+
+        CompletableFuture<String> result = retry.executeAsync(() -> {
+            attemptThreads.add(Thread.currentThread());
+            return attemptThreads.size() < 3
+                    ? CompletableFuture.failedFuture(new IllegalStateException("down"))
+                    : CompletableFuture.completedFuture("ok");
+        });
+
+        // the next attempt is a task on the clock, not a virtual thread racing the test
+        assertThat(attemptThreads).hasSize(1);
+        assertThat(clock.pendingTasks()).isOne();
+        assertThat(clock.nextTaskIn()).isEqualTo(Duration.ZERO);
+        clock.advance(Duration.ZERO);
+        assertThat(result).isCompletedWithValue("ok");
+        assertThat(attemptThreads).containsOnly(Thread.currentThread()).hasSize(3);
+        assertThat(clock.elapsed()).isZero();
+    }
+
+    @Test
     void asyncTimeoutsFireWhenTheClockPassesThemAndAreCancelledOtherwise() {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .timeoutDefaults(t -> t.timeout(Duration.ofSeconds(2)))

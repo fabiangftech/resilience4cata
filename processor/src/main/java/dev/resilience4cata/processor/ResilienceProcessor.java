@@ -109,6 +109,10 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private final Map<Kind, PolicyAttributes> attributes = new EnumMap<>(Kind.class);
     private final Set<String> processed = new HashSet<>();
     private SubclassWriter subclasses;
+    /** {@code -Ar4c.inject=micronaut}: generated subclasses become Micronaut beans that replace their class. */
+    private boolean micronautBeans;
+    /** The invalid value of {@link #INJECT_OPTION}, until it is reported; else null. */
+    private String invalidInjectOption;
     /** What generated methods call: the wrapped instance for an interface, {@code super} for a class. */
     private String delegateReceiver = DELEGATE;
 
@@ -167,6 +171,22 @@ public final class ResilienceProcessor extends AbstractProcessor {
         for (Kind kind : Kind.values()) {
             attributes.put(kind, new PolicyAttributes(messager, kind.annotation));
         }
+        String inject = processingEnv.getOptions().get(INJECT_OPTION);
+        if (inject != null && !inject.isBlank()) {
+            micronautBeans = inject.strip().equals(INJECT_MICRONAUT);
+            invalidInjectOption = micronautBeans ? null : inject;
+        }
+    }
+
+    /** The option that makes generated subclasses beans of a dependency injection container: {@value}. */
+    static final String INJECT_OPTION = "r4c.inject";
+    /** The only supported value of {@link #INJECT_OPTION}: {@value}. */
+    static final String INJECT_MICRONAUT = "micronaut";
+    private static final String MICRONAUT_REPLACES = "io.micronaut.context.annotation.Replaces";
+
+    @Override
+    public Set<String> getSupportedOptions() {
+        return Set.of(INJECT_OPTION);
     }
 
     @Override
@@ -182,6 +202,13 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+        if (invalidInjectOption != null) {
+            messager.printMessage(Diagnostic.Kind.ERROR, ProcessorError.INVALID_INJECT_OPTION.message("Unknown value '"
+                    + invalidInjectOption + "' for the compiler option -A" + INJECT_OPTION + ". The only value is "
+                    + INJECT_MICRONAUT + " (generated subclasses of annotated classes become Micronaut beans); remove the"
+                    + " option for other containers, or set -A" + INJECT_OPTION + "=" + INJECT_MICRONAUT + "."));
+            invalidInjectOption = null; // reported once
+        }
         for (Element root : roundEnv.getRootElements()) {
             scan(root);
         }
@@ -1184,6 +1211,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
         boolean subclass = iface.getKind() == ElementKind.CLASS;
         delegateReceiver = subclass ? "super" : DELEGATE;
         if (subclass) {
+            if (micronautBeans) {
+                appendMicronautBean(out, iface);
+            }
             out.append("@SuppressWarnings({\"deprecation\", \"removal\", \"serial\"})\n");
             out.append("public class ").append(simpleName).append(typeParameters(iface.getTypeParameters()))
                     .append(" extends ").append(ifaceType).append(" {\n\n");
@@ -1321,6 +1351,23 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 }
             }
         }
+    }
+
+    /**
+     * With {@code -Ar4c.inject=micronaut}: the class's own type annotations (its scope, qualifiers,
+     * {@code @Requires}...) and {@code @Replaces(C.class)}, so that Micronaut creates the generated subclass wherever
+     * it would have created {@code C}. Reads only {@code type} and the class path, so the processor stays isolating.
+     */
+    private void appendMicronautBean(StringBuilder out, TypeElement type) {
+        if (elements.getTypeElement(MICRONAUT_REPLACES) == null) {
+            error(type, ProcessorError.INVALID_INJECT_OPTION, "The compiler option -A" + INJECT_OPTION + "="
+                    + INJECT_MICRONAUT + " is set, but " + MICRONAUT_REPLACES + " is not on the compile class path, so "
+                    + type.getSimpleName() + SUFFIX + " cannot replace " + type.getSimpleName() + " as a Micronaut bean."
+                    + " Add Micronaut (io.micronaut:micronaut-inject) to the compile class path, or remove the option.");
+            return;
+        }
+        out.append(AnnotationPrinter.typeAnnotations(type, MICRONAUT_REPLACES, "\n"));
+        out.append('@').append(MICRONAUT_REPLACES).append('(').append(type.getQualifiedName()).append(".class)\n");
     }
 
     /** Writes the generated class, with {@code iface} as its only originating element. */

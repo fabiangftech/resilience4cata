@@ -431,9 +431,10 @@ public final class HedgePolicy {
         /**
          * Starts the next attempt after a failure, but not on this thread: the thread that completed the failed
          * attempt may be an I/O thread of the caller's client. Like an async retry with no delay, the attempt
-         * starts on a new virtual thread; on a manual ticker it is scheduled with no delay instead, so it starts
-         * on the thread that next advances the ticker (deterministic tests). If no attempt can start by then
-         * (settled, stopped, budget), the call ends with {@code cause} if every attempt has failed.
+         * starts on a new virtual thread; on a manual ticker {@link PolicyEnvironment#later} schedules it with
+         * no delay instead, so it starts on the thread that next advances the ticker (deterministic tests). If
+         * no attempt can start by then (settled, stopped, budget), the call ends with {@code cause} if every
+         * attempt has failed.
          */
         private void launchSoon(Throwable cause) {
             Runnable next = () -> {
@@ -441,12 +442,7 @@ public final class HedgePolicy {
                     settleIfAllFailed(cause);
                 }
             };
-            Ticker manual = policy.environment.manual;
-            if (manual != null) {
-                manual.schedule(0, next);
-            } else {
-                AsyncSupport.later(0, next);
-            }
+            policy.environment.later(0, next);
         }
 
         /** Ends the call with {@code cause} if every attempt launched has failed and no other can start. */

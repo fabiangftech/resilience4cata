@@ -40,6 +40,13 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
         return compile(workDir, sources, processor, path);
     }
 
+    /** Compiles {@code sources} with the processor and extra compiler {@code options}, such as {@code -Akey=value}. */
+    static Compilation compileWithOptions(Path workDir, Map<String, String> sources, String... options) {
+        List<String> all = new ArrayList<>(List.of("-Xlint:all", "-Xlint:-processing", "-Werror"));
+        all.addAll(List.of(options));
+        return compile(workDir, sources, List.of(new ResilienceProcessor()), System.getProperty("java.class.path"), all);
+    }
+
     /** Compiles {@code sources} with the processor, on the test classpath without resilience4cata-core. */
     static Compilation compileWithoutCore(Path workDir, Map<String, String> sources) {
         String path = Stream.of(System.getProperty("java.class.path").split(File.pathSeparator))

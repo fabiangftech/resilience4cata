@@ -45,10 +45,13 @@ jobs:
             echo "::error::Run this workflow on tag v$version (got $GITHUB_REF)"; exit 1
           fi
 
+      # JDK 21 (listed last: JAVA_HOME, Gradle and the tests) and JDK 25, the micronaut module's toolchain.
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
-          java-version: 21
+          java-version: |
+            25
+            21
 
       # No Gradle caches for a release: build from scratch, and never save state (the configuration
       # cache would hold the signing key) to the shared GitHub cache.
@@ -57,7 +60,9 @@ jobs:
           cache-disabled: true
 
       - name: Build and bundle
-        run: ./gradlew build centralBundle --no-build-cache --no-configuration-cache
+        run: >-
+          ./gradlew build centralBundle --no-build-cache --no-configuration-cache
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -68,4 +73,6 @@ jobs:
       # -x centralBundle: upload the zip built and archived above, not a re-signed copy.
       - name: Upload to the Central Portal (USER_MANAGED)
         if: env.ORG_GRADLE_PROJECT_centralPortalUsername != '' && env.ORG_GRADLE_PROJECT_centralPortalPassword != ''
-        run: ./gradlew centralUpload -x centralBundle --no-build-cache --no-configuration-cache
+        run: >-
+          ./gradlew centralUpload -x centralBundle --no-build-cache --no-configuration-cache
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64

@@ -10,7 +10,7 @@ Resilience is mostly about time: a retry waits 1 s, a breaker stays open 30 s, a
 
 - **Sleeps advance the clock instead of blocking.** A retry with a 1 s delay returns at once, with the clock 1 s later.
 - **Waits are measured on it.** A breaker stays open until the test advances past `waitInOpen`.
-- **Delayed tasks run when the clock passes their deadline**, on the thread that calls `advance`, before it returns: async retries, async rate-limiter waits, async bulkhead wait limits and async timeouts.
+- **Delayed tasks run when the clock passes their deadline**, on the thread that calls `advance`, before it returns: async retries, async rate-limiter waits, async bulkhead wait limits and async timeouts. A task with no delay (an async retry with `delay = "0"`, a hedge after a failure) waits for the next `advance` too: `advance(Duration.ZERO)` runs it.
 - **Sync timeouts fire exactly at their deadline**, by interrupting the timed thread.
 - **Sync bulkhead waits (`maxWait`) end on the clock.**
 

@@ -21,8 +21,9 @@ import org.junit.jupiter.api.Test;
  * Keeps the documentation site ({@code docs/}) honest.
  *
  * <p>A code block on a page is preceded by {@code <!-- snippet: id -->} and must be identical to the region
- * {@code tag::id[]} … {@code end::id[]} of a file under {@code examples/src/test}, or under {@code spring/src/test}
- * for the Spring Boot guide, whose code needs Spring and runs in that module's own tests (a marker is a line
+ * {@code tag::id[]} … {@code end::id[]} of a file under {@code examples/src/test}, or under {@code spring/src/test},
+ * {@code micronaut/src/test} or {@code quarkus/it/src} for the Spring Boot, Micronaut and Quarkus guides, whose code
+ * needs the framework and runs in that module's own tests (a marker is a line
  * starting with {@code //}, {@code #} or {@code <!--}; marker lines are dropped and the region is dedented), so every snippet on the site compiles and runs. In the
  * user pages ({@link #CHECKED_DIRECTORIES}) every {@code java} block needs such a marker, or
  * {@code <!-- not-compiled: reason -->} when it cannot compile on purpose (a wrong example, generated code).
@@ -31,8 +32,9 @@ import org.junit.jupiter.api.Test;
 class DocsTest {
 
     private static final Path DOCS = Path.of("..", "docs");
-    /** Where the regions are: these examples, and the Spring module's tests (the Spring Boot guide's code). */
-    private static final List<Path> SOURCES = List.of(Path.of("src", "test"), Path.of("..", "spring", "src", "test"));
+    /** Where the regions are: these examples, and the Spring, Micronaut and Quarkus modules' tests (their guides' code). */
+    private static final List<Path> SOURCES = List.of(Path.of("src", "test"), Path.of("..", "spring", "src", "test"),
+            Path.of("..", "micronaut", "src", "test"), Path.of("..", "quarkus", "it", "src"));
     private static final List<String> LANGUAGES = List.of("en", "es");
     /** Pages whose {@code java} blocks must all be compiled; the landing page is {@code README.md}. */
     private static final List<String> CHECKED_DIRECTORIES = List.of("start", "policies", "guides", "observability", "testing", "migrate");
@@ -58,7 +60,8 @@ class DocsTest {
                     }
                     String expected = regions.get(block.id());
                     if (expected == null) {
-                        problems.add(block.where() + ": no region tag::" + block.id() + "[] under examples/src/test or spring/src/test");
+                        problems.add(block.where() + ": no region tag::" + block.id()
+                                + "[] under examples/src/test, spring/src/test, micronaut/src/test or quarkus/it/src");
                     } else if (!expected.equals(block.code())) {
                         problems.add(block.where() + ": snippet '" + block.id() + "' differs from its region:\n--- page\n"
                                 + block.code() + "\n--- examples\n" + expected);

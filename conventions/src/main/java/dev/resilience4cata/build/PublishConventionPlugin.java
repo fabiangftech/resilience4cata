@@ -57,7 +57,7 @@ public final class PublishConventionPlugin implements Plugin<Project> {
 
         PublishingExtension publishing = project.getExtensions().getByType(PublishingExtension.class);
         MavenPublication publication = publishing.getPublications().create(PUBLICATION, MavenPublication.class);
-        publication.setArtifactId("resilience4cata-" + project.getName());
+        publication.setArtifactId(JavaLibraryConventionPlugin.artifactName(project));
         project.getPluginManager().withPlugin("java", plugin ->
                 publication.from(project.getComponents().getByName("java")));
         project.getPluginManager().withPlugin("java-platform", plugin ->
@@ -81,7 +81,7 @@ public final class PublishConventionPlugin implements Plugin<Project> {
     }
 
     private static void describe(Project project, MavenPom pom, String scmRepository, String developerId, String developerName) {
-        pom.getName().set("resilience4cata-" + project.getName());
+        pom.getName().set(JavaLibraryConventionPlugin.artifactName(project));
         pom.getDescription().set(project.provider(() -> {
             String description = project.getDescription();
             if (description == null || description.isBlank()) {

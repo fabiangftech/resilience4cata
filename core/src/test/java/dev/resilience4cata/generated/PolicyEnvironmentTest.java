@@ -52,16 +52,24 @@ class PolicyEnvironmentTest {
     }
 
     @Test
-    void delaysGoToTheTickerButImmediateTasksDoNot() {
+    void everyDelayGoesToTheTickerEvenNone() {
         FakeTicker ticker = new FakeTicker();
         PolicyEnvironment env = PolicyEnvironment.of(ticker, null);
-        CompletableFuture<Void> immediate = new CompletableFuture<>();
 
-        env.later(0, () -> immediate.complete(null));
+        env.later(0, () -> { });
+        env.later(-5, () -> { });
         env.later(10, () -> { });
 
-        immediate.join();
-        assertThat(ticker.scheduled).containsExactly(10L);
+        assertThat(ticker.scheduled).containsExactly(0L, 0L, 10L);
+    }
+
+    @Test
+    void withoutTickerAnImmediateTaskRunsOnAVirtualThread() {
+        CompletableFuture<Thread> ran = new CompletableFuture<>();
+
+        assertThat(PolicyEnvironment.DEFAULT.later(0, () -> ran.complete(Thread.currentThread()))).isNull();
+
+        assertThat(ran.join().isVirtual()).isTrue();
     }
 
     @Test

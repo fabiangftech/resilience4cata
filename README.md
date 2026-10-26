@@ -64,7 +64,7 @@ Maven:
 </annotationProcessorPaths>
 ```
 
-The Gradle Kotlin DSL, the optional `config` and `testkit` modules, IDEs, JPMS and other annotation processors (Lombok, MapStruct) are covered in [installation](docs/en/start/installation.md). For Spring Boot 4.1+, `resilience4cata-spring` configures the registry from `application.yml` and protects annotated beans without AOP ([Spring Boot guide](docs/en/guides/spring.md)).
+The Gradle Kotlin DSL, the optional `config` and `testkit` modules, IDEs, JPMS and other annotation processors (Lombok, MapStruct) are covered in [installation](docs/en/start/installation.md). For Spring Boot 4.1+, `resilience4cata-spring` configures the registry from `application.yml` and protects annotated beans without AOP ([Spring Boot guide](docs/en/guides/spring.md)). For Micronaut 5.2+ (Java 25), `resilience4cata-micronaut` does the same ([Micronaut guide](docs/en/guides/micronaut.md)).
 
 ## Example
 

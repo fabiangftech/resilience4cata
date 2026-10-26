@@ -40,9 +40,11 @@ public interface Ticker {
     void sleep(long nanos) throws InterruptedException;
 
     /**
-     * Runs {@code task} once, when this ticker has moved {@code delayNanos} past the current time.
+     * Runs {@code task} once, when this ticker has moved {@code delayNanos} past the current time. A delay
+     * of zero runs it the next time this ticker reports a reading (a manual ticker: at its next advance,
+     * even by zero), on the thread that moves it, never on the calling thread.
      *
-     * @param delayNanos the delay; positive
+     * @param delayNanos the delay; zero or positive
      * @param task what to run; it must not block for long
      * @return a future whose {@link Future#cancel(boolean) cancel} stops the task from running
      */

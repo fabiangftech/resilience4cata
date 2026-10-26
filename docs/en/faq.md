@@ -18,7 +18,10 @@ Java 21 or later, at compile time and at runtime. The library is compiled with `
 |---|---|
 | Spring Boot 4.1+ | `resilience4cata-spring` (from 0.4.0): annotated classes are instantiated as their generated subclass, beans of annotated interfaces are wrapped, the registry is configured from `application.yml`, plus health, an actuator endpoint and metrics. No AOP. [Spring Boot guide](guides/spring.md) |
 | Spring Boot 3 | not supported |
-| Quarkus, Micronaut, Jakarta CDI | none yet, and none needed: generated classes are plain Java, so create the object yourself (`Resilient.of(…)` or `new C$Resilient(registry, …)`) and register it as a bean the way your framework does it. The generated constructors of annotated classes copy `@Inject` and qualifiers, so a container can also instantiate `C$Resilient` directly |
+| Micronaut 5.2+ (Java 25) | `resilience4cata-micronaut` (from 0.5.0): beans of annotated interfaces marked `@ResilientBean` are wrapped, annotated classes compiled with `-Ar4c.inject=micronaut` are created as their generated subclass, the registry is configured from `application.yml`, plus health, a management endpoint and metrics. No AOP. [Micronaut guide](guides/micronaut.md) |
+| Micronaut 4 | not supported |
+| Quarkus 3.40+ | `resilience4cata-quarkus` (from 0.5.0), a Quarkus extension: annotated classes become their generated subclass as the bean, beans of annotated interfaces and REST clients are injected through their wrapper, the registry is configured from `application.properties`, plus a readiness check, metrics and build-time checks (including a clash with SmallRye Fault Tolerance). No interceptors. [Quarkus guide](guides/quarkus.md), with [SmallRye Fault Tolerance vs resilience4cata](guides/quarkus.md#smallrye) |
+| Jakarta CDI | none yet, and none needed: generated classes are plain Java, so create the object yourself (`Resilient.of(…)` or `new C$Resilient(registry, …)`) and register it as a bean the way your framework does it. The generated constructors of annotated classes copy `@Inject` and qualifiers, so a container can also instantiate `C$Resilient` directly |
 
 There is no runtime proxy, no AOP and no annotation scanning at runtime in any case.
 
@@ -98,7 +101,7 @@ On AWS Graviton3, a retry whose first attempt succeeds costs 1.2 ns and a circui
 
 ### What is not supported yet? :id=not-supported
 
-Adaptive concurrency limits, caching and thread-pool bulkheads; synchronous hedging (`@Hedge` works on async methods); reactive types; `? super` async types; changing the policy order; runtime reconfiguration; integration modules for frameworks other than Spring Boot. See [Design decisions](design.md) for what is planned and what is excluded by decision.
+Adaptive concurrency limits, caching and thread-pool bulkheads; synchronous hedging (`@Hedge` works on async methods); reactive types; `? super` async types; changing the policy order; runtime reconfiguration; integration modules for frameworks other than Spring Boot, Micronaut and Quarkus. See [Design decisions](design.md) for what is planned and what is excluded by decision.
 
 ### What is on the roadmap? :id=roadmap
 
@@ -112,7 +115,7 @@ Planned, not promised; names and scope can change:
 | YAML configuration | v1 | separate module, so `core` stays dependency-free |
 | Configurable execution order (`@Order`) | v1 | |
 | `locked` attribute (an instance that external configuration cannot override) | v1 | |
-| `@Cached`, reactive types, Kotlin coroutines, fault injection, deadline propagation, Quarkus/Micronaut/CDI integrations | later | |
+| `@Cached`, reactive types, Kotlin coroutines, fault injection, deadline propagation, Quarkus/CDI integrations | later | |
 
 Until then, [testkit](guides/testing.md) covers tests.
 

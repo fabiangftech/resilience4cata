@@ -23,6 +23,19 @@ springBootMinimum = "4.1.0"
 springFrameworkMinimum = "7.0.8"
 # Compile-only in the spring module: javac reads Jackson annotations on Spring Boot's health classes.
 jacksonAnnotations = "2.22"
+# The micronaut module (Micronaut 5, Java 25) compiles against the oldest supported Micronaut core (micronautMinimum:
+# never bump it with the rest, .github/dependabot.yml ignores the artifacts that use it); its tests run on the
+# Micronaut platform BOM (micronautPlatform), which manages every Micronaut module.
+micronautPlatform = "5.2.2"
+micronautMinimum = "5.2.0"
+# The quarkus extension (runtime and deployment) compiles against the oldest supported Quarkus (quarkusMinimum: never
+# bump it with the rest, .github/dependabot.yml ignores the artifacts that use it, and it is the Quarkus core version
+# written to META-INF/quarkus-extension.yaml); its tests (quarkus:it) run on quarkus, the Quarkus Gradle plugin and
+# BOM, the latest release at least two weeks old.
+quarkus = "3.40.1"
+quarkusMinimum = "3.40.1"
+# Compile-only in the quarkus extension: the health check's API, at the version of quarkusMinimum's BOM.
+microprofileHealthMinimum = "4.0.1"
 
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
@@ -58,6 +71,23 @@ spring-boot-autoconfigure-processor-minimum = { module = "org.springframework.bo
 spring-boot-configuration-processor-minimum = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "springBootMinimum" }
 spring-tx-minimum = { module = "org.springframework:spring-tx", version.ref = "springFrameworkMinimum" }
 jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations", version.ref = "jacksonAnnotations" }
+# The quarkus extension's main code, at the oldest supported Quarkus.
+quarkus-arc-minimum = { module = "io.quarkus:quarkus-arc", version.ref = "quarkusMinimum" }
+quarkus-arc-deployment-minimum = { module = "io.quarkus:quarkus-arc-deployment", version.ref = "quarkusMinimum" }
+quarkus-extension-processor-minimum = { module = "io.quarkus:quarkus-extension-processor", version.ref = "quarkusMinimum" }
+microprofile-health-api-minimum = { module = "org.eclipse.microprofile.health:microprofile-health-api", version.ref = "microprofileHealthMinimum" }
+# The quarkus extension's tests (quarkus:it): versions from the Quarkus BOM.
+quarkus-bom = { module = "io.quarkus:quarkus-bom", version.ref = "quarkus" }
+quarkus-arc = { module = "io.quarkus:quarkus-arc" }
+quarkus-junit = { module = "io.quarkus:quarkus-junit" }
+quarkus-junit-internal = { module = "io.quarkus:quarkus-junit-internal" }
+quarkus-smallrye-health = { module = "io.quarkus:quarkus-smallrye-health" }
+quarkus-smallrye-fault-tolerance = { module = "io.quarkus:quarkus-smallrye-fault-tolerance" }
+quarkus-micrometer-registry-prometheus = { module = "io.quarkus:quarkus-micrometer-registry-prometheus" }
+quarkus-narayana-jta = { module = "io.quarkus:quarkus-narayana-jta" }
+quarkus-rest = { module = "io.quarkus:quarkus-rest" }
+quarkus-rest-client = { module = "io.quarkus:quarkus-rest-client" }
+rest-assured = { module = "io.rest-assured:rest-assured" }
 # The spring module's tests: versions from spring-boot-dependencies.
 spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure" }
 spring-boot-health = { module = "org.springframework.boot:spring-boot-health" }
@@ -71,3 +101,24 @@ jakarta-transaction-api = { module = "jakarta.transaction:jakarta.transaction-ap
 spring-core-test = { module = "org.springframework:spring-core-test" }
 jackson-databind = { module = "tools.jackson.core:jackson-databind" }
 snakeyaml = { module = "org.yaml:snakeyaml" }
+micronaut-platform = { module = "io.micronaut.platform:micronaut-platform", version.ref = "micronautPlatform" }
+# The micronaut module's main code, at the oldest supported Micronaut core.
+micronaut-inject-minimum = { module = "io.micronaut:micronaut-inject", version.ref = "micronautMinimum" }
+micronaut-inject-java-minimum = { module = "io.micronaut:micronaut-inject-java", version.ref = "micronautMinimum" }
+micronaut-management-minimum = { module = "io.micronaut:micronaut-management", version.ref = "micronautMinimum" }
+# The micronaut module's tests: versions from micronaut-platform.
+micronaut-inject = { module = "io.micronaut:micronaut-inject" }
+micronaut-inject-java = { module = "io.micronaut:micronaut-inject-java" }
+micronaut-management = { module = "io.micronaut:micronaut-management" }
+micronaut-micrometer-core = { module = "io.micronaut.micrometer:micronaut-micrometer-core" }
+micronaut-http-server-netty = { module = "io.micronaut:micronaut-http-server-netty" }
+micronaut-http-client = { module = "io.micronaut:micronaut-http-client" }
+micronaut-serde-jackson = { module = "io.micronaut.serde:micronaut-serde-jackson" }
+micronaut-test-junit5 = { module = "io.micronaut.test:micronaut-test-junit5" }
+logback-classic = { module = "ch.qos.logback:logback-classic" }
+micronaut-data-tx = { module = "io.micronaut.data:micronaut-data-tx" }
+
+[plugins]
+# The official Quarkus Gradle plugin, applied only by the unpublished quarkus:it project (its tests need the
+# application model the plugin provides): the second exception to "no third-party Gradle plugins", see CLAUDE.md.
+quarkus = { id = "io.quarkus", version.ref = "quarkus" }

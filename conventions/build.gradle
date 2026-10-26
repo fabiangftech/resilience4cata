@@ -20,6 +20,10 @@ gradlePlugin {
             id = 'r4c.central'
             implementationClass = 'dev.resilience4cata.build.CentralConventionPlugin'
         }
+        quarkusExtension {
+            id = 'r4c.quarkus-extension'
+            implementationClass = 'dev.resilience4cata.build.QuarkusExtensionConventionPlugin'
+        }
         jcstress {
             id = 'r4c.jcstress'
             implementationClass = 'dev.resilience4cata.build.JcstressConventionPlugin'

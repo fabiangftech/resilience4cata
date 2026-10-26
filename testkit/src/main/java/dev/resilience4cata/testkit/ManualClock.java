@@ -25,7 +25,9 @@ import org.jspecify.annotations.Nullable;
  *       {@code advance(waitInOpen)}; the next call is then a half-open probe.</li>
  *   <li><b>Delayed tasks run when the clock passes their deadline</b>, on the thread that calls
  *       {@link #advance}, before it returns: async retry backoff, async rate limiter waits, async
- *       bulkhead wait limits and async timeouts.</li>
+ *       bulkhead wait limits and async timeouts. A task with no delay (an async retry with a zero
+ *       backoff, a hedge after a failure) waits for the next advance too; {@code advance(Duration.ZERO)}
+ *       runs it.</li>
  *   <li><b>Synchronous bulkhead waits end on this clock.</b> A caller blocked on a full bulkhead with
  *       {@code maxWait} gets a slot as soon as one is released, and is rejected when the clock passes
  *       {@code maxWait} (advanced by another thread, or by the slot holder sleeping on this clock); it
