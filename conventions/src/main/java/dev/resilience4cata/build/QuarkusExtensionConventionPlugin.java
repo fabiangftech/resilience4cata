@@ -19,9 +19,10 @@ import org.gradle.language.jvm.tasks.ProcessResources;
  *   <li>{@code runtime}: {@code quarkusExtensionDescriptor} writes {@code META-INF/quarkus-extension.properties}
  *       ({@code deployment-artifact}, which is how Quarkus finds the deployment module) and
  *       {@code META-INF/quarkus-extension.yaml} (the template {@code src/main/quarkus-extension.yaml} completed with
- *       the artifact and the Quarkus version) into the jar's resources. They are generated outside the source
- *       resource directories on purpose: the Quarkus Gradle plugin then reads them from the jar of a project
- *       dependency, like any other extension, and resolves the deployment artifact by its coordinates.
+ *       the artifact and the Quarkus version) into the jar's resources, for applications that get the extension
+ *       from a repository. Inside this build, the Quarkus Gradle plugin of {@code quarkus:it} finds the deployment
+ *       module through the {@code quarkusExtension} extension instead ({@link QuarkusExtensionModel}): it looks
+ *       while the build is configured, when the jar may not exist yet.
  *   <li>{@code deployment}: {@code quarkusExtensionCheck} (part of {@code check}) fails when an extension on the
  *       runtime class path has no deployment artifact on the deployment module's class path, the check
  *       Quarkus's Maven plugin does.
@@ -63,6 +64,9 @@ public final class QuarkusExtensionConventionPlugin implements Plugin<Project> {
                     task.getOutputDirectory().set(project.getLayout().getBuildDirectory().dir("generated/quarkus-extension"));
                 });
         project.getTasks().named("processResources", ProcessResources.class).configure(task -> task.from(descriptor));
+        // How the Quarkus Gradle plugin of quarkus:it finds the deployment module on a clean build (see the class).
+        QuarkusExtensionModel model = project.getExtensions().create("quarkusExtension", QuarkusExtensionModel.class);
+        model.getDeploymentModule().set(project.getParent().getPath() + ":deployment");
     }
 
     private static void deployment(Project project) {
