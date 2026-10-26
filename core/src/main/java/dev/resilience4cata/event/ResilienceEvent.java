@@ -11,6 +11,15 @@ package dev.resilience4cata.event;
  *     default -> { }
  * }
  * }</pre>
+ *
+ * <p><b>Compatibility.</b> The hierarchy is sealed so that pattern matching works, and it grows in minor
+ * versions: a new policy adds its own event interface, and a policy can add event records. Keep a
+ * {@code default} branch in a {@code switch} over {@code ResilienceEvent} or over one policy's interface,
+ * or register listeners for the record types you need ({@code listen(RetryEvent.GaveUp.class, ...)}), which a
+ * new event type never affects. Without a {@code default}, recompiling against a newer version reports the
+ * new types; code compiled against an older one that receives a type it does not know throws
+ * {@link MatchException} in the listener, which goes to the thread's uncaught exception handler and never
+ * reaches the call.
  */
 public sealed interface ResilienceEvent
         permits CircuitBreakerEvent, RetryEvent, HedgeEvent, TimeoutEvent, BulkheadEvent, RateLimiterEvent, FallbackEvent {

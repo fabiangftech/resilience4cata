@@ -16,6 +16,7 @@ dependencies {
     compileOnly libs.spring.boot.health.minimum
     compileOnly libs.spring.boot.actuator.minimum
     compileOnly libs.spring.boot.actuator.autoconfigure.minimum
+    compileOnly libs.spring.tx.minimum
     // Annotations on Boot's health classes, read by javac.
     compileOnly libs.jackson.annotations
     // Condition metadata (spring-autoconfigure-metadata.properties) and configuration metadata for the IDEs.
@@ -31,6 +32,8 @@ dependencies {
     testImplementation libs.spring.boot.micrometer.metrics
     testImplementation libs.spring.boot.test
     testImplementation libs.spring.test
+    testImplementation libs.spring.tx
+    testImplementation libs.jakarta.transaction.api
     testImplementation libs.spring.core.test
     testImplementation libs.jackson.databind
     testImplementation libs.snakeyaml

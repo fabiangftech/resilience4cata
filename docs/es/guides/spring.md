@@ -131,9 +131,17 @@ falla con [`R4C-SPR-001`](../errors.md#r4c-spr-001): registra la clase en su lug
 
 **Proxies sobre la clase.** La clase generada no es `final`, así que Spring aún puede poner un proxy basado en
 clases alrededor (`@Transactional`, `@Cacheable`, `@Async`, beans con ámbito). El proxy queda fuera de las
-políticas: un método `@Transactional` que se reintenta ejecuta todos sus intentos en **una** transacción. Si cada
-intento necesita su propia transacción, reintenta en un bean que llame al transaccional, o usa el estilo de
-interfaces de abajo.
+políticas. Con transacciones eso supondría una sola transacción para todos los intentos, y cuando un intento
+fallido la marca rollback-only, un intento posterior exitoso no puede hacer commit (`UnexpectedRollbackException`).
+Por eso un método reintentado o con hedge que además es transaccional (`@Transactional` de Spring o de Jakarta, con
+una propagación que se une a una transacción o la inicia) **detiene el arranque** con
+[`R4C-SPR-004`](../errors.md#r4c-spr-004). Corrígelo declarando la política en una interfaz que implemente el bean
+(el envoltorio de la interfaz queda fuera del proxy de transacciones: una transacción por intento), o moviendo
+`@Transactional` a otro bean al que llame el método reintentado. Si lo que quieres es una sola transacción
+compartida, pon `resilience4cata.spring.allow-retry-inside-transaction=true`. `@CircuitBreaker`, `@Timeout`,
+`@RateLimiter` y `@Bulkhead` ejecutan la llamada una vez y no se comprueban. El override generado repite las
+anotaciones del método que sobrescribe, así que un `@Transactional` de Jakarta a nivel de método (que Spring solo
+lee en el método invocado) se aplica y se comprueba como el de Spring.
 
 ## Interfaces anotadas :id=interfaces
 
@@ -307,6 +315,7 @@ listener); el bean `ResilienceConfig` sigue disponible para construirlo con `con
 |---|---|---|
 | `resilience4cata.spring.wrap` | `true` | Reemplaza los beans de interfaces anotadas por su envoltorio |
 | `resilience4cata.spring.exclude` | vacío | Nombres de beans que dejar tal cual: sin subclase, sin envoltorio, sin comprobaciones |
+| `resilience4cata.spring.allow-retry-inside-transaction` | `false` | Permite `@Retry`/`@Hedge` en métodos transaccionales de clases anotadas (una transacción para todos los intentos) en lugar de fallar con R4C-SPR-004 |
 | `resilience4cata.spring.verify-instances` | `fail` (`warn` con inicialización perezosa) | `fail`, `warn` u `off` para claves de instancia que no corresponden a nada |
 | `resilience4cata.spring.health.down-when-open` | vacío | Ids de breakers (o `*`) que ponen la salud en DOWN mientras están abiertos |
 | `resilience4cata.spring.metrics.enabled` | `true` | Registra los medidores de Micrometer |
@@ -370,8 +379,10 @@ procesamiento AOT en la JVM; su CI no construye imágenes nativas.
   dentro de la implementación no están protegidas. Una interfaz anotada por bean.
 - Los métodos `@Bean` deben devolver ellos mismos la clase generada; una clase `@Configuration` completa con
   métodos `@Bean` no puede anotarse ([`R4C-SPR-002`](../errors.md#r4c-spr-002)).
-- Con clases anotadas, los proxies basados en clases como `@Transactional` quedan fuera de las políticas (una
-  transacción para todos los intentos).
+- Con clases anotadas, los proxies basados en clases como `@Transactional` quedan fuera de las políticas; un
+  método transaccional reintentado o con hedge detiene el arranque ([`R4C-SPR-004`](../errors.md#r4c-spr-004))
+  salvo que se permita. La comprobación lee los ficheros de clase, así que una imagen nativa la omite: se ejecuta en
+  el build y las pruebas en la JVM.
 - Los métodos que el constructor llama sobre `this` se ejecutan antes de que se preparen las políticas
   ([clases anotadas](annotated-classes.md)).
 - Sin observaciones por llamada, sin historial de eventos en el endpoint, sin recarga en caliente de la

@@ -56,7 +56,8 @@ class ConfigurationMetadataTest {
             metadata.get("properties").forEach(p -> names.add(p.get("name").asString()));
             assertThat(names).contains("resilience4cata.defaults.retry.max-attempts",
                     "resilience4cata.defaults.circuit-breaker.wait-in-open", "resilience4cata.instances",
-                    "resilience4cata.spring.wrap", "resilience4cata.spring.health.down-when-open");
+                    "resilience4cata.spring.wrap", "resilience4cata.spring.health.down-when-open",
+                    "resilience4cata.spring.allow-retry-inside-transaction");
         }
     }
 

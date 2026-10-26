@@ -448,6 +448,92 @@ class SubclassProcessorTest {
     }
 
     @Test
+    void repeatsTheAnnotationsOfOverriddenMethodsAndTheirParameters() throws Exception {
+        Compilation result = Compilation.compile(workDir, Map.of(
+                "demo.Transactional", """
+                        package demo;
+                        import java.lang.annotation.*;
+                        @Retention(RetentionPolicy.RUNTIME) @Target({ElementType.METHOD, ElementType.TYPE})
+                        public @interface Transactional { String value() default ""; boolean readOnly() default false; }
+                        """,
+                "demo.Valid", """
+                        package demo;
+                        import java.lang.annotation.*;
+                        @Retention(RetentionPolicy.RUNTIME) @Target(ElementType.PARAMETER)
+                        public @interface Valid {}
+                        """,
+                "demo.Marker", """
+                        package demo;
+                        import java.lang.annotation.*;
+                        @Retention(RetentionPolicy.SOURCE) @Target(ElementType.METHOD)
+                        public @interface Marker {}
+                        """,
+                "demo.Standard", """
+                        package demo;
+                        import java.lang.annotation.*;
+                        @dev.resilience4cata.annotation.ResiliencePolicy
+                        @dev.resilience4cata.annotation.Retry(maxAttempts = 2)
+                        @Retention(RetentionPolicy.CLASS) @Target({ElementType.TYPE, ElementType.METHOD})
+                        public @interface Standard {}
+                        """,
+                "demo.Service", """
+                        package demo;
+                        import dev.resilience4cata.annotation.*;
+                        import java.util.concurrent.CompletableFuture;
+                        @Transactional("type level")
+                        public class Service {
+                            @Retry(maxAttempts = 3) @CircuitBreaker @Fallback(method = "recover") @Transactional(value = "tx", readOnly = true)
+                            @Marker @Deprecated
+                            public String call(@Valid String id, int count) { return id; }
+                            String recover(String id, int count, Exception e) { return "recovered"; }
+                            @Standard @Transactional
+                            public CompletableFuture<String> async(@Valid String id) { return CompletableFuture.completedFuture(id); }
+                            @Timeout("1s")
+                            public void plain(String value) {}
+                        }
+                        """));
+
+        assertThat(result.errors()).isEmpty();
+        String generated = result.generatedSource("demo.Service$Resilient");
+        assertThat(generated)
+                .contains("""
+                            @Override
+                            @demo.Transactional(value = "tx", readOnly = true)
+                            @java.lang.Deprecated
+                            public java.lang.String call(@demo.Valid java.lang.String p0, int p1) {
+                        """)
+                .contains("""
+                            @Override
+                            @demo.Transactional
+                            public java.util.concurrent.CompletableFuture<java.lang.String> async(@demo.Valid java.lang.String p0) {
+                        """)
+                .contains("""
+                            @Override
+                            public void plain(java.lang.String p0) {
+                        """)
+                // the inner layers are private methods: they carry no annotations
+                .contains("    private java.lang.String r4c$circuitBreaker0(java.lang.String p0, int p1) {\n")
+                .doesNotContain("Marker")
+                .doesNotContain("@dev.resilience4cata.annotation")
+                .doesNotContain("@demo.Standard")
+                .doesNotContain("type level");
+        // the generated class carries no policy annotation, so the processor does not process it again
+        assertThat(Files.exists(result.generated().resolve("demo/Service$Resilient$Resilient.java"))).isFalse();
+
+        try (java.net.URLClassLoader loader = new java.net.URLClassLoader(new java.net.URL[] {result.classes().toUri().toURL()},
+                getClass().getClassLoader())) {
+            Class<?> type = loader.loadClass("demo.Service$Resilient");
+            java.lang.reflect.Method call = type.getDeclaredMethod("call", String.class, int.class);
+            assertThat(call.getAnnotations()).extracting(a -> a.annotationType().getSimpleName())
+                    .containsExactly("Transactional", "Deprecated");
+            assertThat(call.getAnnotations()[0].toString()).contains("readOnly=true").contains("\"tx\"");
+            assertThat(call.getParameterAnnotations()[0]).extracting(a -> a.annotationType().getSimpleName())
+                    .containsExactly("Valid");
+            assertThat(call.getParameterAnnotations()[1]).isEmpty();
+        }
+    }
+
+    @Test
     void generatedSubclassesAreNotFinalSoFrameworksCanProxyThem() {
         Compilation result = Compilation.compile(workDir, Map.of(
                 "demo.Service", """

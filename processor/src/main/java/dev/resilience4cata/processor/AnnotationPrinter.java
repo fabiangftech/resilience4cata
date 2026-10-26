@@ -28,6 +28,8 @@ import javax.lang.model.util.SimpleAnnotationValueVisitor14;
 final class AnnotationPrinter {
 
     private static final String CONSTRUCTOR_PROPERTIES = "java.beans.ConstructorProperties";
+    private static final String SAFE_VARARGS = "java.lang.SafeVarargs";
+    private static final String LIBRARY_PACKAGE = "dev.resilience4cata.annotation.";
 
     private AnnotationPrinter() {
     }
@@ -38,9 +40,29 @@ final class AnnotationPrinter {
      * adds in front of the original ones; {@code leadingName} is ignored for every other annotation.
      */
     static String annotations(Element element, ElementType target, String separator, String leadingName) {
+        return annotations(element, target, separator, leadingName, false);
+    }
+
+    /**
+     * The annotations of {@code method} to repeat on the generated override, each followed by {@code separator}:
+     * as for constructors, except this library's own annotations and the composed annotations that carry them
+     * (the generated class must not be processed again), and {@code @SafeVarargs}, which an overridable method
+     * cannot have.
+     */
+    static String methodAnnotations(ExecutableElement method, String separator) {
+        return annotations(method, ElementType.METHOD, separator, "", true);
+    }
+
+    /** The annotations of a parameter of an overridden method, each followed by a space; see {@link #methodAnnotations}. */
+    static String parameterAnnotations(VariableElement parameter) {
+        return annotations(parameter, ElementType.PARAMETER, " ", "", true);
+    }
+
+    private static String annotations(Element element, ElementType target, String separator, String leadingName,
+            boolean override) {
         StringBuilder out = new StringBuilder();
         for (AnnotationMirror annotation : element.getAnnotationMirrors()) {
-            if (!copied(annotation, target)) {
+            if (!copied(annotation, target) || (override && !copiedOnOverride(annotation))) {
                 continue;
             }
             String name = ((TypeElement) annotation.getAnnotationType().asElement()).getQualifiedName().toString();
@@ -66,6 +88,22 @@ final class AnnotationPrinter {
         }
         Target applicable = type.getAnnotation(Target.class);
         return applicable == null || Arrays.asList(applicable.value()).contains(target);
+    }
+
+    /** False for {@code @SafeVarargs} and for annotations of this library or annotated with one (bundles). */
+    private static boolean copiedOnOverride(AnnotationMirror annotation) {
+        TypeElement type = (TypeElement) annotation.getAnnotationType().asElement();
+        String name = type.getQualifiedName().toString();
+        if (name.equals(SAFE_VARARGS) || name.startsWith(LIBRARY_PACKAGE)) {
+            return false;
+        }
+        for (AnnotationMirror meta : type.getAnnotationMirrors()) {
+            if (meta.getAnnotationType().getKind() == TypeKind.DECLARED && ((TypeElement) meta.getAnnotationType().asElement())
+                    .getQualifiedName().toString().startsWith(LIBRARY_PACKAGE)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** {@code @ConstructorProperties} must list one name per parameter, so the generated one lists the registry first. */

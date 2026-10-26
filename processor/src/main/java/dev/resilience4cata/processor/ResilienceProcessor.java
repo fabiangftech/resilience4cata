@@ -1364,10 +1364,16 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String signatureTail = "(" + String.join(", ", parameters) + ")" + throwsClause;
         String args = String.join(", ", arguments);
         String delegateCall = delegateReceiver + "." + method.getSimpleName() + "(" + args + ")";
+        // The subclass's override repeats the annotations of the method it overrides and of its parameters, for
+        // frameworks that read them on the invoked method only (@Transactional, interceptor bindings).
+        boolean subclass = !DELEGATE.equals(delegateReceiver);
+        String annotations = subclass ? AnnotationPrinter.methodAnnotations(method, "\n    ") : "";
+        String publicTail = subclass ? "(" + String.join(", ", annotatedParameters(method, parameters)) + ")" + throwsClause
+                : signatureTail;
 
         if (model.asyncResult() != null && (!model.policies().isEmpty() || model.fallback() != null)) {
-            writeAsyncMethod(out, model, index, typeVariables, returnType, method.getSimpleName() + signatureTail,
-                    String.join(", ", parameters), arguments, delegateCall);
+            writeAsyncMethod(out, model, index, typeVariables, returnType, annotations + "public ",
+                    method.getSimpleName() + publicTail, String.join(", ", parameters), arguments, delegateCall);
             return;
         }
         // One layer per policy, outermost first. Layer i calls layer i + 1; the last one calls the delegate.
@@ -1379,8 +1385,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
         for (Kind kind : layers) {
             layerNames.add("r4c$" + kind.field + index);
         }
-        out.append("\n    @Override\n    public ").append(typeVariables).append(returnType).append(' ')
-                .append(method.getSimpleName()).append(signatureTail).append(" {\n");
+        out.append("\n    @Override\n    ").append(annotations).append("public ").append(typeVariables).append(returnType)
+                .append(' ').append(method.getSimpleName()).append(publicTail).append(" {\n");
         if (layers.isEmpty()) {
             appendLines(out, List.of(isVoid ? delegateCall + ";" : "return " + delegateCall + ";"));
         } else {
@@ -1393,6 +1399,15 @@ public final class ResilienceProcessor extends AbstractProcessor {
             appendLines(out, layer(layers.get(i), model, index, inner(layerNames, i + 1, args, delegateCall), isVoid, returnType, arguments));
             out.append("    }\n");
         }
+    }
+
+    /** {@code parameters} with the annotations of {@code method}'s parameters in front of each. */
+    private static List<String> annotatedParameters(ExecutableElement method, List<String> parameters) {
+        List<String> annotated = new ArrayList<>();
+        for (int i = 0; i < parameters.size(); i++) {
+            annotated.add(AnnotationPrinter.parameterAnnotations(method.getParameters().get(i)) + parameters.get(i));
+        }
+        return annotated;
     }
 
     /** Adds the declarations {@code T p0, U p1, ...} and the arguments {@code p0, p1, ...} of a generated method. */
@@ -1417,7 +1432,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
      */
     @SuppressWarnings("java:S107") // java:S107: the parts of the signature that writeMethod already computed
     private static void writeAsyncMethod(StringBuilder out, MethodModel model, int index, String typeVariables,
-            String returnType, String signature, String parameters, List<String> arguments, String delegateCall) {
+            String returnType, String modifiers, String signature, String parameters, List<String> arguments,
+            String delegateCall) {
         FallbackModel fallback = model.fallback();
         String args = String.join(", ", arguments);
         String result = TypePrinter.print(model.asyncResult());
@@ -1427,8 +1443,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 + "(r4c$e, r4c$attempts" + (args.isEmpty() ? "" : ", " + args) + ")";
         String expression = asyncExpression(model, index,
                 isWildcardStage(model.type()) ? widen(delegateCall, result) : delegateCall, recovery);
-        out.append("\n    @Override\n    public ").append(typeVariables).append(returnType).append(' ').append(signature)
-                .append(" {\n");
+        out.append("\n    @Override\n    ").append(modifiers).append(typeVariables).append(returnType).append(' ')
+                .append(signature).append(" {\n");
         appendLines(out, List.of("return " + expression + ";"));
         out.append("    }\n");
         if (fallback == null) {

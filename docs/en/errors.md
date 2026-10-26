@@ -2649,6 +2649,24 @@ bean could no longer be injected by the other ones.
 type), or declare one interface that extends the others and implement that one. To wrap the bean yourself,
 list it in `resilience4cata.spring.exclude` and define a `@Bean` that returns `Resilient.of(...)`.
 
+### R4C-SPR-004
+
+**Trigger:** an annotated class has a method with `@Retry` or `@Hedge` in effect (on the method, the class, a
+superclass, an interface or a bundle) that is also transactional: Spring's or Jakarta's `@Transactional` with a
+propagation that joins or starts a transaction (`REQUIRED`, `SUPPORTS`, `MANDATORY`, `REQUIRES_NEW`, `NESTED`)
+(`BeanCreationException`). The transaction proxy goes around the generated subclass, so every attempt would run
+in the same transaction, and an attempt that fails and marks it rollback-only makes the commit of a later
+successful attempt fail with `UnexpectedRollbackException`.
+
+```text
+[R4C-SPR-004] Bean 'ledger' (com.acme.Ledger) has transactional methods that are retried or hedged: @Retry on post (REQUIRED). ...
+```
+
+**Fix:** declare the policy on an interface the bean implements instead (its wrapper goes outside the
+transaction proxy: one transaction per attempt); or move `@Transactional` to another bean that the retried
+method calls; or, if one shared transaction for every attempt is intended, set
+`resilience4cata.spring.allow-retry-inside-transaction=true`. `NOT_SUPPORTED` and `NEVER` are not reported.
+
 ## Tests: testkit (R4C-TK)
 
 `ManualClock` and `ResilienceTesting` report misuse in tests with these codes.

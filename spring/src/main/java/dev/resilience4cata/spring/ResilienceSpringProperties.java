@@ -19,12 +19,15 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param verifyInstances What to do at startup when a resilience4cata.instances key matches no policy
  *     instance: fail (the default), warn (the default with lazy initialization, where instances appear
  *     later), or off.
+ * @param allowRetryInsideTransaction Whether an annotated class may retry or hedge a transactional method: every
+ *     attempt then runs in the same transaction. Off by default: the startup fails instead.
  * @param health The health indicator.
  * @param metrics The Micrometer metrics.
  */
 @ConfigurationProperties("resilience4cata.spring")
 public record ResilienceSpringProperties(@DefaultValue("true") boolean wrap, @DefaultValue List<String> exclude,
-        @Nullable VerifyInstances verifyInstances, @DefaultValue Health health, @DefaultValue Metrics metrics) {
+        @Nullable VerifyInstances verifyInstances, @DefaultValue("false") boolean allowRetryInsideTransaction,
+        @DefaultValue Health health, @DefaultValue Metrics metrics) {
 
     /** The properties' prefix: {@value}. */
     public static final String PREFIX = "resilience4cata.spring";
@@ -40,7 +43,7 @@ public record ResilienceSpringProperties(@DefaultValue("true") boolean wrap, @De
      * @return the defaults
      */
     public static ResilienceSpringProperties defaults() {
-        return new ResilienceSpringProperties(true, List.of(), null, new Health(List.of()), new Metrics(true));
+        return new ResilienceSpringProperties(true, List.of(), null, false, new Health(List.of()), new Metrics(true));
     }
 
     /** What to do with per-instance overrides that match no instance. */

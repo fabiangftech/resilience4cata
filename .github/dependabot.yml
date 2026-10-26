@@ -21,6 +21,7 @@ updates:
       - dependency-name: 'org.springframework.boot:spring-boot-actuator-autoconfigure'
       - dependency-name: 'org.springframework.boot:spring-boot-autoconfigure-processor'
       - dependency-name: 'org.springframework.boot:spring-boot-configuration-processor'
+      - dependency-name: 'org.springframework:spring-tx'
     groups:
       junit:
         patterns: ['org.junit*']

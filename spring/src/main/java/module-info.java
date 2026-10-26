@@ -18,6 +18,7 @@ module dev.resilience4cata.spring {
     requires org.apache.commons.logging;
     requires static transitive dev.resilience4cata.micrometer;
     requires static transitive micrometer.core;
+    requires static spring.tx;
     requires static transitive spring.boot.health;
     requires static transitive spring.boot.actuator;
     requires static transitive spring.boot.actuator.autoconfigure;

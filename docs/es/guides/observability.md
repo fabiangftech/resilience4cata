@@ -43,7 +43,7 @@ ResilienceRegistry registry = ResilienceRegistry.builder()
                 t -> log.add(t.instance() + ": " + t.from() + " -> " + t.to()))
         // every retry event (Retrying and GaveUp), on one instance only
         .listen("payments", RetryEvent.class, e -> log.add(e.toString()))
-        // everything: the hierarchy is sealed, so a switch can be exhaustive
+        // everything: keep a default branch, new policies add event types
         .listen(ResilienceEvent.class, e -> {
             switch (e) {
                 case RetryEvent.GaveUp g -> log.add("gave up after " + g.attempts() + ": " + g.reason());
@@ -57,6 +57,9 @@ ResilienceRegistry registry = ResilienceRegistry.builder()
 - **Una excepción lanzada por un listener** no llega a la llamada ni a los demás listeners: va al uncaught exception handler del thread.
 - **Orden:** los eventos publicados desde threads distintos pueden llegar desordenados; cada transición de un breaker llega exactamente una vez.
 - `EventListener<E>` es una interfaz funcional (`void onEvent(E event)`), así que sirve una lambda o una referencia a método.
+
+> [!IMPORTANT]
+> **Las versiones nuevas agregan tipos de evento.** La jerarquía es sellada y crece en versiones menores (una política nueva trae su propia interfaz de eventos, como `HedgeEvent` en 0.4.0). Mantén una rama `default` en un `switch` sobre `ResilienceEvent` o sobre la interfaz de una política, o escucha los tipos de record que necesitas (`listen(RetryEvent.GaveUp.class, …)`), que los tipos nuevos nunca afectan. El código compilado contra una versión anterior que recibe un tipo desconocido lanza `MatchException` en el listener; como toda excepción de un listener, va al uncaught exception handler y nunca rompe la llamada.
 
 ### Lo que cuestan los eventos :id=cost
 

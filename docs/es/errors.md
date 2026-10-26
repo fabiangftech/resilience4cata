@@ -2664,6 +2664,24 @@ ya no podría inyectarse por las otras.
 el tipo del bean), o declara una interfaz que extienda a las demás e implementa esa. Para envolver el bean tú
 mismo, ponlo en `resilience4cata.spring.exclude` y define un `@Bean` que devuelva `Resilient.of(...)`.
 
+### R4C-SPR-004
+
+**Causa:** una clase anotada tiene un método con `@Retry` o `@Hedge` en vigor (en el método, la clase, una
+superclase, una interfaz o un bundle) que además es transaccional: `@Transactional` de Spring o de Jakarta con una
+propagación que se une a una transacción o la inicia (`REQUIRED`, `SUPPORTS`, `MANDATORY`, `REQUIRES_NEW`,
+`NESTED`) (`BeanCreationException`). El proxy de transacciones envuelve la subclase generada, así que todos los
+intentos se ejecutarían en la misma transacción, y un intento que falla y la marca rollback-only hace que el commit
+de un intento posterior exitoso falle con `UnexpectedRollbackException`.
+
+```text
+[R4C-SPR-004] Bean 'ledger' (com.acme.Ledger) has transactional methods that are retried or hedged: @Retry on post (REQUIRED). ...
+```
+
+**Corrección:** declara la política en una interfaz que implemente el bean (su envoltorio queda fuera del proxy de
+transacciones: una transacción por intento); o mueve `@Transactional` a otro bean al que llame el método
+reintentado; o, si se quiere a propósito una sola transacción compartida por todos los intentos, pon
+`resilience4cata.spring.allow-retry-inside-transaction=true`. `NOT_SUPPORTED` y `NEVER` no se reportan.
+
 ## Pruebas: testkit (R4C-TK)
 
 `ManualClock` y `ResilienceTesting` reportan un mal uso en las pruebas con estos códigos.

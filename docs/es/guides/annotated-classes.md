@@ -81,6 +81,8 @@ public class ReportService$Resilient extends ReportService {
 - `@ConstructorProperties` lista un nombre por parámetro, así que la copia generada empieza por el del registry.
 - Los nombres de parámetro son los del código fuente, así que un contenedor que empareja beans por nombre de parámetro (Spring, compilando con `-parameters`) ve los mismos nombres en las dos clases.
 
+Los overrides hacen lo mismo con los métodos: cada uno repite las anotaciones del método que sobrescribe y de sus parámetros, con las mismas reglas, así que las anotaciones que los frameworks leen solo en el método invocado (el `@Transactional` de Jakarta en Spring, los interceptor bindings de CDI o Micronaut, `@Deprecated`) no se pierden. No se repiten las anotaciones propias de resilience4cata ni los bundles que las llevan, ni las anotaciones a nivel de tipo de la clase (las `@Inherited` llegan a la subclase de todos modos).
+
 ## ¿Interfaz o clase?
 
 | | Interfaz anotada | Clase anotada |

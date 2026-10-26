@@ -48,7 +48,7 @@ class ObservabilityGuideTest {
                         t -> log.add(t.instance() + ": " + t.from() + " -> " + t.to()))
                 // every retry event (Retrying and GaveUp), on one instance only
                 .listen("payments", RetryEvent.class, e -> log.add(e.toString()))
-                // everything: the hierarchy is sealed, so a switch can be exhaustive
+                // everything: keep a default branch, new policies add event types
                 .listen(ResilienceEvent.class, e -> {
                     switch (e) {
                         case RetryEvent.GaveUp g -> log.add("gave up after " + g.attempts() + ": " + g.reason());

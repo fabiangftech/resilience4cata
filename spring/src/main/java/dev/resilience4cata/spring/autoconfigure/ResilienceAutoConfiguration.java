@@ -15,10 +15,12 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.core.ResolvableType;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
@@ -48,6 +50,18 @@ public final class ResilienceAutoConfiguration {
             ObjectProvider<ResilienceRegistry> registry) {
         ResilienceSpringProperties settings = settings(environment);
         return new ResilientBeansPostProcessor(registry::getObject, settings.wrap(), Set.copyOf(settings.exclude()));
+    }
+
+    /** Fails the startup when a transaction proxy goes around a retried method of an annotated class (R4C-SPR-004). */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "org.springframework.transaction.interceptor.TransactionInterceptor")
+    static class TransactionCheckConfiguration {
+
+        @Bean
+        static RetryInsideTransactionCheck resilienceRetryInsideTransactionCheck(Environment environment) {
+            ResilienceSpringProperties settings = settings(environment);
+            return new RetryInsideTransactionCheck(settings.allowRetryInsideTransaction(), Set.copyOf(settings.exclude()));
+        }
     }
 
     /** Post-processors exist before configuration properties beans do, so they bind the switches themselves. */

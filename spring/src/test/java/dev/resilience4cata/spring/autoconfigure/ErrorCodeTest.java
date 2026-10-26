@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.spring.Runners;
+import dev.resilience4cata.spring.TransactionTest;
 import dev.resilience4cata.spring.broken.AnnotatedConfiguration;
 import dev.resilience4cata.spring.broken.TwoFacedClient;
 import dev.resilience4cata.spring.fixtures.Money;
 import dev.resilience4cata.spring.fixtures.PricingService;
+import dev.resilience4cata.spring.tx.RetriedLedger;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -53,6 +55,8 @@ class ErrorCodeTest {
         reported.addAll(codes(runner.withUserConfiguration(UnprotectedBean.class)));
         reported.addAll(codes(runner.withUserConfiguration(AnnotatedConfiguration.class)));
         reported.addAll(codes(runner.withBean(TwoFacedClient.class, TwoFacedClient::new)));
+        reported.addAll(codes(runner.withUserConfiguration(TransactionTest.Transactions.class)
+                .withBean(RetriedLedger.class)));
 
         assertThat(reported).containsExactlyInAnyOrderElementsOf(
                 Arrays.stream(ErrorCode.values()).map(ErrorCode::code).toList());

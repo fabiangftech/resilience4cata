@@ -81,6 +81,8 @@ public class ReportService$Resilient extends ReportService {
 - `@ConstructorProperties` lists one name per parameter, so the generated copy starts with the registry's.
 - The parameter names are those of the source, so a container that matches beans by parameter name (Spring, compiled with `-parameters`) sees the same names on both classes.
 
+The overrides do the same for methods: each one repeats the annotations of the method it overrides and of its parameters, with the same rules, so annotations that frameworks read only on the invoked method (Jakarta's `@Transactional` under Spring, CDI or Micronaut interceptor bindings, `@Deprecated`) are not lost. resilience4cata's own annotations and the bundles that carry them are not repeated, and neither are the class's type-level annotations (`@Inherited` ones reach the subclass anyway).
+
 ## Interface or class?
 
 | | Annotated interface | Annotated class |

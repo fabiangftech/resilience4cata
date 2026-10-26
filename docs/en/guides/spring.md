@@ -131,9 +131,18 @@ with [`R4C-SPR-001`](../errors.md#r4c-spr-001): register the class instead, or r
 `new OrderService$Resilient(registry, ...)` from the method.
 
 **Proxies over the class.** The generated class is not `final`, so Spring can still put a class-based proxy
-around it (`@Transactional`, `@Cacheable`, `@Async`, scoped beans). The proxy is outside the policies: a
-`@Transactional` method that is retried runs all its attempts in **one** transaction. If each attempt needs
-its own transaction, retry in a bean that calls the transactional one, or use the interface style below.
+around it (`@Transactional`, `@Cacheable`, `@Async`, scoped beans). The proxy is outside the policies. For
+transactions that would mean one transaction for every attempt, and after a failed attempt marks it
+rollback-only, a later successful attempt fails to commit with `UnexpectedRollbackException`. So a method that
+is both retried or hedged and transactional (`@Transactional` of Spring or Jakarta, with a propagation that
+joins or starts a transaction) **stops the startup** with [`R4C-SPR-004`](../errors.md#r4c-spr-004). Fix it
+by declaring the policy on an interface the bean implements (the interface wrapper goes outside the
+transaction proxy: one transaction per attempt), or by moving `@Transactional` to another bean that the
+retried method calls. If one shared transaction is what you want, set
+`resilience4cata.spring.allow-retry-inside-transaction=true`. `@CircuitBreaker`, `@Timeout`, `@RateLimiter`
+and `@Bulkhead` run the call once and are not checked. The generated override repeats the annotations of the
+method it overrides, so a method-level Jakarta `@Transactional` (which Spring reads on the invoked method only)
+applies and is checked like Spring's.
 
 ## Annotated interfaces :id=interfaces
 
@@ -304,6 +313,7 @@ applied); the `ResilienceConfig` bean is still there to build it with `config.ap
 |---|---|---|
 | `resilience4cata.spring.wrap` | `true` | Replace beans of annotated interfaces by their wrapper |
 | `resilience4cata.spring.exclude` | empty | Bean names to leave alone: no subclass, no wrapper, no checks |
+| `resilience4cata.spring.allow-retry-inside-transaction` | `false` | Allow `@Retry`/`@Hedge` on transactional methods of annotated classes (one transaction for every attempt) instead of failing with R4C-SPR-004 |
 | `resilience4cata.spring.verify-instances` | `fail` (`warn` with lazy initialization) | `fail`, `warn` or `off` for instance keys that match nothing |
 | `resilience4cata.spring.health.down-when-open` | empty | Breaker ids (or `*`) that turn the health DOWN while open |
 | `resilience4cata.spring.metrics.enabled` | `true` | Register the Micrometer meters |
@@ -366,8 +376,9 @@ JVM; native images themselves are not built by its CI.
   implementation are not protected. One annotated interface per bean.
 - `@Bean` methods must return the generated class themselves; a full `@Configuration` class with `@Bean`
   methods cannot be annotated ([`R4C-SPR-002`](../errors.md#r4c-spr-002)).
-- With annotated classes, class-based proxies such as `@Transactional` run outside the policies (one
-  transaction for every attempt).
+- With annotated classes, class-based proxies such as `@Transactional` run outside the policies; a retried or
+  hedged transactional method fails the startup ([`R4C-SPR-004`](../errors.md#r4c-spr-004)) unless allowed. The
+  check reads the class files, so a native image skips it: it runs in the JVM build and tests.
 - Methods that the constructor calls on `this` run before the policies are set up
   ([annotated classes](annotated-classes.md)).
 - No per-call observations, no event history in the endpoint, no hot reload of the configuration.
