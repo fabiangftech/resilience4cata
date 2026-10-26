@@ -214,7 +214,7 @@ Based on [05 §2–§4](research/05-project-architecture.md), as set up now:
 - Testing: JUnit, AssertJ, jcstress and JMH (with an allocation gate). Processor tests compile sources in memory with a small `Compilation` helper on plain `javax.tools`, not the compile-testing library. ArchUnit and jqwik (in maintenance mode) are ideas, not used.
 - Static analysis: `javac -Xlint:all -Werror` and JSpecify nullness annotations. Error Prone + NullAway, Spotless and JaCoCo are ideas, not set up.
 - Publishing: to the Maven Central Portal (OSSRH closed in June 2025) with Gradle's own `maven-publish` and `signing` plugins and no third-party plugin. The `r4c.publish` convention plugin writes the POMs and signs; `r4c.central`, at the root, builds a checked bundle zip and uploads it through the Publisher API as a deployment that is released by hand in the portal. The `dev.resilience4cata` namespace is verified on the Central Portal through a DNS TXT record on `resilience4cata.dev`. Steps: [Releasing](releasing.md).
-- Versioning: SemVer, `0.x` while incubating. Planned: japicmp in CI, failing the build from `1.0`.
+- Versioning: SemVer, `0.x` while incubating. `apiCompatibility` (japicmp, in `check` and CI) compares every published module with the last release: a warning before `1.0`, a build failure from `1.0` unless the major version changes ([Releasing](releasing.md)).
 
 ## Documentation
 

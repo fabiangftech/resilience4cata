@@ -24,6 +24,7 @@ groupId `dev.resilience4cata`. Every jar carries `LICENSE` and `NOTICE` (Apache-
 - **`r4c.central`** (`CentralConventionPlugin.java`), applied by the root `build.gradle`:
   - `centralBundle` deletes `build/central-staging`, publishes every module into it, checks it and zips it into `build/central-bundle.zip`. The check fails on a `-SNAPSHOT` version, a missing module, a missing sources or Javadoc jar, or any file without its `.asc` signature and `.md5`/`.sha1` checksums. Only the release version's files go in (no `maven-metadata.xml`), and without the `.sha256`/`.sha512` checksums Gradle also writes: Central does not require them, and every file of the bundle counts against the Central Portal's monthly file quota (1,000 files on the free plan; a release of every module is about 250 files).
   - `centralUpload` posts the zip to the Central Portal Publisher API (`POST /api/v1/publisher/upload`, `publishingType=USER_MANAGED`). Nothing depends on it, so `build` never uploads, and it fails without a token. A `USER_MANAGED` deployment is validated by Central and then waits in the portal until someone presses **Publish**.
+- **`apiCompatibility`** (`ApiCompatibilityTask.java`, added by `r4c.publish` and run by `check`, so by `build` and CI): japicmp compares each published module's jar with the same artifact at `r4c.apiBaseline` (in `gradle.properties`: the last release) from Maven Central, public and protected members, binary and source compatibility. The API is the packages the module exports in `module-info.java`, or `r4cApi.packages` in its build file for a module without one (`micronaut`, `quarkus:runtime`); a module that exports none (`processor`, `quarkus:deployment`) is skipped, and so is a module with no baseline (new since the last release, or offline). The report is `<module>/build/reports/api-compatibility/api-changes.md`. Before 1.0 an incompatible change is a warning; from 1.0 it fails the build unless the major version changes. japicmp runs through Gradle's Worker API, so it adds no Gradle plugin.
 - `opentelemetry` reports its version as the OpenTelemetry instrumentation scope version: `processResources` writes the build's `version` into `dev/resilience4cata/opentelemetry/version.properties`, so a release (including `-Pversion=…`) needs no manual step.
 - Signing is skipped when no key is set, so `./gradlew build` and `./gradlew publishToMavenLocal` need no secrets.
 
@@ -58,14 +59,15 @@ Keep secrets in `~/.gradle/gradle.properties` or the environment, never in the r
 
 ## Release steps
 
-1. Set the release version in `gradle.properties`: `version=0.1.0`. Commit (`release 0.1.0`) and tag: `git tag v0.1.0`, then push the commit and the tag.
-2. Build the bundle, either:
+1. Check the API changes since the last release: `./gradlew apiCompatibility`, then read the warnings and `*/build/reports/api-compatibility/api-changes.md`; every incompatible change goes in the changelog.
+2. Set the release version in `gradle.properties`: `version=0.1.0`. Commit (`release 0.1.0`) and tag: `git tag v0.1.0`, then push the commit and the tag.
+3. Build the bundle, either:
    - in CI: run the **release** workflow (`.github/workflows/release.yml`) on tag `v0.1.0`. It first runs the whole build on JDK 21 and 25 (the same `build` workflow as CI, on the tagged commit), and only then builds, signs, checks, archives `central-bundle.zip` as a workflow artifact, and uploads it if the token secrets are set; or
    - locally: `./gradlew build centralBundle --no-configuration-cache` with the signing properties set.
-3. Upload, if CI did not: `./gradlew centralUpload -x centralBundle`, or in the portal **Publish Component**, choose `build/central-bundle.zip`.
-4. In the portal, open **Deployments**, wait for *Validated*, review the files, then press **Publish** (or **Drop** to discard it). Artifacts reach Maven Central within about 30 minutes.
-5. Bump to the next development version: `version=0.2.0-SNAPSHOT`, commit.
-6. Once the release is visible on Maven Central, update the version written in the docs and the root `README.md` (build snippets on the site, landing pages, changelog): `grep -rn "0\.1\.0" README.md docs/en docs/es`.
+4. Upload, if CI did not: `./gradlew centralUpload -x centralBundle`, or in the portal **Publish Component**, choose `build/central-bundle.zip`.
+5. In the portal, open **Deployments**, wait for *Validated*, review the files, then press **Publish** (or **Drop** to discard it). Artifacts reach Maven Central within about 30 minutes.
+6. Bump to the next development version: `version=0.2.0-SNAPSHOT`, commit.
+7. Once the release is visible on Maven Central, update the version written in the docs and the root `README.md` (build snippets on the site, landing pages, changelog): `grep -rn "0\.1\.0" README.md docs/en docs/es`. Set `r4c.apiBaseline=0.1.0` in `gradle.properties` too, so `apiCompatibility` compares with the new release.
 
 To check a bundle without releasing anything, build it with a throwaway key and a release version:
 

@@ -2,6 +2,12 @@ plugins {
     id 'java-gradle-plugin'
 }
 
+dependencies {
+    // ApiCompatibilityWork runs in an isolated class loader with japicmp on it (the japicmp configuration of
+    // r4c.publish), so build logic only compiles against it.
+    compileOnly libs.japicmp
+}
+
 gradlePlugin {
     plugins {
         javaLibrary {

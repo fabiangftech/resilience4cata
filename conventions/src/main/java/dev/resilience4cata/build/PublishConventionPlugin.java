@@ -1,8 +1,22 @@
 package dev.resilience4cata.build;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.VersionCatalog;
+import org.gradle.api.artifacts.VersionCatalogsExtension;
+import org.gradle.api.attributes.Bundling;
+import org.gradle.api.attributes.Category;
+import org.gradle.api.attributes.LibraryElements;
+import org.gradle.api.attributes.Usage;
 import org.gradle.api.file.Directory;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.ListProperty;
 import org.gradle.api.file.RegularFile;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderFactory;
@@ -36,6 +50,13 @@ import org.gradle.plugins.signing.SigningPlugin;
  * <p>The SCM coordinates come from the {@code r4c.scmRepository} property ({@code owner/repo} on
  * GitHub) and the developer from {@code r4c.developerId} and {@code r4c.developerName}, all in
  * {@code gradle.properties}.
+ *
+ * <p>Every published module with a jar also gets {@code apiCompatibility} ({@link ApiCompatibilityTask}, run by
+ * {@code check}): japicmp compares the jar with the same artifact at {@code r4c.apiBaseline} (gradle.properties,
+ * the last release) from Maven Central. The API is the packages the module exports in {@code module-info.java}
+ * (qualified exports excluded), or, for a module without one, {@code r4cApi.packages} in its build file; a module
+ * with no API package (the processor, the Quarkus deployment module) is skipped. Incompatible changes are a
+ * warning before 1.0 and fail the build from 1.0 when the major version is the baseline's.
  */
 public final class PublishConventionPlugin implements Plugin<Project> {
 
@@ -43,6 +64,23 @@ public final class PublishConventionPlugin implements Plugin<Project> {
     static final String STAGING_REPOSITORY = "centralStaging";
     static final String STAGING_DIR = "central-staging";
     private static final String URL = "https://resilience4cata.dev";
+    private static final Pattern EXPORTS = Pattern.compile("(?m)^\\s*exports\\s+([\\w.]+)\\s*;");
+
+    /** The {@code r4cApi} extension: which packages of a module are its API. */
+    public abstract static class ApiExtension {
+
+        /** Creates the extension. */
+        public ApiExtension() {
+        }
+
+        /**
+         * The API packages, exactly (a subpackage is listed on its own). Defaults to the unqualified
+         * {@code exports} of {@code src/main/java/module-info.java}, or none.
+         *
+         * @return the packages
+         */
+        public abstract ListProperty<String> getPackages();
+    }
 
     @Override
     public void apply(Project project) {
@@ -70,6 +108,7 @@ public final class PublishConventionPlugin implements Plugin<Project> {
         });
 
         configureSigning(project, publication);
+        project.getPluginManager().withPlugin("java", plugin -> configureApiCompatibility(project));
 
         RegularFile license = project.getRootProject().getLayout().getProjectDirectory().file("LICENSE");
         RegularFile notice = project.getRootProject().getLayout().getProjectDirectory().file("NOTICE");
@@ -109,6 +148,87 @@ public final class PublishConventionPlugin implements Plugin<Project> {
             issues.getSystem().set("GitHub");
             issues.getUrl().set("https://github.com/" + scmRepository + "/issues");
         });
+    }
+
+    private static void configureApiCompatibility(Project project) {
+        ProviderFactory providers = project.getProviders();
+        ApiExtension api = project.getExtensions().create("r4cApi", ApiExtension.class);
+        api.getPackages().convention(providers
+                .fileContents(project.getLayout().getProjectDirectory().file("src/main/java/module-info.java"))
+                .getAsText()
+                .map(PublishConventionPlugin::exports)
+                .orElse(List.of()));
+
+        String baseline = providers.gradleProperty("r4c.apiBaseline").get();
+        String current = project.getVersion().toString();
+        String artifactId = JavaLibraryConventionPlugin.artifactName(project);
+        String coordinates = project.getGroup() + ":" + artifactId + ":" + baseline;
+
+        Configuration baselineJar = baselineConfiguration(project, "apiBaseline", coordinates, false);
+        Configuration baselineClasspath = baselineConfiguration(project, "apiBaselineClasspath", coordinates, true);
+        VersionCatalog libs = project.getExtensions().getByType(VersionCatalogsExtension.class).named("libs");
+        Configuration japicmp = project.getConfigurations().create("japicmp", configuration -> {
+            configuration.setCanBeConsumed(false);
+            configuration.setDescription("japicmp, for apiCompatibility.");
+        });
+        project.getDependencies().add(japicmp.getName(), libs.findLibrary("japicmp").orElseThrow());
+
+        var task = project.getTasks().register("apiCompatibility", ApiCompatibilityTask.class, compare -> {
+            compare.setGroup("verification");
+            compare.setDescription("Compares the module's API with its " + baseline + " release (japicmp).");
+            compare.getBaselineJar().from(lenient(baselineJar));
+            compare.getBaselineClasspath().from(lenient(baselineClasspath));
+            compare.getCurrentJar().from(project.getTasks().named("jar"));
+            compare.getCurrentClasspath().from(project.getConfigurations().named("compileClasspath"));
+            compare.getJapicmpClasspath().from(japicmp);
+            compare.getPackages().set(api.getPackages());
+            compare.getBaselineVersion().set(baseline);
+            compare.getCurrentVersion().set(current);
+            compare.getArtifactId().set(artifactId);
+            compare.getFailOnIncompatible().set(major(current) >= 1 && major(current) == major(baseline));
+            compare.getReportDirectory().set(project.getLayout().getBuildDirectory().dir("reports/api-compatibility"));
+            ListProperty<String> packages = api.getPackages();
+            compare.onlyIf("the module exports API packages", spec -> !packages.get().isEmpty());
+        });
+        project.getTasks().named("check").configure(check -> check.dependsOn(task));
+    }
+
+    /** The baseline artifact (or it and its dependencies), resolved as a Java library's API. */
+    private static Configuration baselineConfiguration(Project project, String name, String coordinates, boolean transitive) {
+        ObjectFactory objects = project.getObjects();
+        Configuration configuration = project.getConfigurations().create(name, c -> {
+            c.setCanBeConsumed(false);
+            c.setTransitive(transitive);
+            c.setDescription("The " + coordinates + " release, for apiCompatibility.");
+            c.attributes(attributes -> {
+                attributes.attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.class, Usage.JAVA_API));
+                attributes.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.class, Category.LIBRARY));
+                attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE,
+                        objects.named(LibraryElements.class, LibraryElements.JAR));
+                attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.class, Bundling.EXTERNAL));
+            });
+        });
+        project.getDependencies().add(name, coordinates);
+        return configuration;
+    }
+
+    /** No baseline (a module new since the last release, or offline) is an empty collection, not a failure. */
+    private static FileCollection lenient(Configuration configuration) {
+        return configuration.getIncoming().artifactView(view -> view.setLenient(true)).getFiles();
+    }
+
+    static List<String> exports(String moduleInfo) {
+        String code = moduleInfo.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("//[^\\n]*", "");
+        Matcher matcher = EXPORTS.matcher(code);
+        List<String> packages = new ArrayList<>();
+        while (matcher.find()) {
+            packages.add(matcher.group(1));
+        }
+        return packages;
+    }
+
+    private static int major(String version) {
+        return Integer.parseInt(version.substring(0, version.indexOf('.')));
     }
 
     private static void configureSigning(Project project, MavenPublication publication) {
