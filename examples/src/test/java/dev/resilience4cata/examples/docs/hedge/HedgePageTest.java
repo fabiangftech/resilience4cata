@@ -52,7 +52,8 @@ class HedgePageTest {
         assertThat(attempts.get(0)).isCancelled();        // the loser is cancelled
         // end::hedge-testing[]
         assertThat(attempts.get(0)).isCompletedExceptionally();
-        assertThatThrownBy(attempts.get(0)::join).isInstanceOf(HedgeCancelledException.class);
+        // The exception the loser was completed with; join() wraps it in a new CancellationException on JDK 23+.
+        assertThat(attempts.get(0).handle((value, failure) -> failure).join()).isInstanceOf(HedgeCancelledException.class);
         assertThat(events).containsExactly(
                 new HedgeEvent.Hedged(QUOTE_ID, clock.read(), 2, HedgeEvent.Reason.DELAY),
                 new HedgeEvent.Won(QUOTE_ID, clock.read(), 2));
