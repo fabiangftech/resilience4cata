@@ -25,6 +25,8 @@ springBoot = "4.1.2"
 springBootMinimum = "4.1.0"
 # The Spring Framework of springBootMinimum, for the spring module's compile-only spring-tx (same Dependabot rule).
 springFrameworkMinimum = "7.0.8"
+# Compile-only in the spring module: Mockito.mockingDetails, to leave spies unwrapped (same Dependabot rule).
+mockitoMinimum = "5.21.0"
 # Compile-only in the spring module: javac reads Jackson annotations on Spring Boot's health classes.
 jacksonAnnotations = "2.22"
 # The micronaut module (Micronaut 5, Java 25) compiles against the oldest supported Micronaut core (micronautMinimum:
@@ -80,6 +82,7 @@ spring-boot-actuator-autoconfigure-minimum = { module = "org.springframework.boo
 spring-boot-autoconfigure-processor-minimum = { module = "org.springframework.boot:spring-boot-autoconfigure-processor", version.ref = "springBootMinimum" }
 spring-boot-configuration-processor-minimum = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "springBootMinimum" }
 spring-tx-minimum = { module = "org.springframework:spring-tx", version.ref = "springFrameworkMinimum" }
+mockito-core-minimum = { module = "org.mockito:mockito-core", version.ref = "mockitoMinimum" }
 jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations", version.ref = "jacksonAnnotations" }
 # The quarkus extension's main code, at the oldest supported Quarkus.
 quarkus-arc-minimum = { module = "io.quarkus:quarkus-arc", version.ref = "quarkusMinimum" }

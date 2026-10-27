@@ -8,6 +8,7 @@ import dev.resilience4cata.quarkus.usability.fixtures.Notifier;
 import dev.resilience4cata.quarkus.usability.fixtures.Notifier$Resilient;
 import dev.resilience4cata.quarkus.usability.fixtures.SmsNotifier;
 import io.quarkus.arc.All;
+import io.quarkus.arc.ClientProxy;
 import io.quarkus.test.QuarkusExtensionTest;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -41,8 +42,8 @@ class AllImplementationsTest {
 
     @Test
     void everyImplementationIsListedOnceAndProtected() {
-        assertThat(all).hasSize(2).allMatch(Notifier$Resilient.class::isInstance);
-        assertThat(instances.stream().toList()).hasSize(2).allMatch(Notifier$Resilient.class::isInstance);
+        assertThat(all).hasSize(2).allMatch(n -> ClientProxy.unwrap(n) instanceof Notifier$Resilient);
+        assertThat(instances.stream().toList()).hasSize(2).allMatch(n -> ClientProxy.unwrap(n) instanceof Notifier$Resilient);
         email.failNext(1);
         sms.failNext(1);
         assertThat(all.stream().map(n -> n.send("hi")).sorted().toList()).containsExactly("email: hi", "sms: hi");

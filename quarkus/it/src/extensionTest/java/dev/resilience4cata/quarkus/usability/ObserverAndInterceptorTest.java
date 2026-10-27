@@ -14,6 +14,7 @@ import dev.resilience4cata.quarkus.usability.fixtures.Flaky;
 import dev.resilience4cata.quarkus.usability.fixtures.Notifier;
 import dev.resilience4cata.quarkus.usability.fixtures.Notifier$Resilient;
 import dev.resilience4cata.quarkus.usability.fixtures.Premium;
+import io.quarkus.arc.ClientProxy;
 import io.quarkus.test.QuarkusExtensionTest;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
@@ -76,8 +77,8 @@ class ObserverAndInterceptorTest {
 
     @Test
     void aQualifiedImplementationGetsItsOwnWrapperAndItsInterceptorRunsPerAttempt() {
-        assertThat(premium).isInstanceOf(Notifier$Resilient.class);
-        assertThat(standard).isInstanceOf(Notifier$Resilient.class);
+        assertThat(ClientProxy.unwrap(premium)).isInstanceOf(Notifier$Resilient.class);
+        assertThat(ClientProxy.unwrap(standard)).isInstanceOf(Notifier$Resilient.class);
         assertThat(standard.send("x")).isEqualTo("email: x");
         premiumBean.failNext(1);
         int before = CountedInterceptor.INVOCATIONS.get();

@@ -10,7 +10,6 @@ import dev.resilience4cata.spring.usability.fixtures.Lookup;
 import dev.resilience4cata.spring.usability.fixtures.NameLookup;
 import dev.resilience4cata.spring.usability.fixtures.SpecialClient;
 import dev.resilience4cata.testkit.ManualClock;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -127,7 +126,6 @@ class MockitoBeanTest {
         @Autowired
         Consumer consumer;
 
-        @Disabled("BUG-SPR-5: the spy is wrapped after Spring creates it, so the field holds the wrapper: NotAMockException")
         @Test
         void theSpyCanBeVerified() {
             assertThat(consumer.names.find("a")).isEqualTo("name-a");

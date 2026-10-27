@@ -71,7 +71,7 @@ final class ResilientBeansListener implements BeanCreatedEventListener<Object> {
                 || excluded.contains(bean.getClass().getName()))) {
             return bean;
         }
-        Class<?>[] declared = definition.classValues(ResilientBean.class);
+        Class<?>[] declared = resilientBean(definition);
         if (declared.length > 0) {
             // a generated subclass already applies its interfaces' policies: wrapping it would apply them twice
             return generated.isGeneratedSubclass(bean.getClass()) ? bean : wrap(declared[0], definition, bean);
@@ -89,6 +89,15 @@ final class ResilientBeansListener implements BeanCreatedEventListener<Object> {
             transactions.check(definition, bean);
         }
         return bean;
+    }
+
+    /**
+     * The interface of a {@link ResilientBean} definition, or none. A test's {@code @MockBean} replacing such a bean is
+     * a stub to be injected as it is: its factory method inherits {@code @ResilientBean} from the type it returns (a
+     * {@code @Client} interface, for one), and {@code @MockBean} is {@code @Refreshable}, which R4C-MN-003 rejects.
+     */
+    static Class<?>[] resilientBean(BeanDefinition<?> definition) {
+        return definition.hasStereotype(MOCK_BEAN) ? new Class<?>[0] : definition.classValues(ResilientBean.class);
     }
 
     @SuppressWarnings("unchecked")

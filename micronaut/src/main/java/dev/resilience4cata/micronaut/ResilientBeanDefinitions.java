@@ -25,7 +25,7 @@ final class ResilientBeanDefinitions implements ApplicationEventListener<Startup
     @Override
     public void onApplicationEvent(StartupEvent event) {
         for (BeanDefinition<Object> definition : context.getBeanDefinitions(Qualifiers.byStereotype(ResilientBean.class))) {
-            Class<?>[] declared = definition.classValues(ResilientBean.class);
+            Class<?>[] declared = ResilientBeansListener.resilientBean(definition);
             if (declared.length > 0) {
                 ResilientBeansListener.validate(definition, declared[0]);
             }

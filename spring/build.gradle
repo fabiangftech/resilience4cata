@@ -17,6 +17,8 @@ dependencies {
     compileOnly libs.spring.boot.actuator.minimum
     compileOnly libs.spring.boot.actuator.autoconfigure.minimum
     compileOnly libs.spring.tx.minimum
+    // Mockito's spies (@MockitoSpyBean) are left unwrapped; read only when Mockito is on the class path (tests).
+    compileOnly libs.mockito.core.minimum
     // Annotations on Boot's health classes, read by javac.
     compileOnly libs.jackson.annotations
     // Condition metadata (spring-autoconfigure-metadata.properties) and configuration metadata for the IDEs.

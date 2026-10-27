@@ -142,7 +142,7 @@ final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPo
                 : plans.computeIfAbsent(bean.getClass(), type -> plan(type, type));
         return switch (plan) {
             case Keep keep -> bean;
-            case Wrap(Class<?> type) -> wrap ? wrap(type, bean, beanName) : bean;
+            case Wrap(Class<?> type) -> wrap && !Spies.isSpy(bean) ? wrap(type, bean, beanName) : bean;
             case Unprotected(Class<?> annotated, Class<?> subclass) -> throw unprotected(beanName, bean, annotated, subclass);
             case Several(List<Class<?>> interfaces) -> throw several(beanName, bean, interfaces);
         };

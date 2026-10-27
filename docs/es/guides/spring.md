@@ -355,6 +355,16 @@ void retriesWithoutSleeping() {
 }
 ```
 
+Dobles de prueba de beans protegidos:
+
+- `@MockitoBean` reemplaza el bean por el mock sin envolver, sin las políticas, para una interfaz o una clase
+  anotada.
+- `@MockitoSpyBean` sobre una interfaz anotada también inyecta el spy sin envolver, así que `verify(spy)` funciona;
+  sobre una clase anotada el spy conserva las políticas.
+- Un contexto de test compartido por varias clases de test comparte un registry, así que un breaker abierto sigue
+  abierto entre ellas: reinícialo con `registry.circuitBreaker(id).reset()`, o usa `@DirtiesContext`.
+
+
 ## AOT e imágenes nativas :id=aot
 
 Spring AOT (el paso de procesamiento de una imagen nativa, o de una aplicación JVM optimizada con AOT) funciona:

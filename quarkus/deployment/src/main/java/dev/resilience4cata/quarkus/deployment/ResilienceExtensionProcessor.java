@@ -386,10 +386,16 @@ public class ResilienceExtensionProcessor {
             }
             List<AnnotationInstance> qualifiers = bean.getQualifiers().stream().filter(q -> !q.name().equals(ANY)).toList();
             boolean dependent = BuiltinScope.DEPENDENT.is(bean.getScope());
+            // An @ApplicationScoped delegate gets an @ApplicationScoped wrapper, so that the interface is a
+            // normal-scoped bean as without the extension (a test's @InjectMock needs one); its client proxy
+            // implements the interface, since the wrapper class is final. Other normal scopes keep a @Singleton
+            // wrapper, which holds the delegate's own client proxy.
+            boolean application = BuiltinScope.APPLICATION.is(bean.getScope());
             BeanConfigurator<Object> wrapper = phase.getContext().configure(generated.wrappers().get(type.name().toString()).name());
             wrapper.identifier("resilience4cata-wrapper-" + bean.getIdentifier())
                     .addTypeClosure(beanType(bean, type))
-                    .scope(dependent ? BuiltinScope.DEPENDENT.getInfo() : BuiltinScope.SINGLETON.getInfo())
+                    .scope(dependent ? BuiltinScope.DEPENDENT.getInfo()
+                            : application ? BuiltinScope.APPLICATION.getInfo() : BuiltinScope.SINGLETON.getInfo())
                     .alternative(true)
                     .priority(wrapperPriority(bean))
                     .unremovable()
@@ -400,6 +406,9 @@ public class ResilienceExtensionProcessor {
                     .addInjectionPoint(ClassType.create(bean.getBeanClass()), qualifiers.toArray(AnnotationInstance[]::new))
                     .addInjectionPoint(ClassType.create(REGISTRY));
             qualifiers.forEach(wrapper::addQualifier);
+            if (application) {
+                wrapper.providerType(ClassType.create(type.name()));
+            }
             if (bean.getScope().isNormal()) {
                 wrapper.startup(); // cheap: it holds the bean's client proxy; creates the policies at startup
             }

@@ -9,6 +9,7 @@ import dev.resilience4cata.quarkus.deployment.fixtures.Inventory$Resilient;
 import dev.resilience4cata.quarkus.deployment.fixtures.ListPricing;
 import dev.resilience4cata.quarkus.deployment.fixtures.Pricing;
 import dev.resilience4cata.quarkus.deployment.fixtures.Pricing$Resilient;
+import io.quarkus.arc.ClientProxy;
 import io.quarkus.test.QuarkusExtensionTest;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
@@ -38,7 +39,7 @@ class InterfaceStyleTest {
 
     @Test
     void theInterfaceGetsTheWrapperWithTheBeansQualifiers() {
-        assertThat(pricing).isInstanceOf(Pricing$Resilient.class);
+        assertThat(ClientProxy.unwrap(pricing)).isInstanceOf(Pricing$Resilient.class);
         raw.failNext(1);
         int calls = raw.calls();
         assertThat(pricing.price("x")).isEqualTo(10);
