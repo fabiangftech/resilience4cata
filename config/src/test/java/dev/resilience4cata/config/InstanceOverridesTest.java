@@ -321,4 +321,33 @@ class InstanceOverridesTest {
         assertThatCode(() -> config.verifyInstances(registry)).doesNotThrowAnyException();
         assertThatCode(() -> text("").build().verifyInstances(registry)).doesNotThrowAnyException();
     }
+
+    @Test
+    void verifyInstancesReportsOverridesThatALockedAnnotationIgnores() {
+        ResilienceConfig config = text("""
+                instances.payments.retry.maxAttempts=9
+                instances.payments.retry.delay=7ms
+                instances.payments.retry.jitter=none
+                """).build();
+        ResilienceRegistry registry = config.toRegistry();
+        RetryConfig resolved = registry.retryPolicy("A#m()", "payments", "",
+                r -> r.maxAttempts(5).jitter(RetryConfig.Jitter.NONE), true).config();
+
+        assertThat(resolved.maxAttempts()).isEqualTo(5);
+        assertThat(resolved.delay()).isEqualTo(Duration.ofMillis(7));
+        ConfigException e = org.assertj.core.api.Assertions.catchThrowableOfType(ConfigException.class,
+                () -> config.verifyInstances(registry));
+        assertThat(e.problems()).containsExactly("[R4C-CFG-014] 'instances.payments.retry.maxAttempts'"
+                + " (test.properties, line 1) sets maxAttempts = 9 on retry instance 'payments', but its annotation"
+                + " sets maxAttempts and is locked (locked = true), so the override is ignored and the instance uses "
+                + resolved + ". Remove the key, or remove locked = true from the annotation.");
+    }
+
+    @Test
+    void verifyInstancesPassesWhenALockedInstanceUsesEveryOverride() {
+        ResilienceConfig config = text("instances.payments.retry.delay=7ms").build();
+        ResilienceRegistry registry = config.toRegistry();
+        registry.retryPolicy("A#m()", "payments", "", r -> r.maxAttempts(5), true);
+        assertThatCode(() -> config.verifyInstances(registry)).doesNotThrowAnyException();
+    }
 }

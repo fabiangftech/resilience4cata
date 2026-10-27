@@ -84,6 +84,7 @@ Under the hood this is GCRA, the meter form of a token bucket: the whole state i
 | `maxWait` | duration | `0` (reject at once) | `defaults.rateLimiter.maxWait` | How long a call may wait for its permit. |
 | `name` | `String` | one limiter per method | annotation only | Instance id; methods with the same `name` share one limiter and its permits. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
+| `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
 | `enabled` | `String` | `"true"` | `defaults.rateLimiter.enabled` | `""` (inherit), `"true"` or `"false"`. |
 
 The defaults differ from Resilience4j's (50 permits per 500 ns, 5 s wait): waiting is opt-in here, as in the bulkhead. Keys exist under `configs.<name>.` and `instances.<id>.` too; see [Configuration](../guides/configuration.md).

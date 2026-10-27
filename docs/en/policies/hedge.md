@@ -100,6 +100,7 @@ It is **on by default** (10 % of the calls plus 1 hedge per second, over 10 s), 
 | `budgetWindow` | duration | `10s` | `defaults.hedge.budgetWindow` | Hedge budget: how far back calls and hedges are counted. From `1s` to `1h`. |
 | `name` | `String` | one instance per method | annotation only | Instance id; methods with the same `name` share one hedge, and so its budget. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
+| `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
 | `enabled` | `String` | `"true"` | `defaults.hedge.enabled` | `""` (inherit), `"true"` or `"false"`. |
 
 Every key also exists under `configs.<name>.hedge.…` and `instances.<id>.hedge.…`; see [Configuration](../guides/configuration.md). There is no classifier and no `maxDuration` yet: the per-attempt `@Timeout` and `maxAttempts × delay` bound a call.

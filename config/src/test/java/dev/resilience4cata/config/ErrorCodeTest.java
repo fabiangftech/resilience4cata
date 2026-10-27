@@ -31,7 +31,7 @@ class ErrorCodeTest {
 
     @Test
     void codesAreUniqueAndWellFormed() throws IllegalAccessException {
-        assertThat(codes()).hasSize(13).doesNotHaveDuplicates().allMatch(c -> c.matches("R4C-CFG-\\d{3}"));
+        assertThat(codes()).hasSize(14).doesNotHaveDuplicates().allMatch(c -> c.matches("R4C-CFG-\\d{3}"));
     }
 
     @Test

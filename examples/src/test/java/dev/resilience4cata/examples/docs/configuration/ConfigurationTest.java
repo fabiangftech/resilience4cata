@@ -240,4 +240,24 @@ class ConfigurationTest {
         assertThatThrownBy(() -> config.verifyInstances(registry)).isInstanceOf(ConfigException.class)
                 .hasMessageContaining("[R4C-CFG-013]").hasMessageContaining("shipping");
     }
+
+    @Test
+    void aLockedAnnotationKeepsItsValues() {
+        // tag::configuration-locked[]
+        Properties ops = new Properties();
+        ops.setProperty("instances.payments.circuitBreaker.failureRateThreshold", "80");   // locked: ignored
+        ops.setProperty("instances.payments.circuitBreaker.waitInOpen", "20s");            // not in the annotation: applied
+        ResilienceConfig config = ResilienceConfig.builder().properties("ops.properties", ops).build();
+        ResilienceRegistry registry = config.toRegistry();
+        PaymentsClient payments = Resilient.of(PaymentsClient.class, order -> "paid", registry);
+        // registry.circuitBreaker("payments").config(): failureRateThreshold 30, waitInOpen 20s
+        assertThatThrownBy(() -> config.verifyInstances(registry))
+                .hasMessageContaining("[R4C-CFG-014] 'instances.payments.circuitBreaker.failureRateThreshold'");
+        // end::configuration-locked[]
+
+        assertThat(payments.charge("o-1")).isEqualTo("paid");
+        assertThat(registry.circuitBreaker("payments").config().failureRateThreshold()).isEqualTo(30f);
+        assertThat(registry.circuitBreaker("payments").config().waitInOpen()).isEqualTo(Duration.ofSeconds(20));
+        assertThat(registry.lockedOverrides()).hasSize(1);
+    }
 }

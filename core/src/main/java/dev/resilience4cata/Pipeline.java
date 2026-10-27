@@ -95,25 +95,25 @@ public final class Pipeline<T> {
         this.id = builder.id;
         Step<RetryConfig.Builder> retryStep = builder.retry;
         this.retry = retryStep == null ? null
-                : registry.retryPolicy(id, "", retryStep.config(), retryStep.overrides());
+                : registry.retryPolicy(id, "", retryStep.config(), retryStep.overrides(), builder.locked);
         Step<HedgeConfig.Builder> hedgeStep = builder.hedge;
         this.hedge = hedgeStep == null ? null
-                : registry.hedgePolicy(id, "", hedgeStep.config(), hedgeStep.overrides());
+                : registry.hedgePolicy(id, "", hedgeStep.config(), hedgeStep.overrides(), builder.locked);
         Step<CircuitBreakerConfig.Builder> circuitBreakerStep = builder.circuitBreaker;
         this.circuitBreaker = circuitBreakerStep == null ? null
-                : registry.circuitBreakerPolicy(id, "", circuitBreakerStep.config(), circuitBreakerStep.overrides());
+                : registry.circuitBreakerPolicy(id, "", circuitBreakerStep.config(), circuitBreakerStep.overrides(), builder.locked);
         Step<RateLimiterConfig.Builder> rateLimiterStep = builder.rateLimiter;
         this.rateLimiter = rateLimiterStep == null ? null
-                : registry.rateLimiterPolicy(id, "", rateLimiterStep.config(), rateLimiterStep.overrides());
+                : registry.rateLimiterPolicy(id, "", rateLimiterStep.config(), rateLimiterStep.overrides(), builder.locked);
         Step<AdaptiveLimitConfig.Builder> adaptiveLimitStep = builder.adaptiveLimit;
         this.adaptiveLimit = adaptiveLimitStep == null ? null
-                : registry.adaptiveLimitPolicy(id, "", adaptiveLimitStep.config(), adaptiveLimitStep.overrides());
+                : registry.adaptiveLimitPolicy(id, "", adaptiveLimitStep.config(), adaptiveLimitStep.overrides(), builder.locked);
         Step<TimeoutConfig.Builder> timeoutStep = builder.timeout;
         this.timeout = timeoutStep == null ? null
-                : registry.timeoutPolicy(id, "", timeoutStep.config(), timeoutStep.overrides());
+                : registry.timeoutPolicy(id, "", timeoutStep.config(), timeoutStep.overrides(), builder.locked);
         Step<BulkheadConfig.Builder> bulkheadStep = builder.bulkhead;
         this.bulkhead = bulkheadStep == null ? null
-                : registry.bulkheadPolicy(id, "", bulkheadStep.config(), bulkheadStep.overrides());
+                : registry.bulkheadPolicy(id, "", bulkheadStep.config(), bulkheadStep.overrides(), builder.locked);
         this.retryClassifier = retryStep == null ? null : ownOrShared(builder.retryClassifier, builder.classifier);
         this.circuitBreakerClassifier = circuitBreakerStep == null ? null
                 : ownOrShared(builder.circuitBreakerClassifier, builder.classifier);
@@ -682,6 +682,7 @@ public final class Pipeline<T> {
         private @Nullable ExhaustedResult onExhaustedResult;
         private List<Class<? extends Throwable>> fallbackApplyOn = List.of(Throwable.class);
         private List<Class<? extends Throwable>> fallbackSkipOn = List.of();
+        private boolean locked;
 
         private Builder(ResilienceRegistry registry, String id) {
             this.registry = Objects.requireNonNull(registry, "registry");
@@ -1041,6 +1042,20 @@ public final class Pipeline<T> {
                 throw setTwice("onExhaustedResult");
             }
             this.onExhaustedResult = Objects.requireNonNull(onExhaustedResult, "onExhaustedResult");
+            return this;
+        }
+
+        /**
+         * Locks the values set on the steps ({@code retry(config, overrides)} and the others), like
+         * {@code locked = true} on an annotation: they win over the per-instance overrides of this pipeline's
+         * id ({@code instances.<id>.<policy>.*} or {@code retryInstance(id, ...)} and friends). Attributes the
+         * steps do not set can still be overridden. Overrides that are ignored are logged and listed by
+         * {@link ResilienceRegistry#lockedOverrides()}.
+         *
+         * @return this builder
+         */
+        public Builder<T> locked() {
+            this.locked = true;
             return this;
         }
 

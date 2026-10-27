@@ -117,6 +117,7 @@ flowchart TD
 | `onExhaustedResult` | `ExhaustedResult` | `RETURN` | annotation only | With a classifier: return the last rejected result, or `THROW` a `ResultRejectedException`. |
 | `name` | `String` | one instance per method | annotation only | Instance id; methods with the same `name` share one retry policy. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
+| `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
 | `enabled` | `String` | `"true"` | `defaults.retry.enabled` | `""` (inherit), `"true"` or `"false"`. |
 
 - Durations are strings: `"250ms"`, `"2s"`, `"1m"`, `"PT2S"`, or `"0"`. They are checked when you compile.

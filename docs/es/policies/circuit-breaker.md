@@ -115,6 +115,7 @@ El rechazo, `dev.resilience4cata.CallNotPermittedException`, es una `RuntimeExce
 | `classifier` | `Class<?>` | ninguno | solo anotación | Un `Classifier<T>` que registra resultados y excepciones según diga. Reemplaza a `recordOn`. Ver [Classifiers](../guides/classifiers.md). |
 | `name` | `String` | un breaker por método | solo anotación | Id de la instancia; los métodos con el mismo `name` comparten un breaker. |
 | `config` | `String` | `default` | solo anotación | Configuración con nombre de la que partir. |
+| `locked` | `boolean` | `false` | solo anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
 | `enabled` | `String` | `"true"` | `defaults.circuitBreaker.enabled` | `""` (heredar), `"true"` o `"false"` (arranca en `DISABLED`). |
 
 Los valores por defecto son los de Resilience4j, salvo que la detección de llamadas lentas está desactivada. Las claves de config también aceptan kebab-case (`circuit-breaker.wait-in-open`) y existen bajo `configs.<name>.` e `instances.<id>.`; ver [Configuración](../guides/configuration.md).

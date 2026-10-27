@@ -194,6 +194,24 @@ final class PolicyType<B, C> {
         });
     }
 
+    /**
+     * Whether applying {@code setting} to {@code config}, an instance's resolved configuration, would
+     * change it, or make it invalid. False for a setting the instance already uses; true for one that a
+     * locked annotation kept from applying.
+     */
+    @SuppressWarnings("unchecked") // config comes from a LockedOverride of this policy
+    boolean changes(Record config, Setting setting) {
+        C current = (C) config;
+        B builder = toBuilder.apply(current);
+        Attribute<B> attribute = Objects.requireNonNull(attributes.get(setting.key().attribute()));
+        attribute.set(builder, setting.value());
+        try {
+            return !build.apply(builder).equals(current);
+        } catch (IllegalArgumentException e) {
+            return true;
+        }
+    }
+
     void registerDefaults(ResilienceRegistry.Builder registry, Map<String, Setting> settings) {
         defaultsRegistrar.accept(registry, applier(settings));
     }

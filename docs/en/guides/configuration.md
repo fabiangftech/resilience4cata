@@ -173,7 +173,7 @@ Lowest first, for each attribute of each instance:
 2. `defaults.<policy>.*`, or `retryDefaults(...)` and friends in code.
 3. The named config the annotation picks with `config = "…"`: first the code's `retry("<name>", ...)`, then `configs.<name>.*`, attribute by attribute (the `extends` chain root first).
 4. The annotation's own attributes.
-5. `instances.<id>.*`, or `retryInstance(id, ...)` and friends in code.
+5. `instances.<id>.*`, or `retryInstance(id, ...)` and friends in code, except for the attributes of an annotation with `locked = true` ([below](#locking-an-instance)).
 
 So **an annotation beats a named config**, and **an instance key beats the annotation**: operators can retune one method without recompiling. Per-instance overrides apply once, when the instance is created.
 
@@ -192,6 +192,34 @@ Code and external configuration combine like this:
 
 - `retryInstance(...)` and the other `*Instance` calls made on the builder after `applyTo` beat the external `instances.*` keys.
 - `retryDefaults(...)` and the other `*Defaults` calls made after `applyTo` **replace** the external defaults of that policy instead of merging with them.
+
+## Locking an instance
+
+To keep a value that operators must not change, add `locked = true` to the annotation. The attributes the annotation sets (directly, at type level or through a [bundle](bundles.md)) then win over `instances.<id>.*` keys and `retryInstance(...)` calls; the attributes it leaves unset can still be overridden:
+
+<!-- snippet: configuration-locked-client -->
+```java
+public interface PaymentsClient {
+
+    @CircuitBreaker(name = "payments", failureRateThreshold = 30, locked = true)
+    String charge(String order);
+}
+```
+
+<!-- snippet: configuration-locked -->
+```java
+Properties ops = new Properties();
+ops.setProperty("instances.payments.circuitBreaker.failureRateThreshold", "80");   // locked: ignored
+ops.setProperty("instances.payments.circuitBreaker.waitInOpen", "20s");            // not in the annotation: applied
+ResilienceConfig config = ResilienceConfig.builder().properties("ops.properties", ops).build();
+ResilienceRegistry registry = config.toRegistry();
+PaymentsClient payments = Resilient.of(PaymentsClient.class, order -> "paid", registry);
+// registry.circuitBreaker("payments").config(): failureRateThreshold 30, waitInOpen 20s
+assertThatThrownBy(() -> config.verifyInstances(registry))
+        .hasMessageContaining("[R4C-CFG-014] 'instances.payments.circuitBreaker.failureRateThreshold'");
+```
+
+An ignored override is not silent: the registry logs a warning (`System.Logger`, name `dev.resilience4cata.ResilienceRegistry`) when it creates the instance, `config.verifyInstances(registry)` reports each ignored key with its source ([`R4C-CFG-014`](../errors.md#r4c-cfg-014)), and `registry.lockedOverrides()` lists the instances concerned. A method can unlock what its type locks with `locked = false`. Named configs and defaults are not affected: an annotation already wins over them. For a [pipeline](pipeline.md), `Pipeline.Builder.locked()` locks the values set on its steps.
 
 ## Validation and errors
 

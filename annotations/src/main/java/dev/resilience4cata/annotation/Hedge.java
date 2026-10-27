@@ -33,6 +33,14 @@ public @interface Hedge {
     String config() default "";
 
     /**
+     * Locks the values set in this annotation (directly, at type level or through a bundle): per-instance
+     * overrides ({@code instances.<id>.*} in external configuration, or {@code *Instance(...)} on the registry
+     * builder) cannot change them, and an override that tries to is ignored and logged. Attributes the
+     * annotation leaves unset can still be overridden. Named configurations never override an annotation.
+     */
+    boolean locked() default false;
+
+    /**
      * Attempts in flight at most, including the first one, between 2 and 10. {@code -1} means inherit (the
      * built-in default is 2: one hedge).
      */

@@ -19,6 +19,7 @@ final class ProblemException extends RuntimeException {
     static final String REGISTERED_TWICE = "R4C-CFG-011";
     static final String INVALID_INSTANCE_ID = "R4C-CFG-012";
     static final String UNKNOWN_INSTANCE = "R4C-CFG-013";
+    static final String LOCKED_INSTANCE = "R4C-CFG-014";
 
     private final String code;
 

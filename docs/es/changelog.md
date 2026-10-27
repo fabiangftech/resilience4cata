@@ -4,6 +4,13 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Sin publicar] :id=unreleased
+
+### Añadido
+
+- **`locked = true`** en `@Retry`, `@Hedge`, `@CircuitBreaker`, `@RateLimiter`, `@AdaptiveLimit`, `@Timeout` y `@Bulkhead` (y `Pipeline.Builder.locked()`): los valores que fija la anotación ganan sobre los overrides por instancia (`instances.<id>.*`, `retryInstance(...)` y similares); los atributos que deja sin fijar se pueden seguir sobrescribiendo. Un override ignorado se escribe en el log al crear la instancia, lo lista el nuevo `registry.lockedOverrides()` (`LockedOverride`), y `config.verifyInstances(registry)` lo reporta clave por clave con el nuevo código [R4C-CFG-014](errors.md#r4c-cfg-014), así que las integraciones de Spring, Micronaut y Quarkus lo reportan al arrancar. El código generado solo cambia en las anotaciones con `locked = true`. Ver [Bloquear una instancia](guides/configuration.md#bloquear-una-instancia).
+- El build compara la API pública de cada módulo publicado con la última versión (`./gradlew apiCompatibility`, parte de `check`), con japicmp.
+
 ## [0.6.0] - 2026-10-26 :id=0.6.0
 
 ### Agregado
