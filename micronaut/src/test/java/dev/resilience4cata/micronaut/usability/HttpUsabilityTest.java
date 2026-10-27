@@ -6,7 +6,6 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.http.client.HttpClient;
 import io.micronaut.runtime.server.EmbeddedServer;
 import java.util.Map;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /** A declarative {@code @Client} and an annotated {@code @Controller}, over a real server. */
@@ -40,7 +39,6 @@ class HttpUsabilityTest {
     }
 
     @Test
-    @Disabled("BUG-MN-5: generated overrides rename parameters to p0, p1..., so @PathVariable without a name gets 400")
     void aPathVariableIsBoundByTheParameterNameAsInTheClass() {
         try (EmbeddedServer server = ApplicationContext.run(EmbeddedServer.class,
                 Map.of("micronaut.server.port", "-1", "test.usability", "http"));

@@ -40,6 +40,16 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
         return compile(workDir, sources, processor, path);
     }
 
+    /** Like {@link #compile(Path, Map, Processor, List)}, with extra compiler {@code options}, such as {@code -parameters}. */
+    static Compilation compile(Path workDir, Map<String, String> sources, Processor processor, List<Path> classpath,
+            List<String> options) {
+        String path = Stream.concat(classpath.stream().map(Path::toString),
+                Stream.of(System.getProperty("java.class.path"))).collect(Collectors.joining(File.pathSeparator));
+        List<String> all = new ArrayList<>(List.of("-Xlint:all", "-Xlint:-processing", "-Werror"));
+        all.addAll(options);
+        return compile(workDir, sources, List.of(processor), path, all);
+    }
+
     /** Compiles {@code sources} with the processor and extra compiler {@code options}, such as {@code -Akey=value}. */
     static Compilation compileWithOptions(Path workDir, Map<String, String> sources, String... options) {
         List<String> all = new ArrayList<>(List.of("-Xlint:all", "-Xlint:-processing", "-Werror"));

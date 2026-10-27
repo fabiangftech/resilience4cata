@@ -24,7 +24,6 @@ class ParameterNamesTest {
 
     private final ApplicationContextRunner runner = Runners.runner();
 
-    @Disabled("BUG-SPR-1: the retried listener's override names its parameter p0, so #placed is null in the condition")
     @Test
     void aRetriedEventListenerEvaluatesItsConditionOnTheParameterName() {
         runner.withUserConfiguration(OrderEvents.class).run(context -> {

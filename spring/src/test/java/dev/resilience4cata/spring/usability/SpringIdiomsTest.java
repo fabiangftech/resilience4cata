@@ -39,7 +39,6 @@ class SpringIdiomsTest {
 
     private final ApplicationContextRunner runner = Runners.runner();
 
-    @Disabled("BUG-SPR-1: generated overrides rename parameters to p0, p1..., so SpEL #name keys of @Cacheable resolve to null")
     @Test
     void aCacheableKeyNamingTheParameterWorksOnAnAnnotatedClass() {
         runner.withUserConfiguration(Caching.class, CachedQuotes.class).run(context -> {
@@ -48,11 +47,10 @@ class SpringIdiomsTest {
 
             assertThat(quotes.quote("a")).isEqualTo(101);
             assertThat(quotes.quote("a")).as("the second call is served from the cache").isEqualTo(101);
-            assertThat(quotes.calls).hasValue(1);
+            assertThat(quotes.calls()).isEqualTo(1);
         });
     }
 
-    @Disabled("BUG-SPR-1: generated overrides rename parameters to p0, p1..., hiding the names Spring reads with -parameters")
     @Test
     void theGeneratedOverrideKeepsTheParameterNamesThatSpringReads() throws NoSuchMethodException {
         String[] names = new DefaultParameterNameDiscoverer().getParameterNames(

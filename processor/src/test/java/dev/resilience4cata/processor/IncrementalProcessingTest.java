@@ -157,7 +157,11 @@ class IncrementalProcessingTest {
 
     @Test
     void recompilingOnlyTheInterfaceGeneratesTheSameSource() throws IOException {
-        Compilation full = Compilation.compile(workDir.resolve("full"), SOURCES);
+        // With -parameters, as Spring Boot, Micronaut and Quarkus builds compile: a subclass overriding a method it
+        // inherits from a class file can only keep the method's parameter names if the class file has them.
+        List<String> parameters = List.of("-parameters");
+        Compilation full = Compilation.compile(workDir.resolve("full"), SOURCES, new ResilienceProcessor(), List.of(),
+                parameters);
         assertThat(full.errors()).isEmpty();
 
         // What Gradle does when only Client.java and Sub.java must be recompiled: their outputs are deleted,
@@ -177,7 +181,7 @@ class IncrementalProcessingTest {
         Compilation partial = Compilation.compile(workDir.resolve("partial"),
                 Map.of("demo.Client", SOURCES.get("demo.Client"), "demo.Sub", SOURCES.get("demo.Sub"),
                         "demo.Service", SOURCES.get("demo.Service")),
-                new ResilienceProcessor(), List.of(previous));
+                new ResilienceProcessor(), List.of(previous), parameters);
 
         assertThat(partial.errors()).isEmpty();
         for (String generated : List.of("demo.Client$Resilient", "demo.Sub$Resilient", "demo.Sub$Nested$Resilient",

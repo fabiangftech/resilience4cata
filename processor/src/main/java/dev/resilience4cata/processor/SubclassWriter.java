@@ -72,11 +72,26 @@ final class SubclassWriter {
     private static final String REGISTRY = "registry";
 
     /**
-     * Leftmost names of the qualified expressions in the field-initialization block ({@code java.util.Objects...},
+     * Leftmost names of the qualified expressions in generated constructors and methods ({@code java.util.Objects...},
      * {@code dev.resilience4cata.RetryConfig.Backoff...}): a parameter with one of these names would obscure the
      * package, so it is renamed. Names starting with {@code r4c$} are the processor's own and renamed as well.
      */
     private static final Set<String> OBSCURING = Set.of("java", "dev");
+
+    /**
+     * The name a generated subclass gives the parameter at {@code index}: its declared name, which frameworks read
+     * on the invoked method (Spring's SpEL and MVC binding, Micronaut's binding, Bean Validation), unless it would
+     * obscure a package or clash with the processor's own names.
+     */
+    static String parameterName(VariableElement parameter, int index) {
+        return parameterName(parameter, index, Set.of());
+    }
+
+    /** Like {@link #parameterName(VariableElement, int)}, also renaming the names in {@code reserved}. */
+    static String parameterName(VariableElement parameter, int index, Set<String> reserved) {
+        String name = parameter.getSimpleName().toString();
+        return OBSCURING.contains(name) || reserved.contains(name) || name.startsWith("r4c$") ? "r4c$p" + index : name;
+    }
 
     /**
      * Reports every reason why {@code type} cannot be extended by the generated subclass, and every method
@@ -266,10 +281,7 @@ final class SubclassWriter {
                 if (c.isVarArgs() && i == parameterTypes.size() - 1) {
                     parameterType = parameterType.substring(0, parameterType.length() - 2) + "...";
                 }
-                String name = declared.get(i).getSimpleName().toString();
-                if (OBSCURING.contains(name) || name.startsWith("r4c$")) {
-                    name = "r4c$p" + i;
-                }
+                String name = parameterName(declared.get(i), i);
                 parameters.append(", ").append(AnnotationPrinter.annotations(declared.get(i), ElementType.PARAMETER, " ", ""))
                         .append(parameterType).append(' ').append(name);
                 arguments.add(name);
