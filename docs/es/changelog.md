@@ -4,6 +4,12 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Sin publicar] :id=unreleased
+
+### Corregido
+
+- **Las clases anotadas conservan los nombres de sus parámetros.** Los overrides de una subclase generada llamaban a sus parámetros `p0`, `p1`, …, así que fallaban en las clases anotadas las funciones que leen los nombres en el método invocado: `@Cacheable(key = "#sku")` y `@EventListener(condition = "#event.urgent")` de Spring, `@PathVariable`/`@QueryValue` sin nombre explícito en controladores de Spring MVC y Micronaut, y Bean Validation, que reportaba cada violación dos veces (`p0` y el nombre real). Ahora conservan los nombres declarados; solo se renombra un parámetro llamado `java`, `dev`, como la primera parte del paquete de un fallback estático, o que empiece por `r4c$`. Un método heredado de un archivo de clase solo tiene sus nombres si esa clase se compiló con `-parameters`, como hacen los builds de Spring Boot, Micronaut y Quarkus. Los wrappers de interfaces no cambian.
+
 ## [0.8.0] - 2026-10-27 :id=0.8.0
 
 ### Agregado

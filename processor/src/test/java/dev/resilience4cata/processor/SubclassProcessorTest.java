@@ -55,12 +55,12 @@ class SubclassProcessorTest {
                 .contains("public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry) {\n        super();\n")
                 .doesNotContain("long ignored")
                 .contains("\"demo.Service#call(java.lang.String)\"")
-                .contains("return super.call(p0);")
-                .contains("return this.recover(p0, r4c$f0);")
-                .contains("public java.util.concurrent.CompletableFuture<java.lang.String> async(int p0)")
-                .contains("super.async(p0)")
-                .contains("this.later(p0)")
-                .contains("public <T extends java.lang.Comparable<T>> T generic(T p0)")
+                .contains("return super.call(argument);")
+                .contains("return this.recover(argument, r4c$f0);")
+                .contains("public java.util.concurrent.CompletableFuture<java.lang.String> async(int id)")
+                .contains("super.async(id)")
+                .contains("this.later(id)")
+                .contains("public <T extends java.lang.Comparable<T>> T generic(T value)")
                 .doesNotContain("plain")
                 .doesNotContain("delegate");
         // every constructor sets up every policy
@@ -136,7 +136,7 @@ class SubclassProcessorTest {
         // the class's type level applies to its own methods; Object methods only take method annotations
         assertThat(generated).contains("\"demo.Impl#unannotated()\"")
                 .doesNotContain("toString").doesNotContain("hashCode")
-                .contains("public boolean equals(java.lang.Object p0)");
+                .contains("public boolean equals(java.lang.Object o)");
         assertThat(section(generated, "demo.Impl#equals(java.lang.Object)"))
                 .contains("r4c$b.maxAttempts(7);")
                 .doesNotContain("maxDuration");
@@ -182,10 +182,10 @@ class SubclassProcessorTest {
         assertThat(result.errors()).isEmpty();
         assertThat(result.generatedSource("demo.Store$Resilient"))
                 .contains("public class Store$Resilient<K extends java.lang.Comparable<K>, V> extends demo.Store<K, V>")
-                .contains("public V get(K p0)");
+                .contains("public V get(K key)");
         assertThat(result.generatedSource("demo.Store$Cache$Resilient"))
                 .contains("extends demo.Store.Cache {")
-                .contains("public java.lang.Integer get(java.lang.String p0)")
+                .contains("public java.lang.Integer get(java.lang.String key)")
                 .contains("public java.lang.Integer size()");
         assertThat(result.generatedSource("demo.Holder$Nested$Resilient")).contains("super.run();");
     }
@@ -334,8 +334,8 @@ class SubclassProcessorTest {
 
         assertThat(result.errors()).isEmpty();
         assertThat(result.generatedSource("demo.Service$Resilient"))
-                .contains("return this.recover(p0, r4c$f0);")
-                .contains("return demo.Service.fixed(p0);");
+                .contains("return this.recover(id, r4c$f0);")
+                .contains("return demo.Service.fixed(id);");
     }
 
     @Test
@@ -500,19 +500,19 @@ class SubclassProcessorTest {
                             @Override
                             @demo.Transactional(value = "tx", readOnly = true)
                             @java.lang.Deprecated
-                            public java.lang.String call(@demo.Valid java.lang.String p0, int p1) {
+                            public java.lang.String call(@demo.Valid java.lang.String id, int count) {
                         """)
                 .contains("""
                             @Override
                             @demo.Transactional
-                            public java.util.concurrent.CompletableFuture<java.lang.String> async(@demo.Valid java.lang.String p0) {
+                            public java.util.concurrent.CompletableFuture<java.lang.String> async(@demo.Valid java.lang.String id) {
                         """)
                 .contains("""
                             @Override
-                            public void plain(java.lang.String p0) {
+                            public void plain(java.lang.String value) {
                         """)
                 // the inner layers are private methods: they carry no annotations
-                .contains("    private java.lang.String r4c$circuitBreaker0(java.lang.String p0, int p1) {\n")
+                .contains("    private java.lang.String r4c$circuitBreaker0(java.lang.String id, int count) {\n")
                 .doesNotContain("Marker")
                 .doesNotContain("@dev.resilience4cata.annotation")
                 .doesNotContain("@demo.Standard")
@@ -606,6 +606,64 @@ class SubclassProcessorTest {
                   ]
                 }
                 """);
+    }
+
+    @Test
+    void overridesKeepTheDeclaredParameterNamesExceptThoseThatWouldObscureAPackage() {
+        Compilation result = compile("demo.Service", """
+                package demo;
+                import dev.resilience4cata.annotation.*;
+                import java.util.concurrent.CompletableFuture;
+                public class Service {
+                    @Retry @Timeout("1s") @Fallback(method = "recover")
+                    public String find(String sku, int warehouse, String java, int dev, long r4c$attempts) { return sku; }
+                    String recover(String sku, int warehouse, String java, int dev, long r4c$attempts) { return "x"; }
+                    @Retry @Timeout("1s") @Fallback(method = "later")
+                    public CompletableFuture<String> async(String sku, String... tags) {
+                        return CompletableFuture.completedFuture(sku);
+                    }
+                    CompletableFuture<String> later(String sku, String[] tags, Throwable failure) {
+                        return CompletableFuture.completedFuture("later");
+                    }
+                    @Fallback(method = "fixed")
+                    public String named(String demo) { return demo; }
+                    static String fixed(String demo) { return "fixed"; }
+                }
+                """);
+
+        assertThat(result.diagnostics()).map(d -> d.getMessage(java.util.Locale.ROOT)).isEmpty();
+        String generated = result.generatedSource("demo.Service$Resilient");
+        String declared = "(java.lang.String sku, int warehouse, java.lang.String r4c$p2, int r4c$p3, long r4c$p4)";
+        assertThat(generated)
+                // frameworks read these names on the invoked override: Spring's SpEL and MVC, Micronaut's binding,
+                // Bean Validation's property paths
+                .contains("public java.lang.String find" + declared + " {")
+                .contains("private java.lang.String r4c$timeout0" + declared + " {")
+                .contains("super.find(sku, warehouse, r4c$p2, r4c$p3, r4c$p4)")
+                .contains("this.recover(sku, warehouse, r4c$p2, r4c$p3, r4c$p4)")
+                .contains("async(java.lang.String sku, java.lang.String... tags)")
+                // demo.Service.fixed(...) would read the parameter "demo" as its receiver
+                .contains("public java.lang.String named(java.lang.String r4c$p0) {")
+                .contains("return demo.Service.fixed(r4c$p0);")
+                .contains("super.async(sku, tags)")
+                .doesNotContain(" p0");
+    }
+
+    @Test
+    void interfaceWrappersKeepTheirPositionalParameterNames() {
+        Compilation result = compile("demo.Api", """
+                package demo;
+                import dev.resilience4cata.annotation.*;
+                public interface Api {
+                    @Retry
+                    String find(String sku, int warehouse);
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Api$Resilient"))
+                .contains("public java.lang.String find(java.lang.String p0, int p1) {")
+                .contains("this.delegate.find(p0, p1)");
     }
 
     /** The part of the generated source that sets up the policy with this instance id. */

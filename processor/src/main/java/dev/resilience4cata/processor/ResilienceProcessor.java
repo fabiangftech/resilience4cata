@@ -1448,7 +1448,10 @@ public final class ResilienceProcessor extends AbstractProcessor {
         List<? extends TypeMirror> parameterTypes = type.getParameterTypes();
         List<String> parameters = new ArrayList<>();
         List<String> arguments = new ArrayList<>();
-        addParameters(method, parameterTypes, parameters, arguments);
+        // The subclass keeps the parameter names (frameworks read them on the override); the interface wrapper's
+        // output stays as it was, since frameworks read the interface.
+        boolean subclass = !DELEGATE.equals(delegateReceiver);
+        addParameters(method, parameterTypes, parameters, arguments, subclass ? staticReceivers(model) : null);
         String returnType = TypePrinter.print(type.getReturnType());
         boolean isVoid = type.getReturnType().getKind() == TypeKind.VOID;
         String typeVariables = type.getTypeVariables().isEmpty() ? "" : methodTypeVariables(type.getTypeVariables()) + " ";
@@ -1458,7 +1461,6 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String delegateCall = delegateReceiver + "." + method.getSimpleName() + "(" + args + ")";
         // The subclass's override repeats the annotations of the method it overrides and of its parameters, for
         // frameworks that read them on the invoked method only (@Transactional, interceptor bindings).
-        boolean subclass = !DELEGATE.equals(delegateReceiver);
         String annotations = subclass ? AnnotationPrinter.methodAnnotations(method, "\n    ") : "";
         String publicTail = subclass ? "(" + String.join(", ", annotatedParameters(method, parameters)) + ")" + throwsClause
                 : signatureTail;
@@ -1502,16 +1504,37 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return annotated;
     }
 
-    /** Adds the declarations {@code T p0, U p1, ...} and the arguments {@code p0, p1, ...} of a generated method. */
+    /**
+     * The leftmost names of the static fallback methods' receivers ({@code demo} in {@code demo.Service.fixed(...)}):
+     * a parameter with one of these names would obscure them.
+     */
+    private static Set<String> staticReceivers(MethodModel model) {
+        Set<String> names = new HashSet<>();
+        if (model.fallback() != null) {
+            for (FallbackTarget target : model.fallback().targets()) {
+                if (!target.receiver().equals("this") && !target.receiver().equals(DELEGATE)) {
+                    names.add(target.receiver().split("\\.", 2)[0]);
+                }
+            }
+        }
+        return names;
+    }
+
+    /**
+     * Adds the declarations and the arguments of a generated method: {@code T p0, U p1, ...} in an interface wrapper
+     * ({@code reserved} null), the declared names ({@link SubclassWriter#parameterName}) in a subclass, renaming those
+     * in {@code reserved} too.
+     */
     private static void addParameters(ExecutableElement method, List<? extends TypeMirror> parameterTypes,
-            List<String> parameters, List<String> arguments) {
+            List<String> parameters, List<String> arguments, Set<String> reserved) {
         for (int i = 0; i < parameterTypes.size(); i++) {
             String parameterType = TypePrinter.print(parameterTypes.get(i));
             if (method.isVarArgs() && i == parameterTypes.size() - 1) {
                 parameterType = parameterType.substring(0, parameterType.length() - 2) + "...";
             }
-            parameters.add(parameterType + " p" + i);
-            arguments.add("p" + i);
+            String name = reserved != null ? SubclassWriter.parameterName(method.getParameters().get(i), i, reserved) : "p" + i;
+            parameters.add(parameterType + " " + name);
+            arguments.add(name);
         }
     }
 

@@ -9,7 +9,6 @@ import dev.resilience4cata.quarkus.usability.fixtures.Flaky;
 import io.quarkus.test.QuarkusExtensionTest;
 import jakarta.inject.Inject;
 import jakarta.validation.ConstraintViolationException;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
@@ -46,7 +45,6 @@ class BeanValidationTest {
     }
 
     @Test
-    @Disabled("BUG-QK-9: the generated override names its parameters p0..pn, so one blank argument gives two violations, open.p0 and open.owner")
     void aViolationNamesTheParameterAsDeclared() {
         assertThatExceptionOfType(ConstraintViolationException.class).isThrownBy(() -> accounts.open(" "))
                 .satisfies(e -> assertThat(e.getConstraintViolations())

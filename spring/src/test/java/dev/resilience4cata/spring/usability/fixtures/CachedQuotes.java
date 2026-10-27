@@ -9,11 +9,16 @@ import org.springframework.stereotype.Service;
 @Service
 public class CachedQuotes {
 
-    public final AtomicInteger calls = new AtomicInteger();
+    private final AtomicInteger calls = new AtomicInteger();
 
     @Retry(maxAttempts = 3, delay = "10ms")
     @Cacheable(cacheNames = "quotes", key = "#sku")
     public int quote(String sku) {
         return 100 + calls.incrementAndGet();
+    }
+
+    /** Through a method: the bean is a class-based proxy ({@code @Cacheable}), whose own fields are not set. */
+    public int calls() {
+        return calls.get();
     }
 }

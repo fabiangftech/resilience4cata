@@ -4,6 +4,12 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
+## [Unreleased] :id=unreleased
+
+### Fixed
+
+- **Annotated classes keep their parameter names.** The overrides of a generated subclass named their parameters `p0`, `p1`, …, so features that read names on the invoked method broke on annotated classes: Spring's `@Cacheable(key = "#sku")` and `@EventListener(condition = "#event.urgent")`, `@PathVariable`/`@QueryValue` without an explicit name in Spring MVC and Micronaut controllers, and Bean Validation, which reported a violation twice (`p0` and the real name). They now keep the declared names; only a parameter named `java`, `dev`, the first part of a static fallback's package, or starting with `r4c$` is renamed. A method inherited from a class file has its names only if that class was compiled with `-parameters`, as Spring Boot, Micronaut and Quarkus builds do. Interface wrappers are unchanged.
+
 ## [0.8.0] - 2026-10-27 :id=0.8.0
 
 ### Added

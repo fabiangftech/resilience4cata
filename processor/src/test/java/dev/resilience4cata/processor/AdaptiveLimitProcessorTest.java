@@ -138,7 +138,7 @@ class AdaptiveLimitProcessorTest {
         assertThat(result.generatedSource("demo.Inventory$Resilient"))
                 .contains("r4c$b.maxLimit(90);")
                 .contains("r4c$b.window(java.time.Duration.ofNanos(2000000000L));")
-                .contains("r4c$result = super.stock(p0);");
+                .contains("r4c$result = super.stock(sku);");
     }
 
     @Test
