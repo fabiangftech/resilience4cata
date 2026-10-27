@@ -457,6 +457,11 @@ build and tests.
 - Annotated classes need `-Ar4c.inject=micronaut` to be created by Micronaut, or a factory. Only the class's own
   bean definition is left out: subclass beans, beans of the class from `@Factory` methods and a test's `@MockBean`
   stay. `@Factory` classes cannot be annotated.
+- Keep policies off configuration classes (`@ConfigurationProperties`, `@EachProperty`). Micronaut's processor writes
+  its configuration metadata once per compilation round, and it sees the generated subclass a round later, so it
+  warns `Error occurred writing configuration metadata`, which fails a `-Werror` build. Put the configuration in its
+  own class and the policies on a bean that receives it: `@EachBean(BackendConfig.class)` gives one protected bean
+  per `@EachProperty` entry.
 - With annotated classes, Micronaut's AOP runs outside the policies; a retried or hedged transactional method fails
   ([`R4C-MN-005`](../errors.md#r4c-mn-005)) unless allowed.
 - Methods that the constructor calls on `this` run before the policies are set up
