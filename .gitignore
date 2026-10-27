@@ -29,3 +29,6 @@ __pycache__/
 .sonar/
 
 create-releases.sh
+social-preview-prompt.txt
+
+launch/
