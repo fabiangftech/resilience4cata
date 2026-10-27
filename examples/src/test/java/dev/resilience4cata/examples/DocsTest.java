@@ -37,7 +37,7 @@ class DocsTest {
             Path.of("..", "micronaut", "src", "test"), Path.of("..", "quarkus", "it", "src"));
     private static final List<String> LANGUAGES = List.of("en", "es");
     /** Pages whose {@code java} blocks must all be compiled; the landing page is {@code README.md}. */
-    private static final List<String> CHECKED_DIRECTORIES = List.of("start", "policies", "guides", "observability", "testing", "migrate");
+    private static final List<String> CHECKED_DIRECTORIES = List.of("start", "policies", "guides", "observability", "testing", "migrate", "blog");
 
     private static final Pattern MARKER = Pattern.compile("^<!-- (snippet|not-compiled):(.+)-->$");
     private static final Pattern FENCE = Pattern.compile("^(`{3,}+|~{3,}+)(\\w*+).*$");

@@ -1,0 +1,36 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Include the R4C-… error code and message if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: The annotated interface or class and the configuration involved; a small failing test helps most.
+      render: java
+  - type: input
+    id: version
+    attributes:
+      label: resilience4cata version
+      placeholder: 0.8.0
+    validations:
+      required: true
+  - type: input
+    id: java
+    attributes:
+      label: Java version and build tool
+      placeholder: JDK 21, Gradle 9.1
+    validations:
+      required: true
+  - type: input
+    id: framework
+    attributes:
+      label: Framework, if any
+      placeholder: Spring Boot 4.1, Micronaut 5.2, Quarkus 3.40, none

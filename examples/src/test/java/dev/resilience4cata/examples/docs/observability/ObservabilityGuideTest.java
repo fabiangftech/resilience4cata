@@ -15,6 +15,8 @@ import dev.resilience4cata.Resilient;
 import dev.resilience4cata.event.CircuitBreakerEvent;
 import dev.resilience4cata.event.ResilienceEvent;
 import dev.resilience4cata.event.RetryEvent;
+import dev.resilience4cata.testkit.ManualClock;
+import dev.resilience4cata.testkit.ResilienceTesting;
 import java.text.MessageFormat;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +72,9 @@ class ObservabilityGuideTest {
 
     @Test
     void theSnapshotDescribesEveryInstance() {
-        ResilienceRegistry registry = ResilienceRegistry.builder().build();
+        // On a manual clock: with the real one, a slow machine refills the rate limiter's permit (one every 10 ms)
+        // between the call and the snapshot.
+        ResilienceRegistry registry = ResilienceTesting.registry(new ManualClock()).build();
         PaymentGateway payments = Resilient.of(PaymentGateway.class, delegate, registry);
         down.set(false);
         payments.charge("o-1");
