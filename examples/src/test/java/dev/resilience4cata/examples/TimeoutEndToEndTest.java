@@ -7,6 +7,8 @@ import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.CallTimeoutException;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
+import dev.resilience4cata.testkit.ManualClock;
+import dev.resilience4cata.testkit.ResilienceTesting;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -22,7 +24,7 @@ class TimeoutEndToEndTest {
     private final AtomicInteger calls = new AtomicInteger();
     private volatile long sleepMillis = 10_000;
 
-    private final SearchClient client = Resilient.of(SearchClient.class, new SearchClient() {
+    private final SearchClient backend = new SearchClient() {
         @Override
         public String search(String query) {
             return slow(query);
@@ -49,7 +51,9 @@ class TimeoutEndToEndTest {
             }
             return "results for " + query;
         }
-    }, registry);
+    };
+
+    private final SearchClient client = Resilient.of(SearchClient.class, backend, registry);
 
     @AfterEach
     void clearInterrupt() {
@@ -69,8 +73,14 @@ class TimeoutEndToEndTest {
 
     @Test
     void aFastCallIsNotAffected() {
+        // On a manual clock the 50 ms timeout fires only when the clock moves, so a slow machine cannot make this
+        // fast call late (with the real clock, a busy CI runner occasionally did).
         sleepMillis = 0;
-        assertThat(client.search("java")).isEqualTo("results for java");
+        ResilienceRegistry manual = ResilienceTesting.registry(new ManualClock())
+                .timeout("slow", t -> t.timeout(Duration.ofSeconds(30)))
+                .build();
+        SearchClient onManualClock = Resilient.of(SearchClient.class, backend, manual);
+        assertThat(onManualClock.search("java")).isEqualTo("results for java");
     }
 
     @Test
