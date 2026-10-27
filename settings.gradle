@@ -16,4 +16,4 @@ include 'annotations', 'core', 'processor', 'config', 'all', 'testkit', 'microme
         // as Quarkus requires; it is the one module split in nested projects. Its tests are in the unpublished
         // quarkus:it, the only project that applies the Quarkus Gradle plugin.
         'quarkus:runtime', 'quarkus:deployment', 'quarkus:it',
-        'bom', 'examples', 'benchmark', 'stress'
+        'bom', 'examples', 'benchmark', 'stress', 'site'

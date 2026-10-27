@@ -6,8 +6,8 @@
         <h1 id="r4c-hero-title">Resilience,<br>compiled.</h1>
         <p class="sub">Annotate a Java interface with retry, circuit breaker, timeout and friends. At compile time, an annotation processor writes the plain Java that enforces them. No proxies, no reflection, no framework.</p>
         <div class="ctas">
-          <a class="btn btn-primary" href="#/en/start/quickstart">Get started</a>
-          <a class="btn btn-quiet" href="#/en/?id=benchmarks">See the benchmarks</a>
+          <a class="btn btn-primary" href="/en/start/quickstart">Get started</a>
+          <a class="btn btn-quiet" href="/en/?id=benchmarks">See the benchmarks</a>
         </div>
         <ul class="facts">
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Java 21+</li>
@@ -49,7 +49,7 @@
   &lt;/<span class="k">path</span>&gt;
 &lt;/<span class="k">annotationProcessorPaths</span>&gt;</pre></div>
         </div>
-        <p class="install-note">Version 0.8.0 on Maven Central. <code>resilience4cata-all</code> brings core, the annotations and configuration; the processor only goes on the annotation processor path. <a href="#/en/start/installation">Installation guide</a></p>
+        <p class="install-note">Version 0.8.0 on Maven Central. <code>resilience4cata-all</code> brings core, the annotations and configuration; the processor only goes on the annotation processor path. <a href="/en/start/installation">Installation guide</a></p>
       </div>
     </div>
     <div class="r4c-compile" aria-label="Annotated interface and the class the processor generates from it">
@@ -175,7 +175,7 @@ at CheckoutService.pay</pre>
   followed by ns, us, ms, s, m, h or d …
     @Retry(delay = "2 seconds")
     ^</pre>
-        <p style="margin-top:12px"><a href="#/en/errors?id=r4c-atr-001">Every error code, with a fix</a></p>
+        <p style="margin-top:12px"><a href="/en/errors?id=r4c-atr-001">Every error code, with a fix</a></p>
       </div>
     </div>
   </div>
@@ -191,7 +191,7 @@ at CheckoutService.pay</pre>
         <dt>Compared</dt><dd>Resilience4j 2.4.0</dd>
         <dt>Date</dt><dd>2026-10-24</dd>
       </dl>
-      <a href="#/en/benchmarks?id=mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3">Methods, all results and fairness notes</a>
+      <a href="/en/benchmarks?id=mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3">Methods, all results and fairness notes</a>
     </div>
     <figure class="r4c-chart">
       <figcaption class="legend">
@@ -231,16 +231,16 @@ at CheckoutService.pay</pre>
     <h2 class="h2" id="pol-h">Eight policies, one annotation each</h2>
     <p class="lead">Put them on a method or on the whole interface. Stack them freely: the processor always nests them in the same order.</p>
     <div class="panel">
-      <a class="breaker" href="#/en/policies/retry"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4.5V8.5H16"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></span><span><h3>@Retry</h3><p>Try again with exponential backoff and jitter, within an optional time budget.</p><span class="attrs">maxAttempts · delay · backoff · maxDuration</span></span></a>
-      <a class="breaker" href="#/en/policies/hedge"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h13"/><path d="M13 5l3 3-3 3"/><path d="M8 16h13"/><path d="M18 13l3 3-3 3"/></svg></span><span><h3>@Hedge</h3><p>Start the same idempotent async call again when it is slow, and keep the first success.</p><span class="attrs">delay · maxAttempts · hedgeOn · budgetPercent</span></span></a>
-      <a class="breaker" href="#/en/policies/circuit-breaker"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4.5"/><circle cx="8" cy="16" r="1.6"/><path d="M9.2 15 L17 7.5"/><circle cx="16.5" cy="16" r="1.6"/><path d="M18 16h4"/></svg></span><span><h3>@CircuitBreaker</h3><p>Stop calling a dependency that keeps failing, then let a few probe calls through.</p><span class="attrs">failureRateThreshold · waitInOpen · halfOpenCalls</span></span></a>
-      <a class="breaker" href="#/en/policies/rate-limiter"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16l-5.5 6h-5z"/><path d="M12 10v1.5"/><circle cx="12" cy="15" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="20" r="1.3" fill="currentColor" stroke="none"/></svg></span><span><h3>@RateLimiter</h3><p>Admit a fixed number of calls per period, rejecting or waiting for the rest.</p><span class="attrs">permits · period · maxWait</span></span></a>
-      <a class="breaker" href="#/en/policies/adaptive-limit"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.4" fill="currentColor" stroke="none"/></svg></span><span><h3>@AdaptiveLimit</h3><p>Cap concurrent calls with a limit that finds itself: up while latency holds, down when it rises.</p><span class="attrs">algorithm · minLimit · maxLimit</span></span></a>
-      <a class="breaker" href="#/en/policies/timeout"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V9.5"/><path d="M10 3h4"/><path d="M12 3v3.5"/><path d="M18.2 6.8l1.4-1.4"/></svg></span><span><h3>@Timeout</h3><p>Interrupt a call that runs past its budget, on the caller’s own thread.</p><span class="attrs">value</span></span></a>
-      <a class="breaker" href="#/en/policies/bulkhead"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18l-1.8 8.4a2 2 0 0 1-2 1.6H6.8a2 2 0 0 1-2-1.6z"/><path d="M9 8v10"/><path d="M15 8v10"/><path d="M12 8V4.5"/></svg></span><span><h3>@Bulkhead</h3><p>Cap how many calls run at the same time, so one slow dependency can’t take every thread.</p><span class="attrs">maxConcurrent · maxWait</span></span></a>
-      <a class="breaker" href="#/en/policies/fallback"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h10"/><path d="M15.5 5.5l3 3"/><path d="M18.5 5.5l-3 3"/><path d="M7.5 7c0 6 3 10 8.5 10H21"/><path d="M18 14l3 3-3 3"/></svg></span><span><h3>@Fallback</h3><p>Return a useful answer when everything else has failed, from a sibling method or a handler class.</p><span class="attrs">value · method</span></span></a>
+      <a class="breaker" href="/en/policies/retry"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4.5V8.5H16"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></span><span><h3>@Retry</h3><p>Try again with exponential backoff and jitter, within an optional time budget.</p><span class="attrs">maxAttempts · delay · backoff · maxDuration</span></span></a>
+      <a class="breaker" href="/en/policies/hedge"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h13"/><path d="M13 5l3 3-3 3"/><path d="M8 16h13"/><path d="M18 13l3 3-3 3"/></svg></span><span><h3>@Hedge</h3><p>Start the same idempotent async call again when it is slow, and keep the first success.</p><span class="attrs">delay · maxAttempts · hedgeOn · budgetPercent</span></span></a>
+      <a class="breaker" href="/en/policies/circuit-breaker"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4.5"/><circle cx="8" cy="16" r="1.6"/><path d="M9.2 15 L17 7.5"/><circle cx="16.5" cy="16" r="1.6"/><path d="M18 16h4"/></svg></span><span><h3>@CircuitBreaker</h3><p>Stop calling a dependency that keeps failing, then let a few probe calls through.</p><span class="attrs">failureRateThreshold · waitInOpen · halfOpenCalls</span></span></a>
+      <a class="breaker" href="/en/policies/rate-limiter"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16l-5.5 6h-5z"/><path d="M12 10v1.5"/><circle cx="12" cy="15" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="20" r="1.3" fill="currentColor" stroke="none"/></svg></span><span><h3>@RateLimiter</h3><p>Admit a fixed number of calls per period, rejecting or waiting for the rest.</p><span class="attrs">permits · period · maxWait</span></span></a>
+      <a class="breaker" href="/en/policies/adaptive-limit"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.4" fill="currentColor" stroke="none"/></svg></span><span><h3>@AdaptiveLimit</h3><p>Cap concurrent calls with a limit that finds itself: up while latency holds, down when it rises.</p><span class="attrs">algorithm · minLimit · maxLimit</span></span></a>
+      <a class="breaker" href="/en/policies/timeout"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V9.5"/><path d="M10 3h4"/><path d="M12 3v3.5"/><path d="M18.2 6.8l1.4-1.4"/></svg></span><span><h3>@Timeout</h3><p>Interrupt a call that runs past its budget, on the caller’s own thread.</p><span class="attrs">value</span></span></a>
+      <a class="breaker" href="/en/policies/bulkhead"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18l-1.8 8.4a2 2 0 0 1-2 1.6H6.8a2 2 0 0 1-2-1.6z"/><path d="M9 8v10"/><path d="M15 8v10"/><path d="M12 8V4.5"/></svg></span><span><h3>@Bulkhead</h3><p>Cap how many calls run at the same time, so one slow dependency can’t take every thread.</p><span class="attrs">maxConcurrent · maxWait</span></span></a>
+      <a class="breaker" href="/en/policies/fallback"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h10"/><path d="M15.5 5.5l3 3"/><path d="M18.5 5.5l-3 3"/><path d="M7.5 7c0 6 3 10 8.5 10H21"/><path d="M18 14l3 3-3 3"/></svg></span><span><h3>@Fallback</h3><p>Return a useful answer when everything else has failed, from a sibling method or a handler class.</p><span class="attrs">value · method</span></span></a>
     </div>
-    <p class="order">Order, outermost first: Fallback, Retry or Hedge, CircuitBreaker, RateLimiter, AdaptiveLimit, Timeout, Bulkhead, then your method. <a href="#/en/policies/">How they combine</a></p>
+    <p class="order">Order, outermost first: Fallback, Retry or Hedge, CircuitBreaker, RateLimiter, AdaptiveLimit, Timeout, Bulkhead, then your method. <a href="/en/policies/">How they combine</a></p>
   </div>
 </section>
 <section aria-labelledby="qs-h">
@@ -259,21 +259,21 @@ at CheckoutService.pay</pre>
     <span class="k">new</span> <span class="t">HttpPaymentClient</span>(), registry);</pre></li>
     </ol>
     <div class="cta-row">
-      <a class="btn btn-primary" href="#/en/start/quickstart">Follow the quickstart</a>
-      <a class="btn btn-quiet" href="#/en/start/how-it-works">How it works</a>
+      <a class="btn btn-primary" href="/en/start/quickstart">Follow the quickstart</a>
+      <a class="btn btn-quiet" href="/en/start/how-it-works">How it works</a>
     </div>
   </div>
 </section>
 <div class="foot-wrap">
   <div class="wrap foot">
     <div>
-      <a class="r4c-brand" href="#/en/"><svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#F2B500"/><g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round"><path d="M4 27h7"/><path d="M13.6 25.4 L27 13"/><path d="M31 27h5"/></g><circle cx="13" cy="27" r="2.6" fill="#1A1F24"/><circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/></svg><span>resilience<b>4cata</b></span></a>
+      <a class="r4c-brand" href="/en/"><svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#F2B500"/><g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round"><path d="M4 27h7"/><path d="M13.6 25.4 L27 13"/><path d="M31 27h5"/></g><circle cx="13" cy="27" r="2.6" fill="#1A1F24"/><circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/></svg><span>resilience<b>4cata</b></span></a>
       <p>Annotation-driven resilience for plain Java 21+. Apache License 2.0.</p>
       <span class="coord">dev.resilience4cata:resilience4cata-bom:0.8.0</span>
     </div>
-    <div><h4>Learn</h4><ul><li><a href="#/en/start/installation">Installation</a></li><li><a href="#/en/start/quickstart">Quickstart</a></li><li><a href="#/en/start/how-it-works">How it works</a></li><li><a href="#/en/guides/testing">Testing with ManualClock</a></li></ul></div>
-    <div><h4>Reference</h4><ul><li><a href="#/en/errors">Error codes</a></li><li><a href="#/en/reference/configuration">Configuration keys</a></li><li><a href="#/en/performance">Performance</a></li><li><a href="https://javadoc.io/doc/dev.resilience4cata">Javadoc</a></li></ul></div>
-    <div><h4>Project</h4><ul><li><a href="https://github.com/fabiangftech/resilience4cata">GitHub</a></li><li><a href="https://central.sonatype.com/namespace/dev.resilience4cata">Maven Central</a></li><li><a href="https://github.com/fabiangftech/resilience4cata/releases">Releases</a></li><li><a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a></li><li><a href="#/es/" lang="es" hreflang="es">Documentación en español</a></li></ul></div>
+    <div><h4>Learn</h4><ul><li><a href="/en/start/installation">Installation</a></li><li><a href="/en/start/quickstart">Quickstart</a></li><li><a href="/en/start/how-it-works">How it works</a></li><li><a href="/en/guides/testing">Testing with ManualClock</a></li></ul></div>
+    <div><h4>Reference</h4><ul><li><a href="/en/errors">Error codes</a></li><li><a href="/en/reference/configuration">Configuration keys</a></li><li><a href="/en/performance">Performance</a></li><li><a href="https://javadoc.io/doc/dev.resilience4cata">Javadoc</a></li></ul></div>
+    <div><h4>Project</h4><ul><li><a href="https://github.com/fabiangftech/resilience4cata">GitHub</a></li><li><a href="https://central.sonatype.com/namespace/dev.resilience4cata">Maven Central</a></li><li><a href="https://github.com/fabiangftech/resilience4cata/releases">Releases</a></li><li><a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a></li><li><a href="/es/" lang="es" hreflang="es">Documentación en español</a></li></ul></div>
   </div>
 </div>
 </div>

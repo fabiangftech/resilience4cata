@@ -4,18 +4,18 @@
   <meta charset="UTF-8">
   <title>resilience4cata</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Annotation-driven resilience for plain Java 21+. Retry, circuit breaker, rate limiter, timeout, bulkhead and fallback, generated at compile time by an annotation processor. No proxies, no reflection, no framework.">
+  <meta name="description" content="Annotation-driven resilience for plain Java 21+: retry, circuit breaker, rate limiter, timeout, bulkhead, hedging and more, generated at compile time. No proxies, no framework.">
   <link rel="canonical" href="https://resilience4cata.dev/">
   <meta name="theme-color" content="#F5F6F2" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#15191D" media="(prefers-color-scheme: dark)">
-  <link rel="icon" type="image/svg+xml" href="_media/logo-mark.svg">
-  <link rel="icon" type="image/png" sizes="32x32" href="_media/favicon-32.png">
-  <link rel="apple-touch-icon" href="_media/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="/_media/logo-mark.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/_media/favicon-32.png">
+  <link rel="apple-touch-icon" href="/_media/apple-touch-icon.png">
   <!-- Social cards -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="resilience4cata">
   <meta property="og:title" content="resilience4cata: resilience, compiled">
-  <meta property="og:description" content="Annotate a Java interface with retry, circuit breaker, timeout and friends. An annotation processor writes the plain Java that enforces them.">
+  <meta property="og:description" content="Annotate a Java interface with retry, circuit breaker, timeout, hedging and friends. An annotation processor writes the plain Java that enforces them.">
   <meta property="og:url" content="https://resilience4cata.dev/">
   <meta property="og:image" content="https://resilience4cata.dev/_media/og.png">
   <meta property="og:image:width" content="1200">
@@ -25,27 +25,53 @@
   <meta name="twitter:title" content="resilience4cata: resilience, compiled">
   <meta name="twitter:description" content="Annotation-driven resilience for plain Java 21+, generated at compile time.">
   <meta name="twitter:image" content="https://resilience4cata.dev/_media/og.png">
-  <!-- Theme and language before first paint (no flash) -->
+  <!-- Structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": "resilience4cata",
+    "description": "Annotation-driven resilience for plain Java 21+: retry, circuit breaker, rate limiter, timeout, bulkhead, fallback, hedging and adaptive concurrency limits, generated at compile time.",
+    "url": "https://resilience4cata.dev/",
+    "codeRepository": "https://github.com/fabiangftech/resilience4cata",
+    "programmingLanguage": "Java",
+    "runtimePlatform": "Java 21",
+    "license": "https://www.apache.org/licenses/LICENSE-2.0",
+    "keywords": "java, resilience, fault tolerance, circuit breaker, retry, rate limiter, bulkhead, timeout, hedging, annotation processor, resilience4j alternative"
+  }
+  </script>
+  <!-- Theme, language and old #/ links before first paint (no flash) -->
   <script>
     (function () {
+      var root = document.documentElement;
+      root.classList.add('r4c-js');
       var get = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
       var t = get('r4c-theme');
       var q = /[?&]theme=(light|dark)\b/.exec(location.search);
       if (q) t = q[1];
-      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t);
+      // Old links used hash routes (#/en/x); the site now has real paths (/en/x).
       var h = location.hash;
-      if (!h || h === '#' || h === '#/' || h === '#/README') {
-        var lang = get('r4c-lang') || ((navigator.languages && navigator.languages[0]) || navigator.language || 'en');
-        location.replace('#/' + (/^es\b/i.test(lang) ? 'es' : 'en') + '/');
+      if (/^#\/(en|es)\//.test(h)) {
+        location.replace(h.slice(1).replace(/\.md(?=$|\?)/, ''));
+        return;
       }
-      var m = /^#\/(en|es)\//.exec(location.hash);
-      if (m) document.documentElement.lang = m[1];
+      var p = location.pathname;
+      if (p === '/' || p === '/index.html' || p === '/README') {
+        var lang = get('r4c-lang') || ((navigator.languages && navigator.languages[0]) || navigator.language || 'en');
+        location.replace('/' + (/^es\b/i.test(lang) ? 'es' : 'en') + '/');
+        return;
+      }
+      var m = /^\/(en|es)\//.exec(p);
+      if (m) root.lang = m[1];
     })();
   </script>
+  <!-- The pre-rendered page (for crawlers and readers without JavaScript); Docsify replaces it. -->
+  <style>.r4c-js .r4c-prerender { display: none; }</style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
-  <link rel="stylesheet" href="_media/theme.css">
+  <link rel="stylesheet" href="/_media/theme.css">
 </head>
 <body>
   <a class="r4c-skip" href="#main">Skip to content</a>
@@ -54,20 +80,20 @@
       <button class="r4c-tool r4c-menu" type="button" aria-label="Navigation" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
-      <a class="r4c-brand" href="#/en/" aria-label="resilience4cata home">
+      <a class="r4c-brand" href="/en/" aria-label="resilience4cata home">
         <svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#F2B500"/><g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round"><path d="M4 27h7"/><path d="M13.6 25.4 L27 13"/><path d="M31 27h5"/></g><circle cx="13" cy="27" r="2.6" fill="#1A1F24"/><circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/></svg>
         <span>resilience<b>4cata</b></span>
       </a>
       <nav class="r4c-nav" aria-label="Main">
-        <a data-nav="docs" href="#/en/start/installation">Docs</a>
-        <a data-nav="policies" href="#/en/policies/">Policies</a>
-        <a data-nav="performance" href="#/en/performance">Performance</a>
-        <a data-nav="errors" href="#/en/errors">Error codes</a>
+        <a data-nav="docs" href="/en/start/installation">Docs</a>
+        <a data-nav="policies" href="/en/policies/">Policies</a>
+        <a data-nav="performance" href="/en/performance">Performance</a>
+        <a data-nav="errors" href="/en/errors">Error codes</a>
       </nav>
       <div class="r4c-tools">
         <div class="r4c-search-slot"></div>
         <span class="r4c-lang" role="group" aria-label="Language">
-          <a data-lang="en" lang="en" hreflang="en" href="#/en/">EN</a><a data-lang="es" lang="es" hreflang="es" href="#/es/">ES</a>
+          <a data-lang="en" lang="en" hreflang="en" href="/en/">EN</a><a data-lang="es" lang="es" hreflang="es" href="/es/">ES</a>
         </span>
         <button class="r4c-tool r4c-theme" type="button" aria-label="Color theme: system">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>
@@ -83,7 +109,8 @@
   <script>
     window.$docsify = {
       name: 'resilience4cata',
-      nameLink: { '/es/': '#/es/', '/': '#/en/' },
+      nameLink: { '/es/': '/es/', '/': '/en/' },
+      routerMode: 'history',
       loadSidebar: true,
       loadNavbar: false,
       relativePath: true,
@@ -132,7 +159,7 @@
       plugins: []
     };
   </script>
-  <script src="_media/r4c.js"></script>
+  <script src="/_media/r4c.js"></script>
   <!-- Docsify 4 and plugins, pinned -->
   <script src="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/docsify.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/plugins/search.min.js"></script>
