@@ -30,6 +30,18 @@ final class AnnotationPrinter {
     private static final String CONSTRUCTOR_PROPERTIES = "java.beans.ConstructorProperties";
     private static final String SAFE_VARARGS = "java.lang.SafeVarargs";
     private static final String LIBRARY_PACKAGE = "dev.resilience4cata.annotation.";
+    /**
+     * Bean Validation: constraints and {@code @Valid} are inherited from the overridden method, and repeating them is
+     * an error there (Hibernate Validator's HV000131 for a cascaded return value marked twice), so overrides never
+     * carry them; custom constraints are recognized by their {@code @Constraint} meta-annotation.
+     */
+    private static final List<String> VALIDATION_PACKAGES = List.of("jakarta.validation.", "javax.validation.");
+    private static final List<String> CONSTRAINT = List.of("jakarta.validation.Constraint", "javax.validation.Constraint");
+    /**
+     * The Micronaut integration's marker for beans to wrap with their interface's generated class: the generated
+     * subclass already applies the interface's policies, so it must not be wrapped again.
+     */
+    private static final String RESILIENT_BEAN = "dev.resilience4cata.micronaut.ResilientBean";
 
     private AnnotationPrinter() {
     }
@@ -66,7 +78,7 @@ final class AnnotationPrinter {
                 continue;
             }
             String name = ((TypeElement) annotation.getAnnotationType().asElement()).getQualifiedName().toString();
-            if (name.startsWith("java.lang.") || name.equals(skipped)) {
+            if (name.startsWith("java.lang.") || name.equals(skipped) || name.equals(RESILIENT_BEAN)) {
                 continue;
             }
             out.append(print(annotation)).append(separator);
@@ -111,16 +123,23 @@ final class AnnotationPrinter {
         return applicable == null || Arrays.asList(applicable.value()).contains(target);
     }
 
-    /** False for {@code @SafeVarargs} and for annotations of this library or annotated with one (bundles). */
+    /**
+     * False for {@code @SafeVarargs}, for annotations of this library or annotated with one (bundles), and for Bean
+     * Validation annotations ({@link #VALIDATION_PACKAGES}).
+     */
     private static boolean copiedOnOverride(AnnotationMirror annotation) {
         TypeElement type = (TypeElement) annotation.getAnnotationType().asElement();
         String name = type.getQualifiedName().toString();
-        if (name.equals(SAFE_VARARGS) || name.startsWith(LIBRARY_PACKAGE)) {
+        if (name.equals(SAFE_VARARGS) || name.startsWith(LIBRARY_PACKAGE)
+                || VALIDATION_PACKAGES.stream().anyMatch(name::startsWith)) {
             return false;
         }
         for (AnnotationMirror meta : type.getAnnotationMirrors()) {
-            if (meta.getAnnotationType().getKind() == TypeKind.DECLARED && ((TypeElement) meta.getAnnotationType().asElement())
-                    .getQualifiedName().toString().startsWith(LIBRARY_PACKAGE)) {
+            if (meta.getAnnotationType().getKind() != TypeKind.DECLARED) {
+                continue;
+            }
+            String metaName = ((TypeElement) meta.getAnnotationType().asElement()).getQualifiedName().toString();
+            if (metaName.startsWith(LIBRARY_PACKAGE) || CONSTRAINT.contains(metaName)) {
                 return false;
             }
         }

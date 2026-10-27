@@ -650,6 +650,53 @@ class SubclassProcessorTest {
     }
 
     @Test
+    void overridesDoNotRepeatBeanValidationAnnotations() {
+        Compilation result = Compilation.compile(workDir, Map.of(
+                "jakarta.validation.Valid", """
+                        package jakarta.validation;
+                        import java.lang.annotation.*;
+                        @Retention(RetentionPolicy.RUNTIME) @Target({ElementType.METHOD, ElementType.PARAMETER})
+                        public @interface Valid {}
+                        """,
+                "jakarta.validation.Constraint", """
+                        package jakarta.validation;
+                        import java.lang.annotation.*;
+                        @Retention(RetentionPolicy.RUNTIME) @Target(ElementType.ANNOTATION_TYPE)
+                        public @interface Constraint {}
+                        """,
+                "demo.Positive", """
+                        package demo;
+                        import java.lang.annotation.*;
+                        @jakarta.validation.Constraint
+                        @Retention(RetentionPolicy.RUNTIME) @Target({ElementType.METHOD, ElementType.PARAMETER})
+                        public @interface Positive {}
+                        """,
+                "demo.Audited", """
+                        package demo;
+                        import java.lang.annotation.*;
+                        @Retention(RetentionPolicy.RUNTIME) @Target({ElementType.METHOD, ElementType.PARAMETER})
+                        public @interface Audited {}
+                        """,
+                "demo.Profiles", """
+                        package demo;
+                        import dev.resilience4cata.annotation.Retry;
+                        import jakarta.validation.Valid;
+                        public class Profiles {
+                            @Retry @Valid @Positive @Audited
+                            public String load(@Valid @Positive @Audited String id) { return id; }
+                        }
+                        """));
+
+        assertThat(result.errors()).isEmpty();
+        // Bean Validation inherits them from the overridden method, and repeating @Valid on a return value is
+        // Hibernate Validator's HV000131
+        assertThat(result.generatedSource("demo.Profiles$Resilient"))
+                .contains("    @demo.Audited\n    public java.lang.String load(@demo.Audited java.lang.String id) {")
+                .doesNotContain("Valid")
+                .doesNotContain("Positive");
+    }
+
+    @Test
     void interfaceWrappersKeepTheirPositionalParameterNames() {
         Compilation result = compile("demo.Api", """
                 package demo;

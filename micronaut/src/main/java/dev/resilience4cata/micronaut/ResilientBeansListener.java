@@ -68,7 +68,8 @@ final class ResilientBeansListener implements BeanCreatedEventListener<Object> {
         }
         Class<?>[] declared = definition.classValues(ResilientBean.class);
         if (declared.length > 0) {
-            return wrap(declared[0], definition, bean);
+            // a generated subclass already applies its interfaces' policies: wrapping it would apply them twice
+            return generated.isGeneratedSubclass(bean.getClass()) ? bean : wrap(declared[0], definition, bean);
         }
         Optional<Class<?>> annotated = unprotected.computeIfAbsent(bean.getClass(), this::annotatedSuperclass);
         if (annotated.isPresent()) {

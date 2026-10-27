@@ -5,14 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.micronaut.context.ApplicationContext;
 import java.util.Map;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /** An {@code @ResilientBean} whose class is annotated too. */
 class BothStylesTest {
 
     @Test
-    @Disabled("BUG-MN-7: the generated subclass keeps @ResilientBean and is wrapped again: 3 x 3 = 9 attempts")
     void theInterfaceRetryRunsOnceNotOncePerStyle() {
         try (ApplicationContext context = ApplicationContext.run(Map.of("test.usability", "both-styles"))) {
             Inventory inventory = context.getBean(Inventory.class);

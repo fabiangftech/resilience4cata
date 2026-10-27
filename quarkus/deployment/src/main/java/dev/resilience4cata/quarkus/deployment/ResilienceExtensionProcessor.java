@@ -89,6 +89,13 @@ public class ResilienceExtensionProcessor {
     private static final DotName TRANSACTIONAL = DotName.createSimple("jakarta.transaction.Transactional");
     private static final DotName OBJECT = DotName.createSimple(Object.class.getName());
     private static final DotName PATH = DotName.createSimple("jakarta.ws.rs.Path");
+    private static final DotName NAMED = DotName.createSimple("jakarta.inject.Named");
+    /**
+     * The copy of the class's annotations onto its generated subclass runs before other extensions' transformations:
+     * those that add a scope when a class has none (the scheduler for {@code @Scheduled} methods, messaging, event
+     * consumers) must see the copied scope, or the subclass ends up with two.
+     */
+    private static final int COPY_PRIORITY = AnnotationTransformation.DEFAULT_PRIORITY_VALUE + 100_000;
     /** ArC's lookup conditions, read by Quarkus from the bean class's own annotations in the original index. */
     private static final List<DotName> LOOKUP_CONDITIONS = List.of(
             DotName.createSimple("io.quarkus.arc.lookup.LookupIfProperty"),
@@ -197,7 +204,7 @@ public class ResilienceExtensionProcessor {
                 // @Inherited ones too: ArC discovers a bean by its own bean-defining annotations, not inherited ones.
                 if (!isPolicyAnnotation(annotation.name(), index) && !annotation.name().equals(VETOED)
                         && !subclass.hasDeclaredAnnotation(annotation.name())) {
-                    copied.add(AnnotationInstance.create(annotation.name(), subclass, annotation.values()));
+                    copied.add(AnnotationInstance.create(annotation.name(), subclass, copiedValues(annotation, annotated)));
                 }
             }
             DotName annotatedName = annotated.name();
@@ -207,6 +214,7 @@ public class ResilienceExtensionProcessor {
                     .transform(context -> context.add(AnnotationInstance.create(VETOED, annotated, List.of())))));
             if (!copied.isEmpty()) {
                 transformers.produce(new AnnotationsTransformerBuildItem(AnnotationTransformation.forClasses()
+                        .priority(COPY_PRIORITY)
                         .when(context -> context.declaration().asClass().name().equals(subclassName))
                         .transform(context -> context.addAll(copied))));
             }
@@ -293,6 +301,20 @@ public class ResilienceExtensionProcessor {
             }
         }
         return false;
+    }
+
+    /**
+     * The values of a class annotation copied to the generated subclass: as declared, except an {@code @Named} without
+     * a value, which would name the bean after the subclass; it gets the name CDI gives the class itself.
+     */
+    private static List<AnnotationValue> copiedValues(AnnotationInstance annotation, ClassInfo annotated) {
+        AnnotationValue value = annotation.value();
+        if (!annotation.name().equals(NAMED) || (value != null && !value.asString().isEmpty())) {
+            return annotation.values();
+        }
+        String simpleName = annotated.simpleName();
+        String defaultName = Character.toLowerCase(simpleName.charAt(0)) + simpleName.substring(1);
+        return List.of(AnnotationValue.createStringValue("value", defaultName));
     }
 
     /** Producer methods and fields declared by {@code type}. */
