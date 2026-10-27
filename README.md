@@ -8,7 +8,7 @@ Annotation-driven resilience for **plain Java 21+**: retry, hedging, circuit bre
 
 Sync and async (`CompletionStage`), interfaces and annotated classes, composed annotations, named configurations with external overrides, typed events and snapshots, a programmatic `Pipeline` for code you cannot annotate, and a `testkit` with a manual clock.
 
-**Documentation: [resilience4cata.dev](https://resilience4cata.dev)** (English and Spanish). Status: 0.7.0 on Maven Central; names can still change before 1.0.
+**Documentation: [resilience4cata.dev](https://resilience4cata.dev)** (English and Spanish). Status: 0.8.0 on Maven Central; names can still change before 1.0.
 
 ## Install
 

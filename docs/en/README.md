@@ -49,7 +49,7 @@
   &lt;/<span class="k">path</span>&gt;
 &lt;/<span class="k">annotationProcessorPaths</span>&gt;</pre></div>
         </div>
-        <p class="install-note">Version 0.7.0 on Maven Central. <code>resilience4cata-all</code> brings core, the annotations and configuration; the processor only goes on the annotation processor path. <a href="#/en/start/installation">Installation guide</a></p>
+        <p class="install-note">Version 0.8.0 on Maven Central. <code>resilience4cata-all</code> brings core, the annotations and configuration; the processor only goes on the annotation processor path. <a href="#/en/start/installation">Installation guide</a></p>
       </div>
     </div>
     <div class="r4c-compile" aria-label="Annotated interface and the class the processor generates from it">
@@ -269,7 +269,7 @@ at CheckoutService.pay</pre>
     <div>
       <a class="r4c-brand" href="#/en/"><svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#F2B500"/><g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round"><path d="M4 27h7"/><path d="M13.6 25.4 L27 13"/><path d="M31 27h5"/></g><circle cx="13" cy="27" r="2.6" fill="#1A1F24"/><circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/></svg><span>resilience<b>4cata</b></span></a>
       <p>Annotation-driven resilience for plain Java 21+. Apache License 2.0.</p>
-      <span class="coord">dev.resilience4cata:resilience4cata-bom:0.7.0</span>
+      <span class="coord">dev.resilience4cata:resilience4cata-bom:0.8.0</span>
     </div>
     <div><h4>Learn</h4><ul><li><a href="#/en/start/installation">Installation</a></li><li><a href="#/en/start/quickstart">Quickstart</a></li><li><a href="#/en/start/how-it-works">How it works</a></li><li><a href="#/en/guides/testing">Testing with ManualClock</a></li></ul></div>
     <div><h4>Reference</h4><ul><li><a href="#/en/errors">Error codes</a></li><li><a href="#/en/reference/configuration">Configuration keys</a></li><li><a href="#/en/performance">Performance</a></li><li><a href="https://javadoc.io/doc/dev.resilience4cata">Javadoc</a></li></ul></div>
