@@ -745,6 +745,49 @@ public interface QuoteClient {
 }
 ```
 
+## Annotation processor: policy order (R4C-ORD)
+
+### R4C-ORD-001
+
+**Trigger:** `@PolicyOrder` lists a layer more than once (on the method, on its type or in a bundle). Each layer has
+one place in the order.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Layer;
+import dev.resilience4cata.annotation.PolicyOrder;
+import dev.resilience4cata.annotation.Retry;
+import dev.resilience4cata.annotation.Timeout;
+
+public interface ReportClient {
+    @Retry
+    @Timeout("2s")
+    @PolicyOrder({Layer.TIMEOUT, Layer.RETRY, Layer.TIMEOUT})
+    String report(String id);
+}
+```
+
+**Fix:** list each layer once, outermost first.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Layer;
+import dev.resilience4cata.annotation.PolicyOrder;
+import dev.resilience4cata.annotation.Retry;
+import dev.resilience4cata.annotation.Timeout;
+
+public interface ReportClient {
+    @Retry
+    @Timeout("2s")
+    @PolicyOrder({Layer.TIMEOUT, Layer.RETRY})
+    String report(String id);
+}
+```
+
 ## Annotation processor: classifiers (R4C-CLS)
 
 The generated class creates one instance of each `classifier` class per method, so the class must be a

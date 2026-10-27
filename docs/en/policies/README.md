@@ -1,6 +1,6 @@
 # Policies
 
-resilience4cata has eight policies, one annotation each; put them on a method or a whole interface, alone or stacked, and the processor always nests them in the same order.
+resilience4cata has eight policies, one annotation each; put them on a method or a whole interface, alone or stacked, and the processor nests them in one default order, which `@PolicyOrder` can change.
 
 | Policy | Annotation | What it does | Thrown when it rejects |
 |---|---|---|---|
@@ -31,7 +31,7 @@ Every policy except Hedge works on synchronous methods and on methods that retur
 
 A common stack for a remote call is a timeout, a circuit breaker and a retry, plus a fallback where a degraded answer exists.
 
-## The order is fixed
+## The default order :id=default-order
 
 Outermost first:
 
@@ -40,7 +40,7 @@ flowchart LR
     caller(["caller"]) --> F["Fallback"] --> R["Retry | Hedge"] --> C["CircuitBreaker"] --> L["RateLimiter"] --> A["AdaptiveLimit"] --> T["Timeout"] --> B["Bulkhead"] --> M(["your method"])
 ```
 
-The order you write the annotations in does not matter, and the order cannot be changed. It is chosen so that each policy sees what it should:
+The order you write the annotations in does not matter. The default order is chosen so that each policy sees what it should:
 
 - **Fallback is outermost**, so it sees the final outcome: the last failure once the retries give up, and every rejection from the policies inside.
 - **Retry is outside the circuit breaker**, so every attempt is recorded by the breaker, and an open breaker stops the retries (below). **Hedge** sits in the same place, for the same reasons: each hedged attempt goes through the breaker, limiter, timeout and bulkhead on its own.
@@ -48,6 +48,53 @@ The order you write the annotations in does not matter, and the order cannot be 
 - **The adaptive limit is inside the rate limiter and outside the timeout and the bulkhead**, so a timeout or a full bulkhead inside it is the overload signal that lowers its limit.
 - **The timeout is inside the retry**, so it applies per attempt; `@Retry(maxDuration = …)` bounds the whole operation.
 - **The bulkhead is innermost**, so a slot is held only while the method actually runs: not during a retry's backoff, not while waiting for a permit.
+
+## Changing the order :id=changing-the-order
+
+`@PolicyOrder` lists layers to move, outermost first. They move together, in that order, to the place of the outermost
+of them; the layers you do not list keep their default order around them, and layers the method does not have are
+ignored. Here the timeout goes around the whole retry loop, so one second bounds every attempt together:
+
+<!-- snippet: policies-order -->
+```java
+import static dev.resilience4cata.annotation.Layer.RETRY;
+import static dev.resilience4cata.annotation.Layer.TIMEOUT;
+
+import dev.resilience4cata.annotation.Jitter;
+import dev.resilience4cata.annotation.PolicyOrder;
+import dev.resilience4cata.annotation.Retry;
+import dev.resilience4cata.annotation.Timeout;
+
+public interface ReportApi {
+
+    @PolicyOrder({TIMEOUT, RETRY})                // Fallback -> Timeout -> Retry -> ...: one deadline for every attempt
+    @Timeout("1s")
+    @Retry(maxAttempts = 10, delay = "300ms", jitter = Jitter.NONE)
+    String report(String id);
+}
+```
+
+The usual changes:
+
+- **`{TIMEOUT, RETRY}`**: one deadline for the whole operation, as above. With the default order each attempt gets its own
+  timeout (a `@Retry(maxDuration = …)` also bounds the whole operation, without reordering).
+- **`{CIRCUIT_BREAKER, RETRY}`**: the breaker records the whole operation once, not every attempt, and an open breaker
+  rejects the call before the retry starts.
+- **`{BULKHEAD, RETRY}`**: the bulkhead holds a slot for the whole operation, backoff pauses included, so it limits
+  operations in progress rather than calls in flight.
+
+What else to know:
+
+- **The fallback is always outermost**, so it still sees the final outcome. `FallbackContext.attempts()` counts the
+  retry's attempts only while the retry is the layer right inside the fallback, as by default; with another layer in
+  between it reports `1`.
+- **Any order compiles.** Some change semantics in ways worth checking: a rate limiter outside the breaker spends permits
+  on calls the breaker rejects, and a bulkhead outside a timeout holds its slot until the timeout fires.
+- **Where it goes:** on a method, on a type (for every method) or in a [bundle](../guides/bundles.md); the method's wins
+  over the type's, and a direct annotation over a bundle's. Listing a layer twice is
+  [`R4C-ORD-001`](../errors.md#r4c-ord-001).
+- **It is decided at compile time**, like the rest of the generated code, so it cannot come from configuration. A
+  [`Pipeline`](../guides/pipeline.md) always uses the default order.
 
 ## Combining them
 
@@ -162,7 +209,7 @@ A rejection by an inner policy is an `Exception` like any other to the layers ou
 
 ## Programmatic use
 
-Code that cannot be annotated gets the same policies, in the same order, from a [`Pipeline`](../guides/pipeline.md). Each policy page shows its pipeline equivalent.
+Code that cannot be annotated gets the same policies, in the default order, from a [`Pipeline`](../guides/pipeline.md). Each policy page shows its pipeline equivalent.
 
 ## What it costs
 

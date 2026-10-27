@@ -229,7 +229,7 @@ at CheckoutService.pay</pre>
 <section id="policies" aria-labelledby="pol-h">
   <div class="wrap">
     <h2 class="h2" id="pol-h">Ocho políticas, una anotación cada una</h2>
-    <p class="lead">Ponlas en un método o en toda la interfaz. Combínalas como quieras: el procesador siempre las anida en el mismo orden.</p>
+    <p class="lead">Ponlas en un método o en toda la interfaz. Combínalas como quieras: el procesador las anida en un orden pensado para ello, que <code>@PolicyOrder</code> puede cambiar.</p>
     <div class="panel">
       <a class="breaker" href="/es/policies/retry"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4.5V8.5H16"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></span><span><h3>@Retry</h3><p>Vuelve a intentar con backoff exponencial y jitter, dentro de un presupuesto de tiempo opcional.</p><span class="attrs">maxAttempts · delay · backoff · maxDuration</span></span></a>
       <a class="breaker" href="/es/policies/hedge"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h13"/><path d="M13 5l3 3-3 3"/><path d="M8 16h13"/><path d="M18 13l3 3-3 3"/></svg></span><span><h3>@Hedge</h3><p>Vuelve a lanzar la misma llamada async idempotente cuando va lenta, y se queda con el primer éxito.</p><span class="attrs">delay · maxAttempts · hedgeOn · budgetPercent</span></span></a>

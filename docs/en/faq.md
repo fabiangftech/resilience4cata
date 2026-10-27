@@ -45,7 +45,7 @@ Annotate an **interface** when you own it and the implementation may be anything
 
 ### Can I change the order of the policies? :id=order
 
-No. It is always Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method, whatever the order of the annotations. So every attempt of a retry is recorded by the breaker and gets its own timeout, and an open breaker stops the retries. See [Policies](policies/README.md).
+Yes, with `@PolicyOrder` on a method, a type or a bundle. By default it is Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method, whatever the order of the annotations, so every attempt of a retry is recorded by the breaker and gets its own timeout, and an open breaker stops the retries. `@PolicyOrder({TIMEOUT, RETRY})`, for example, puts one timeout around the whole retry loop. The fallback is always outermost, and the order is fixed at compile time. See [Changing the order](policies/README.md#changing-the-order).
 
 ### Why is my method not retried when the implementation calls it? :id=self-invocation
 
@@ -101,7 +101,7 @@ On AWS Graviton3, a retry whose first attempt succeeds costs 1.2 ns and a circui
 
 ### What is not supported yet? :id=not-supported
 
-Caching and thread-pool bulkheads; the Vegas algorithm and waiting (`maxWait`) for adaptive limits; synchronous hedging (`@Hedge` works on async methods); reactive types; `? super` async types; changing the policy order; runtime reconfiguration; integration modules for frameworks other than Spring Boot, Micronaut and Quarkus. See [Design decisions](design.md) for what is planned and what is excluded by decision.
+Caching and thread-pool bulkheads; the Vegas algorithm and waiting (`maxWait`) for adaptive limits; synchronous hedging (`@Hedge` works on async methods); reactive types; `? super` async types; runtime reconfiguration; integration modules for frameworks other than Spring Boot, Micronaut and Quarkus. See [Design decisions](design.md) for what is planned and what is excluded by decision.
 
 ### What is on the roadmap? :id=roadmap
 
@@ -113,7 +113,7 @@ Planned, not promised; names and scope can change:
 | Adaptive concurrency limit (`@AdaptiveLimit`) | done in 0.6.0 | Gradient2 and AIMD, sync and async ([Adaptive limit](policies/adaptive-limit.md)); Vegas and waiting later. Resilience4j has none |
 | OpenTelemetry tracing | later | metrics are in `resilience4cata-opentelemetry` since 0.3.0 ([guide](guides/opentelemetry.md)) |
 | YAML configuration | v1 | separate module, so `core` stays dependency-free |
-| Configurable execution order (`@Order`) | v1 | |
+| Configurable execution order (`@PolicyOrder`) | done in 0.10.0 | annotations only; a `Pipeline` keeps the default order ([Changing the order](policies/README.md#changing-the-order)) |
 | `locked` attribute (annotation values that external configuration cannot override) | done in 0.7.0 | `locked = true` on the annotation, `Pipeline.Builder.locked()` ([Locking an instance](guides/configuration.md#locking-an-instance)) |
 | `@Cached`, reactive types, Kotlin coroutines, fault injection, deadline propagation | later | |
 

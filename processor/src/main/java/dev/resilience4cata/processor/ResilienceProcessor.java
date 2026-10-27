@@ -5,6 +5,7 @@ import dev.resilience4cata.annotation.Bulkhead;
 import dev.resilience4cata.annotation.CircuitBreaker;
 import dev.resilience4cata.annotation.Fallback;
 import dev.resilience4cata.annotation.Hedge;
+import dev.resilience4cata.annotation.PolicyOrder;
 import dev.resilience4cata.annotation.RateLimiter;
 import dev.resilience4cata.annotation.Retry;
 import dev.resilience4cata.annotation.Timeout;
@@ -119,6 +120,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private Types types;
     private Messager messager;
     private final Map<Kind, PolicyAttributes> attributes = new EnumMap<>(Kind.class);
+    /** {@code @PolicyOrder}, read with the same precedence and bundle rules as the policy annotations. */
+    private PolicyAttributes order;
     private final Set<String> processed = new HashSet<>();
     private SubclassWriter subclasses;
     /** {@code -Ar4c.inject=micronaut}: generated subclasses become Micronaut beans that replace their class. */
@@ -183,6 +186,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         for (Kind kind : Kind.values()) {
             attributes.put(kind, new PolicyAttributes(messager, kind.annotation));
         }
+        order = new PolicyAttributes(messager, PolicyOrder.class);
         String inject = processingEnv.getOptions().get(INJECT_OPTION);
         if (inject != null && !inject.isBlank()) {
             micronautBeans = inject.strip().equals(INJECT_MICRONAUT);
@@ -300,6 +304,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
         Map<Kind, Optional<Map<String, AnnotationValue>>> typeLevel = new EnumMap<>(Kind.class);
         attributes.forEach((kind, policy) -> typeLevel.put(kind, policy.on(iface)));
+        Optional<Map<String, AnnotationValue>> typeOrder = order.on(iface);
         List<MethodModel> methods = new ArrayList<>();
         boolean anyPolicy = false;
         for (ExecutableElement method : members(iface)) {
@@ -344,9 +349,12 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         + " the implementation), or use the reactive library's own retry and timeout operators.");
                 valid = false;
             }
+            List<Kind> layers = layers(iface, typeOrder, method, policies);
+            valid &= layers != null;
             if (annotated || iface.getKind() == ElementKind.INTERFACE) { // a subclass overrides only protected methods
                 methods.add(new MethodModel(method, type, policies, fallback,
-                    asyncResult == null || asyncResult.getKind() == TypeKind.NONE ? null : asyncResult));
+                    asyncResult == null || asyncResult.getKind() == TypeKind.NONE ? null : asyncResult,
+                    layers == null ? List.copyOf(policies.keySet()) : layers));
             }
         }
         if (!anyPolicy || !valid) {
@@ -423,7 +431,11 @@ public final class ResilienceProcessor extends AbstractProcessor {
     /** Merges one policy's attributes, lowest precedence first: declaring interface, wrapped interface, method. */
     private Optional<Map<String, AnnotationValue>> effective(Kind kind, TypeElement iface,
             Optional<Map<String, AnnotationValue>> typeLevel, ExecutableElement method) {
-        PolicyAttributes policy = attributes.get(kind);
+        return effective(attributes.get(kind), iface, typeLevel, method);
+    }
+
+    private Optional<Map<String, AnnotationValue>> effective(PolicyAttributes policy, TypeElement iface,
+            Optional<Map<String, AnnotationValue>> typeLevel, ExecutableElement method) {
         if (iface.getKind() == ElementKind.CLASS) { // interface < interface method < class < class method
             return subclasses.effective(policy, iface, method);
         }
@@ -439,6 +451,64 @@ public final class ResilienceProcessor extends AbstractProcessor {
         typeLevel.ifPresent(merged::putAll);
         methodLevel.ifPresent(merged::putAll);
         return Optional.of(merged);
+    }
+
+    /**
+     * The method's policy layers, outermost first (the fallback is not one: it is always outermost): the default
+     * order, changed by an effective {@code @PolicyOrder}. Null after reporting a layer listed twice.
+     */
+    private List<Kind> layers(TypeElement iface, Optional<Map<String, AnnotationValue>> typeOrder,
+            ExecutableElement method, Map<Kind, PolicyModel> policies) {
+        List<Kind> defaults = List.copyOf(policies.keySet()); // EnumMap: the default order; FALLBACK is never there
+        AnnotationValue value = effective(order, iface, typeOrder, method).map(v -> v.get("value")).orElse(null);
+        if (value == null) {
+            return defaults;
+        }
+        List<Kind> listed = new ArrayList<>();
+        for (Object item : (List<?>) value.getValue()) {
+            Kind kind = Kind.valueOf(((VariableElement) ((AnnotationValue) item).getValue()).getSimpleName().toString());
+            if (listed.contains(kind)) {
+                error(method, ProcessorError.ORDER_DUPLICATE, "@PolicyOrder lists " + kind + " twice: "
+                        + value + ". List each layer once, outermost first.");
+                return null;
+            }
+            listed.add(kind);
+        }
+        return reorder(defaults, listed);
+    }
+
+    /**
+     * Moves the {@code listed} layers that {@code defaults} has together, in the listed order, to the place of the
+     * outermost of them; the others keep their default order. With fewer than two of them, nothing moves.
+     */
+    static List<Kind> reorder(List<Kind> defaults, List<Kind> listed) {
+        List<Kind> moved = listed.stream().filter(defaults::contains).toList();
+        if (moved.size() < 2) {
+            return defaults;
+        }
+        List<Kind> layers = new ArrayList<>();
+        boolean placed = false;
+        for (Kind kind : defaults) {
+            if (!moved.contains(kind)) {
+                layers.add(kind);
+            } else if (!placed) {
+                layers.addAll(moved);
+                placed = true;
+            }
+        }
+        return List.copyOf(layers);
+    }
+
+    /** The fallback runs inside the retry's (or hedge's) give-up branch, with the attempts: when that layer is outermost. */
+    private static boolean fallbackFused(MethodModel model) {
+        return model.fallback() != null && !model.layers().isEmpty()
+                && (model.layers().get(0) == Kind.RETRY || model.layers().get(0) == Kind.HEDGE);
+    }
+
+    /** True if the circuit breaker's layer is nested inside the retry's. */
+    private static boolean breakerInsideRetry(MethodModel model) {
+        int retry = model.layers().indexOf(Kind.RETRY);
+        return retry >= 0 && model.layers().indexOf(Kind.CIRCUIT_BREAKER) > retry;
     }
 
     /**
@@ -1506,9 +1576,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
             return;
         }
         // One layer per policy, outermost first. Layer i calls layer i + 1; the last one calls the delegate.
-        List<Kind> layers = new ArrayList<>(model.policies().keySet());
-        if (model.fallback() != null && !layers.contains(Kind.RETRY)) {
-            layers.add(0, Kind.FALLBACK); // with a retry, the fallback is part of the retry layer instead
+        List<Kind> layers = new ArrayList<>(model.layers());
+        if (model.fallback() != null && !fallbackFused(model)) {
+            layers.add(0, Kind.FALLBACK); // with a retry outermost, the fallback is part of the retry layer instead
         }
         List<String> layerNames = new ArrayList<>();
         for (Kind kind : layers) {
@@ -1613,14 +1683,14 @@ public final class ResilienceProcessor extends AbstractProcessor {
      * if there is no retry to run it.
      */
     private static String asyncExpression(MethodModel model, int index, String delegateCall, String recovery) {
-        List<Kind> layers = new ArrayList<>(model.policies().keySet());
+        List<Kind> layers = model.layers();
         StringBuilder expression = new StringBuilder(delegateCall);
         for (int i = layers.size() - 1; i >= 0; i--) {
             Kind kind = layers.get(i);
             expression.insert(0, "this." + kind.field + index + EXECUTE_ASYNC)
                     .append(asyncArguments(model, kind, index, recovery)).append(')');
         }
-        if (model.fallback() != null && !layers.contains(Kind.RETRY) && !layers.contains(Kind.HEDGE)) {
+        if (model.fallback() != null && !fallbackFused(model)) {
             expression.insert(0, "this.fallback" + index + EXECUTE_ASYNC).append(", ").append(recovery).append(')');
         }
         return expression.toString();
@@ -1629,13 +1699,13 @@ public final class ResilienceProcessor extends AbstractProcessor {
     /** The arguments after the call lambda of {@code kind}'s {@code executeAsync}, each preceded by a comma. */
     private static String asyncArguments(MethodModel model, Kind kind, int index, String recovery) {
         String classifier = classifierField(model, kind, index);
-        boolean fallback = model.fallback() != null;
+        boolean fallback = fallbackFused(model);
         if (classifier != null && kind == Kind.RETRY) {
             return ", this." + classifier + ", " + (model.policies().get(kind).throwOnExhaustedResult() ? "true, " : "")
                     + (fallback ? "this.fallback" + index + ", " + recovery : "null, null");
         }
         if (classifier != null) {
-            return ", this." + classifier + (model.policies().containsKey(Kind.RETRY) ? ", true" : "");
+            return ", this." + classifier + (breakerInsideRetry(model) ? ", true" : "");
         }
         if ((kind == Kind.RETRY || kind == Kind.HEDGE) && fallback) {
             return ", this.fallback" + index + ", " + recovery; // the hedge, like the retry, runs it with the attempts
@@ -1711,7 +1781,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             case CIRCUIT_BREAKER -> classifierField(model, kind, index) == null
                     ? circuitBreaker(index, call, isVoid, returnType)
                     : classifiedCircuitBreaker(index, call, isVoid, returnType, model.policies().get(kind).classifier(),
-                            classifierField(model, kind, index), model.policies().containsKey(Kind.RETRY));
+                            classifierField(model, kind, index), breakerInsideRetry(model));
             case RATE_LIMITER -> rateLimiter(index, call, isVoid);
             case ADAPTIVE_LIMIT -> adaptiveLimit(index, call, isVoid, returnType);
             case TIMEOUT -> timeout(index, call, isVoid, returnType);
@@ -1723,7 +1793,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private static List<String> retryLayer(MethodModel model, int index, String call, boolean isVoid, String returnType,
             List<String> arguments) {
         String classifier = classifierField(model, Kind.RETRY, index);
-        boolean classifiedBreaker = classifierField(model, Kind.CIRCUIT_BREAKER, index) != null;
+        boolean classifiedBreaker = classifierField(model, Kind.CIRCUIT_BREAKER, index) != null && breakerInsideRetry(model);
         List<String> giveUp = giveUp(model, index, "r4c$e", "r4c$attempts", isVoid, arguments);
         List<String> onClassifierFailure =
                 onClassifierFailure(giveUp(model, index, "r4c$c", "r4c$attempts + 1", isVoid, arguments));
@@ -1734,7 +1804,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         List<String> giveUpOnRejected;
         if (!retry.throwOnExhaustedResult()) {
             giveUpOnRejected = null;
-        } else if (model.fallback() == null) {
+        } else if (!fallbackFused(model)) {
             giveUpOnRejected = List.of();
         } else {
             giveUpOnRejected = giveUp(model, index, "r4c$r", "r4c$attempts", isVoid, arguments);
@@ -1780,7 +1850,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
     /** What the retry layer does when it gives up on the failure in {@code failure}: run the fallback, or rethrow. */
     private static List<String> giveUp(MethodModel model, int index, String failure, String attempts, boolean isVoid,
             List<String> arguments) {
-        return model.fallback() == null ? List.of("throw " + failure + ";")
+        return !fallbackFused(model) ? List.of("throw " + failure + ";")
                 : fallbackLines(model.fallback(), index, failure, attempts, isVoid, arguments);
     }
 
@@ -2215,8 +2285,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
      * {@code fallback} is null when the method has no {@code @Fallback}; {@code asyncResult} is the
      * {@code T} of a method that returns a stage, null for a synchronous method.
      */
+    /** {@code layers}: the policies' kinds, outermost first, in the default or the {@code @PolicyOrder} order. */
     private record MethodModel(ExecutableElement method, ExecutableType type, Map<Kind, PolicyModel> policies,
-            FallbackModel fallback, TypeMirror asyncResult) {
+            FallbackModel fallback, TypeMirror asyncResult, List<Kind> layers) {
     }
 
     /**
