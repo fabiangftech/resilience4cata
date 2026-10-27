@@ -13,7 +13,7 @@ metadata:
     - "concurrency-limit"
     - "bulkhead"
     - "timeout"
-  guide: "https://resilience4cata.dev/#/en/guides/quarkus"
+  guide: "https://resilience4cata.dev/en/guides/quarkus"
   categories:
     - "cloud"
   status: "preview"

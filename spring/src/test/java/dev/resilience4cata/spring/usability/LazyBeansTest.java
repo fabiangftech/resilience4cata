@@ -5,9 +5,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.spring.Runners;
 import dev.resilience4cata.spring.usability.fixtures.LazyPayments;
-import org.junit.jupiter.api.Disabled;
+import java.util.List;
+import java.util.Objects;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.boot.diagnostics.FailureAnalysis;
+import org.springframework.boot.diagnostics.FailureAnalyzer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.core.env.Environment;
+import org.springframework.core.io.support.SpringFactoriesLoader;
 
 /** {@code @Lazy} protected beans and the startup check of {@code instances.<id>} keys. */
 class LazyBeansTest {
@@ -24,11 +30,23 @@ class LazyBeansTest {
         });
     }
 
-    @Disabled("BUG-SPR-6: the R4C-CFG-013 startup failure says nothing of lazy beans or verify-instances=warn")
     @Test
-    void theStartupFailureForALazyBeansKeyPointsAtVerifyInstances() {
-        runner.run(context -> assertThat(context.getStartupFailure())
-                .hasMessageContaining("resilience4cata.spring.verify-instances"));
+    void theStartupFailureReportForALazyBeansKeyPointsAtVerifyInstances() {
+        runner.run(context -> {
+            // what Spring Boot prints: the failure analysis of the registered analyzers
+            FailureAnalysis analysis = analyzers().stream().map(a -> a.analyze(context.getStartupFailure()))
+                    .filter(Objects::nonNull).findFirst().orElseThrow();
+            assertThat(analysis.getDescription()).contains("R4C-CFG-013", "lazy-payments");
+            assertThat(analysis.getAction()).contains("@Lazy", "resilience4cata.spring.verify-instances=warn");
+        });
+    }
+
+    private static List<FailureAnalyzer> analyzers() {
+        return SpringFactoriesLoader.forDefaultResourceLocation().load(FailureAnalyzer.class,
+                SpringFactoriesLoader.ArgumentResolver.of(BeanFactory.class, null).and(Environment.class, null),
+                SpringFactoriesLoader.FailureHandler.handleMessage((message, failure) -> {
+                    // Spring Boot's own analyzers need a bean factory; resilience4cata's accept none
+                }));
     }
 
     @Test

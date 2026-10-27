@@ -322,8 +322,10 @@ Message: Invalid resilience4cata configuration (2 problems):
 At startup, each `resilience4cata.instances.<id>.*` key must match a policy instance
 ([`R4C-CFG-013`](../errors.md#r4c-cfg-013)). Micronaut creates singletons lazily by default, so the instances of
 most beans do not exist yet then: an unmatched key is only logged as a warning, which may be a false alarm. When
-the context creates its singletons eagerly (`eagerInitSingletons(true)`), every instance exists and an unmatched
-key stops the startup. `resilience4cata.micronaut.verify-instances` (`fail`, `warn`, `off`) overrides both.
+the context creates its singletons eagerly (`eagerInitSingletons(true)`), the instances of singletons exist and an
+unmatched key stops the startup, unless the application has protected beans that are not singletons
+(`@Prototype`, `@Refreshable`, request scope), whose instances appear when they are created: then it stays a
+warning. `resilience4cata.micronaut.verify-instances` (`fail`, `warn`, `off`) overrides all of these.
 
 ## Customizing the registry :id=beans
 

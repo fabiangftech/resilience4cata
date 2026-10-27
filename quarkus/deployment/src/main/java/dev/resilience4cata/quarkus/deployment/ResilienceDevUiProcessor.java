@@ -16,7 +16,7 @@ import io.quarkus.devui.spi.page.Page;
 public class ResilienceDevUiProcessor {
 
     /** The guide's Dev UI section. */
-    static final String GUIDE = "https://resilience4cata.dev/#/en/guides/quarkus.md?id=dev-ui";
+    static final String GUIDE = "https://resilience4cata.dev/en/guides/quarkus#dev-ui";
 
     /** Creates the processor; Quarkus instantiates it. */
     public ResilienceDevUiProcessor() {

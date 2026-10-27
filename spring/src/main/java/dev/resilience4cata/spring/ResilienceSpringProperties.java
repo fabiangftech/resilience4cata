@@ -65,9 +65,35 @@ public record ResilienceSpringProperties(@DefaultValue("true") boolean wrap, @De
      */
     public record Health(@DefaultValue List<String> downWhenOpen) {
 
-        /** Copies the list. */
+        /** Copies the list, joining back derived ids that a comma split. */
         public Health {
-            downWhenOpen = List.copyOf(downWhenOpen);
+            downWhenOpen = breakerIds(downWhenOpen);
+        }
+
+        /**
+         * The breaker ids of a list property: the framework splits a value at every comma, which also splits a
+         * derived id such as {@code com.acme.Charges#charge(java.lang.String,int)}; parts are joined back while a
+         * parenthesis is open.
+         */
+        static List<String> breakerIds(List<String> parts) {
+            List<String> ids = new java.util.ArrayList<>();
+            StringBuilder pending = null;
+            int open = 0;
+            for (String part : parts) {
+                pending = pending == null ? new StringBuilder(part.strip())
+                        : pending.append(',').append(part.strip());
+                open += (int) (part.chars().filter(c -> c == '(').count()
+                        - part.chars().filter(c -> c == ')').count());
+                if (open <= 0) {
+                    ids.add(pending.toString());
+                    pending = null;
+                    open = 0;
+                }
+            }
+            if (pending != null) {
+                ids.add(pending.toString());
+            }
+            return ids.stream().filter(id -> !id.isEmpty()).toList();
         }
     }
 

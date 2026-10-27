@@ -326,8 +326,10 @@ Al arrancar, cada clave `resilience4cata.instances.<id>.*` debe corresponder a u
 ([`R4C-CFG-013`](../errors.md#r4c-cfg-013)). Micronaut crea los singletons de forma perezosa por defecto, así que
 las instancias de la mayoría de los beans aún no existen en ese momento: una clave sin correspondencia solo se
 registra como advertencia, que puede ser una falsa alarma. Cuando el contexto crea sus singletons de forma
-anticipada (`eagerInitSingletons(true)`), todas las instancias existen y una clave sin correspondencia detiene el
-arranque. `resilience4cata.micronaut.verify-instances` (`fail`, `warn`, `off`) se impone a ambos casos.
+anticipada (`eagerInitSingletons(true)`), las instancias de los singletons existen y una clave sin correspondencia
+detiene el arranque, salvo que la aplicación tenga beans protegidos que no son singletons (`@Prototype`,
+`@Refreshable`, ámbito de petición), cuyas instancias aparecen cuando se crean: entonces sigue siendo una
+advertencia. `resilience4cata.micronaut.verify-instances` (`fail`, `warn`, `off`) se impone a todos estos casos.
 
 ## Personalizar el registro :id=beans
 

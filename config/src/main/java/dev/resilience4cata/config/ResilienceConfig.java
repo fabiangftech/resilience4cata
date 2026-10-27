@@ -226,8 +226,8 @@ public final class ResilienceConfig {
             if (closest != null) {
                 message.append(". Did you mean '").append(Key.quoted(closest)).append("'?");
             } else {
-                message.append(". An instance id is the policy's name, or <interface>#<method>(<parameter types>)"
-                        + " when it has none");
+                message.append(". An instance id is the policy's name, or <interface or class>#<method>(<parameter"
+                        + " types>) when it has none.");
             }
             message.append(" Known ").append(policy.name).append(" instances: ").append(ids);
             problems.add(new ProblemException(ProblemException.UNKNOWN_INSTANCE, message.toString()));

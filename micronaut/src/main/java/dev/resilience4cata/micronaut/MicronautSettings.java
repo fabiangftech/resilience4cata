@@ -40,7 +40,8 @@ record MicronautSettings(VerifyInstances verifyInstances, List<String> exclude, 
 
     /**
      * @param eagerSingletons whether the context creates every singleton at startup: then the default of
-     *     {@code verify-instances} is {@code fail}, since every instance exists by then, otherwise {@code warn}
+     *     {@code verify-instances} is {@code fail}, otherwise {@code warn}; {@link InstanceVerifier} still uses
+     *     {@code warn} when protected beans that are not singletons create their instances later
      */
     static MicronautSettings of(Environment environment, boolean eagerSingletons) {
         String mode = environment.getProperty(PREFIX + ".verify-instances", String.class)
@@ -49,15 +50,38 @@ record MicronautSettings(VerifyInstances verifyInstances, List<String> exclude, 
         try {
             verify = VerifyInstances.valueOf(mode.strip().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid value '" + mode + "' for " + PREFIX
-                    + ".verify-instances: use fail, warn or off.", e);
+            throw ErrorCode.INVALID_SETTING.exception("Invalid value '" + mode + "' for " + PREFIX
+                    + ".verify-instances.", "Use fail, warn or off.");
         }
         return new MicronautSettings(verify, list(environment, PREFIX + ".exclude"),
-                list(environment, PREFIX + ".health.down-when-open"));
+                breakerIds(list(environment, PREFIX + ".health.down-when-open")));
     }
 
     private static List<String> list(Environment environment, String key) {
         return environment.getProperty(key, Argument.listOf(String.class)).orElse(List.of()).stream()
                 .map(String::strip).filter(s -> !s.isEmpty()).toList();
+    }
+
+    /**
+     * The breaker ids of a list property: the framework splits a value at every comma, which also splits a derived id
+     * such as {@code com.acme.Charges#charge(java.lang.String,int)}; parts are joined back while a parenthesis is open.
+     */
+    static List<String> breakerIds(List<String> parts) {
+        List<String> ids = new java.util.ArrayList<>();
+        StringBuilder pending = null;
+        int open = 0;
+        for (String part : parts) {
+            pending = pending == null ? new StringBuilder(part.strip()) : pending.append(',').append(part.strip());
+            open += (int) (part.chars().filter(c -> c == '(').count() - part.chars().filter(c -> c == ')').count());
+            if (open <= 0) {
+                ids.add(pending.toString());
+                pending = null;
+                open = 0;
+            }
+        }
+        if (pending != null) {
+            ids.add(pending.toString());
+        }
+        return ids.stream().filter(id -> !id.isEmpty()).toList();
     }
 }

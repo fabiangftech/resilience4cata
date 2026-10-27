@@ -44,7 +44,7 @@ class FailureAnalyzersTest {
                     assertThat(analysis.getDescription()).startsWith("Invalid resilience4cata configuration (2 problems):")
                             .contains("\n    [R4C-CFG-001] unknown key 'resilience4cata.defaults.retry.max-atempts'"
                                     + " (class path resource [broken-test.yml] - 4:20)");
-                    assertThat(analysis.getAction()).contains("https://resilience4cata.dev/#/en/errors");
+                    assertThat(analysis.getAction()).contains("https://resilience4cata.dev/en/errors");
                 });
     }
 
