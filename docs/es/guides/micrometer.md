@@ -14,7 +14,7 @@ Importa el BOM, como para los otros módulos ([instalación](../start/installati
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.6.0')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.7.0')
     implementation 'dev.resilience4cata:resilience4cata-micrometer'
 }
 ```
@@ -23,7 +23,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation(platform("dev.resilience4cata:resilience4cata-bom:0.6.0"))
+    implementation(platform("dev.resilience4cata:resilience4cata-bom:0.7.0"))
     implementation("dev.resilience4cata:resilience4cata-micrometer")
 }
 ```

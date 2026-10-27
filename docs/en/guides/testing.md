@@ -27,7 +27,7 @@ Two artifacts, both test-only:
 #### **Gradle**
 ```groovy
 dependencies {
-    testImplementation platform('dev.resilience4cata:resilience4cata-bom:0.6.0')
+    testImplementation platform('dev.resilience4cata:resilience4cata-bom:0.7.0')
     testImplementation 'dev.resilience4cata:resilience4cata-junit'      // with JUnit; brings testkit
     // or, with another test framework:
     // testImplementation 'dev.resilience4cata:resilience4cata-testkit'
@@ -36,7 +36,7 @@ dependencies {
 #### **Gradle (Kotlin)**
 ```kotlin
 dependencies {
-    testImplementation(platform("dev.resilience4cata:resilience4cata-bom:0.6.0"))
+    testImplementation(platform("dev.resilience4cata:resilience4cata-bom:0.7.0"))
     testImplementation("dev.resilience4cata:resilience4cata-junit")      // with JUnit; brings testkit
     // or, with another test framework:
     // testImplementation("dev.resilience4cata:resilience4cata-testkit")
