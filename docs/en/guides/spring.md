@@ -353,6 +353,14 @@ void retriesWithoutSleeping() {
 }
 ```
 
+Test doubles of protected beans:
+
+- `@MockitoBean` replaces the bean with the bare mock, without the policies, for an annotated interface or class.
+- `@MockitoSpyBean` on an annotated interface injects the bare spy too, so `verify(spy)` works; on an annotated
+  class the spy keeps the policies.
+- A test context shared by several test classes shares one registry, so an open breaker stays open across them:
+  reset it with `registry.circuitBreaker(id).reset()`, or use `@DirtiesContext`.
+
 ## AOT and native images :id=aot
 
 Spring AOT (the processing step of a native image build, or of an AOT-optimized JVM application) works:

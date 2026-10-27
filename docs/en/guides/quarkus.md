@@ -183,8 +183,11 @@ public class Checkout {
 ```
 
 - `@Inject CardPayments` (the class) still gets the bean itself, unprotected.
-- The wrapper of a normal-scoped bean is a `@Singleton` that holds the bean's client proxy (request and session
-  scopes keep working) and is created at startup; the wrapper of a `@Dependent` bean is `@Dependent` too.
+- The wrapper of an `@ApplicationScoped` bean is `@ApplicationScoped` too, behind its own client proxy, so the
+  interface stays a normal-scoped bean (a test's `@InjectMock` on the interface works, and replaces the wrapper,
+  policies included). The wrapper of a request- or session-scoped bean is a `@Singleton` that holds the bean's
+  client proxy (those scopes keep working). Both are created at startup; the wrapper of a `@Dependent` bean is
+  `@Dependent` too.
 - CDI interceptors of the bean run **inside** the policies: a retried `@Transactional` method gets one
   transaction per attempt.
 - Calls inside `CardPayments` on `this` are not protected (the wrapper is outside the object).

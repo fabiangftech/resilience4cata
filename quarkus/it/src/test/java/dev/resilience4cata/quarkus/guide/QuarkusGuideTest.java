@@ -69,7 +69,8 @@ class QuarkusGuideTest {
 
     @Test
     void theInterfaceIsInjectedThroughItsWrapper() {
-        assertThat(payments.getClass().getName()).endsWith("PaymentsGateway$Resilient");
+        // the wrapper of an @ApplicationScoped bean is @ApplicationScoped too: behind its own client proxy
+        assertThat(io.quarkus.arc.ClientProxy.unwrap(payments).getClass().getName()).endsWith("PaymentsGateway$Resilient");
         assertThat(checkout.pay("o-1")).isEqualTo("receipt-o-1");
         assertThat(registry.snapshot().retries()).extracting(r -> r.instance())
                 .contains("dev.resilience4cata.quarkus.guide.PaymentsGateway#charge(java.lang.String,long)");

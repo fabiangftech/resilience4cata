@@ -187,9 +187,11 @@ public class Checkout {
 ```
 
 - `@Inject CardPayments` (la clase) sigue recibiendo el propio bean, sin protección.
-- El envoltorio de un bean de ámbito normal es un `@Singleton` que guarda el proxy de cliente del bean (los ámbitos
-  de petición y de sesión siguen funcionando) y se crea al arrancar; el envoltorio de un bean `@Dependent` también
-  es `@Dependent`.
+- El envoltorio de un bean `@ApplicationScoped` también es `@ApplicationScoped`, detrás de su propio proxy de
+  cliente, así que la interfaz sigue siendo un bean de ámbito normal (un `@InjectMock` sobre la interfaz en un test
+  funciona, y reemplaza al envoltorio, políticas incluidas). El envoltorio de un bean de ámbito de petición o de
+  sesión es un `@Singleton` que guarda el proxy de cliente del bean (esos ámbitos siguen funcionando). Ambos se
+  crean al arrancar; el envoltorio de un bean `@Dependent` también es `@Dependent`.
 - Los interceptores de CDI del bean se ejecutan **dentro** de las políticas: un método `@Transactional` reintentado
   obtiene una transacción por intento.
 - Las llamadas sobre `this` dentro de `CardPayments` no están protegidas (el envoltorio está fuera del objeto).

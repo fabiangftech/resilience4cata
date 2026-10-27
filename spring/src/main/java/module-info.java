@@ -19,6 +19,7 @@ module dev.resilience4cata.spring {
     requires static transitive dev.resilience4cata.micrometer;
     requires static transitive micrometer.core;
     requires static spring.tx;
+    requires static org.mockito;
     requires static transitive spring.boot.health;
     requires static transitive spring.boot.actuator;
     requires static transitive spring.boot.actuator.autoconfigure;

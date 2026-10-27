@@ -6,6 +6,7 @@ import dev.resilience4cata.quarkus.usability.fixtures.Flaky;
 import dev.resilience4cata.quarkus.usability.fixtures.Store;
 import dev.resilience4cata.quarkus.usability.fixtures.Store$Resilient;
 import dev.resilience4cata.quarkus.usability.fixtures.TextStore;
+import io.quarkus.arc.ClientProxy;
 import io.quarkus.test.QuarkusExtensionTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ class GenericInterfaceTest {
 
     @Test
     void theParameterizedInterfaceGetsTheWrapper() {
-        assertThat(store).isInstanceOf(Store$Resilient.class);
+        assertThat(ClientProxy.unwrap(store)).isInstanceOf(Store$Resilient.class);
         raw.failNext(2);
         int before = raw.calls();
         assertThat(store.load("1")).isEqualTo("text-1");

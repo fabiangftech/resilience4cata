@@ -25,6 +25,9 @@ updates:
       - dependency-name: 'org.springframework.boot:spring-boot-autoconfigure-processor'
       - dependency-name: 'org.springframework.boot:spring-boot-configuration-processor'
       - dependency-name: 'org.springframework:spring-tx'
+      # Compile-only in the spring module, to recognize Mockito spies (mockitoMinimum); its tests get Mockito
+      # through Spring Boot's BOM.
+      - dependency-name: 'org.mockito:mockito-core'
       # The oldest Micronaut that resilience4cata-micronaut supports (micronautMinimum): its main code compiles
       # against these artifacts. Its tests get Micronaut through the micronaut-platform entry (micronautPlatform),
       # which these rules do not touch.

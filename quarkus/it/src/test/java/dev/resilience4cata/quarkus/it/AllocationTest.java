@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Quarkus adds nothing to the call path that allocates: a successful call through the injected beans (the generated
- * subclass behind ArC's client proxy, and the generated wrapper of an interface around the bean's client proxy)
- * allocates nothing once compiled.
+ * subclass behind ArC's client proxy, and the generated wrapper of an interface, behind its own client proxy when the
+ * bean is {@code @ApplicationScoped}) allocates nothing once compiled.
  */
 @QuarkusTest
 class AllocationTest {
@@ -27,7 +27,7 @@ class AllocationTest {
 
     @Test
     void successfulCallsOnQuarkusBeansDoNotAllocate() {
-        assertThat(quotes.getClass().getName()).endsWith("Quotes$Resilient");
+        assertThat(io.quarkus.arc.ClientProxy.unwrap(quotes).getClass().getName()).endsWith("Quotes$Resilient");
         assertThat(ratings.getClass().getName()).contains("_ClientProxy");
         long bytes = steadyState(() -> {
             long sum = 0;
