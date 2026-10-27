@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import dev.resilience4cata.spring.ResilienceEndpoint;
 import dev.resilience4cata.spring.Runners;
 import dev.resilience4cata.spring.usability.fixtures.OrderEvents;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.actuate.endpoint.OperationType;
 import org.springframework.boot.actuate.endpoint.invoke.reflect.OperationMethod;
@@ -42,7 +41,6 @@ class ParameterNamesTest {
      * the web; a web application exposing {@code resilience4cata} fails to start with "Failed to extract
      * parameter names" otherwise.
      */
-    @Disabled("BUG-SPR-7: the spring module is compiled without -parameters: ResilienceEndpoint.instance's name is lost")
     @Test
     void theEndpointsSelectorParameterHasItsName() {
         assertThatCode(() -> new OperationMethod(ResilienceEndpoint.class.getMethod("instance", String.class),
