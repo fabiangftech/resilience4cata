@@ -5,14 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.inject.qualifiers.Qualifiers;
 import java.util.Map;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /** Two annotated classes of one hierarchy, each a bean of its own. */
 class UsabilityHierarchyTest {
 
     @Test
-    @Disabled("BUG-MN-1: @Replaces(Orders.class) on Orders$Resilient also removes every subclass bean of Orders")
     void anAnnotatedSubclassIsStillItsOwnBean() {
         try (ApplicationContext context = ApplicationContext.run(Map.of("test.usability", "hierarchy"))) {
             assertThat(context.getBeansOfType(Orders.class)).extracting(o -> o.getClass().getSimpleName())

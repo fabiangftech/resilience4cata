@@ -8,6 +8,7 @@ import io.micronaut.context.event.BeanCreatedEvent;
 import io.micronaut.context.event.BeanCreatedEventListener;
 import io.micronaut.core.annotation.Order;
 import io.micronaut.core.order.Ordered;
+import io.micronaut.inject.AdvisedBeanType;
 import io.micronaut.inject.BeanDefinition;
 import jakarta.inject.Singleton;
 import java.util.List;
@@ -42,6 +43,10 @@ final class ResilientBeansListener implements BeanCreatedEventListener<Object> {
 
     private final BeanProvider<ResilienceRegistry> registry;
     private final Set<String> excluded;
+    /** Micronaut Test's replacement of a bean in a test: a stub subclass of an annotated class is meant to be bare. */
+    private static final String MOCK_BEAN = "io.micronaut.test.annotation.MockBean";
+    private static final String CONTAINER_BEAN = "dev.resilience4cata.generated.ContainerBean";
+
     private final GeneratedClasses generated = new GeneratedClasses();
     private final Map<Class<?>, Optional<Class<?>>> unprotected = new ConcurrentHashMap<>();
     private final @Nullable RetryInsideTransactionCheck transactions;
@@ -71,8 +76,13 @@ final class ResilientBeansListener implements BeanCreatedEventListener<Object> {
             // a generated subclass already applies its interfaces' policies: wrapping it would apply them twice
             return generated.isGeneratedSubclass(bean.getClass()) ? bean : wrap(declared[0], definition, bean);
         }
+        Class<?> defined = definition instanceof AdvisedBeanType<?> advised ? advised.getInterceptedType()
+                : definition.getBeanType();
+        if (generated.isGeneratedSubclass(defined) && !definition.hasAnnotation(CONTAINER_BEAN)) {
+            throw withoutInjectOption(definition, defined.getSuperclass());
+        }
         Optional<Class<?>> annotated = unprotected.computeIfAbsent(bean.getClass(), this::annotatedSuperclass);
-        if (annotated.isPresent()) {
+        if (annotated.isPresent() && !definition.hasStereotype(MOCK_BEAN)) {
             throw unprotected(definition, bean, annotated.get());
         }
         if (transactions != null) {
@@ -134,6 +144,21 @@ final class ResilientBeansListener implements BeanCreatedEventListener<Object> {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * R4C-MN-004 for a generated subclass that Micronaut creates from its own definition, but which was compiled
+     * without {@code -Ar4c.inject=micronaut}: a mirrored {@code @Inject} constructor made it a bean, without the
+     * class's scope and qualifiers.
+     */
+    private static ResilienceBeanException withoutInjectOption(BeanDefinition<Object> definition, Class<?> annotated) {
+        String subclass = annotated.getSimpleName() + Resilient.GENERATED_SUFFIX;
+        return ErrorCode.UNPROTECTED_INSTANCE.exception("Bean " + definition.getBeanType().getName() + " is the generated "
+                + subclass + ", compiled without the compiler option -A" + "r4c.inject=micronaut: Micronaut created it"
+                + " only because its constructor repeats @Inject, so it does not have " + annotated.getSimpleName()
+                + "'s scope and qualifiers.", "Add -Ar4c.inject=micronaut to the compiler options of the module that"
+                + " declares " + annotated.getSimpleName() + " (see the Micronaut guide), or remove @Inject from its"
+                + " constructor and create it from a @Factory method.");
     }
 
     private static ResilienceBeanException unprotected(BeanDefinition<Object> definition, Object bean, Class<?> annotated) {

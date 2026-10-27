@@ -6,7 +6,6 @@ import io.micronaut.context.annotation.Property;
 import io.micronaut.test.annotation.MockBean;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -31,7 +30,6 @@ class MockBeanOfAnAnnotatedClassTest {
     }
 
     @Test
-    @Disabled("BUG-MN-2: @MockBean of an annotated class and the generated subclass replace each other: no bean is left")
     void theMockReplacesTheAnnotatedClass() {
         assertThat(prices.price("sku")).isEqualTo(7);
     }

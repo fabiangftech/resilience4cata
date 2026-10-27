@@ -1432,19 +1432,22 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
     /**
      * With {@code -Ar4c.inject=micronaut}: the class's own type annotations (its scope, qualifiers,
-     * {@code @Requires}...) and {@code @Replaces(C.class)}, so that Micronaut creates the generated subclass wherever
-     * it would have created {@code C}. Reads only {@code type} and the class path, so the processor stays isolating.
+     * {@code @Requires}, {@code @Replaces}...), so that Micronaut creates the generated subclass as it would have
+     * created {@code C}. {@code C}'s own definition is left out by the Micronaut integration
+     * ({@code AnnotatedClassesFilter}), not by a {@code @Replaces(C.class)} here: that would also replace every subclass
+     * of {@code C} and every {@code @MockBean} of it. Reads only {@code type} and the class path, so the processor
+     * stays isolating.
      */
     private void appendMicronautBean(StringBuilder out, TypeElement type) {
         if (elements.getTypeElement(MICRONAUT_REPLACES) == null) {
             error(type, ProcessorError.INVALID_INJECT_OPTION, "The compiler option -A" + INJECT_OPTION + "="
                     + INJECT_MICRONAUT + " is set, but " + MICRONAUT_REPLACES + " is not on the compile class path, so "
-                    + type.getSimpleName() + SUFFIX + " cannot replace " + type.getSimpleName() + " as a Micronaut bean."
+                    + type.getSimpleName() + SUFFIX + " cannot be a Micronaut bean in place of " + type.getSimpleName() + "."
                     + " Add Micronaut (io.micronaut:micronaut-inject) to the compile class path, or remove the option.");
             return;
         }
-        out.append(AnnotationPrinter.typeAnnotations(type, MICRONAUT_REPLACES, "\n"));
-        out.append('@').append(MICRONAUT_REPLACES).append('(').append(type.getQualifiedName()).append(".class)\n");
+        out.append(AnnotationPrinter.typeAnnotations(type, "", "\n"));
+        out.append("@dev.resilience4cata.generated.ContainerBean\n");
     }
 
     /** Writes the generated class, with {@code iface} as its only originating element. */
