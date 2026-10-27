@@ -114,8 +114,8 @@ Planificado, no prometido; los nombres y el alcance pueden cambiar:
 | Tracing de OpenTelemetry | más adelante | las métricas están en `resilience4cata-opentelemetry` desde 0.3.0 ([guía](guides/opentelemetry.md)) |
 | Configuración YAML | v1 | módulo separado, para que `core` siga sin dependencias |
 | Orden de ejecución configurable (`@Order`) | v1 | |
-| Atributo `locked` (valores de la anotación que la configuración externa no puede sobrescribir) | hecho, próxima versión | `locked = true` en la anotación, `Pipeline.Builder.locked()` ([Bloquear una instancia](guides/configuration.md#bloquear-una-instancia)) |
-| `@Cached`, tipos reactivos, corrutinas de Kotlin, inyección de fallos, propagación de deadlines, integraciones con Quarkus/CDI | más adelante | |
+| Atributo `locked` (valores de la anotación que la configuración externa no puede sobrescribir) | hecho en 0.7.0 | `locked = true` en la anotación, `Pipeline.Builder.locked()` ([Bloquear una instancia](guides/configuration.md#bloquear-una-instancia)) |
+| `@Cached`, tipos reactivos, corrutinas de Kotlin, inyección de fallos, propagación de deadlines | más adelante | |
 
 Mientras tanto, [testkit](guides/testing.md) cubre las pruebas.
 
