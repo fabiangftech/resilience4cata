@@ -11,7 +11,6 @@ import io.quarkus.test.QuarkusExtensionTest;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import java.util.List;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
@@ -31,7 +30,6 @@ class BuildProfileTest {
     Instance<Greeting> greetings; // not @Inject Greeting: with the bug, that injection point fails the whole build
 
     @Test
-    @Disabled("BUG-QK-2: @IfBuildProfile/@UnlessBuildProfile (and @IfBuildProperty) copied to C$Resilient are ignored")
     void onlyTheBeanOfTheActiveBuildProfileExists() {
         List<String> classes = greetings.handlesStream().map(h -> h.getBean().getBeanClass().getSimpleName()).toList();
         assertThat(classes).containsExactly(TestGreeting$Resilient.class.getSimpleName());

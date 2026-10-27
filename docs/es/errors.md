@@ -639,6 +639,44 @@ public interface PriceClient {
 }
 ```
 
+### R4C-ASY-002
+
+**Causa:** un método anotado devuelve un tipo reactivo perezoso: un `Flow.Publisher` o un `Publisher` de Reactive
+Streams (`Mono` y `Flux` de Reactor, `Flowable` de RxJava), `Uni` o `Multi` de Mutiny, o `Single`, `Maybe`,
+`Completable` u `Observable` de RxJava. Un método así solo construye un pipeline que se ejecuta después, al
+suscribirse, así que las políticas protegerían su construcción, no el trabajo: un fallo nunca se reintentaría ni
+tendría timeout.
+
+**Incorrecto:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+import java.util.concurrent.Flow;
+
+public interface PriceClient {
+    @Retry
+    Flow.Publisher<Integer> price(String sku);
+}
+```
+
+**Corrección:** devuelve `CompletionStage<T>` o `CompletableFuture<T>`, convirtiendo en la implementación
+(`uni.subscribeAsCompletionStage()`, `mono.toFuture()`), o mantén el tipo reactivo y usa los operadores de retry y
+timeout de la propia librería reactiva.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+import java.util.concurrent.CompletionStage;
+
+public interface PriceClient {
+    @Retry
+    CompletionStage<Integer> price(String sku);
+}
+```
+
 ## Procesador de anotaciones: hedges (R4C-HDG)
 
 ### R4C-HDG-001
@@ -2914,6 +2952,33 @@ delante de la subclase generada necesita uno, y Quarkus solo puede añadirlo a l
 **Corrección:** añade un constructor sin parámetros (basta con que sea package-private: solo lo usa el proxy),
 o usa inyección por campo en lugar de por constructor, o haz el bean `@Singleton`, que no tiene proxy de
 cliente.
+
+### R4C-QK-006
+
+**Causa:** un bean protegido por resilience4cata tiene una condición de búsqueda (`@LookupIfProperty`,
+`@LookupUnlessProperty`): una clase anotada, o un bean que implementa una interfaz anotada. El bean que recibe la
+aplicación es la subclase generada o el wrapper de la interfaz, y Quarkus solo lee las condiciones de búsqueda en la
+clase original, así que el bean seguiría disponible diga lo que diga la propiedad.
+
+```text
+[R4C-QK-006] Beans protected by resilience4cata have lookup conditions (@LookupIfProperty, @LookupUnlessProperty): com.acme.BetaFeature. ...
+```
+
+**Corrección:** usa una condición de build en su lugar (`@IfBuildProperty`, `@IfBuildProfile` y sus formas
+`Unless`), que funciona en clases anotadas, o comprueba la propiedad en el código que busca el bean.
+
+### R4C-QK-007
+
+**Causa:** un recurso de Quarkus REST (una clase con `@Path`, o que implementa una interfaz con `@Path`) es una clase
+anotada. Quarkus REST crea las clases de recursos por su cuenta, así que la subclase generada nunca atendería los
+endpoints y las políticas no se ejecutarían.
+
+```text
+[R4C-QK-007] REST resource classes (@Path) have resilience4cata annotations: com.acme.OrdersResource. ...
+```
+
+**Corrección:** mueve las llamadas protegidas a un bean que el recurso inyecte (una clase anotada, o un bean que
+implemente una interfaz anotada), o protege la interfaz del cliente REST que el recurso llama.
 
 ## Pruebas: testkit (R4C-TK)
 

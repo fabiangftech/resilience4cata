@@ -71,6 +71,14 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private static final String DELEGATE = "this.delegate";
     private static final String OBJECT = "java.lang.Object";
     private static final String COMPLETION_STAGE = "java.util.concurrent.CompletionStage";
+    /**
+     * Lazy reactive types: the method only builds a pipeline that runs when subscribed, so policies around the call
+     * would protect the building, not the work. Checked when present on the classpath.
+     */
+    private static final List<String> REACTIVE_TYPES = List.of("java.util.concurrent.Flow.Publisher",
+            "org.reactivestreams.Publisher", "io.smallrye.mutiny.Uni", "io.smallrye.mutiny.Multi",
+            "io.reactivex.rxjava3.core.Single", "io.reactivex.rxjava3.core.Maybe", "io.reactivex.rxjava3.core.Completable",
+            "io.reactivex.rxjava3.core.Observable");
     private static final String EXECUTE_ASYNC = ".executeAsync(() -> ";
 
     /** Supported policies, in nesting order: outermost first. */
@@ -327,6 +335,15 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         + TypePrinter.print(type.getReturnType()) + ".");
                 valid = false;
             }
+            String reactive = annotated && asyncResult == null ? reactiveType(type.getReturnType()) : null;
+            if (reactive != null) {
+                error(method, ProcessorError.REACTIVE_TYPE, "The method returns " + TypePrinter.print(type.getReturnType())
+                        + ", a " + reactive + ": it only builds a pipeline that runs later, when subscribed, so the"
+                        + " policies would protect building it, not the work. Return CompletionStage<T> or"
+                        + " CompletableFuture<T> (for example Uni.subscribeAsCompletionStage() or Mono.toFuture() in"
+                        + " the implementation), or use the reactive library's own retry and timeout operators.");
+                valid = false;
+            }
             if (annotated || iface.getKind() == ElementKind.INTERFACE) { // a subclass overrides only protected methods
                 methods.add(new MethodModel(method, type, policies, fallback,
                     asyncResult == null || asyncResult.getKind() == TypeKind.NONE ? null : asyncResult));
@@ -453,6 +470,21 @@ public final class ResilienceProcessor extends AbstractProcessor {
             }
         }
         return types.getNoType(TypeKind.NONE);
+    }
+
+    /** The reactive type among {@link #REACTIVE_TYPES} that {@code returnType} is, or null. */
+    private String reactiveType(TypeMirror returnType) {
+        if (returnType.getKind() != TypeKind.DECLARED) {
+            return null;
+        }
+        TypeMirror erased = types.erasure(returnType);
+        for (String name : REACTIVE_TYPES) {
+            TypeElement reactive = elements.getTypeElement(name);
+            if (reactive != null && types.isAssignable(erased, types.erasure(reactive.asType()))) {
+                return name;
+            }
+        }
+        return null;
     }
 
     /** True if an asynchronous method returns a stage with a wildcard argument, {@code ? extends X} or {@code ?}. */

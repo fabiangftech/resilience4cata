@@ -116,10 +116,11 @@ public interface ParcelClient {
 ## Qué no está soportado
 
 - **Otros tipos de stage son errores de compilación** ([`R4C-ASY-001`](../errors.md#r4c-asy-001)): `CompletionStage` crudo, `? super X`, y los subtipos de `CompletionStage` distintos de `CompletableFuture`.
-- **Otros tipos asíncronos se tratan como sincrónicos.** Un método que devuelve `java.util.concurrent.Future`, un tipo reactivo o cualquier otra cosa se protege como cualquier método sincrónico: las políticas ven solo la llamada que *devuelve* el objeto, no el trabajo que representa.
+- **Los tipos reactivos son errores de compilación** ([`R4C-ASY-002`](../errors.md#r4c-asy-002)): `Flow.Publisher` y el `Publisher` de Reactive Streams (`Mono` y `Flux` de Reactor), `Uni` y `Multi` de Mutiny, y los tipos de RxJava. Solo construyen un pipeline que se ejecuta al suscribirse, así que las políticas protegerían su construcción, no el trabajo. Convierte a un `CompletionStage` en la implementación (`uni.subscribeAsCompletionStage()`, `mono.toFuture()`).
+- **Otros tipos asíncronos se tratan como sincrónicos.** Un método que devuelve `java.util.concurrent.Future` o cualquier otra cosa se protege como cualquier método sincrónico: las políticas ven solo la llamada que *devuelve* el objeto, no el trabajo que representa.
 
 > [!WARNING]
-> Si un método devuelve un `Future` o un tipo reactivo, ni el timeout ni el retry se aplican al resultado. Devuelve un `CompletableFuture`, o envuelve el trabajo en uno.
+> Si un método devuelve un `Future`, ni el timeout ni el retry se aplican al resultado. Devuelve un `CompletableFuture`, o envuelve el trabajo en uno.
 
 ## Costo
 

@@ -53,7 +53,7 @@ In the interface style, the policies live in the generated wrapper; a call from 
 
 ### Does it support reactive types (`Mono`, `Flux`, `Single`)? :id=reactive
 
-No. Async methods must return `CompletionStage<T>` or `CompletableFuture<T>`. Any other return type is treated as synchronous: the policies protect only the call that returns the object, not the work it represents. See [Async methods](guides/async.md).
+No. Async methods must return `CompletionStage<T>` or `CompletableFuture<T>`. A method returning a reactive type (`Publisher`, `Mono`, `Flux`, `Uni`, `Multi`, RxJava's types) with resilience annotations is a compile error, [R4C-ASY-002](errors.md#r4c-asy-002), because the policies would protect only building the pipeline, not the work. Convert to a `CompletionStage` in the implementation. See [Async methods](guides/async.md).
 
 ### Does it work with virtual threads? :id=virtual-threads
 

@@ -635,6 +635,43 @@ public interface PriceClient {
 }
 ```
 
+### R4C-ASY-002
+
+**Trigger:** an annotated method returns a lazy reactive type: a `Flow.Publisher` or Reactive Streams `Publisher`
+(Reactor's `Mono` and `Flux`, RxJava's `Flowable`), Mutiny's `Uni` or `Multi`, or RxJava's `Single`, `Maybe`,
+`Completable` or `Observable`. Such a method only builds a pipeline that runs later, when it is subscribed, so the
+policies would protect building it, not the work: a failure would never be retried or timed out.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+import java.util.concurrent.Flow;
+
+public interface PriceClient {
+    @Retry
+    Flow.Publisher<Integer> price(String sku);
+}
+```
+
+**Fix:** return `CompletionStage<T>` or `CompletableFuture<T>`, converting in the implementation
+(`uni.subscribeAsCompletionStage()`, `mono.toFuture()`), or keep the reactive type and use the reactive library's own
+retry and timeout operators.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+import java.util.concurrent.CompletionStage;
+
+public interface PriceClient {
+    @Retry
+    CompletionStage<Integer> price(String sku);
+}
+```
+
 ## Annotation processor: hedges (R4C-HDG)
 
 ### R4C-HDG-001
@@ -2893,6 +2930,33 @@ front of the generated subclass needs one, and Quarkus can add it to the subclas
 
 **Fix:** add a constructor without parameters (package-private is enough: only the proxy uses it), or use
 field injection instead of constructor injection, or make the bean `@Singleton`, which has no client proxy.
+
+### R4C-QK-006
+
+**Trigger:** a bean protected by resilience4cata has a lookup condition (`@LookupIfProperty`,
+`@LookupUnlessProperty`): an annotated class, or a bean implementing an annotated interface. The bean the application
+gets is the generated subclass or the interface wrapper, and Quarkus reads lookup conditions only on the original
+class, so the bean would stay resolvable whatever the property says.
+
+```text
+[R4C-QK-006] Beans protected by resilience4cata have lookup conditions (@LookupIfProperty, @LookupUnlessProperty): com.acme.BetaFeature. ...
+```
+
+**Fix:** use a build-time condition instead (`@IfBuildProperty`, `@IfBuildProfile` and their `Unless` forms), which
+works on annotated classes, or check the property in the code that looks the bean up.
+
+### R4C-QK-007
+
+**Trigger:** a Quarkus REST resource (a class with `@Path`, or one implementing an interface with `@Path`) is an
+annotated class. Quarkus REST creates resource classes itself, so the generated subclass would never serve the
+endpoints and the policies would not run.
+
+```text
+[R4C-QK-007] REST resource classes (@Path) have resilience4cata annotations: com.acme.OrdersResource. ...
+```
+
+**Fix:** move the protected calls to a bean that the resource injects (an annotated class, or a bean implementing an
+annotated interface), or protect the REST client interface the resource calls.
 
 ## Tests: testkit (R4C-TK)
 

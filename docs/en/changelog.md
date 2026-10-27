@@ -6,8 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased] :id=unreleased
 
+### Changed
+
+- **Reactive return types are a compile error.** A method with resilience annotations that returns a lazy reactive type (`Flow.Publisher` or Reactive Streams `Publisher`, so Reactor's `Mono` and `Flux`; Mutiny's `Uni` and `Multi`; RxJava's types) used to compile as a synchronous method, so the policies protected only building the pipeline and a failure was never retried or timed out. It is now [R4C-ASY-002](errors.md#r4c-asy-002); return a `CompletionStage` instead (`uni.subscribeAsCompletionStage()`, `mono.toFuture()`).
+- **Quarkus: two cases that silently lost the protection are build errors.** A Quarkus REST resource that is an annotated class ([R4C-QK-007](errors.md#r4c-qk-007): Quarkus REST creates resource classes itself, so the generated subclass never served the endpoints), and a protected bean with `@LookupIfProperty`/`@LookupUnlessProperty` ([R4C-QK-006](errors.md#r4c-qk-006): the condition was ignored).
+
 ### Fixed
 
+- **Quarkus: build-time conditions on annotated classes.** `@IfBuildProfile`, `@UnlessBuildProfile`, `@IfBuildProperty` and `@UnlessBuildProperty` on an annotated class were ignored, so both a production and a test implementation were beans (an ambiguous injection). The generated subclass of a disabled class is now disabled too.
+- **Quarkus: generic annotated interfaces.** `@Inject Store<String>` of an annotated `Store<T>` got the unprotected bean, because the wrapper's bean types were raw; they now keep the bean's type arguments.
 - **Annotated classes keep their parameter names.** The overrides of a generated subclass named their parameters `p0`, `p1`, …, so features that read names on the invoked method broke on annotated classes: Spring's `@Cacheable(key = "#sku")` and `@EventListener(condition = "#event.urgent")`, `@PathVariable`/`@QueryValue` without an explicit name in Spring MVC and Micronaut controllers, and Bean Validation, which reported a violation twice (`p0` and the real name). They now keep the declared names; only a parameter named `java`, `dev`, the first part of a static fallback's package, or starting with `r4c$` is renamed. A method inherited from a class file has its names only if that class was compiled with `-parameters`, as Spring Boot, Micronaut and Quarkus builds do. Interface wrappers are unchanged.
 
 ## [0.8.0] - 2026-10-27 :id=0.8.0
