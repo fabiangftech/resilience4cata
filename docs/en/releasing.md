@@ -14,6 +14,7 @@ How resilience4cata is published to Maven Central. Everything uses Gradle's own 
 | `resilience4cata-testkit` | same; depends on `resilience4cata-core` (`compile`) |
 | `resilience4cata-opentelemetry` | same; depends on `resilience4cata-core` and `io.opentelemetry:opentelemetry-api` (`compile`) |
 | `resilience4cata-junit` | same; depends on `resilience4cata-testkit` and `org.junit.jupiter:junit-jupiter-api` 5.10.5 (`compile`) |
+| `resilience4cata-all` | jar (only `module-info`), sources, a Javadoc jar with a README (javadoc refuses a module without packages), POM, module metadata; depends on `core`, `annotations` and `config` (`compile`) |
 | `resilience4cata-bom` | POM and module metadata only: constraints on every module above, at the same version |
 
 groupId `dev.resilience4cata`. Every jar carries `LICENSE` and `NOTICE` (Apache-2.0) in `META-INF`, and archives are reproducible (no file timestamps, fixed order). `examples`, `benchmark` and `stress` are not published.

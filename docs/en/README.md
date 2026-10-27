@@ -27,44 +27,29 @@
             <button class="r4c-copy" type="button">Copy</button>
           </div>
           <div role="tabpanel" id="r4c-p-g" aria-labelledby="r4c-t-g"><pre><span class="k">dependencies</span> {
-    <span class="k">implementation</span> platform(<span class="s">'dev.resilience4cata:resilience4cata-bom:0.7.0'</span>)
-    <span class="k">annotationProcessor</span> platform(<span class="s">'dev.resilience4cata:resilience4cata-bom:0.7.0'</span>)
-    <span class="k">implementation</span> <span class="s">'dev.resilience4cata:resilience4cata-core'</span>
-    <span class="k">compileOnly</span> <span class="s">'dev.resilience4cata:resilience4cata-annotations'</span>
-    <span class="k">annotationProcessor</span> <span class="s">'dev.resilience4cata:resilience4cata-processor'</span>
+    <span class="k">implementation</span> <span class="s">'dev.resilience4cata:resilience4cata-all:0.8.0'</span>
+    <span class="k">annotationProcessor</span> <span class="s">'dev.resilience4cata:resilience4cata-processor:0.8.0'</span>
 }</pre></div>
           <div role="tabpanel" id="r4c-p-k" aria-labelledby="r4c-t-k" hidden><pre><span class="k">dependencies</span> {
-    <span class="k">val</span> r4cBom = platform(<span class="s">"dev.resilience4cata:resilience4cata-bom:0.7.0"</span>)
-    implementation(r4cBom)
-    annotationProcessor(r4cBom)
-    implementation(<span class="s">"dev.resilience4cata:resilience4cata-core"</span>)
-    compileOnly(<span class="s">"dev.resilience4cata:resilience4cata-annotations"</span>)
-    annotationProcessor(<span class="s">"dev.resilience4cata:resilience4cata-processor"</span>)
+    implementation(<span class="s">"dev.resilience4cata:resilience4cata-all:0.8.0"</span>)
+    annotationProcessor(<span class="s">"dev.resilience4cata:resilience4cata-processor:0.8.0"</span>)
 }</pre></div>
-          <div role="tabpanel" id="r4c-p-m" aria-labelledby="r4c-t-m" hidden><pre>&lt;<span class="k">dependencies</span>&gt;
-  &lt;<span class="k">dependency</span>&gt;
-    &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
-    &lt;<span class="k">artifactId</span>&gt;resilience4cata-core&lt;/<span class="k">artifactId</span>&gt;
-    &lt;<span class="k">version</span>&gt;0.7.0&lt;/<span class="k">version</span>&gt;
-  &lt;/<span class="k">dependency</span>&gt;
-  &lt;<span class="k">dependency</span>&gt;
-    &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
-    &lt;<span class="k">artifactId</span>&gt;resilience4cata-annotations&lt;/<span class="k">artifactId</span>&gt;
-    &lt;<span class="k">version</span>&gt;0.7.0&lt;/<span class="k">version</span>&gt;
-    &lt;<span class="k">scope</span>&gt;provided&lt;/<span class="k">scope</span>&gt;
-  &lt;/<span class="k">dependency</span>&gt;
-&lt;/<span class="k">dependencies</span>&gt;
+          <div role="tabpanel" id="r4c-p-m" aria-labelledby="r4c-t-m" hidden><pre>&lt;<span class="k">dependency</span>&gt;
+  &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
+  &lt;<span class="k">artifactId</span>&gt;resilience4cata-all&lt;/<span class="k">artifactId</span>&gt;
+  &lt;<span class="k">version</span>&gt;0.8.0&lt;/<span class="k">version</span>&gt;
+&lt;/<span class="k">dependency</span>&gt;
 <span></span>
 <span class="c">&lt;!-- in the maven-compiler-plugin &lt;configuration&gt; --&gt;</span>
 &lt;<span class="k">annotationProcessorPaths</span>&gt;
   &lt;<span class="k">path</span>&gt;
     &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
     &lt;<span class="k">artifactId</span>&gt;resilience4cata-processor&lt;/<span class="k">artifactId</span>&gt;
-    &lt;<span class="k">version</span>&gt;0.7.0&lt;/<span class="k">version</span>&gt;
+    &lt;<span class="k">version</span>&gt;0.8.0&lt;/<span class="k">version</span>&gt;
   &lt;/<span class="k">path</span>&gt;
 &lt;/<span class="k">annotationProcessorPaths</span>&gt;</pre></div>
         </div>
-        <p class="install-note">Version 0.7.0 on Maven Central. The processor only goes on the annotation processor path; the annotations are compile-only. <a href="#/en/start/installation">Installation guide</a></p>
+        <p class="install-note">Version 0.7.0 on Maven Central. <code>resilience4cata-all</code> brings core, the annotations and configuration; the processor only goes on the annotation processor path. <a href="#/en/start/installation">Installation guide</a></p>
       </div>
     </div>
     <div class="r4c-compile" aria-label="Annotated interface and the class the processor generates from it">

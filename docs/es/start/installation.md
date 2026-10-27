@@ -1,6 +1,6 @@
 # Instalación
 
-Agrega cuatro artefactos a tu build: el BOM, `core`, las anotaciones y el procesador de anotaciones. Esta página cubre Gradle y Maven, los IDE, JPMS y otros procesadores de anotaciones.
+Para empezar bastan dos líneas: `resilience4cata-all` y el procesador de anotaciones. Esta página cubre esa forma, los módulos por separado, Gradle y Maven, los IDE, JPMS y otros procesadores de anotaciones.
 
 **Requisitos:** Java 21 o posterior, tanto para compilar como para ejecutar (los jars se compilan con `--release 21` y se prueban en Java 21 y 25). Coordenadas: groupId `dev.resilience4cata`, versión `0.7.0`, en Maven Central.
 
@@ -9,6 +9,7 @@ Agrega cuatro artefactos a tu build: el BOM, `core`, las anotaciones y el proces
 | Artefacto | Qué es | Scope |
 |---|---|---|
 | `resilience4cata-bom` | Alinea las versiones de todos los artefactos de abajo | `platform(...)` (Gradle), `import` (Maven) |
+| `resilience4cata-all` | Desde 0.8.0. Una sola dependencia para `core`, `annotations` y `config`, sin código propio ([la forma corta](#la-forma-corta)) | `implementation` (Gradle), `compile` por defecto (Maven) |
 | `resilience4cata-core` | Políticas, `ResilienceRegistry`, `Resilient`, `Pipeline`, eventos, snapshots. Su única dependencia es JSpecify (`org.jspecify:jspecify`) | `implementation` (Gradle), `compile` por defecto (Maven) |
 | `resilience4cata-annotations` | `@Retry`, `@CircuitBreaker`, `@RateLimiter`, `@Timeout`, `@Bulkhead`, `@Fallback`, `@ResiliencePolicy`. Retención `CLASS`, así que no hacen falta en tiempo de ejecución | `compileOnly` (Gradle), `provided` (Maven) |
 | `resilience4cata-processor` | El procesador de anotaciones que genera el código. **Obligatorio** cuando usas las anotaciones: no hay alternativa por reflexión | `annotationProcessor` (Gradle), `annotationProcessorPaths` (Maven). Nunca en el class path de ejecución |
@@ -22,7 +23,54 @@ Agrega cuatro artefactos a tu build: el BOM, `core`, las anotaciones y el proces
 
 `core` y `processor` deben tener la misma versión; el BOM se encarga de eso.
 
-## Agrega las dependencias
+## La forma corta
+
+`resilience4cata-all` depende de `core`, `annotations` y `config`, así que con una dependencia tienes las políticas, las anotaciones y la [configuración externa](../guides/configuration.md). El procesador sigue necesitando su propia línea: las herramientas de build solo ejecutan los procesadores de anotaciones del processor path, así que ninguna dependencia puede traerlo.
+
+<!-- tabs:start -->
+
+#### **Gradle**
+
+```groovy
+dependencies {
+    implementation 'dev.resilience4cata:resilience4cata-all:0.8.0'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:0.8.0'
+}
+```
+
+#### **Gradle (Kotlin)**
+
+```kotlin
+dependencies {
+    implementation("dev.resilience4cata:resilience4cata-all:0.8.0")
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor:0.8.0")
+}
+```
+
+#### **Maven**
+
+```xml
+<dependency>
+  <groupId>dev.resilience4cata</groupId>
+  <artifactId>resilience4cata-all</artifactId>
+  <version>0.8.0</version>
+</dependency>
+
+<!-- in the maven-compiler-plugin <configuration> -->
+<annotationProcessorPaths>
+  <path>
+    <groupId>dev.resilience4cata</groupId>
+    <artifactId>resilience4cata-processor</artifactId>
+    <version>0.8.0</version>
+  </path>
+</annotationProcessorPaths>
+```
+
+<!-- tabs:end -->
+
+Escribe la misma versión en las dos líneas: `core` y `processor` deben coincidir. Las anotaciones quedan también en el class path de ejecución; son un jar pequeño que nada lee en ejecución. Para dejarlas solo en compilación, o para no incluir `config`, agrega los módulos uno por uno como se explica abajo.
+
+## Módulo por módulo
 
 Importa primero el BOM y después agrega los artefactos sin versión.
 
@@ -323,6 +371,8 @@ module com.acme.shop {
     exports com.acme.shop.clients to dev.resilience4cata.core;
 }
 ```
+
+Con `resilience4cata-all`, `requires dev.resilience4cata.all;` reemplaza los tres `requires`: lee `core`, las anotaciones y `config` de forma transitiva.
 
 Sin el export calificado, `Resilient.of` falla con [`R4C-RT-005`](../errors.md#r4c-rt-005), cuyo mensaje indica la línea que hay que agregar. `core` requiere JSpecify de forma transitiva, así que no necesitas declararlo.
 

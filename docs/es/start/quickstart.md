@@ -6,18 +6,16 @@ Necesitas Java 21 o posterior y un proyecto Gradle o Maven. Todo lo que sigue es
 
 ## 1. Agrega las dependencias
 
+`resilience4cata-all` trae la librería (core, las anotaciones y la configuración externa); el procesador genera el código al compilar y va solo en el path de procesadores de anotaciones.
+
 <!-- tabs:start -->
 
 #### **Gradle**
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.7.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.7.0')
-
-    implementation 'dev.resilience4cata:resilience4cata-core'
-    compileOnly 'dev.resilience4cata:resilience4cata-annotations'
-    annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
+    implementation 'dev.resilience4cata:resilience4cata-all:0.8.0'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:0.8.0'
 }
 ```
 
@@ -25,46 +23,33 @@ dependencies {
 
 ```kotlin
 dependencies {
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:0.7.0")
-    implementation(r4cBom)
-    annotationProcessor(r4cBom)
-
-    implementation("dev.resilience4cata:resilience4cata-core")
-    compileOnly("dev.resilience4cata:resilience4cata-annotations")
-    annotationProcessor("dev.resilience4cata:resilience4cata-processor")
+    implementation("dev.resilience4cata:resilience4cata-all:0.8.0")
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor:0.8.0")
 }
 ```
 
 #### **Maven**
 
 ```xml
-<dependencies>
-  <dependency>
-    <groupId>dev.resilience4cata</groupId>
-    <artifactId>resilience4cata-core</artifactId>
-    <version>0.7.0</version>
-  </dependency>
-  <dependency>
-    <groupId>dev.resilience4cata</groupId>
-    <artifactId>resilience4cata-annotations</artifactId>
-    <version>0.7.0</version>
-    <scope>provided</scope>
-  </dependency>
-</dependencies>
+<dependency>
+  <groupId>dev.resilience4cata</groupId>
+  <artifactId>resilience4cata-all</artifactId>
+  <version>0.8.0</version>
+</dependency>
 
 <!-- in the maven-compiler-plugin <configuration> -->
 <annotationProcessorPaths>
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>0.7.0</version>
+    <version>0.8.0</version>
   </path>
 </annotationProcessorPaths>
 ```
 
 <!-- tabs:end -->
 
-La [página de instalación](installation.md) explica cada línea, el BOM con Maven, los IDE y JPMS.
+La [página de instalación](installation.md) explica cada línea, el BOM y los módulos por separado, los IDE y JPMS.
 
 ## 2. Anota una interfaz
 

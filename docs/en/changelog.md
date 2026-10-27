@@ -4,6 +4,12 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
+## [Unreleased] :id=unreleased
+
+### Added
+
+- **`resilience4cata-all`: one dependency to start with.** It depends on `core`, `annotations` and `config` and has no code of its own, so a project needs two lines: `resilience4cata-all` and the processor on the annotation processor path (no dependency can bring a processor there). It is also a JPMS module, `dev.resilience4cata.all`, that reads the three transitively. The individual modules and the BOM work as before; use them to keep the annotations compile-only. In the BOM. See [The short way](start/installation.md#the-short-way).
+
 ## [0.7.0] - 2026-10-27 :id=0.7.0
 
 ### Added

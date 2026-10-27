@@ -1,0 +1,17 @@
+plugins {
+    id 'r4c.java-library'
+    id 'r4c.publish'
+}
+
+description = 'One dependency to start with: core, the annotations and external configuration (the processor still goes on the annotation processor path).'
+
+// No code of its own: the jar holds only module-info, so JPMS users can require this one module.
+dependencies {
+    api project(':core')
+    api project(':annotations')
+    api project(':config')
+}
+
+// javadoc refuses a module without packages; Central accepts a Javadoc jar that only explains why it is empty.
+tasks.named('javadoc') { enabled = false }
+tasks.named('javadocJar') { from('src/javadoc') }
