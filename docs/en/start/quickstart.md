@@ -149,7 +149,7 @@ The second call takes up to a few hundred milliseconds: between attempts the ret
 - **The first call** failed with `IOException`, so the retry waited and tried again; the second attempt returned `9.99`.
 - **The second wrapper** always fails, so after three attempts the fallback `unknownPrice` answered `0`.
 - **The breaker** recorded every attempt, five calls with four failures, but stayed `CLOSED`: by default it judges only once its window holds 100 calls (`minimumCalls`).
-- The policies nest in a fixed order, outermost first: `Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method`. That is why the fallback sees the final outcome and every retry attempt has its own two-second timeout.
+- The policies nest in this order by default, outermost first ([`@PolicyOrder`](../policies/README.md#changing-the-order) changes it): `Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method`. That is why the fallback sees the final outcome and every retry attempt has its own two-second timeout.
 
 ## Next steps
 

@@ -5,7 +5,7 @@ package dev.resilience4cata.processor;
  * {@code docs/en/errors.md} has one section per code (what triggers it, a wrong example, the fix).
  *
  * <p>Codes are grouped by area: {@code APT} placement and general, {@code ATR} attribute values,
- * {@code CMP} composed annotations, {@code ASY} asynchronous methods, {@code HDG} hedges, {@code CLS}
+ * {@code CMP} composed annotations, {@code ASY} asynchronous methods, {@code HDG} hedges, {@code ORD} policy order, {@code CLS}
  * classifiers, {@code FB} fallbacks, {@code SUB} annotated classes. A code is never renumbered or reused: a new error takes the
  * next free number of its area, and a retired one stays here, marked as no longer reported.
  */
@@ -36,6 +36,8 @@ enum ProcessorError {
 
     HEDGE_NOT_ASYNC("R4C-HDG-001", "@Hedge on a synchronous method"),
     HEDGE_WITH_RETRY("R4C-HDG-002", "@Hedge and @Retry on the same method"),
+
+    ORDER_DUPLICATE("R4C-ORD-001", "a layer listed twice in @PolicyOrder"),
 
     CLASSIFIER_MISSING_CORE("R4C-CLS-001", "dev.resilience4cata.Classifier is not on the classpath"),
     CLASSIFIER_NOT_CLASS("R4C-CLS-002", "the classifier is not a class"),

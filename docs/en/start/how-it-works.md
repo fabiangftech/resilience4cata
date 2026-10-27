@@ -147,7 +147,7 @@ An unknown config name fails at that moment ([`R4C-REG-004`](../errors.md#r4c-re
 
 ## Policy order
 
-Whatever order you write the annotations in, the policies nest in this fixed order, outermost first:
+Whatever order you write the annotations in, the policies nest in this order by default, outermost first ([`@PolicyOrder`](../policies/README.md#changing-the-order) changes it):
 
 ```mermaid
 flowchart LR

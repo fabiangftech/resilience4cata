@@ -4,6 +4,12 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
+## [Unreleased] :id=unreleased
+
+### Added
+
+- **`@PolicyOrder`: change the order of a method's policies.** It lists layers (`Layer.RETRY`, `TIMEOUT`, `CIRCUIT_BREAKER`, …) that move together, in the listed order, to the place of the outermost of them; the others keep their default order. `@PolicyOrder({TIMEOUT, RETRY})` puts one timeout around the whole retry loop, `{CIRCUIT_BREAKER, RETRY}` records one outcome per operation in the breaker, `{BULKHEAD, RETRY}` holds the slot across retries. On a method, a type or a bundle; decided at compile time, and the fallback stays outermost. Listing a layer twice is [R4C-ORD-001](errors.md#r4c-ord-001). Without it, or when it changes nothing, the generated code is unchanged. A `Pipeline` keeps the default order. See [Changing the order](policies/README.md#changing-the-order).
+
 ## [0.9.0] - 2026-10-27 :id=0.9.0
 
 ### Changed

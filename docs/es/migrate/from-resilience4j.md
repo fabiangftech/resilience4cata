@@ -20,7 +20,7 @@ resilience4cata cubre ocho políticas (retry, hedge, circuit breaker, rate limit
 |---|---|---|
 | Dónde viven las políticas | decoradores (`Decorators.ofSupplier(…)`, `Retry.decorateSupplier(…)`) o aspectos de Spring AOP alrededor de un bean | una clase generada en tiempo de compilación: `<Interface>$Resilient` envuelve tu implementación, o `<Class>$Resilient` extiende tu clase |
 | Cuándo se detecta un error de configuración | al arrancar o en la primera llamada | en su mayoría al compilar ([códigos de error](../errors.md)) |
-| Orden de las políticas | el orden en que compones los decoradores; con Spring, un orden fijo de aspectos (configurable) | fijo: Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → método |
+| Orden de las políticas | el orden en que compones los decoradores; con Spring, un orden fijo de aspectos (configurable) | por defecto Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → método; `@PolicyOrder` lo cambia por método, tipo o bundle |
 | Registries | uno por política (`CircuitBreakerRegistry`, `RetryRegistry`, …) | un solo `ResilienceRegistry` para todas las políticas |
 | Instancias | se buscan por nombre | una por método anotado de forma predeterminada; los métodos con el mismo `name` comparten una |
 
@@ -120,9 +120,9 @@ La semántica difiere: en Resilience4j gana el primer intento que **termina**, a
 
 ## Diferencias de comportamiento :id=differences
 
-### El orden es fijo :id=order
+### El orden :id=order
 
-Fallback → Retry (o Hedge) → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → método, sin importar el orden de las anotaciones. Coincide con el orden predeterminado de aspectos de Spring en Resilience4j para las políticas que ambas tienen. No hay `@Order` ni reordenamiento por método; para otro orden, usa dos interfaces o un [`Pipeline`](../guides/pipeline.md) dentro de un método envuelto.
+Fallback → Retry (o Hedge) → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → método por defecto, sin importar el orden de las anotaciones. Coincide con el orden predeterminado de aspectos de Spring en Resilience4j para las políticas que ambas tienen. Donde Resilience4j cambia el orden de forma global con las propiedades `<module>AspectOrder`, resilience4cata lo cambia por método, tipo o bundle con [`@PolicyOrder`](../policies/README.md#changing-the-order), al compilar; el fallback sigue siendo la capa más exterior.
 
 ### Un breaker abierto detiene los retries :id=open-breaker
 
@@ -253,7 +253,7 @@ proxies; el procesador de anotaciones genera las clases protegidas y la integrac
 | `resilience4j.<module>.configs.default.<key>` | `resilience4cata.defaults.<policy>.<attribute>` |
 | `resilience4j.<module>.configs.<name>.<key>` | `resilience4cata.configs.<name>.<policy>.<attribute>`, usada por `@Retry(config = "<name>")` y similares |
 | `baseConfig: <name>` | `resilience4cata.configs.<config>.extends: <name>`; una anotación elige su config con `config = "<name>"` |
-| propiedades `<module>AspectOrder` | ninguna: el orden es fijo (Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead) |
+| propiedades `<module>AspectOrder` | `@PolicyOrder` en el método, el tipo o un bundle ([Cambiar el orden](../policies/README.md#changing-the-order)) |
 | beans `CircuitBreakerConfigCustomizer`, `RetryConfigCustomizer`… | beans `ResilienceRegistryCustomizer` |
 | beans `RegistryEventConsumer`, `getEventPublisher()` | beans `EventListener<…>` |
 | `/actuator/circuitbreakers`, `/actuator/retries`, `/actuator/ratelimiters`… | `/actuator/resilience4cata` (todas las políticas, solo lectura) |

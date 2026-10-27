@@ -229,7 +229,7 @@ at CheckoutService.pay</pre>
 <section id="policies" aria-labelledby="pol-h">
   <div class="wrap">
     <h2 class="h2" id="pol-h">Eight policies, one annotation each</h2>
-    <p class="lead">Put them on a method or on the whole interface. Stack them freely: the processor always nests them in the same order.</p>
+    <p class="lead">Put them on a method or on the whole interface. Stack them freely: the processor nests them in one well-chosen order, which <code>@PolicyOrder</code> can change.</p>
     <div class="panel">
       <a class="breaker" href="/en/policies/retry"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4.5V8.5H16"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></span><span><h3>@Retry</h3><p>Try again with exponential backoff and jitter, within an optional time budget.</p><span class="attrs">maxAttempts · delay · backoff · maxDuration</span></span></a>
       <a class="breaker" href="/en/policies/hedge"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h13"/><path d="M13 5l3 3-3 3"/><path d="M8 16h13"/><path d="M18 13l3 3-3 3"/></svg></span><span><h3>@Hedge</h3><p>Start the same idempotent async call again when it is slow, and keep the first success.</p><span class="attrs">delay · maxAttempts · hedgeOn · budgetPercent</span></span></a>

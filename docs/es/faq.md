@@ -45,7 +45,7 @@ Anota una **interfaz** cuando es tuya y la implementación puede ser cualquier c
 
 ### ¿Puedo cambiar el orden de las políticas? :id=order
 
-No. Siempre es Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → método, sin importar el orden de las anotaciones. Así, el breaker registra cada intento de un retry, cada intento tiene su propio timeout y un breaker abierto detiene los retries. Consulta [Políticas](policies/README.md).
+Sí, con `@PolicyOrder` en un método, un tipo o un bundle. Por defecto es Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → método, sin importar el orden de las anotaciones, así que el breaker registra cada intento de un retry, cada intento tiene su propio timeout y un breaker abierto detiene los retries. `@PolicyOrder({TIMEOUT, RETRY})`, por ejemplo, pone un único timeout alrededor de todo el bucle del retry. El fallback siempre es la capa más exterior, y el orden queda fijo al compilar. Consulta [Cambiar el orden](policies/README.md#changing-the-order).
 
 ### ¿Por qué no se reintenta mi método cuando la implementación lo llama? :id=self-invocation
 
@@ -101,7 +101,7 @@ En AWS Graviton3, un retry cuyo primer intento tiene éxito cuesta 1.2 ns y un c
 
 ### ¿Qué no se admite todavía? :id=not-supported
 
-Caché y bulkheads con pool de threads; el algoritmo Vegas y la espera (`maxWait`) en los adaptive limits; hedging sincrónico (`@Hedge` funciona en métodos async); tipos reactivos; tipos async `? super`; cambiar el orden de las políticas; reconfiguración en tiempo de ejecución; módulos de integración con frameworks distintos de Spring Boot, Micronaut y Quarkus. Consulta [Decisiones de diseño](design.md) para ver qué está planeado y qué está excluido por decisión.
+Caché y bulkheads con pool de threads; el algoritmo Vegas y la espera (`maxWait`) en los adaptive limits; hedging sincrónico (`@Hedge` funciona en métodos async); tipos reactivos; tipos async `? super`; reconfiguración en tiempo de ejecución; módulos de integración con frameworks distintos de Spring Boot, Micronaut y Quarkus. Consulta [Decisiones de diseño](design.md) para ver qué está planeado y qué está excluido por decisión.
 
 ### ¿Qué hay en la hoja de ruta? :id=roadmap
 
@@ -113,7 +113,7 @@ Planificado, no prometido; los nombres y el alcance pueden cambiar:
 | Límite de concurrencia adaptativo (`@AdaptiveLimit`) | hecho en 0.6.0 | Gradient2 y AIMD, sync y async ([Adaptive limit](policies/adaptive-limit.md)); Vegas y la espera, más adelante. Resilience4j no tiene |
 | Tracing de OpenTelemetry | más adelante | las métricas están en `resilience4cata-opentelemetry` desde 0.3.0 ([guía](guides/opentelemetry.md)) |
 | Configuración YAML | v1 | módulo separado, para que `core` siga sin dependencias |
-| Orden de ejecución configurable (`@Order`) | v1 | |
+| Orden de ejecución configurable (`@PolicyOrder`) | hecho en 0.10.0 | solo anotaciones; un `Pipeline` mantiene el orden por defecto ([Cambiar el orden](policies/README.md#changing-the-order)) |
 | Atributo `locked` (valores de la anotación que la configuración externa no puede sobrescribir) | hecho en 0.7.0 | `locked = true` en la anotación, `Pipeline.Builder.locked()` ([Bloquear una instancia](guides/configuration.md#bloquear-una-instancia)) |
 | `@Cached`, tipos reactivos, corrutinas de Kotlin, inyección de fallos, propagación de deadlines | más adelante | |
 

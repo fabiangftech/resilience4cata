@@ -750,6 +750,49 @@ public interface QuoteClient {
 }
 ```
 
+## Procesador de anotaciones: orden de las políticas (R4C-ORD)
+
+### R4C-ORD-001
+
+**Causa:** `@PolicyOrder` nombra una capa más de una vez (en el método, en su tipo o en un bundle). Cada capa tiene
+un solo lugar en el orden.
+
+**Incorrecto:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Layer;
+import dev.resilience4cata.annotation.PolicyOrder;
+import dev.resilience4cata.annotation.Retry;
+import dev.resilience4cata.annotation.Timeout;
+
+public interface ReportClient {
+    @Retry
+    @Timeout("2s")
+    @PolicyOrder({Layer.TIMEOUT, Layer.RETRY, Layer.TIMEOUT})
+    String report(String id);
+}
+```
+
+**Corrección:** nombra cada capa una sola vez, de la más exterior a la más interior.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Layer;
+import dev.resilience4cata.annotation.PolicyOrder;
+import dev.resilience4cata.annotation.Retry;
+import dev.resilience4cata.annotation.Timeout;
+
+public interface ReportClient {
+    @Retry
+    @Timeout("2s")
+    @PolicyOrder({Layer.TIMEOUT, Layer.RETRY})
+    String report(String id);
+}
+```
+
 ## Procesador de anotaciones: clasificadores (R4C-CLS)
 
 La clase generada crea una instancia de cada clase `classifier` por método, así que la clase debe ser

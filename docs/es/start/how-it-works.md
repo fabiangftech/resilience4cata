@@ -147,7 +147,7 @@ Un nombre de configuración desconocido falla en ese momento ([`R4C-REG-004`](..
 
 ## Orden de las políticas
 
-Sin importar en qué orden escribas las anotaciones, las políticas se anidan en este orden fijo, de afuera hacia adentro:
+Sin importar en qué orden escribas las anotaciones, las políticas se anidan en este orden por defecto, de afuera hacia adentro ([`@PolicyOrder`](../policies/README.md#changing-the-order) lo cambia):
 
 ```mermaid
 flowchart LR
