@@ -1,0 +1,40 @@
+plugins {
+    id 'r4c.java-library'
+}
+
+description = 'The documentation site: docs/ plus a pre-rendered HTML page per Markdown page, for search engines. Not published.'
+
+dependencies {
+    implementation libs.commonmark
+    implementation libs.commonmark.ext.gfm.tables
+}
+
+def docs = rootProject.layout.projectDirectory.dir('docs')
+def site = layout.buildDirectory.dir('site')
+
+// ./gradlew :site:generate writes site/build/site, which the site workflow deploys to GitHub Pages.
+tasks.register('generate', JavaExec) {
+    group = 'documentation'
+    description = 'Generates the documentation site (docs/ plus pre-rendered pages, sitemap.xml, robots.txt) in build/site.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.resilience4cata.site.SiteGenerator'
+    inputs.dir(docs).withPropertyName('docs').withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(site).withPropertyName('site')
+    args(docs.asFile.path, site.get().asFile.path)
+}
+
+// ./gradlew :site:serve previews the generated site on http://localhost:3000, with the same URL rules as GitHub Pages.
+tasks.register('serve', JavaExec) {
+    group = 'documentation'
+    description = 'Serves build/site on http://localhost:3000 (-Pport=<n> for another port).'
+    dependsOn 'generate'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.resilience4cata.site.SiteServer'
+    args(site.get().asFile.path, providers.gradleProperty('port').getOrElse('3000'))
+}
+
+// SiteGeneratorTest renders the real documentation.
+tasks.named('test') {
+    inputs.dir(docs).withPropertyName('docs').withPathSensitivity(PathSensitivity.RELATIVE)
+    systemProperty 'docs.dir', docs.asFile.path
+}

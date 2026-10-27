@@ -6,8 +6,8 @@
         <h1 id="r4c-hero-title">Resiliencia,<br>compilada.</h1>
         <p class="sub">Anota una interfaz Java con retry, circuit breaker, timeout y compañía. Al compilar, un procesador de anotaciones escribe el Java plano que los aplica. Sin proxies, sin reflexión, sin framework.</p>
         <div class="ctas">
-          <a class="btn btn-primary" href="#/es/start/quickstart">Empezar</a>
-          <a class="btn btn-quiet" href="#/es/?id=benchmarks">Ver los benchmarks</a>
+          <a class="btn btn-primary" href="/es/start/quickstart">Empezar</a>
+          <a class="btn btn-quiet" href="/es/?id=benchmarks">Ver los benchmarks</a>
         </div>
         <ul class="facts">
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Java 21+</li>
@@ -49,7 +49,7 @@
   &lt;/<span class="k">path</span>&gt;
 &lt;/<span class="k">annotationProcessorPaths</span>&gt;</pre></div>
         </div>
-        <p class="install-note">Versión 0.8.0 en Maven Central. <code>resilience4cata-all</code> trae core, las anotaciones y la configuración; el procesador va solo en el path de procesadores de anotaciones. <a href="#/es/start/installation">Guía de instalación</a></p>
+        <p class="install-note">Versión 0.8.0 en Maven Central. <code>resilience4cata-all</code> trae core, las anotaciones y la configuración; el procesador va solo en el path de procesadores de anotaciones. <a href="/es/start/installation">Guía de instalación</a></p>
       </div>
     </div>
     <div class="r4c-compile" aria-label="Interfaz anotada y la clase que el procesador genera a partir de ella">
@@ -175,7 +175,7 @@ at CheckoutService.pay</pre>
   followed by ns, us, ms, s, m, h or d …
     @Retry(delay = "2 seconds")
     ^</pre>
-        <p style="margin-top:12px"><a href="#/es/errors?id=r4c-atr-001">Cada código de error, con su solución</a></p>
+        <p style="margin-top:12px"><a href="/es/errors?id=r4c-atr-001">Cada código de error, con su solución</a></p>
       </div>
     </div>
   </div>
@@ -191,7 +191,7 @@ at CheckoutService.pay</pre>
         <dt>Comparado con</dt><dd>Resilience4j 2.4.0</dd>
         <dt>Fecha</dt><dd>2026-10-24</dd>
       </dl>
-      <a href="#/es/benchmarks?id=cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3">Método, todos los resultados y notas de equidad</a>
+      <a href="/es/benchmarks?id=cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3">Método, todos los resultados y notas de equidad</a>
     </div>
     <figure class="r4c-chart">
       <figcaption class="legend">
@@ -231,16 +231,16 @@ at CheckoutService.pay</pre>
     <h2 class="h2" id="pol-h">Ocho políticas, una anotación cada una</h2>
     <p class="lead">Ponlas en un método o en toda la interfaz. Combínalas como quieras: el procesador siempre las anida en el mismo orden.</p>
     <div class="panel">
-      <a class="breaker" href="#/es/policies/retry"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4.5V8.5H16"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></span><span><h3>@Retry</h3><p>Vuelve a intentar con backoff exponencial y jitter, dentro de un presupuesto de tiempo opcional.</p><span class="attrs">maxAttempts · delay · backoff · maxDuration</span></span></a>
-      <a class="breaker" href="#/es/policies/hedge"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h13"/><path d="M13 5l3 3-3 3"/><path d="M8 16h13"/><path d="M18 13l3 3-3 3"/></svg></span><span><h3>@Hedge</h3><p>Vuelve a lanzar la misma llamada async idempotente cuando va lenta, y se queda con el primer éxito.</p><span class="attrs">delay · maxAttempts · hedgeOn · budgetPercent</span></span></a>
-      <a class="breaker" href="#/es/policies/circuit-breaker"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4.5"/><circle cx="8" cy="16" r="1.6"/><path d="M9.2 15 L17 7.5"/><circle cx="16.5" cy="16" r="1.6"/><path d="M18 16h4"/></svg></span><span><h3>@CircuitBreaker</h3><p>Deja de llamar a una dependencia que sigue fallando y luego deja pasar algunas llamadas de prueba.</p><span class="attrs">failureRateThreshold · waitInOpen · halfOpenCalls</span></span></a>
-      <a class="breaker" href="#/es/policies/rate-limiter"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16l-5.5 6h-5z"/><path d="M12 10v1.5"/><circle cx="12" cy="15" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="20" r="1.3" fill="currentColor" stroke="none"/></svg></span><span><h3>@RateLimiter</h3><p>Admite un número fijo de llamadas por período y rechaza o hace esperar al resto.</p><span class="attrs">permits · period · maxWait</span></span></a>
-      <a class="breaker" href="#/es/policies/adaptive-limit"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.4" fill="currentColor" stroke="none"/></svg></span><span><h3>@AdaptiveLimit</h3><p>Limita las llamadas concurrentes con un límite que se ajusta solo: sube mientras la latencia se mantiene, baja cuando crece.</p><span class="attrs">algorithm · minLimit · maxLimit</span></span></a>
-      <a class="breaker" href="#/es/policies/timeout"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V9.5"/><path d="M10 3h4"/><path d="M12 3v3.5"/><path d="M18.2 6.8l1.4-1.4"/></svg></span><span><h3>@Timeout</h3><p>Interrumpe una llamada que se pasa de su presupuesto, en el propio thread de quien llama.</p><span class="attrs">value</span></span></a>
-      <a class="breaker" href="#/es/policies/bulkhead"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18l-1.8 8.4a2 2 0 0 1-2 1.6H6.8a2 2 0 0 1-2-1.6z"/><path d="M9 8v10"/><path d="M15 8v10"/><path d="M12 8V4.5"/></svg></span><span><h3>@Bulkhead</h3><p>Limita cuántas llamadas corren a la vez, para que una dependencia lenta no se quede con todos los threads.</p><span class="attrs">maxConcurrent · maxWait</span></span></a>
-      <a class="breaker" href="#/es/policies/fallback"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h10"/><path d="M15.5 5.5l3 3"/><path d="M18.5 5.5l-3 3"/><path d="M7.5 7c0 6 3 10 8.5 10H21"/><path d="M18 14l3 3-3 3"/></svg></span><span><h3>@Fallback</h3><p>Devuelve una respuesta útil cuando todo lo demás falló, desde un método hermano o una clase handler.</p><span class="attrs">value · method</span></span></a>
+      <a class="breaker" href="/es/policies/retry"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4.5V8.5H16"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></span><span><h3>@Retry</h3><p>Vuelve a intentar con backoff exponencial y jitter, dentro de un presupuesto de tiempo opcional.</p><span class="attrs">maxAttempts · delay · backoff · maxDuration</span></span></a>
+      <a class="breaker" href="/es/policies/hedge"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h13"/><path d="M13 5l3 3-3 3"/><path d="M8 16h13"/><path d="M18 13l3 3-3 3"/></svg></span><span><h3>@Hedge</h3><p>Vuelve a lanzar la misma llamada async idempotente cuando va lenta, y se queda con el primer éxito.</p><span class="attrs">delay · maxAttempts · hedgeOn · budgetPercent</span></span></a>
+      <a class="breaker" href="/es/policies/circuit-breaker"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4.5"/><circle cx="8" cy="16" r="1.6"/><path d="M9.2 15 L17 7.5"/><circle cx="16.5" cy="16" r="1.6"/><path d="M18 16h4"/></svg></span><span><h3>@CircuitBreaker</h3><p>Deja de llamar a una dependencia que sigue fallando y luego deja pasar algunas llamadas de prueba.</p><span class="attrs">failureRateThreshold · waitInOpen · halfOpenCalls</span></span></a>
+      <a class="breaker" href="/es/policies/rate-limiter"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16l-5.5 6h-5z"/><path d="M12 10v1.5"/><circle cx="12" cy="15" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="20" r="1.3" fill="currentColor" stroke="none"/></svg></span><span><h3>@RateLimiter</h3><p>Admite un número fijo de llamadas por período y rechaza o hace esperar al resto.</p><span class="attrs">permits · period · maxWait</span></span></a>
+      <a class="breaker" href="/es/policies/adaptive-limit"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.4" fill="currentColor" stroke="none"/></svg></span><span><h3>@AdaptiveLimit</h3><p>Limita las llamadas concurrentes con un límite que se ajusta solo: sube mientras la latencia se mantiene, baja cuando crece.</p><span class="attrs">algorithm · minLimit · maxLimit</span></span></a>
+      <a class="breaker" href="/es/policies/timeout"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V9.5"/><path d="M10 3h4"/><path d="M12 3v3.5"/><path d="M18.2 6.8l1.4-1.4"/></svg></span><span><h3>@Timeout</h3><p>Interrumpe una llamada que se pasa de su presupuesto, en el propio thread de quien llama.</p><span class="attrs">value</span></span></a>
+      <a class="breaker" href="/es/policies/bulkhead"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18l-1.8 8.4a2 2 0 0 1-2 1.6H6.8a2 2 0 0 1-2-1.6z"/><path d="M9 8v10"/><path d="M15 8v10"/><path d="M12 8V4.5"/></svg></span><span><h3>@Bulkhead</h3><p>Limita cuántas llamadas corren a la vez, para que una dependencia lenta no se quede con todos los threads.</p><span class="attrs">maxConcurrent · maxWait</span></span></a>
+      <a class="breaker" href="/es/policies/fallback"><span class="handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h10"/><path d="M15.5 5.5l3 3"/><path d="M18.5 5.5l-3 3"/><path d="M7.5 7c0 6 3 10 8.5 10H21"/><path d="M18 14l3 3-3 3"/></svg></span><span><h3>@Fallback</h3><p>Devuelve una respuesta útil cuando todo lo demás falló, desde un método hermano o una clase handler.</p><span class="attrs">value · method</span></span></a>
     </div>
-    <p class="order">Orden, de afuera hacia adentro: Fallback, Retry o Hedge, CircuitBreaker, RateLimiter, AdaptiveLimit, Timeout, Bulkhead y luego tu método. <a href="#/es/policies/">Cómo se combinan</a></p>
+    <p class="order">Orden, de afuera hacia adentro: Fallback, Retry o Hedge, CircuitBreaker, RateLimiter, AdaptiveLimit, Timeout, Bulkhead y luego tu método. <a href="/es/policies/">Cómo se combinan</a></p>
   </div>
 </section>
 <section aria-labelledby="qs-h">
@@ -259,21 +259,21 @@ at CheckoutService.pay</pre>
     <span class="k">new</span> <span class="t">HttpPaymentClient</span>(), registry);</pre></li>
     </ol>
     <div class="cta-row">
-      <a class="btn btn-primary" href="#/es/start/quickstart">Sigue el inicio rápido</a>
-      <a class="btn btn-quiet" href="#/es/start/how-it-works">Cómo funciona</a>
+      <a class="btn btn-primary" href="/es/start/quickstart">Sigue el inicio rápido</a>
+      <a class="btn btn-quiet" href="/es/start/how-it-works">Cómo funciona</a>
     </div>
   </div>
 </section>
 <div class="foot-wrap">
   <div class="wrap foot">
     <div>
-      <a class="r4c-brand" href="#/es/"><svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#F2B500"/><g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round"><path d="M4 27h7"/><path d="M13.6 25.4 L27 13"/><path d="M31 27h5"/></g><circle cx="13" cy="27" r="2.6" fill="#1A1F24"/><circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/></svg><span>resilience<b>4cata</b></span></a>
+      <a class="r4c-brand" href="/es/"><svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#F2B500"/><g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round"><path d="M4 27h7"/><path d="M13.6 25.4 L27 13"/><path d="M31 27h5"/></g><circle cx="13" cy="27" r="2.6" fill="#1A1F24"/><circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/></svg><span>resilience<b>4cata</b></span></a>
       <p>Resiliencia basada en anotaciones para Java 21+ puro. Licencia Apache 2.0.</p>
       <span class="coord">dev.resilience4cata:resilience4cata-bom:0.8.0</span>
     </div>
-    <div><h4>Aprende</h4><ul><li><a href="#/es/start/installation">Instalación</a></li><li><a href="#/es/start/quickstart">Inicio rápido</a></li><li><a href="#/es/start/how-it-works">Cómo funciona</a></li><li><a href="#/es/guides/testing">Tests con ManualClock</a></li></ul></div>
-    <div><h4>Referencia</h4><ul><li><a href="#/es/errors">Códigos de error</a></li><li><a href="#/es/reference/configuration">Claves de configuración</a></li><li><a href="#/es/performance">Rendimiento</a></li><li><a href="https://javadoc.io/doc/dev.resilience4cata">Javadoc</a></li></ul></div>
-    <div><h4>Proyecto</h4><ul><li><a href="https://github.com/fabiangftech/resilience4cata">GitHub</a></li><li><a href="https://central.sonatype.com/namespace/dev.resilience4cata">Maven Central</a></li><li><a href="https://github.com/fabiangftech/resilience4cata/releases">Versiones</a></li><li><a href="https://www.apache.org/licenses/LICENSE-2.0">Licencia Apache 2.0</a></li><li><a href="#/en/" lang="en" hreflang="en">Documentation in English</a></li></ul></div>
+    <div><h4>Aprende</h4><ul><li><a href="/es/start/installation">Instalación</a></li><li><a href="/es/start/quickstart">Inicio rápido</a></li><li><a href="/es/start/how-it-works">Cómo funciona</a></li><li><a href="/es/guides/testing">Tests con ManualClock</a></li></ul></div>
+    <div><h4>Referencia</h4><ul><li><a href="/es/errors">Códigos de error</a></li><li><a href="/es/reference/configuration">Claves de configuración</a></li><li><a href="/es/performance">Rendimiento</a></li><li><a href="https://javadoc.io/doc/dev.resilience4cata">Javadoc</a></li></ul></div>
+    <div><h4>Proyecto</h4><ul><li><a href="https://github.com/fabiangftech/resilience4cata">GitHub</a></li><li><a href="https://central.sonatype.com/namespace/dev.resilience4cata">Maven Central</a></li><li><a href="https://github.com/fabiangftech/resilience4cata/releases">Versiones</a></li><li><a href="https://www.apache.org/licenses/LICENSE-2.0">Licencia Apache 2.0</a></li><li><a href="/en/" lang="en" hreflang="en">Documentation in English</a></li></ul></div>
   </div>
 </div>
 </div>

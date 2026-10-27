@@ -286,10 +286,10 @@
   function sidebarLinks() {
     return $$('.sidebar-nav a').filter(function (a) {
       var h = a.getAttribute('href') || '';
-      return h.indexOf('#/') === 0;
+      return /^\/(en|es)\//.test(h);
     });
   }
-  function hrefPath(h) { return (h || '').replace(/^#/, '').replace(/\?.*$/, ''); }
+  function hrefPath(h) { return (h || '').replace(/\?.*$/, ''); }
   function samePath(a, b) {
     var n = function (p) { return p.replace(/\.md$/, '').replace(/\/README$/, '/').replace(/\/$/, '/'); };
     return n(a) === n(b);
@@ -324,7 +324,7 @@
     var crumbs = document.createElement('ol');
     crumbs.className = 'r4c-crumbs';
     crumbs.setAttribute('aria-label', 'Breadcrumb');
-    crumbs.innerHTML = '<li><a href="#/' + current.lang + '/">' + L.docs + '</a></li>' +
+    crumbs.innerHTML = '<li><a href="/' + current.lang + '/">' + L.docs + '</a></li>' +
       (group ? '<li>' + escapeHtml(group) + '</li>' : '') +
       '<li aria-current="page">' + escapeHtml(h1.textContent.replace(/\s+/g, ' ').trim()) + '</li>';
     wrap.parentNode.insertBefore(crumbs, wrap);
@@ -389,11 +389,11 @@
       html += '<nav class="r4c-pager" aria-label="Pages">' + cell(prev, 'prev', L.previous) + cell(next, 'next', L.next) + '</nav>';
     }
     var other = current.lang === 'en' ? 'es' : 'en';
-    var file = vm.route.file || '';
+    var file = (vm.route.file || '').replace(/^\//, '');
     html += '<div class="r4c-page-meta">' +
       '<a href="https://github.com/' + REPO + '/edit/' + BRANCH + '/docs/' + file + '">' +
       svg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>') + L.edit + '</a>' +
-      '<a href="#' + path.replace(/^\/(en|es)\//, '/' + other + '/') + '" lang="' + other + '">' + L.otherLang + '</a></div>';
+      '<a href="' + path.replace(/^\/(en|es)\//, '/' + other + '/') + '" lang="' + other + '">' + L.otherLang + '</a></div>';
     out.innerHTML = html;
     article.appendChild(out);
   }
@@ -493,11 +493,11 @@
     $$('.r4c-lang a').forEach(function (a) {
       var l = a.getAttribute('data-lang');
       var target = path === '/' ? '/' + l + '/' : path.replace(/^\/(en|es)\//, '/' + l + '/');
-      a.setAttribute('href', '#' + target);
+      a.setAttribute('href', target);
       if (l === current.lang) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
     });
     var brand = $('.r4c-brand');
-    if (brand) brand.setAttribute('href', '#/' + current.lang + '/');
+    if (brand) brand.setAttribute('href', '/' + current.lang + '/');
     var section = /\/policies\//.test(path) ? 'policies'
       : /\/(performance|benchmarks)$/.test(path) ? 'performance'
       : /\/errors$/.test(path) ? 'errors'
@@ -506,7 +506,7 @@
     $$('.r4c-nav a').forEach(function (a) {
       var k = a.getAttribute('data-nav');
       a.textContent = L.nav[k];
-      a.setAttribute('href', '#/' + current.lang + '/' + targets[k]);
+      a.setAttribute('href', '/' + current.lang + '/' + targets[k]);
       if (k === section) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     var menu = $('.r4c-menu');
@@ -515,6 +515,14 @@
     if (skip) skip.textContent = L.skip;
     updateThemeButton();
     void other;
+  }
+
+  // Docsify links a folder's README.md as /x/README; the page's URL is /x/.
+  function readmeLinks() {
+    $$('a[href]').forEach(function (a) {
+      var h = a.getAttribute('href');
+      if (/^\/(en|es)\/(.*\/)?README(\?|$)/.test(h)) a.setAttribute('href', h.replace(/README(?=\?|$)/, ''));
+    });
   }
 
   function closeMenu() {
@@ -541,6 +549,7 @@
 
     hook.doneEach(function () {
       var path = vm.route.path;
+      readmeLinks();
       var L = I18N[current.lang];
       var article = $('.markdown-section');
       updateHeader(path);
@@ -555,7 +564,7 @@
         buildToc(document.createElement('div'), L);
         if (path === '/') {
           var lang = store.get('r4c-lang') || navigator.language || 'en';
-          location.replace('#/' + (/^es\b/i.test(lang) ? 'es' : 'en') + '/');
+          location.replace('/' + (/^es\b/i.test(lang) ? 'es' : 'en') + '/');
         }
         return;
       }
@@ -564,6 +573,9 @@
       factsStrips(article);
       var notFound = !!$('.r4c-404', article);
       if (!notFound) titleBlock(article, path, L);
+      // Same title as the pre-rendered page (site/…/SiteGenerator), not Docsify's sidebar label.
+      var h1 = $('h1', article);
+      if (h1 && !notFound) document.title = h1.textContent.replace(/\s+/g, ' ').trim() + ' · resilience4cata';
       buildToc(article, L);
       if (!notFound) pageFooter(article, vm, L);
       renderMermaid();

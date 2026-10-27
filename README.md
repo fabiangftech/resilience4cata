@@ -85,7 +85,7 @@ Not every case is a win (the free bulkhead is a tie), and most real calls take m
 
 ## Documentation
 
-The site at [resilience4cata.dev](https://resilience4cata.dev) is the Markdown in [`docs/`](docs/) (a [Docsify](https://docsify.js.org) site; preview it with `python3 -m http.server -d docs 3000`). Good places to start:
+The site at [resilience4cata.dev](https://resilience4cata.dev) is the Markdown in [`docs/`](docs/) (a [Docsify](https://docsify.js.org) site, pre-rendered for search engines by the `site` module; preview it with `./gradlew :site:serve`). Good places to start:
 
 - [Installation](docs/en/start/installation.md), [quickstart](docs/en/start/quickstart.md) and [how it works](docs/en/start/how-it-works.md)
 - [Policies](docs/en/policies/README.md): every annotation, attribute and default
