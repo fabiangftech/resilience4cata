@@ -14,7 +14,14 @@ import org.apache.commons.logging.LogFactory;
 import org.jspecify.annotations.Nullable;
 import org.springframework.aop.scope.ScopedProxyUtils;
 import org.springframework.aop.support.AopUtils;
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.SmartInstantiationAwareBeanPostProcessor;
+import org.springframework.beans.factory.support.MergedBeanDefinitionPostProcessor;
+import org.springframework.beans.factory.support.RootBeanDefinition;
+import org.springframework.core.ResolvableType;
+import org.springframework.core.annotation.MergedAnnotations;
 import org.springframework.util.ClassUtils;
 
 /**
@@ -31,7 +38,10 @@ import org.springframework.util.ClassUtils;
  * <p>The registry is looked up when the first bean is wrapped, never when this post-processor is
  * created, so that it and its dependencies go through every post-processor.
  */
-final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPostProcessor {
+final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPostProcessor,
+        MergedBeanDefinitionPostProcessor {
+
+    private static final String JAKARTA_INJECT = "jakarta.inject.Inject";
 
     private static final Log LOG = LogFactory.getLog(ResilientBeansPostProcessor.class);
 
@@ -65,6 +75,50 @@ final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPo
     }
 
     private static final Keep KEEP = new Keep();
+
+    /**
+     * The constructor of a generated subclass that Spring would pick on the annotated class itself. With several
+     * constructors and none {@code @Autowired} or {@code @Inject}, Spring uses the class's no-argument one; the
+     * subclass mirrors it as the constructor that takes only the registry, which Spring would not find on its own.
+     */
+    @Override
+    public Constructor<?> @Nullable [] determineCandidateConstructors(Class<?> beanClass, String beanName) {
+        if (!generated.isGenerated(beanClass) || beanClass.getSuperclass() == null
+                || generated.subclassOf(beanClass.getSuperclass()) != beanClass) {
+            return null;
+        }
+        Constructor<?>[] constructors = beanClass.getDeclaredConstructors();
+        if (constructors.length < 2 || Arrays.stream(constructors).anyMatch(ResilientBeansPostProcessor::injected)) {
+            return null;
+        }
+        return Arrays.stream(constructors)
+                .filter(c -> c.getParameterCount() == 1 && c.getParameterTypes()[0] == ResilienceRegistry.class)
+                .findFirst().map(c -> new Constructor<?>[] {c}).orElse(null);
+    }
+
+    private static boolean injected(Constructor<?> constructor) {
+        MergedAnnotations annotations = MergedAnnotations.from(constructor);
+        return annotations.isPresent(Autowired.class) || annotations.isPresent(JAKARTA_INJECT);
+    }
+
+    /**
+     * Gives a bean that will be wrapped the generic interface type as its target type ({@code Lookup<String>} for a
+     * {@code NameLookup implements Lookup<String>}): Spring matches generic injection points against the target type
+     * first, and once the bean is the wrapper its own class says only {@code Lookup}. Runs before the bean is created;
+     * beans of non-generic interfaces are left as they are.
+     */
+    @Override
+    public void postProcessMergedBeanDefinition(RootBeanDefinition definition, Class<?> beanType, String beanName) {
+        if (!wrap || excluded.contains(beanName) || ScopedProxyUtils.isScopedTarget(beanName)) {
+            return;
+        }
+        if (plans.computeIfAbsent(beanType, type -> plan(type, type)) instanceof Wrap(Class<?> type)) {
+            ResolvableType interfaceType = ResolvableType.forClass(beanType).as(type);
+            if (interfaceType.hasGenerics() && !interfaceType.hasUnresolvableGenerics()) {
+                definition.setTargetType(interfaceType);
+            }
+        }
+    }
 
     @Override
     public Object getEarlyBeanReference(Object bean, String beanName) {

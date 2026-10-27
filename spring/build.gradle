@@ -50,6 +50,8 @@ tasks.named('compileJava') {
     inputs.files(tasks.named('processResources')).withPropertyName('resources').withPathSensitivity(PathSensitivity.RELATIVE)
     // It takes the descriptions from the Javadoc of the sources it compiles: an incremental compile would drop them.
     options.incremental = false
+    // Spring reads parameter names at run time: the actuator endpoint's @Selector parameter needs its name.
+    options.compilerArgs.add('-parameters')
 }
 
 tasks.named('compileTestJava') {

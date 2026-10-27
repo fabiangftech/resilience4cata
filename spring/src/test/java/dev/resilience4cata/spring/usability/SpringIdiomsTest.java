@@ -59,7 +59,6 @@ class SpringIdiomsTest {
         assertThat(names).containsExactly("sku");
     }
 
-    @Disabled("BUG-SPR-2: with two constructors and no @Autowired, the generated subclass has no no-arg constructor")
     @Test
     void anAnnotatedClassWithANoArgAndAnotherConstructorUsesTheNoArgOneAsSpringDoes() {
         runner.withUserConfiguration(DualConstructorService.class).run(context -> {
@@ -72,7 +71,6 @@ class SpringIdiomsTest {
         });
     }
 
-    @Disabled("BUG-SPR-4: the wrapper of a generic interface is raw, so injection by type argument becomes ambiguous")
     @Test
     void genericInterfaceBeansAreInjectedByTheirTypeArgument() {
         runner.withUserConfiguration(NameLookup.class, AgeLookup.class, LookupConsumer.class).run(context -> {
