@@ -27,3 +27,5 @@ __pycache__/
 
 # SonarCloud scanner cache (./gradlew sonar)
 .sonar/
+
+create-releases.sh
