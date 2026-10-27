@@ -1,0 +1,7 @@
+# The prod profile of usability.yml (ProfilesTest).
+resilience4cata:
+  defaults:
+    retry:
+      delay: 300ms
+      retry-on:
+        - java.io.IOException

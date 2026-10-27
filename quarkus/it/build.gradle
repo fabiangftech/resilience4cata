@@ -51,6 +51,10 @@ dependencies {
     // extensionTest ones: QuarkusExtensionTest builds its applications from the test source set's application model.
     testImplementation libs.quarkus.smallrye.fault.tolerance
     testImplementation libs.quarkus.narayana.jta
+    // Usability tests (usability packages): Quarkus features users combine with the policies, and @InjectMock.
+    testImplementation libs.quarkus.hibernate.validator
+    testImplementation libs.quarkus.scheduler
+    testImplementation libs.quarkus.junit.mockito
     // DevUiTest (extensionTest, whose applications are built from this model too) runs an application in dev mode.
     // A real dev-mode application model adds each extension's conditional dev dependencies: the Dev UI itself
     // (from quarkus-vertx-http) and the -dev artifacts with the other extensions' Dev UI services; this model is
@@ -61,6 +65,7 @@ dependencies {
     testImplementation libs.quarkus.rest.dev
     testImplementation libs.quarkus.smallrye.health.dev
     testImplementation libs.quarkus.smallrye.fault.tolerance.dev
+    testImplementation libs.quarkus.scheduler.dev
     testCompileOnly project(':annotations')
     testAnnotationProcessor project(':processor')
 
@@ -85,6 +90,11 @@ def extensionTest = tasks.register('extensionTest', Test) {
     // ErrorCodeTest checks the error codes against the error reference pages.
     inputs.files('../../docs/en/errors.md', '../../docs/es/errors.md').withPropertyName('errorPages')
             .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+// Quarkus applications compile with -parameters (Quarkus REST and Hibernate Validator use the names): the usability
+// tests' applications do too.
+tasks.named('compileExtensionTestJava') {
+    options.compilerArgs.add('-parameters')
 }
 tasks.named('check') {
     dependsOn extensionTest

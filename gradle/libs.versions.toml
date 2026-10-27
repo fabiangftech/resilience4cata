@@ -106,6 +106,10 @@ quarkus-micrometer-registry-prometheus = { module = "io.quarkus:quarkus-micromet
 quarkus-narayana-jta = { module = "io.quarkus:quarkus-narayana-jta" }
 quarkus-rest = { module = "io.quarkus:quarkus-rest" }
 quarkus-rest-client = { module = "io.quarkus:quarkus-rest-client" }
+quarkus-hibernate-validator = { module = "io.quarkus:quarkus-hibernate-validator" }
+quarkus-scheduler = { module = "io.quarkus:quarkus-scheduler" }
+quarkus-scheduler-dev = { module = "io.quarkus:quarkus-scheduler-dev" }
+quarkus-junit-mockito = { module = "io.quarkus:quarkus-junit-mockito" }
 rest-assured = { module = "io.rest-assured:rest-assured" }
 # The spring module's tests: versions from spring-boot-dependencies.
 spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure" }
@@ -120,6 +124,7 @@ jakarta-transaction-api = { module = "jakarta.transaction:jakarta.transaction-ap
 spring-core-test = { module = "org.springframework:spring-core-test" }
 jackson-databind = { module = "tools.jackson.core:jackson-databind" }
 snakeyaml = { module = "org.yaml:snakeyaml" }
+mockito-core = { module = "org.mockito:mockito-core" }
 micronaut-platform = { module = "io.micronaut.platform:micronaut-platform", version.ref = "micronautPlatform" }
 # The micronaut module's main code, at the oldest supported Micronaut core.
 micronaut-inject-minimum = { module = "io.micronaut:micronaut-inject", version.ref = "micronautMinimum" }
