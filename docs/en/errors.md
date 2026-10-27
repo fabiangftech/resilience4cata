@@ -2833,7 +2833,10 @@ into a singleton that implements the annotated interface.
 
 **Trigger:** a bean is an instance of an annotated class `C` but not of the generated `C$Resilient`, so its
 policies would never run: Micronaut created `C` itself (it has a scope annotation or an `@Inject` constructor, and
-the code was compiled without `-Ar4c.inject=micronaut`), or a `@Factory` method returned `new C(...)`.
+the code was compiled without `-Ar4c.inject=micronaut`), or a `@Factory` method returned `new C(...)`. Also reported
+when Micronaut creates `C$Resilient` from its own definition although it was compiled without the option: its
+constructor repeats `C`'s `@Inject`, so it is a bean, but without `C`'s scope and qualifiers (a `@Singleton` would
+become a new instance per injection).
 
 ```text
 [R4C-MN-004] Bean com.acme.InventoryService is an instance of com.acme.InventoryService, which has resilience4cata annotations, but not of the generated InventoryService$Resilient, so its policies would not run. ...

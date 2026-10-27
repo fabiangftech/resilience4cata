@@ -103,13 +103,16 @@ class ProcessorCoexistenceTest {
     }
 
     @Test
-    void withTheOptionTheGeneratedSubclassIsTheBeanThatReplacesTheClass() throws IOException {
+    void withTheOptionTheGeneratedSubclassIsABeanWithTheClassAnnotations() throws IOException {
         Output output = compile("option", false, List.of("-Ar4c.inject=micronaut"));
 
         assertThat(output.classes()).contains("demo/$Inventory$Resilient$Definition.class",
                 "demo/$Pricing$Resilient$Definition.class").doesNotContain("demo/$Payments$Resilient$Definition.class");
+        // the class's own annotations, and no @Replaces(Inventory.class): AnnotatedClassesFilter leaves out
+        // Inventory's own definition instead, which would also replace subclasses and @MockBeans of Inventory
         assertThat(output.sources().get("demo/Inventory$Resilient.java"))
-                .contains("@jakarta.inject.Singleton\n@io.micronaut.context.annotation.Replaces(demo.Inventory.class)\n");
+                .contains("@jakarta.inject.Singleton\n@dev.resilience4cata.generated.ContainerBean\n@SuppressWarnings")
+                .doesNotContain("Replaces");
     }
 
     private record Output(List<String> classes, Map<String, String> sources) {

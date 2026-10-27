@@ -11,8 +11,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * {@code -Ar4c.inject=micronaut}: the generated subclass of an annotated class repeats the class's type annotations
- * and replaces it ({@code @Replaces(C.class)}), so that Micronaut creates it in place of the class. Without the
- * option, nothing changes. Micronaut's {@code @Replaces} is declared here by a stand-in of the same name.
+ * (a {@code @Replaces} of the class's own included), so that Micronaut creates it as it would the class; the Micronaut
+ * integration leaves out the class's own definition. Without the option, nothing changes. Micronaut's
+ * {@code @Replaces}, whose presence marks Micronaut on the class path, is declared here by a stand-in.
  */
 class InjectOptionProcessorTest {
 
@@ -99,7 +100,7 @@ class InjectOptionProcessorTest {
     }
 
     @Test
-    void theSubclassRepeatsTheClassAnnotationsAndReplacesIt() {
+    void theSubclassRepeatsTheClassAnnotations() {
         Compilation result = Compilation.compileWithOptions(workDir, sources(), "-Ar4c.inject=micronaut");
 
         assertThat(result.diagnostics()).map(d -> d.getMessage(Locale.ROOT)).isEmpty();
@@ -108,7 +109,8 @@ class InjectOptionProcessorTest {
 
                 @demo.Scope
                 @demo.Requires(property = "service.enabled", env = {"prod", "test"})
-                @io.micronaut.context.annotation.Replaces(demo.Service.class)
+                @io.micronaut.context.annotation.Replaces(demo.Other.class)
+                @dev.resilience4cata.generated.ContainerBean
                 @SuppressWarnings({"deprecation", "removal", "serial"})
                 public class Service$Resilient extends demo.Service {
                 """);
@@ -127,7 +129,7 @@ class InjectOptionProcessorTest {
         assertThat(blank.generatedSource("demo.Service$Resilient")).isEqualTo(without.generatedSource("demo.Service$Resilient"));
         assertThat(with.generatedSource("demo.Api$Resilient")).as("interface wrappers never change")
                 .isEqualTo(without.generatedSource("demo.Api$Resilient"));
-        assertThat(with.generatedSource("demo.Service$Resilient").replaceAll("(?m)^@(demo|io\\.micronaut)\\..*\\n", ""))
+        assertThat(with.generatedSource("demo.Service$Resilient").replaceAll("(?m)^@(demo|io\\.micronaut|dev\\.resilience4cata\\.generated)\\..*\\n", ""))
                 .as("only the type annotations differ").isEqualTo(without.generatedSource("demo.Service$Resilient"));
     }
 

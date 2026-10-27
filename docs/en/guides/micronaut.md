@@ -143,8 +143,9 @@ public class OrderService {
 
 The processor generates `OrderService$Resilient extends OrderService`. With `-Ar4c.inject=micronaut` it also
 repeats the class's own annotations on it (`@Singleton`, qualifiers such as `@Named`, `@Requires`, `@Primary`,
-`@Order`…) and adds `@Replaces(OrderService.class)`. Micronaut's processor then writes a bean definition for the
-generated class, and Micronaut creates `OrderService$Resilient` wherever it would have created `OrderService`:
+`@Order`…). Micronaut's processor then writes a bean definition for the generated class, the integration leaves out
+the one Micronaut compiled for `OrderService` itself, and Micronaut creates `OrderService$Resilient` wherever it
+would have created `OrderService`:
 
 - the bean is still an `OrderService`, with its scope, qualifiers and requirements;
 - calls on `this` (`findAgain` calling `find`) go through the policies, unlike Micronaut's own `@Retryable`;
@@ -451,9 +452,9 @@ build and tests.
   the imports, an IDE may pick the wrong one. Do not combine them with resilience4cata's on one method.
 - Annotated interfaces: inject the interface; calls on `this` inside the implementation are not protected; one
   annotated interface per `@ResilientBean`.
-- Annotated classes need `-Ar4c.inject=micronaut` to be created by Micronaut, or a factory. The generated class
-  replaces the class only: a `@Replaces` on the class itself is not repeated, and `@Factory` classes cannot be
-  annotated.
+- Annotated classes need `-Ar4c.inject=micronaut` to be created by Micronaut, or a factory. Only the class's own
+  bean definition is left out: subclass beans, beans of the class from `@Factory` methods and a test's `@MockBean`
+  stay. `@Factory` classes cannot be annotated.
 - With annotated classes, Micronaut's AOP runs outside the policies; a retried or hedged transactional method fails
   ([`R4C-MN-005`](../errors.md#r4c-mn-005)) unless allowed.
 - Methods that the constructor calls on `this` run before the policies are set up

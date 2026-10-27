@@ -142,9 +142,9 @@ public class OrderService {
 
 El procesador genera `OrderService$Resilient extends OrderService`. Con `-Ar4c.inject=micronaut` además repite en
 ella las anotaciones propias de la clase (`@Singleton`, calificadores como `@Named`, `@Requires`, `@Primary`,
-`@Order`…) y añade `@Replaces(OrderService.class)`. El procesador de Micronaut escribe entonces una definición de
-bean para la clase generada, y Micronaut crea `OrderService$Resilient` dondequiera que habría creado
-`OrderService`:
+`@Order`…). El procesador de Micronaut escribe entonces una definición de bean para la clase generada, la
+integración deja fuera la que Micronaut compiló para el propio `OrderService`, y Micronaut crea
+`OrderService$Resilient` dondequiera que habría creado `OrderService`:
 
 - el bean sigue siendo un `OrderService`, con su ámbito, sus calificadores y sus requisitos;
 - las llamadas sobre `this` (`findAgain` llamando a `find`) pasan por las políticas, a diferencia del `@Retryable`
@@ -457,9 +457,9 @@ omite: se ejecuta en el build y las pruebas en la JVM.
   método.
 - Interfaces anotadas: inyecta la interfaz; las llamadas sobre `this` dentro de la implementación no están
   protegidas; una interfaz anotada por `@ResilientBean`.
-- Las clases anotadas necesitan `-Ar4c.inject=micronaut` para que Micronaut las cree, o un factory. La clase
-  generada solo reemplaza a la clase: un `@Replaces` en la propia clase no se repite, y las clases `@Factory` no
-  pueden anotarse.
+- Las clases anotadas necesitan `-Ar4c.inject=micronaut` para que Micronaut las cree, o un factory. Solo se deja
+  fuera la definición de bean de la propia clase: los beans de subclases, los beans de la clase que crean métodos
+  `@Factory` y el `@MockBean` de un test se mantienen. Las clases `@Factory` no pueden anotarse.
 - Con clases anotadas, la AOP de Micronaut se ejecuta fuera de las políticas; un método transaccional reintentado o
   con hedge falla ([`R4C-MN-005`](../errors.md#r4c-mn-005)) salvo que se permita.
 - Los métodos que el constructor llama sobre `this` se ejecutan antes de que las políticas estén listas

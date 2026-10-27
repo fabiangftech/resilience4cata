@@ -2851,7 +2851,9 @@ inyéctalo en un singleton que implemente la interfaz anotada.
 **Causa:** un bean es una instancia de una clase anotada `C` pero no de la `C$Resilient` generada, así que sus
 políticas nunca se ejecutarían: Micronaut creó `C` por su cuenta (tiene una anotación de ámbito o un constructor
 `@Inject`, y el código se compiló sin `-Ar4c.inject=micronaut`), o un método de un `@Factory` devolvió
-`new C(...)`.
+`new C(...)`. También se reporta cuando Micronaut crea `C$Resilient` desde su propia definición aunque se compiló
+sin la opción: su constructor repite el `@Inject` de `C`, así que es un bean, pero sin el ámbito ni los
+calificadores de `C` (un `@Singleton` pasaría a ser una instancia nueva en cada inyección).
 
 ```text
 [R4C-MN-004] Bean com.acme.InventoryService is an instance of com.acme.InventoryService, which has resilience4cata annotations, but not of the generated InventoryService$Resilient, so its policies would not run. ...
