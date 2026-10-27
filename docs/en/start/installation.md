@@ -1,6 +1,6 @@
 # Installation
 
-Add four artifacts to your build: the BOM, `core`, the annotations and the annotation processor. This page covers Gradle and Maven, IDEs, JPMS and other annotation processors.
+Two lines are enough to start: `resilience4cata-all` and the annotation processor. This page covers that setup, the individual modules, Gradle and Maven, IDEs, JPMS and other annotation processors.
 
 **Requirements:** Java 21 or newer, both to compile and to run (the jars are built with `--release 21` and tested on Java 21 and 25). Coordinates: groupId `dev.resilience4cata`, version `0.7.0`, on Maven Central.
 
@@ -9,6 +9,7 @@ Add four artifacts to your build: the BOM, `core`, the annotations and the annot
 | Artifact | What it is | Scope |
 |---|---|---|
 | `resilience4cata-bom` | Aligns the versions of every artifact below | `platform(...)` (Gradle), `import` (Maven) |
+| `resilience4cata-all` | From 0.8.0. One dependency for `core`, `annotations` and `config`, with no code of its own ([the short way](#the-short-way)) | `implementation` (Gradle), default `compile` (Maven) |
 | `resilience4cata-core` | Policies, `ResilienceRegistry`, `Resilient`, `Pipeline`, events, snapshots. Its only dependency is JSpecify (`org.jspecify:jspecify`) | `implementation` (Gradle), default `compile` (Maven) |
 | `resilience4cata-annotations` | `@Retry`, `@CircuitBreaker`, `@RateLimiter`, `@Timeout`, `@Bulkhead`, `@Fallback`, `@ResiliencePolicy`. `CLASS` retention, so not needed at runtime | `compileOnly` (Gradle), `provided` (Maven) |
 | `resilience4cata-processor` | The annotation processor that generates the code. **Mandatory** when you use the annotations: there is no reflection fallback | `annotationProcessor` (Gradle), `annotationProcessorPaths` (Maven). Never on the runtime class path |
@@ -22,7 +23,54 @@ Add four artifacts to your build: the BOM, `core`, the annotations and the annot
 
 `core` and `processor` must have the same version; the BOM makes sure they do.
 
-## Add the dependencies
+## The short way
+
+`resilience4cata-all` depends on `core`, `annotations` and `config`, so one dependency gives you the policies, the annotations and [external configuration](../guides/configuration.md). The processor still needs its own line: build tools only run annotation processors from the processor path, so no dependency can bring it.
+
+<!-- tabs:start -->
+
+#### **Gradle**
+
+```groovy
+dependencies {
+    implementation 'dev.resilience4cata:resilience4cata-all:0.8.0'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:0.8.0'
+}
+```
+
+#### **Gradle (Kotlin)**
+
+```kotlin
+dependencies {
+    implementation("dev.resilience4cata:resilience4cata-all:0.8.0")
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor:0.8.0")
+}
+```
+
+#### **Maven**
+
+```xml
+<dependency>
+  <groupId>dev.resilience4cata</groupId>
+  <artifactId>resilience4cata-all</artifactId>
+  <version>0.8.0</version>
+</dependency>
+
+<!-- in the maven-compiler-plugin <configuration> -->
+<annotationProcessorPaths>
+  <path>
+    <groupId>dev.resilience4cata</groupId>
+    <artifactId>resilience4cata-processor</artifactId>
+    <version>0.8.0</version>
+  </path>
+</annotationProcessorPaths>
+```
+
+<!-- tabs:end -->
+
+Write the same version on both lines: `core` and `processor` must match. The annotations end up on the runtime class path too; they are a small jar that nothing reads at run time. To keep them compile-only, or to leave out `config`, add the modules one by one as below.
+
+## Module by module
 
 Import the BOM first, then add the artifacts without versions.
 
@@ -323,6 +371,8 @@ module com.acme.shop {
     exports com.acme.shop.clients to dev.resilience4cata.core;
 }
 ```
+
+With `resilience4cata-all`, `requires dev.resilience4cata.all;` replaces the three `requires`: it reads `core`, the annotations and `config` transitively.
 
 Without the qualified export, `Resilient.of` fails with [`R4C-RT-005`](../errors.md#r4c-rt-005), whose message names the line to add. `core` requires JSpecify transitively, so you don't need to declare it.
 

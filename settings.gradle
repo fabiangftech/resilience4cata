@@ -11,7 +11,7 @@ dependencyResolutionManagement {
 
 rootProject.name = 'resilience4cata'
 
-include 'annotations', 'core', 'processor', 'config', 'testkit', 'micrometer', 'opentelemetry', 'junit', 'spring', 'micronaut',
+include 'annotations', 'core', 'processor', 'config', 'all', 'testkit', 'micrometer', 'opentelemetry', 'junit', 'spring', 'micronaut',
         // The Quarkus extension: runtime (resilience4cata-quarkus) and deployment (resilience4cata-quarkus-deployment),
         // as Quarkus requires; it is the one module split in nested projects. Its tests are in the unpublished
         // quarkus:it, the only project that applies the Quarkus Gradle plugin.

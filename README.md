@@ -12,59 +12,37 @@ Sync and async (`CompletionStage`), interfaces and annotated classes, composed a
 
 ## Install
 
-Java 21 or newer. The processor is mandatory and goes only on the annotation processor path; the annotations are compile-only.
+Java 21 or newer. Two lines: `resilience4cata-all` (core, the annotations and external configuration) and the annotation processor, which is mandatory and goes only on the annotation processor path.
 
 Gradle:
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.7.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.7.0')
-
-    implementation 'dev.resilience4cata:resilience4cata-core'
-    compileOnly 'dev.resilience4cata:resilience4cata-annotations'
-    annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
+    implementation 'dev.resilience4cata:resilience4cata-all:0.8.0'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:0.8.0'
 }
 ```
 
 Maven:
 
 ```xml
-<dependencyManagement>
-  <dependencies>
-    <dependency>
-      <groupId>dev.resilience4cata</groupId>
-      <artifactId>resilience4cata-bom</artifactId>
-      <version>0.7.0</version>
-      <type>pom</type>
-      <scope>import</scope>
-    </dependency>
-  </dependencies>
-</dependencyManagement>
-
-<dependencies>
-  <dependency>
-    <groupId>dev.resilience4cata</groupId>
-    <artifactId>resilience4cata-core</artifactId>
-  </dependency>
-  <dependency>
-    <groupId>dev.resilience4cata</groupId>
-    <artifactId>resilience4cata-annotations</artifactId>
-    <scope>provided</scope>
-  </dependency>
-</dependencies>
+<dependency>
+  <groupId>dev.resilience4cata</groupId>
+  <artifactId>resilience4cata-all</artifactId>
+  <version>0.8.0</version>
+</dependency>
 
 <!-- in the maven-compiler-plugin <configuration> -->
 <annotationProcessorPaths>
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>0.7.0</version>
+    <version>0.8.0</version>
   </path>
 </annotationProcessorPaths>
 ```
 
-The Gradle Kotlin DSL, the optional `config` and `testkit` modules, IDEs, JPMS and other annotation processors (Lombok, MapStruct) are covered in [installation](docs/en/start/installation.md). For Spring Boot 4.1+, `resilience4cata-spring` configures the registry from `application.yml` and protects annotated beans without AOP ([Spring Boot guide](docs/en/guides/spring.md)). For Micronaut 5.2+ (Java 25), `resilience4cata-micronaut` does the same ([Micronaut guide](docs/en/guides/micronaut.md)).
+The Gradle Kotlin DSL, the BOM and the individual modules (to keep the annotations compile-only), `testkit`, IDEs, JPMS and other annotation processors (Lombok, MapStruct) are covered in [installation](docs/en/start/installation.md). For Spring Boot 4.1+, `resilience4cata-spring` configures the registry from `application.yml` and protects annotated beans without AOP ([Spring Boot guide](docs/en/guides/spring.md)). For Micronaut 5.2+ (Java 25), `resilience4cata-micronaut` does the same ([Micronaut guide](docs/en/guides/micronaut.md)).
 
 ## Example
 
