@@ -83,6 +83,7 @@ flowchart TD
 | `maxWait` | duración | `0` (rechazar enseguida) | `defaults.bulkhead.maxWait` | Cuánto puede esperar una llamada por un slot libre. |
 | `name` | `String` | un bulkhead por método | solo anotación | Id de la instancia; los métodos con el mismo `name` comparten un bulkhead y sus slots. |
 | `config` | `String` | `default` | solo anotación | Configuración con nombre de la que partir. |
+| `locked` | `boolean` | `false` | solo anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
 | `enabled` | `String` | `"true"` | `defaults.bulkhead.enabled` | `""` (heredar), `"true"` o `"false"`. |
 
 Los valores por defecto son los de Resilience4j. Las claves también existen bajo `configs.<name>.` e `instances.<id>.`; ver [Configuración](../guides/configuration.md).

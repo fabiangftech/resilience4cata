@@ -109,6 +109,7 @@ El timeout cubre el stage, no la llamada al método que lo devuelve: un método 
 |---|---|---|---|---|
 | `value` | duración | `1s` | `defaults.timeout.value` | Tiempo máximo que puede tardar un intento. Mayor que 0. |
 | `config` | `String` | `default` | solo anotación | Configuración con nombre de la que partir. |
+| `locked` | `boolean` | `false` | solo anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
 | `enabled` | `String` | `"true"` | `defaults.timeout.enabled` | `""` (heredar), `"true"` o `"false"`. |
 
 `@Timeout` **no tiene `name`**: un timeout no guarda estado que valga la pena compartir, así que cada método anotado tiene su propia política, con el id `<interfaz>#<método>(<tipos de parámetros>)`. En la configuración externa el atributo es `value` (`configs.slow.timeout.value=10s`, `instances."com.acme.ReportApi#build(java.lang.String)".timeout.value=5s`); en código el método del builder es `TimeoutConfig.Builder.timeout(Duration)`. Ver [Configuración](../guides/configuration.md).

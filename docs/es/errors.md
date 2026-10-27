@@ -2701,6 +2701,16 @@ solo existen una vez envueltos los servicios). El mensaje sugiere el id más par
 **Corrección:** usa un id de instancia existente: el `name` de la política, o
 `<interface>#<method>(<parameter types>)` si no tiene.
 
+### R4C-CFG-014
+
+**Causa:** `config.verifyInstances(registry)` encontró un ajuste `instances.` de un atributo que la
+anotación de la instancia fija con `locked = true` (o que un pipeline construido con `.locked()` fija en su
+paso). El registry conservó el valor de la anotación e ignoró el ajuste; el mensaje muestra la configuración
+que usa la instancia.
+
+**Corrección:** quita la clave, o quita `locked = true` de la anotación si los operadores deben poder
+cambiar ese valor. Ver [Bloquear una instancia](guides/configuration.md#bloquear-una-instancia).
+
 ## Ejecución: integración con Spring Boot (R4C-SPR)
 
 `resilience4cata-spring` revisa los beans al arrancar y detiene el arranque con estos códigos cuando un bean

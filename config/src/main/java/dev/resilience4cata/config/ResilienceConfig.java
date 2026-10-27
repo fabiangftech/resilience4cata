@@ -4,6 +4,7 @@ import dev.resilience4cata.AdaptiveLimitSnapshot;
 import dev.resilience4cata.BulkheadSnapshot;
 import dev.resilience4cata.CircuitBreakerSnapshot;
 import dev.resilience4cata.HedgeSnapshot;
+import dev.resilience4cata.LockedOverride;
 import dev.resilience4cata.RateLimiterSnapshot;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.ResilienceSnapshot;
@@ -185,11 +186,13 @@ public final class ResilienceConfig {
      * of that policy that {@code registry} has created. Instances are created when an annotated
      * interface is wrapped with {@code Resilient.of(...)} or a pipeline is built, so call this after
      * that, for example at the end of startup or in a test; an override that matches nothing is
-     * otherwise silently unused.
+     * otherwise silently unused. It also reports every override that an instance ignores because its
+     * annotation is locked ({@code locked = true}) and sets that attribute itself
+     * ({@link ResilienceRegistry#lockedOverrides()}).
      *
      * @param registry a registry built from this configuration
      * @throws ConfigException listing every override that matches no instance, with its source and
-     *     the closest instance id
+     *     the closest instance id, and every override ignored by a locked instance
      */
     public void verifyInstances(ResilienceRegistry registry) {
         Objects.requireNonNull(registry, "registry");
@@ -229,6 +232,23 @@ public final class ResilienceConfig {
             message.append(" Known ").append(policy.name).append(" instances: ").append(ids);
             problems.add(new ProblemException(ProblemException.UNKNOWN_INSTANCE, message.toString()));
         }));
+        for (LockedOverride locked : registry.lockedOverrides()) {
+            PolicyType<?, ?> policy = PolicyType.find(locked.policy());
+            Map<String, Setting> settings = policy == null ? null
+                    : instances.getOrDefault(locked.instance(), Map.of()).get(policy);
+            if (settings == null) {
+                continue; // set in code (retryInstance(...) and friends): logged by the registry
+            }
+            for (Setting setting : settings.values()) {
+                if (policy.changes(locked.config(), setting)) {
+                    problems.add(new ProblemException(ProblemException.LOCKED_INSTANCE, setting.origin() + " sets "
+                            + setting.key().attribute() + " = " + setting.text() + " on " + policy.name + " instance '"
+                            + locked.instance() + "', but its annotation sets " + setting.key().attribute()
+                            + " and is locked (locked = true), so the override is ignored and the instance uses "
+                            + locked.config() + ". Remove the key, or remove locked = true from the annotation."));
+                }
+            }
+        }
         problems.throwIfAny();
     }
 

@@ -117,6 +117,7 @@ flowchart TD
 | `onExhaustedResult` | `ExhaustedResult` | `RETURN` | solo anotación | Con un classifier: devolver el último resultado rechazado, o `THROW` para lanzar una `ResultRejectedException`. |
 | `name` | `String` | una instancia por método | solo anotación | Id de la instancia; los métodos con el mismo `name` comparten una política de retry. |
 | `config` | `String` | `default` | solo anotación | Configuración con nombre de la que partir. |
+| `locked` | `boolean` | `false` | solo anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
 | `enabled` | `String` | `"true"` | `defaults.retry.enabled` | `""` (heredar), `"true"` o `"false"`. |
 
 - Las duraciones son strings: `"250ms"`, `"2s"`, `"1m"`, `"PT2S"` o `"0"`. Se validan al compilar.

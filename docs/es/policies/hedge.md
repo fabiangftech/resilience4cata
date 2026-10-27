@@ -100,6 +100,7 @@ Está **activo por defecto** (10 % de las llamadas más 1 hedge por segundo, en 
 | `budgetWindow` | duración | `10s` | `defaults.hedge.budgetWindow` | Presupuesto de hedge: hasta cuándo atrás se cuentan llamadas y hedges. De `1s` a `1h`. |
 | `name` | `String` | una instancia por método | solo en la anotación | Id de instancia; los métodos con el mismo `name` comparten un hedge, y con él su presupuesto. |
 | `config` | `String` | `default` | solo en la anotación | Configuración con nombre de la que partir. |
+| `locked` | `boolean` | `false` | solo en la anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
 | `enabled` | `String` | `"true"` | `defaults.hedge.enabled` | `""` (heredar), `"true"` o `"false"`. |
 
 Cada clave existe también bajo `configs.<name>.hedge.…` e `instances.<id>.hedge.…`; ver [Configuración](../guides/configuration.md). Todavía no hay clasificador ni `maxDuration`: el `@Timeout` por intento y `maxAttempts × delay` acotan una llamada.

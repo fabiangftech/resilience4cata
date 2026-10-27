@@ -2685,6 +2685,16 @@ services are wrapped). The message suggests the closest id.
 **Fix:** use an existing instance id: the policy's `name`, or `<interface>#<method>(<parameter types>)` when
 it has none.
 
+### R4C-CFG-014
+
+**Trigger:** `config.verifyInstances(registry)` found an `instances.` override of an attribute that the
+instance's annotation sets with `locked = true` (or that a pipeline built with `.locked()` sets on its step).
+The registry kept the annotation's value and ignored the override; the message shows the configuration the
+instance uses.
+
+**Fix:** remove the key, or remove `locked = true` from the annotation if operators should be able to
+change that value. See [Locking an instance](guides/configuration.md#locking-an-instance).
+
 ## Runtime: Spring Boot integration (R4C-SPR)
 
 `resilience4cata-spring` checks the beans at startup and fails it with these codes when a bean would silently

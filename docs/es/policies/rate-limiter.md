@@ -84,6 +84,7 @@ Por dentro es GCRA, la forma "medidor" de un token bucket: todo el estado es un 
 | `maxWait` | duración | `0` (rechazar enseguida) | `defaults.rateLimiter.maxWait` | Cuánto puede esperar una llamada por su permiso. |
 | `name` | `String` | un limiter por método | solo anotación | Id de la instancia; los métodos con el mismo `name` comparten un limiter y sus permisos. |
 | `config` | `String` | `default` | solo anotación | Configuración con nombre de la que partir. |
+| `locked` | `boolean` | `false` | solo anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
 | `enabled` | `String` | `"true"` | `defaults.rateLimiter.enabled` | `""` (heredar), `"true"` o `"false"`. |
 
 Los valores por defecto difieren de los de Resilience4j (50 permisos cada 500 ns, 5 s de espera): aquí esperar es opcional, como en el bulkhead. Las claves también existen bajo `configs.<name>.` e `instances.<id>.`; ver [Configuración](../guides/configuration.md).

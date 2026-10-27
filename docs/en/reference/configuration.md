@@ -22,7 +22,7 @@ Each table lists the `defaults.<policy>.<attribute>` form. The same `<policy>.<a
 - Config and profile names are lowercase letters and digits separated by single hyphens (`slow-external`).
 - An instance id is case-sensitive. It must be in double quotes unless it is made only of letters, digits, `_` and `-`. A derived id is `<type>#<method>(<parameter types>)`, with fully qualified, erased parameter types separated by commas without spaces, for example `com.acme.CatalogClient#price(java.lang.String,int)`.
 - Every key may start with `r4c.` or `resilience4cata.`. In **system properties the prefix is required**; other system properties are ignored.
-- Some attributes exist only on annotations and have no key: `name`, `config`, `classifier`, `onExhaustedResult`, and everything on `@Fallback`.
+- Some attributes exist only on annotations and have no key: `name`, `config`, `locked`, `classifier`, `onExhaustedResult`, and everything on `@Fallback`.
 
 ## Environment variables :id=environment-variables
 
@@ -60,9 +60,9 @@ Values then combine, lowest first:
 2. `defaults.*` (and `ResilienceRegistry.Builder.*Defaults(...)` in code);
 3. `configs.<name>.*`, root of the `extends` chain first; external keys override a config of the same name registered in code, attribute by attribute;
 4. annotation attributes;
-5. `instances.<id>.*`, so operators can retune one instance without recompiling.
+5. `instances.<id>.*`, so operators can retune one instance without recompiling, except the attributes of an annotation with `locked = true`, which keep the annotation's value ([Locking an instance](../guides/configuration.md#locking-an-instance)).
 
-Everything is resolved once, when an instance is created. Nothing is reloaded afterwards. To check that every `instances.<id>` key matches an instance, call `config.verifyInstances(registry)` after wrapping your services ([R4C-CFG-013](../errors.md#r4c-cfg-013)).
+Everything is resolved once, when an instance is created. Nothing is reloaded afterwards. To check that every `instances.<id>` key matches an instance, call `config.verifyInstances(registry)` after wrapping your services ([R4C-CFG-013](../errors.md#r4c-cfg-013)); it also reports keys that a locked annotation ignores ([R4C-CFG-014](../errors.md#r4c-cfg-014)).
 
 ## Retry :id=retry
 

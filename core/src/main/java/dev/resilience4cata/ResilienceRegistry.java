@@ -59,6 +59,7 @@ public final class ResilienceRegistry {
     private static final String OVERRIDES = "overrides";
     private static final String OVERLAY_METHOD = "Overlay";
     private static final String ANNOTATION_OR_STEP = "the values set in its annotation or pipeline step";
+    private static final System.Logger LOGGER = System.getLogger(ResilienceRegistry.class.getName());
 
     private static final PolicyKind<RetryConfig, RetryConfig.Builder> RETRY_KIND =
             new PolicyKind<>(RETRY_NAME, RetryConfig::toBuilder, RetryConfig.Builder::build);
@@ -100,6 +101,8 @@ public final class ResilienceRegistry {
     private final Instances instances;
     /** {@link #onInstanceCreated} actions; read only when an instance is created, never on a call. */
     private final CopyOnWriteArrayList<Runnable> creationListeners = new CopyOnWriteArrayList<>();
+    /** {@link #lockedOverrides()}, by policy and instance id; written only when an instance is created. */
+    private final ConcurrentHashMap<String, LockedOverride> lockedOverrides = new ConcurrentHashMap<>();
 
     // java:S107: one resolved configuration set per policy kind, built once by the builder.
     @SuppressWarnings("java:S107")
@@ -155,10 +158,12 @@ public final class ResilienceRegistry {
     /**
      * Resolves one instance's configuration: the named config ({@code base}), then the annotation's or
      * pipeline step's values ({@code overrides}), then the instance's own overrides ({@code instance}).
-     * Runs once, when the instance is created.
+     * When {@code locked}, the annotation's values are applied once more at the end, so they win over
+     * the instance's overrides; an override that this changes is recorded and logged once per instance.
+     * Runs once per call site, when the instance is created.
      */
-    private static <C, B> C resolve(C base, @Nullable Consumer<B> overrides, @Nullable Consumer<B> instance,
-            PolicyKind<C, B> policy, String key, String config) {
+    private <C extends Record, B> C resolve(C base, @Nullable Consumer<B> overrides, @Nullable Consumer<B> instance,
+            boolean locked, PolicyKind<C, B> policy, String key, String config) {
         if (overrides == null && instance == null) {
             return base;
         }
@@ -169,17 +174,67 @@ public final class ResilienceRegistry {
         if (instance != null) {
             instance.accept(builder);
         }
+        boolean relock = locked && overrides != null && instance != null;
+        C requested = null;
+        if (relock) {
+            requested = buildOrNull(policy, builder);
+            overrides.accept(builder);
+        }
+        C resolved;
         try {
-            return policy.build().apply(builder);
+            resolved = policy.build().apply(builder);
         } catch (IllegalArgumentException e) {
             String kind = policy.name();
             String named = config.isEmpty() || config.equals(DEFAULT) ? "the " + kind + " defaults"
                     : "named config '" + config + "'";
             String sources = instance == null ? ANNOTATION_OR_STEP : instanceSources(kind, key, overrides != null);
+            if (relock) {
+                sources += ", then " + ANNOTATION_OR_STEP + " again (locked)";
+            }
             throw new IllegalArgumentException(ErrorCode.INVALID_INSTANCE_CONFIG.message("Invalid " + kind
                     + " config for instance '" + key + "': " + ErrorCode.detail(e) + ". It starts from " + named
                     + " and applies " + sources + "; fix the value there so that the combination is valid."), e);
         }
+        if (relock && !resolved.equals(requested)) {
+            lockedOverride(policy.name(), key, resolved, requested);
+        }
+        return resolved;
+    }
+
+    /** The configuration a builder holds now, or {@code null} if it is invalid. */
+    private static <C, B> @Nullable C buildOrNull(PolicyKind<C, B> policy, B builder) {
+        try {
+            return policy.build().apply(builder);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /** Records that a locked instance ignored some of its per-instance overrides; logs it the first time. */
+    private void lockedOverride(String policy, String key, Record kept, @Nullable Record requested) {
+        LockedOverride override = new LockedOverride(policy, key, kept);
+        if (lockedOverrides.putIfAbsent(policy + '\u0000' + key, override) == null) {
+            LOGGER.log(System.Logger.Level.WARNING, () -> "resilience4cata: the " + policy + " instance '" + key
+                    + "' is locked (locked = true on its annotation), so the values its annotation sets win over its"
+                    + " per-instance overrides (" + policy + "Instance(...) or instances.<id>." + policy + ".*),"
+                    + " and some of those overrides were ignored. Kept: " + kept + (requested == null
+                            ? "; the overrides alone would give an invalid configuration."
+                            : "; the overrides would have given: " + requested + ".")
+                    + " Remove the overrides of the locked values, or remove locked = true.");
+        }
+    }
+
+    /**
+     * Returns the per-instance overrides that a locked annotation ({@code locked = true}) made ineffective, at
+     * least in part, among the instances created so far: one entry per instance, sorted by policy and id.
+     * {@code ResilienceConfig.verifyInstances} reports them key by key. Off the call path.
+     *
+     * @return the locked instances whose per-instance overrides were partly ignored
+     */
+    public List<LockedOverride> lockedOverrides() {
+        return lockedOverrides.values().stream()
+                .sorted(Comparator.comparing(LockedOverride::policy).thenComparing(LockedOverride::instance))
+                .toList();
     }
 
     /** Where an instance's values come from, for a message, when it has per-instance overrides. */
@@ -309,8 +364,26 @@ public final class ResilienceRegistry {
      */
     public RetryPolicy retryPolicy(String instanceId, String name, String config,
             @Nullable Consumer<RetryConfig.Builder> overrides) {
+        return retryPolicy(instanceId, name, config, overrides, false);
+    }
+
+    /**
+     * Returns the retry policy for one call site, creating it on first use. Used by generated code;
+     * not intended to be called directly.
+     *
+     * @param instanceId derived id of the call site, used when {@code name} is empty
+     * @param name explicit instance name from the annotation, or {@code ""}
+     * @param config named configuration to start from, or {@code ""}
+     * @param overrides values set in the annotations, or {@code null}
+     * @param locked {@code locked = true} on the annotation: the values set in {@code overrides} win over
+     *     the instance's per-instance overrides
+     * @return the policy
+     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
+     */
+    public RetryPolicy retryPolicy(String instanceId, String name, String config,
+            @Nullable Consumer<RetryConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
-        RetryConfig resolved = resolve(retryConfig(config), overrides, instances.retry().get(key), RETRY_KIND, key, config);
+        RetryConfig resolved = resolve(retryConfig(config), overrides, instances.retry().get(key), locked, RETRY_KIND, key, config);
         RetryPolicy policy = instance(retries, key, k -> new RetryPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw conflict("Retry instance", key, policy.config(), resolved);
@@ -332,8 +405,27 @@ public final class ResilienceRegistry {
      */
     public HedgePolicy hedgePolicy(String instanceId, String name, String config,
             @Nullable Consumer<HedgeConfig.Builder> overrides) {
+        return hedgePolicy(instanceId, name, config, overrides, false);
+    }
+
+    /**
+     * Returns the hedge policy for one call site, creating it on first use. Used by generated code;
+     * not intended to be called directly. Call sites with the same {@code name} share the instance, and so
+     * its hedge budget.
+     *
+     * @param instanceId derived id of the call site, used when {@code name} is empty
+     * @param name explicit instance name from the annotation, or {@code ""}
+     * @param config named configuration to start from, or {@code ""}
+     * @param overrides values set in the annotations, or {@code null}
+     * @param locked {@code locked = true} on the annotation: the values set in {@code overrides} win over
+     *     the instance's per-instance overrides
+     * @return the policy
+     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
+     */
+    public HedgePolicy hedgePolicy(String instanceId, String name, String config,
+            @Nullable Consumer<HedgeConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
-        HedgeConfig resolved = resolve(hedgeConfig(config), overrides, instances.hedge().get(key), HEDGE_KIND, key, config);
+        HedgeConfig resolved = resolve(hedgeConfig(config), overrides, instances.hedge().get(key), locked, HEDGE_KIND, key, config);
         HedgePolicy policy = instance(hedges, key, k -> new HedgePolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw conflict("Hedge instance", key, policy.config(), resolved);
@@ -354,8 +446,26 @@ public final class ResilienceRegistry {
      */
     public CircuitBreakerPolicy circuitBreakerPolicy(String instanceId, String name, String config,
             @Nullable Consumer<CircuitBreakerConfig.Builder> overrides) {
+        return circuitBreakerPolicy(instanceId, name, config, overrides, false);
+    }
+
+    /**
+     * Returns the circuit breaker for one call site, creating it on first use. Used by generated
+     * code; not intended to be called directly.
+     *
+     * @param instanceId derived id of the call site, used when {@code name} is empty
+     * @param name explicit instance name from the annotation, or {@code ""}
+     * @param config named configuration to start from, or {@code ""}
+     * @param overrides values set in the annotations, or {@code null}
+     * @param locked {@code locked = true} on the annotation: the values set in {@code overrides} win over
+     *     the instance's per-instance overrides
+     * @return the circuit breaker
+     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
+     */
+    public CircuitBreakerPolicy circuitBreakerPolicy(String instanceId, String name, String config,
+            @Nullable Consumer<CircuitBreakerConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
-        CircuitBreakerConfig resolved = resolve(circuitBreakerConfig(config), overrides, instances.circuitBreaker().get(key), CIRCUIT_BREAKER_KIND, key, config);
+        CircuitBreakerConfig resolved = resolve(circuitBreakerConfig(config), overrides, instances.circuitBreaker().get(key), locked, CIRCUIT_BREAKER_KIND, key, config);
         CircuitBreakerPolicy policy = instance(circuitBreakers, key, k -> new CircuitBreakerPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw conflict("Circuit breaker", key, policy.config(), resolved);
@@ -376,8 +486,26 @@ public final class ResilienceRegistry {
      */
     public RateLimiterPolicy rateLimiterPolicy(String instanceId, String name, String config,
             @Nullable Consumer<RateLimiterConfig.Builder> overrides) {
+        return rateLimiterPolicy(instanceId, name, config, overrides, false);
+    }
+
+    /**
+     * Returns the rate limiter for one call site, creating it on first use. Used by generated code;
+     * not intended to be called directly.
+     *
+     * @param instanceId derived id of the call site, used when {@code name} is empty
+     * @param name explicit instance name from the annotation, or {@code ""}
+     * @param config named configuration to start from, or {@code ""}
+     * @param overrides values set in the annotations, or {@code null}
+     * @param locked {@code locked = true} on the annotation: the values set in {@code overrides} win over
+     *     the instance's per-instance overrides
+     * @return the rate limiter
+     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
+     */
+    public RateLimiterPolicy rateLimiterPolicy(String instanceId, String name, String config,
+            @Nullable Consumer<RateLimiterConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
-        RateLimiterConfig resolved = resolve(rateLimiterConfig(config), overrides, instances.rateLimiter().get(key), RATE_LIMITER_KIND, key, config);
+        RateLimiterConfig resolved = resolve(rateLimiterConfig(config), overrides, instances.rateLimiter().get(key), locked, RATE_LIMITER_KIND, key, config);
         RateLimiterPolicy policy = instance(rateLimiters, key, k -> new RateLimiterPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw conflict("Rate limiter", key, policy.config(), resolved);
@@ -397,8 +525,25 @@ public final class ResilienceRegistry {
      */
     public TimeoutPolicy timeoutPolicy(String instanceId, String name, String config,
             @Nullable Consumer<TimeoutConfig.Builder> overrides) {
+        return timeoutPolicy(instanceId, name, config, overrides, false);
+    }
+
+    /**
+     * Returns the timeout policy for one call site. Used by generated code; not intended to be called
+     * directly. Timeouts hold no state shared between calls, so every call site gets its own policy.
+     *
+     * @param instanceId derived id of the call site
+     * @param name unused: timeouts have no shared state; kept so that every policy has the same shape
+     * @param config named configuration to start from, or {@code ""}
+     * @param overrides values set in the annotations, or {@code null}
+     * @param locked {@code locked = true} on the annotation: the values set in {@code overrides} win over
+     *     the instance's per-instance overrides
+     * @return the policy
+     */
+    public TimeoutPolicy timeoutPolicy(String instanceId, String name, String config,
+            @Nullable Consumer<TimeoutConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
-        TimeoutConfig resolved = resolve(timeoutConfig(config), overrides, instances.timeout().get(key), TIMEOUT_KIND, key, config);
+        TimeoutConfig resolved = resolve(timeoutConfig(config), overrides, instances.timeout().get(key), locked, TIMEOUT_KIND, key, config);
         TimeoutPolicy policy = new TimeoutPolicy(key, resolved, environment);
         if (timeouts.putIfAbsent(key, policy) == null) { // only for snapshot(): the first call site with this id is shown
             instanceCreated();
@@ -450,8 +595,26 @@ public final class ResilienceRegistry {
      */
     public BulkheadPolicy bulkheadPolicy(String instanceId, String name, String config,
             @Nullable Consumer<BulkheadConfig.Builder> overrides) {
+        return bulkheadPolicy(instanceId, name, config, overrides, false);
+    }
+
+    /**
+     * Returns the bulkhead for one call site, creating it on first use. Used by generated code; not
+     * intended to be called directly.
+     *
+     * @param instanceId derived id of the call site, used when {@code name} is empty
+     * @param name explicit instance name from the annotation, or {@code ""}
+     * @param config named configuration to start from, or {@code ""}
+     * @param overrides values set in the annotations, or {@code null}
+     * @param locked {@code locked = true} on the annotation: the values set in {@code overrides} win over
+     *     the instance's per-instance overrides
+     * @return the bulkhead
+     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
+     */
+    public BulkheadPolicy bulkheadPolicy(String instanceId, String name, String config,
+            @Nullable Consumer<BulkheadConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
-        BulkheadConfig resolved = resolve(bulkheadConfig(config), overrides, instances.bulkhead().get(key), BULKHEAD_KIND, key, config);
+        BulkheadConfig resolved = resolve(bulkheadConfig(config), overrides, instances.bulkhead().get(key), locked, BULKHEAD_KIND, key, config);
         BulkheadPolicy policy = instance(bulkheads, key, k -> new BulkheadPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {
             throw conflict("Bulkhead", key, policy.config(), resolved);
@@ -487,8 +650,26 @@ public final class ResilienceRegistry {
      */
     public AdaptiveLimitPolicy adaptiveLimitPolicy(String instanceId, String name, String config,
             @Nullable Consumer<AdaptiveLimitConfig.Builder> overrides) {
+        return adaptiveLimitPolicy(instanceId, name, config, overrides, false);
+    }
+
+    /**
+     * Returns the adaptive limit for one call site, creating it on first use. Used by generated code; not
+     * intended to be called directly.
+     *
+     * @param instanceId derived id of the call site, used when {@code name} is empty
+     * @param name explicit instance name from the annotation, or {@code ""}
+     * @param config named configuration to start from, or {@code ""}
+     * @param overrides values set in the annotations, or {@code null}
+     * @param locked {@code locked = true} on the annotation: the values set in {@code overrides} win over
+     *     the instance's per-instance overrides
+     * @return the adaptive limit
+     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
+     */
+    public AdaptiveLimitPolicy adaptiveLimitPolicy(String instanceId, String name, String config,
+            @Nullable Consumer<AdaptiveLimitConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
-        AdaptiveLimitConfig resolved = resolve(adaptiveLimitConfig(config), overrides, instances.adaptiveLimit().get(key),
+        AdaptiveLimitConfig resolved = resolve(adaptiveLimitConfig(config), overrides, instances.adaptiveLimit().get(key), locked,
                 ADAPTIVE_LIMIT_KIND, key, config);
         AdaptiveLimitPolicy policy = instance(adaptiveLimits, key, k -> new AdaptiveLimitPolicy(k, resolved, environment));
         if (!policy.config().equals(resolved)) {

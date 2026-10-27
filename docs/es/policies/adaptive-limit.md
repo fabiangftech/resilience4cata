@@ -107,6 +107,7 @@ String cancel(String order);
 | `ignoreOn` | clases de excepción | ninguna | `defaults.adaptiveLimit.ignoreOn` | Fallos que nunca son muestras; ganan sobre `dropOn`. |
 | `name` | `String` | un límite por método | solo en la anotación | Id de instancia; los métodos con el mismo `name` comparten un límite y sus lugares. |
 | `config` | `String` | `default` | solo en la anotación | Configuración con nombre de la que partir. |
+| `locked` | `boolean` | `false` | solo en la anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
 | `enabled` | `String` | `"true"` | `defaults.adaptiveLimit.enabled` | `""` (heredar), `"true"` o `"false"`. |
 
 <!-- snippet: adaptive-limit-tuned -->

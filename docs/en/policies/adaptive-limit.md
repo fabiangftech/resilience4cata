@@ -107,6 +107,7 @@ String cancel(String order);
 | `ignoreOn` | exception classes | none | `defaults.adaptiveLimit.ignoreOn` | Failures that are never samples; they win over `dropOn`. |
 | `name` | `String` | one limit per method | annotation only | Instance id; methods with the same `name` share one limit and its slots. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
+| `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
 | `enabled` | `String` | `"true"` | `defaults.adaptiveLimit.enabled` | `""` (inherit), `"true"` or `"false"`. |
 
 <!-- snippet: adaptive-limit-tuned -->

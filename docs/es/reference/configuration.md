@@ -22,7 +22,7 @@ Cada tabla muestra la forma `defaults.<policy>.<attribute>`. La misma parte `<po
 - Los nombres de configuraciones y perfiles son letras minúsculas y dígitos separados por guiones simples (`slow-external`).
 - Un id de instancia distingue mayúsculas. Va entre comillas dobles salvo que tenga solo letras, dígitos, `_` y `-`. Un id derivado es `<type>#<method>(<parameter types>)`, con los tipos de parámetro totalmente calificados y borrados (erasure), separados por comas sin espacios, por ejemplo `com.acme.CatalogClient#price(java.lang.String,int)`.
 - Toda clave puede empezar con `r4c.` o `resilience4cata.`. En las **propiedades del sistema el prefijo es obligatorio**; las demás propiedades del sistema se ignoran.
-- Algunos atributos existen solo en las anotaciones y no tienen clave: `name`, `config`, `classifier`, `onExhaustedResult` y todo lo de `@Fallback`.
+- Algunos atributos existen solo en las anotaciones y no tienen clave: `name`, `config`, `locked`, `classifier`, `onExhaustedResult` y todo lo de `@Fallback`.
 
 ## Variables de entorno :id=environment-variables
 
@@ -60,9 +60,9 @@ Después los valores se combinan, de menor a mayor:
 2. `defaults.*` (y `ResilienceRegistry.Builder.*Defaults(...)` en código);
 3. `configs.<name>.*`, empezando por la raíz de la cadena `extends`; las claves externas sobrescriben, atributo por atributo, una configuración con el mismo nombre registrada en código;
 4. los atributos de las anotaciones;
-5. `instances.<id>.*`, para que operaciones pueda reajustar una instancia sin recompilar.
+5. `instances.<id>.*`, para que operaciones pueda reajustar una instancia sin recompilar, salvo los atributos de una anotación con `locked = true`, que conservan el valor de la anotación ([Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia)).
 
-Todo se resuelve una vez, cuando se crea una instancia. Después no se recarga nada. Para comprobar que cada clave `instances.<id>` corresponde a una instancia, llama a `config.verifyInstances(registry)` después de envolver tus servicios ([R4C-CFG-013](../errors.md#r4c-cfg-013)).
+Todo se resuelve una vez, cuando se crea una instancia. Después no se recarga nada. Para comprobar que cada clave `instances.<id>` corresponde a una instancia, llama a `config.verifyInstances(registry)` después de envolver tus servicios ([R4C-CFG-013](../errors.md#r4c-cfg-013)); también reporta las claves que una anotación bloqueada ignora ([R4C-CFG-014](../errors.md#r4c-cfg-014)).
 
 ## Retry :id=retry
 

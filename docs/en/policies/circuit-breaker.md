@@ -115,6 +115,7 @@ The rejection, `dev.resilience4cata.CallNotPermittedException`, is a `RuntimeExc
 | `classifier` | `Class<?>` | none | annotation only | A `Classifier<T>` that records results and exceptions as it says. Replaces `recordOn`. See [Classifiers](../guides/classifiers.md). |
 | `name` | `String` | one breaker per method | annotation only | Instance id; methods with the same `name` share one breaker. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
+| `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
 | `enabled` | `String` | `"true"` | `defaults.circuitBreaker.enabled` | `""` (inherit), `"true"` or `"false"` (starts `DISABLED`). |
 
 The defaults are Resilience4j's, except that slow-call detection is off. Config keys also accept kebab-case (`circuit-breaker.wait-in-open`) and exist under `configs.<name>.` and `instances.<id>.`; see [Configuration](../guides/configuration.md).

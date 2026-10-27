@@ -173,7 +173,7 @@ De menor a mayor, para cada atributo de cada instancia:
 2. `defaults.<policy>.*`, o `retryDefaults(...)` y similares en código.
 3. La configuración con nombre que la anotación elige con `config = "…"`: primero el `retry("<name>", ...)` del código, luego `configs.<name>.*`, atributo por atributo (la cadena de `extends` empezando por la raíz).
 4. Los atributos propios de la anotación.
-5. `instances.<id>.*`, o `retryInstance(id, ...)` y similares en código.
+5. `instances.<id>.*`, o `retryInstance(id, ...)` y similares en código, salvo los atributos de una anotación con `locked = true` ([abajo](#bloquear-una-instancia)).
 
 Así que **una anotación gana sobre una configuración con nombre**, y **una clave de instancia gana sobre la anotación**: operaciones puede ajustar un método sin recompilar. Los overrides por instancia se aplican una vez, cuando se crea la instancia.
 
@@ -192,6 +192,34 @@ El código y la configuración externa se combinan así:
 
 - `retryInstance(...)` y las demás llamadas `*Instance` hechas en el builder después de `applyTo` ganan sobre las claves externas `instances.*`.
 - `retryDefaults(...)` y las demás llamadas `*Defaults` hechas después de `applyTo` **reemplazan** los valores por defecto externos de esa política en lugar de combinarse con ellos.
+
+## Bloquear una instancia
+
+Para conservar un valor que operaciones no debe cambiar, agrega `locked = true` a la anotación. Los atributos que fija la anotación (directamente, a nivel de tipo o con un [bundle](bundles.md)) ganan entonces sobre las claves `instances.<id>.*` y las llamadas `retryInstance(...)`; los que deja sin fijar se pueden seguir sobrescribiendo:
+
+<!-- snippet: configuration-locked-client -->
+```java
+public interface PaymentsClient {
+
+    @CircuitBreaker(name = "payments", failureRateThreshold = 30, locked = true)
+    String charge(String order);
+}
+```
+
+<!-- snippet: configuration-locked -->
+```java
+Properties ops = new Properties();
+ops.setProperty("instances.payments.circuitBreaker.failureRateThreshold", "80");   // locked: ignored
+ops.setProperty("instances.payments.circuitBreaker.waitInOpen", "20s");            // not in the annotation: applied
+ResilienceConfig config = ResilienceConfig.builder().properties("ops.properties", ops).build();
+ResilienceRegistry registry = config.toRegistry();
+PaymentsClient payments = Resilient.of(PaymentsClient.class, order -> "paid", registry);
+// registry.circuitBreaker("payments").config(): failureRateThreshold 30, waitInOpen 20s
+assertThatThrownBy(() -> config.verifyInstances(registry))
+        .hasMessageContaining("[R4C-CFG-014] 'instances.payments.circuitBreaker.failureRateThreshold'");
+```
+
+Un override ignorado no pasa en silencio: el registry escribe un aviso en el log (`System.Logger`, nombre `dev.resilience4cata.ResilienceRegistry`) al crear la instancia, `config.verifyInstances(registry)` reporta cada clave ignorada con su fuente ([`R4C-CFG-014`](../errors.md#r4c-cfg-014)), y `registry.lockedOverrides()` lista las instancias afectadas. Un método puede desbloquear lo que bloquea su tipo con `locked = false`. Las configuraciones con nombre y los valores por defecto no cambian: una anotación ya gana sobre ellos. En un [pipeline](pipeline.md), `Pipeline.Builder.locked()` bloquea los valores fijados en sus pasos.
 
 ## Validación y errores
 

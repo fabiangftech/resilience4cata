@@ -6,7 +6,10 @@ import japicmp.cmp.JarArchiveComparator;
 import japicmp.cmp.JarArchiveComparatorOptions;
 import japicmp.config.Options;
 import japicmp.model.AccessModifier;
+import japicmp.model.JApiChangeStatus;
 import japicmp.model.JApiClass;
+import japicmp.model.JApiClassType;
+import japicmp.model.JApiMethod;
 import japicmp.output.markdown.MarkdownOutputGenerator;
 import java.io.File;
 import java.io.IOException;
@@ -17,6 +20,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javassist.ClassPool;
+import javassist.bytecode.AnnotationDefaultAttribute;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.RegularFileProperty;
@@ -83,6 +88,9 @@ public abstract class ApiCompatibilityWork implements WorkAction<ApiCompatibilit
             return;
         }
 
+        // javassist caches every jar it opens in the JVM-wide jar URL cache, which outlives this build in the
+        // Gradle daemon: a jar rebuilt at the same path would then be read through its stale entry.
+        ClassPool.cacheOpenedJarFile = false;
         Options options = Options.newDefault();
         options.setAccessModifier(AccessModifier.PROTECTED);
         options.setOutputOnlyModifications(true);
@@ -99,7 +107,7 @@ public abstract class ApiCompatibilityWork implements WorkAction<ApiCompatibilit
         List<JApiClass> classes = new JarArchiveComparator(JarArchiveComparatorOptions.of(options))
                 .compare(oldArchives, newArchives);
         List<String> binary = names(classes.stream().filter(c -> !c.isBinaryCompatible()).toList());
-        List<String> source = names(classes.stream().filter(c -> c.isBinaryCompatible() && !c.isSourceCompatible()).toList());
+        List<String> source = names(classes.stream().filter(c -> c.isBinaryCompatible() && sourceIncompatible(c)).toList());
 
         StringBuilder summary = new StringBuilder("# ").append(artifactId).append(": ").append(baseline)
                 .append(" → ").append(current).append("\n\n");
@@ -108,6 +116,10 @@ public abstract class ApiCompatibilityWork implements WorkAction<ApiCompatibilit
         } else {
             list(summary, "Binary incompatible (also source incompatible, as a rule)", binary);
             list(summary, "Source incompatible only", source);
+        }
+        if (classes.stream().anyMatch(c -> !c.isSourceCompatible() && !sourceIncompatible(c))) {
+            summary.append("\nAn element added to an annotation with a default value is source compatible, though"
+                    + " japicmp's report below lists it as an abstract method added.\n");
         }
         summary.append("\n## Every change\n\n").append(new MarkdownOutputGenerator(options, classes).generate());
         write(report, summary.toString());
@@ -122,6 +134,38 @@ public abstract class ApiCompatibilityWork implements WorkAction<ApiCompatibilit
             throw new GradleException(message + "\nA breaking change needs a new major version (see docs/en/releasing.md).");
         }
         LOGGER.warn("{}\nAllowed before 1.0: list it in the changelog.", message);
+    }
+
+    /**
+     * Whether {@code type} breaks source compatibility. japicmp treats an annotation like an interface, so
+     * an element added with a default value counts as an abstract method added, which breaks
+     * implementations; nobody implements an annotation, and uses that do not set the element still compile.
+     */
+    private static boolean sourceIncompatible(JApiClass type) {
+        if (type.isSourceCompatible()) {
+            return false;
+        }
+        if (!isAnnotation(type)) {
+            return true;
+        }
+        if (type.getCompatibilityChanges().stream().anyMatch(change -> !change.isSourceCompatible())) {
+            return true;
+        }
+        return type.getMethods().stream()
+                .filter(element -> element.getChangeStatus() != JApiChangeStatus.NEW || !hasDefault(element))
+                .anyMatch(element -> !element.isSourceCompatible());
+    }
+
+    private static boolean isAnnotation(JApiClass type) {
+        JApiClassType classType = type.getClassType();
+        return classType.getOldTypeOptional().orElse(null) == JApiClassType.ClassType.ANNOTATION
+                && classType.getNewTypeOptional().orElse(null) == JApiClassType.ClassType.ANNOTATION;
+    }
+
+    private static boolean hasDefault(JApiMethod element) {
+        return element.getNewMethod()
+                .map(method -> method.getMethodInfo().getAttribute(AnnotationDefaultAttribute.tag) != null)
+                .orElse(false);
     }
 
     private static List<JApiCmpArchive> archives(ConfigurableFileCollection jars, String version) {

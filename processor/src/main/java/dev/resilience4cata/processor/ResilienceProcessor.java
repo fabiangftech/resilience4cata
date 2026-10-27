@@ -481,6 +481,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String config = "";
         String classifier = null;
         boolean throwOnExhaustedResult = false;
+        boolean locked = false;
         List<String> overrides = new ArrayList<>();
         for (Map.Entry<String, AnnotationValue> entry : values.entrySet()) {
             String attribute = entry.getKey();
@@ -499,6 +500,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     }
                 }
                 case "config" -> config = (String) value;
+                case "locked" -> locked = (Boolean) value;
                 case "enabled" -> {
                     if (value.equals("true") || value.equals("false")) {
                         overrides.add("enabled(" + value + ")");
@@ -635,7 +637,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
             return null;
         }
         String instanceId = iface.getQualifiedName() + "#" + method.getSimpleName() + "(" + erasedParameters(type) + ")";
-        return new PolicyModel(instanceId, name, config, overrides, classifier, throwOnExhaustedResult);
+        // A lock with no attribute set locks nothing: the call stays the same as without it.
+        return new PolicyModel(instanceId, name, config, overrides, classifier, throwOnExhaustedResult,
+                locked && !overrides.isEmpty());
     }
 
     /**
@@ -1385,7 +1389,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 out.append("        this.").append(kind.field).append(i).append(" = ").append(registry).append('.').append(kind.registryMethod)
                         .append('(').append(literal(policy.instanceId())).append(", ").append(literal(policy.name()))
                         .append(", ").append(literal(policy.config())).append(", ").append(overrides(policy.overrides()))
-                        .append(");\n");
+                        .append(policy.locked() ? ", true" : "").append(");\n");
                 if (ownsClassifier(methods.get(i), kind, i)) {
                     out.append("        this.").append(classifierField(methods.get(i), kind, i)).append(" = new ")
                             .append(policy.classifier()).append("();\n");
@@ -2185,12 +2189,13 @@ public final class ResilienceProcessor extends AbstractProcessor {
     /**
      * {@code classifier} is the qualified name of the classifier class, or null for none.
      * {@code throwOnExhaustedResult}: {@code @Retry(onExhaustedResult = THROW)}.
+     * {@code locked}: {@code locked = true} with at least one attribute in {@code overrides}.
      */
     private record PolicyModel(String instanceId, String name, String config, List<String> overrides,
-            String classifier, boolean throwOnExhaustedResult) {
+            String classifier, boolean throwOnExhaustedResult, boolean locked) {
 
         PolicyModel(String instanceId, String name, String config, List<String> overrides, String classifier) {
-            this(instanceId, name, config, overrides, classifier, false);
+            this(instanceId, name, config, overrides, classifier, false, false);
         }
     }
 }

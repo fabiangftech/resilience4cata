@@ -83,6 +83,7 @@ flowchart TD
 | `maxWait` | duration | `0` (reject at once) | `defaults.bulkhead.maxWait` | How long a call may wait for a free slot. |
 | `name` | `String` | one bulkhead per method | annotation only | Instance id; methods with the same `name` share one bulkhead and its slots. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
+| `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
 | `enabled` | `String` | `"true"` | `defaults.bulkhead.enabled` | `""` (inherit), `"true"` or `"false"`. |
 
 The defaults are Resilience4j's. Keys exist under `configs.<name>.` and `instances.<id>.` too; see [Configuration](../guides/configuration.md).
