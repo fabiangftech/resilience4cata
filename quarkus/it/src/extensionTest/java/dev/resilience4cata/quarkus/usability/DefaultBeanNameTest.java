@@ -11,7 +11,6 @@ import io.quarkus.test.QuarkusExtensionTest;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.literal.NamedLiteral;
 import jakarta.inject.Inject;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
@@ -41,7 +40,6 @@ class DefaultBeanNameTest {
     }
 
     @Test
-    @Disabled("BUG-QK-1: a copied @Named without a value names the bean after C$Resilient, not after C")
     void theDefaultNameIsTheAnnotatedClasssName() {
         InjectableBean<?> bean = Arc.container().instance(DefaultNamedService.class).getBean();
         assertThat(bean.getName()).isEqualTo("defaultNamedService");

@@ -8,7 +8,6 @@ import dev.resilience4cata.quarkus.usability.fixtures.Profiles$Resilient;
 import io.quarkus.test.QuarkusExtensionTest;
 import jakarta.inject.Inject;
 import jakarta.validation.ConstraintViolationException;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
@@ -17,7 +16,6 @@ import org.junit.jupiter.api.extension.RegisterExtension;
  * Validation forbids marking a return value for cascaded validation twice in one hierarchy (HV000131), and the
  * generated override repeats the method's {@code @Valid}: the application does not start.
  */
-@Disabled("BUG-QK-7: the generated override copies @Valid from the return value: HV000131 at startup")
 class CascadedReturnValueTest {
 
     @RegisterExtension
