@@ -2865,6 +2865,17 @@ bean that the retried method calls; or, if one shared transaction for every atte
 `resilience4cata.micronaut.allow-retry-inside-transaction=true`. `NOT_SUPPORTED` and `NEVER` are not reported.
 The check reads the generated class file, so a native image skips it.
 
+### R4C-MN-006
+
+**Trigger:** a switch of the Micronaut integration has an invalid value, for example
+`resilience4cata.micronaut.verify-instances: strict`. The context fails to start.
+
+```text
+[R4C-MN-006] Invalid value 'strict' for resilience4cata.micronaut.verify-instances. Use fail, warn or off.
+```
+
+**Fix:** use one of the values the message lists.
+
 ## Build: Quarkus extension (R4C-QK)
 
 `resilience4cata-quarkus` checks the application while Quarkus builds it (`quarkusBuild`, dev mode, every

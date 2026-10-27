@@ -52,6 +52,7 @@ class ErrorCodeTest {
         reported.addAll(codes("R4C-MN-003", context -> { }));
         reported.addAll(codes("R4C-MN-004", context -> context.getBean(Catalog.class)));
         reported.addAll(codes("R4C-MN-005", context -> context.getBean(TransactionalLedger.class)));
+        reported.addAll(codes(Map.of("resilience4cata.micronaut.verify-instances", "strict"), context -> { }));
 
         assertThat(reported).containsExactlyInAnyOrderElementsOf(
                 Arrays.stream(ErrorCode.values()).map(ErrorCode::code).toList());
@@ -77,8 +78,13 @@ class ErrorCodeTest {
 
     /** The codes in the messages of the failure and its causes, when {@code use} runs with the broken bean present. */
     static Set<String> codes(String broken, Consumer<ApplicationContext> use) {
+        return codes(Map.of("test.broken", broken), use);
+    }
+
+    /** The codes in the messages of the failure and its causes, when {@code use} runs with these properties. */
+    static Set<String> codes(Map<String, Object> properties, Consumer<ApplicationContext> use) {
         Set<String> codes = new TreeSet<>();
-        for (String message : messages(broken, use)) {
+        for (String message : messages(properties, use)) {
             Matcher m = CODE.matcher(message);
             while (m.find()) {
                 codes.add(m.group(1));
@@ -88,13 +94,17 @@ class ErrorCodeTest {
     }
 
     private static Set<String> messages(String broken, Consumer<ApplicationContext> use) {
+        return messages(Map.of("test.broken", broken), use);
+    }
+
+    private static Set<String> messages(Map<String, Object> properties, Consumer<ApplicationContext> use) {
         Set<String> messages = new TreeSet<>();
         Throwable failure = catchThrowable(() -> {
-            try (ApplicationContext context = ApplicationContext.run(Map.of("test.broken", broken))) {
+            try (ApplicationContext context = ApplicationContext.run(properties)) {
                 use.accept(context);
             }
         });
-        assertThat(failure).as(broken).isNotNull();
+        assertThat(failure).as(properties.toString()).isNotNull();
         for (Throwable t = failure; t != null; t = t.getCause()) {
             messages.add(String.valueOf(t.getMessage()));
         }

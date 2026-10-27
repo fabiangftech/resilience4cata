@@ -1,7 +1,7 @@
 {
   "groups" : [ {
     "name" : "resilience4cata",
-    "description" : "Policy configuration, read by resilience4cata-config. See https://resilience4cata.dev/#/en/reference/configuration"
+    "description" : "Policy configuration, read by resilience4cata-config. See https://resilience4cata.dev/en/reference/configuration"
   }, {
     "name" : "resilience4cata.defaults.retry",
     "description" : "Defaults of every retry: each annotation and named config starts from them."

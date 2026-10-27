@@ -17,7 +17,6 @@ import dev.resilience4cata.spring.usability.fixtures.NameLookup;
 import dev.resilience4cata.spring.usability.fixtures.ScopedCounter;
 import dev.resilience4cata.spring.usability.fixtures.SpecialClient;
 import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -159,7 +158,6 @@ class SpringIdiomsTest {
         });
     }
 
-    @Disabled("BUG-SPR-3: down-when-open is a comma-separated list, so a derived id with several parameters is split")
     @Test
     void downWhenOpenAcceptsADerivedIdOfAMethodWithSeveralParameters() {
         String id = Charges.class.getName() + "#charge(java.lang.String,int)";

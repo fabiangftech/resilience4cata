@@ -68,7 +68,7 @@ class ConfigurationMetadataTest {
         ArrayNode hints = root.putArray("hints");
         groups.addObject().put("name", "resilience4cata")
                 .put("description", "Policy configuration, read by resilience4cata-config. See"
-                        + " https://resilience4cata.dev/#/en/reference/configuration");
+                        + " https://resilience4cata.dev/en/reference/configuration");
         Class<?> policyType = Class.forName("dev.resilience4cata.config.PolicyType");
         for (Object policy : (List<?>) get(policyType, null, "ALL")) {
             String name = (String) get(policyType, policy, "name");

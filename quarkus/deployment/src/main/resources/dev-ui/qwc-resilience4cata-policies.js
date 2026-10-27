@@ -123,7 +123,7 @@ export class QwcResilience4cataPolicies extends LitElement {
                 ['Instance', t => html`<code>${t.instance}</code>`],
                 ['Timeout', t => html`${t.timeout}`]
             ])}
-            <span class="note">Docs: <a href="https://resilience4cata.dev/#/en/guides/quarkus.md?id=dev-ui" target="_blank">resilience4cata.dev</a></span>
+            <span class="note">Docs: <a href="https://resilience4cata.dev/en/guides/quarkus#dev-ui" target="_blank">resilience4cata.dev</a></span>
         `;
     }
 

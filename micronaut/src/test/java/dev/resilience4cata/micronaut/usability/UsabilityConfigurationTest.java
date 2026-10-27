@@ -6,14 +6,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import dev.resilience4cata.ResilienceRegistry;
 import io.micronaut.context.ApplicationContext;
 import java.util.Map;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /** Configuration the way a Micronaut application writes it. */
 class UsabilityConfigurationTest {
 
     @Test
-    @Disabled("BUG-MN-3: with eager singletons, an instance key of a @Prototype or @Refreshable bean fails R4C-CFG-013")
     void eagerSingletonsDoNotRejectTheInstanceKeysOfPrototypeBeans() {
         try (ApplicationContext context = ApplicationContext.builder()
                 .properties(Map.of("test.usability", "scopes",
@@ -36,7 +34,6 @@ class UsabilityConfigurationTest {
     }
 
     @Test
-    @Disabled("BUG-MN-4: an invalid resilience4cata.micronaut.verify-instances value fails without an R4C code")
     void anInvalidSwitchValueIsReportedWithAnErrorCode() {
         assertThatThrownBy(() -> ApplicationContext.run(Map.of("resilience4cata.micronaut.verify-instances", "strict")))
                 .satisfies(e -> assertThat(messages(e)).contains("R4C-MN-", "verify-instances", "strict"));

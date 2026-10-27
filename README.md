@@ -92,7 +92,7 @@ The site at [resilience4cata.dev](https://resilience4cata.dev) is the Markdown i
 - [Configuration](docs/en/guides/configuration.md): properties files, environment variables, system properties
 - [Error reference](docs/en/errors.md): every `R4C-…` code with a wrong example and the fix
 
-The documentation is bilingual. English is the source of truth; the Spanish version has the same pages: [documentación en español](https://resilience4cata.dev/#/es/) ([inicio rápido](docs/es/start/quickstart.md)).
+The documentation is bilingual. English is the source of truth; the Spanish version has the same pages: [documentación en español](https://resilience4cata.dev/es/) ([inicio rápido](docs/es/start/quickstart.md)).
 
 ## Building from source
 

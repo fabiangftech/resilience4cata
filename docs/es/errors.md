@@ -2883,6 +2883,17 @@ bean al que llame el método reintentado; o, si se quiere a propósito una sola 
 intentos, pon `resilience4cata.micronaut.allow-retry-inside-transaction=true`. `NOT_SUPPORTED` y `NEVER` no se
 reportan. La revisión lee el archivo de clase generado, así que una imagen nativa la omite.
 
+### R4C-MN-006
+
+**Causa:** una opción de la integración con Micronaut tiene un valor inválido, por ejemplo
+`resilience4cata.micronaut.verify-instances: strict`. El contexto no arranca.
+
+```text
+[R4C-MN-006] Invalid value 'strict' for resilience4cata.micronaut.verify-instances. Use fail, warn or off.
+```
+
+**Corrección:** usa uno de los valores que indica el mensaje.
+
 ## Compilación: extensión de Quarkus (R4C-QK)
 
 `resilience4cata-quarkus` revisa la aplicación mientras Quarkus la construye (`quarkusBuild`, el modo dev, cada
