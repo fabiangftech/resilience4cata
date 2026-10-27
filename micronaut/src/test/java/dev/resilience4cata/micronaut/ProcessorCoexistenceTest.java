@@ -115,16 +115,76 @@ class ProcessorCoexistenceTest {
                 .doesNotContain("Replaces");
     }
 
+    /**
+     * Micronaut writes its configuration metadata file once per round, and a generated class is processed a round
+     * after its class: an annotated class that is itself a configuration class ({@code @EachProperty},
+     * {@code @ConfigurationProperties}) makes Micronaut warn about a second write, which fails -Werror builds. The
+     * guide's alternative, configuration in its own class and policies on an {@code @EachBean} of it, compiles
+     * cleanly.
+     */
+    @Test
+    void policiesOnAnEachBeanOfAConfigurationClassCompileWithoutWarnings() throws IOException {
+        Map<String, String> sources = Map.of("demo.BackendConfig", """
+                package demo;
+                import io.micronaut.context.annotation.EachProperty;
+                import io.micronaut.context.annotation.Parameter;
+                @EachProperty("backends")
+                public class BackendConfig {
+                    private final String name;
+                    private String url;
+                    public BackendConfig(@Parameter String name) {
+                        this.name = name;
+                    }
+                    public String getName() {
+                        return name;
+                    }
+                    public String getUrl() {
+                        return url;
+                    }
+                    public void setUrl(String url) {
+                        this.url = url;
+                    }
+                }
+                """, "demo.Backend", """
+                package demo;
+                import dev.resilience4cata.annotation.Retry;
+                import io.micronaut.context.annotation.EachBean;
+                @EachBean(BackendConfig.class)
+                public class Backend {
+                    private final BackendConfig config;
+                    public Backend(BackendConfig config) {
+                        this.config = config;
+                    }
+                    @Retry(maxAttempts = 3)
+                    public String call(String path) {
+                        return config.getUrl() + path;
+                    }
+                }
+                """);
+        for (boolean micronautFirst : List.of(true, false)) {
+            Output output = compile("each-bean-" + micronautFirst, micronautFirst, List.of("-Ar4c.inject=micronaut"),
+                    sources);
+            assertThat(output.classes()).contains("demo/$Backend$Resilient$Definition.class");
+            assertThat(output.sources().get("demo/Backend$Resilient.java"))
+                    .contains("@io.micronaut.context.annotation.EachBean(demo.BackendConfig.class)");
+        }
+    }
+
     private record Output(List<String> classes, Map<String, String> sources) {
     }
 
     private Output compile(String name, boolean micronautFirst, List<String> extraOptions) throws IOException {
+        return compile(name, micronautFirst, extraOptions, SOURCES);
+    }
+
+    private Output compile(String name, boolean micronautFirst, List<String> extraOptions, Map<String, String> sources)
+            throws IOException {
         Path dir = workDir.resolve(name);
         Path src = Files.createDirectories(dir.resolve("src"));
         Path classes = Files.createDirectories(dir.resolve("classes"));
         Path generated = Files.createDirectories(dir.resolve("generated"));
         List<Path> files = new ArrayList<>();
-        for (Map.Entry<String, String> source : SOURCES.entrySet()) {
+        for (Map.Entry<String, String> source : sources.entrySet()) {
             Path file = src.resolve(source.getKey().replace('.', '/') + ".java");
             Files.createDirectories(file.getParent());
             Files.writeString(file, source.getValue());

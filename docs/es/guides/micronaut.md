@@ -462,6 +462,11 @@ omite: se ejecuta en el build y las pruebas en la JVM.
 - Las clases anotadas necesitan `-Ar4c.inject=micronaut` para que Micronaut las cree, o un factory. Solo se deja
   fuera la definición de bean de la propia clase: los beans de subclases, los beans de la clase que crean métodos
   `@Factory` y el `@MockBean` de un test se mantienen. Las clases `@Factory` no pueden anotarse.
+- No pongas políticas en clases de configuración (`@ConfigurationProperties`, `@EachProperty`). El procesador de
+  Micronaut escribe sus metadatos de configuración una vez por ronda de compilación, y ve la subclase generada una
+  ronda después, así que avisa `Error occurred writing configuration metadata`, lo que hace fallar un build con
+  `-Werror`. Pon la configuración en su propia clase y las políticas en un bean que la reciba:
+  `@EachBean(BackendConfig.class)` da un bean protegido por cada entrada de `@EachProperty`.
 - Con clases anotadas, la AOP de Micronaut se ejecuta fuera de las políticas; un método transaccional reintentado o
   con hedge falla ([`R4C-MN-005`](../errors.md#r4c-mn-005)) salvo que se permita.
 - Los métodos que el constructor llama sobre `this` se ejecutan antes de que las políticas estén listas
