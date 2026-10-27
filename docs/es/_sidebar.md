@@ -35,6 +35,7 @@
 - [Rendimiento](/es/performance.md)
 - [Migrar desde Resilience4j](/es/migrate/from-resilience4j.md)
 - [Preguntas frecuentes](/es/faq.md)
+- [Blog](/es/blog/README.md)
 - **Proyecto**
   - [Decisiones de diseño](/es/design.md)
   - [Arquitectura](/es/architecture.md)

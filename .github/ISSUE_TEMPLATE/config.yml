@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/fabiangftech/resilience4cata/discussions
+    about: Ask how to do something, or discuss an idea before opening an issue.
+  - name: Documentation
+    url: https://resilience4cata.dev/en/
+    about: Guides, every policy, configuration keys and error codes (R4C-…).

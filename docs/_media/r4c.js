@@ -24,7 +24,7 @@
       onThisPage: 'On this page', previous: 'Previous', next: 'Next', docs: 'Docs',
       edit: 'Edit this page on GitHub', otherLang: 'Leer en español',
       system: 'System', light: 'Light', dark: 'Dark', themeLabel: 'Color theme: ',
-      nav: { docs: 'Docs', policies: 'Policies', performance: 'Performance', errors: 'Error codes' },
+      nav: { docs: 'Docs', policies: 'Policies', performance: 'Performance', errors: 'Error codes', blog: 'Blog' },
       menu: 'Navigation', skip: 'Skip to content', copy: 'Copy', copied: 'Copied'
     },
     es: {
@@ -33,7 +33,7 @@
       onThisPage: 'En esta página', previous: 'Anterior', next: 'Siguiente', docs: 'Docs',
       edit: 'Editar esta página en GitHub', otherLang: 'Read in English',
       system: 'Sistema', light: 'Claro', dark: 'Oscuro', themeLabel: 'Tema de color: ',
-      nav: { docs: 'Documentación', policies: 'Políticas', performance: 'Rendimiento', errors: 'Códigos de error' },
+      nav: { docs: 'Documentación', policies: 'Políticas', performance: 'Rendimiento', errors: 'Códigos de error', blog: 'Blog' },
       menu: 'Navegación', skip: 'Saltar al contenido', copy: 'Copiar', copied: 'Copiado'
     }
   };
@@ -501,8 +501,9 @@
     var section = /\/policies\//.test(path) ? 'policies'
       : /\/(performance|benchmarks)$/.test(path) ? 'performance'
       : /\/errors$/.test(path) ? 'errors'
+      : /\/blog\//.test(path) ? 'blog'
       : isLanding(path) ? '' : 'docs';
-    var targets = { docs: 'start/installation', policies: 'policies/', performance: 'performance', errors: 'errors' };
+    var targets = { docs: 'start/installation', policies: 'policies/', performance: 'performance', errors: 'errors', blog: 'blog/' };
     $$('.r4c-nav a').forEach(function (a) {
       var k = a.getAttribute('data-nav');
       a.textContent = L.nav[k];
