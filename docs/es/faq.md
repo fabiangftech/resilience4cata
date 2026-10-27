@@ -53,7 +53,7 @@ En el estilo de interfaz, las políticas viven en el wrapper generado; una llama
 
 ### ¿Admite tipos reactivos (`Mono`, `Flux`, `Single`)? :id=reactive
 
-No. Los métodos async deben devolver `CompletionStage<T>` o `CompletableFuture<T>`. Cualquier otro tipo de retorno se trata como síncrono: las políticas solo protegen la llamada que devuelve el objeto, no el trabajo que representa. Consulta [Métodos async](guides/async.md).
+No. Los métodos async deben devolver `CompletionStage<T>` o `CompletableFuture<T>`. Un método con anotaciones de resiliencia que devuelve un tipo reactivo (`Publisher`, `Mono`, `Flux`, `Uni`, `Multi`, los tipos de RxJava) es un error de compilación, [R4C-ASY-002](errors.md#r4c-asy-002), porque las políticas solo protegerían la construcción del pipeline, no el trabajo. Convierte a un `CompletionStage` en la implementación. Consulta [Métodos async](guides/async.md).
 
 ### ¿Funciona con virtual threads? :id=virtual-threads
 

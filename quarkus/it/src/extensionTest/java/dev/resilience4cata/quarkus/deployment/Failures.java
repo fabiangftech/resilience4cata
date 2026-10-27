@@ -4,12 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** The messages of a failure and its causes and suppressed exceptions, for assertions. */
-final class Failures {
+public final class Failures {
 
     private Failures() {
     }
 
-    static String messages(Throwable failure) {
+    public static String messages(Throwable failure) {
         List<String> messages = new ArrayList<>();
         collect(failure, messages, 0);
         return String.join("\n", messages);

@@ -8,7 +8,6 @@ import dev.resilience4cata.quarkus.usability.fixtures.Store$Resilient;
 import dev.resilience4cata.quarkus.usability.fixtures.TextStore;
 import io.quarkus.test.QuarkusExtensionTest;
 import jakarta.inject.Inject;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
@@ -26,7 +25,6 @@ class GenericInterfaceTest {
     TextStore raw;
 
     @Test
-    @Disabled("BUG-QK-3: the wrapper's bean types are raw (Store), so @Inject Store<String> gets the unprotected bean")
     void theParameterizedInterfaceGetsTheWrapper() {
         assertThat(store).isInstanceOf(Store$Resilient.class);
         raw.failNext(2);

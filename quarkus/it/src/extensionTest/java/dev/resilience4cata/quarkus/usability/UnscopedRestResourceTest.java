@@ -1,32 +1,30 @@
 package dev.resilience4cata.quarkus.usability;
 
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
+import dev.resilience4cata.quarkus.deployment.Failures;
 import dev.resilience4cata.quarkus.usability.fixtures.Flaky;
 import dev.resilience4cata.quarkus.usability.fixtures.OrdersResource;
 import dev.resilience4cata.quarkus.usability.fixtures.OrdersResource$Resilient;
 import io.quarkus.test.QuarkusExtensionTest;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
- * A Quarkus REST resource without a scope annotation, the form of most Quarkus guides: Quarkus makes it a
- * {@code @Singleton} bean by itself. Its endpoints should go through the policies.
+ * R4C-QK-007 for a Quarkus REST resource without a scope annotation, the form of most Quarkus guides (Quarkus makes it
+ * a {@code @Singleton} bean by itself).
  */
-@Disabled("BUG-QK-4: Quarkus REST serves annotated resource classes with an instance of the vetoed original class:"
-        + " the endpoints' policies silently do nothing")
 class UnscopedRestResourceTest {
 
     @RegisterExtension
     static final QuarkusExtensionTest TEST = new QuarkusExtensionTest()
-            .withApplicationRoot(jar -> jar.addClasses(Flaky.class, OrdersResource.class, OrdersResource$Resilient.class));
+            .withApplicationRoot(jar -> jar.addClasses(Flaky.class, OrdersResource.class, OrdersResource$Resilient.class))
+            .assertException(failure -> assertThat(Failures.messages(failure))
+                    .contains("[R4C-QK-007]", OrdersResource.class.getName()));
 
     @Test
-    void anEndpointIsRetried() {
-        int before = given().get("/orders/fail/2").then().statusCode(200).extract().asString().transform(Integer::parseInt);
-        given().get("/orders/42").then().statusCode(200).body(equalTo("order 42"));
-        given().get("/orders/fail/0").then().statusCode(200).body(equalTo(String.valueOf(before + 3)));
+    void theBuildFails() {
+        fail("the build should have failed");
     }
 }

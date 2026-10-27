@@ -32,6 +32,7 @@ enum ProcessorError {
     BUNDLE_CONFLICT("R4C-CMP-002", "two composed annotations set an attribute to different values"),
 
     UNSUPPORTED_ASYNC_TYPE("R4C-ASY-001", "unsupported asynchronous return type"),
+    REACTIVE_TYPE("R4C-ASY-002", "reactive return type"),
 
     HEDGE_NOT_ASYNC("R4C-HDG-001", "@Hedge on a synchronous method"),
     HEDGE_WITH_RETRY("R4C-HDG-002", "@Hedge and @Retry on the same method"),

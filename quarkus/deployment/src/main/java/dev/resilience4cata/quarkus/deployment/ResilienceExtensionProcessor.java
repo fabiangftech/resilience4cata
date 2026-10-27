@@ -36,6 +36,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import org.jboss.jandex.AnnotationInstance;
+import org.jboss.jandex.AnnotationTarget;
 import org.jboss.jandex.AnnotationTransformation;
 import org.jboss.jandex.AnnotationValue;
 import org.jboss.jandex.ClassInfo;
@@ -87,6 +88,13 @@ public class ResilienceExtensionProcessor {
     private static final DotName REST_CLIENT = DotName.createSimple("org.eclipse.microprofile.rest.client.inject.RestClient");
     private static final DotName TRANSACTIONAL = DotName.createSimple("jakarta.transaction.Transactional");
     private static final DotName OBJECT = DotName.createSimple(Object.class.getName());
+    private static final DotName PATH = DotName.createSimple("jakarta.ws.rs.Path");
+    /** ArC's lookup conditions, read by Quarkus from the bean class's own annotations in the original index. */
+    private static final List<DotName> LOOKUP_CONDITIONS = List.of(
+            DotName.createSimple("io.quarkus.arc.lookup.LookupIfProperty"),
+            DotName.createSimple("io.quarkus.arc.lookup.LookupIfProperty$List"),
+            DotName.createSimple("io.quarkus.arc.lookup.LookupUnlessProperty"),
+            DotName.createSimple("io.quarkus.arc.lookup.LookupUnlessProperty$List"));
 
     @BuildStep
     FeatureBuildItem feature() {
@@ -166,6 +174,8 @@ public class ResilienceExtensionProcessor {
         IndexView index = combined.getIndex();
         Set<String> excluded = Set.copyOf(config.beans().exclude().orElse(List.of()));
         List<String> problems = new ArrayList<>();
+        Set<String> lookups = new TreeSet<>();
+        Set<String> resources = new TreeSet<>();
         for (Map.Entry<String, ClassInfo> entry : generated.subclasses().entrySet()) {
             ClassInfo annotated = index.getClassByName(entry.getKey());
             ClassInfo subclass = entry.getValue();
@@ -175,6 +185,12 @@ public class ResilienceExtensionProcessor {
             List<String> producers = producers(annotated);
             if (!producers.isEmpty()) {
                 problems.add(entry.getKey() + " declares " + String.join(", ", producers));
+            }
+            if (hasLookupCondition(annotated)) {
+                lookups.add(entry.getKey());
+            }
+            if (isRestResource(annotated, index)) {
+                resources.add(entry.getKey());
             }
             List<AnnotationInstance> copied = new ArrayList<>();
             for (AnnotationInstance annotation : annotated.declaredAnnotations()) {
@@ -201,12 +217,82 @@ public class ResilienceExtensionProcessor {
                         .transform(context -> context.add(AnnotationInstance.create(INJECT, implicit, List.of())))));
             }
         }
+        if (!resources.isEmpty()) {
+            throw new DeploymentException(ErrorCode.REST_RESOURCE.message("REST resource classes (@Path) have"
+                    + " resilience4cata annotations: " + String.join(", ", resources) + ". Quarkus REST creates its"
+                    + " resource classes itself, so the generated subclass would never be used and the policies would"
+                    + " not run. Move the protected calls to a bean that the resource injects (an annotated class, or"
+                    + " a bean implementing an annotated interface), or protect a REST client interface instead."));
+        }
+        if (!lookups.isEmpty()) {
+            throw lookupConditions(lookups);
+        }
         if (!problems.isEmpty()) {
             throw new DeploymentException(ErrorCode.PRODUCER_ON_ANNOTATED_CLASS.message("Annotated classes declare"
                     + " producers: " + String.join("; ", problems) + ". The generated subclass replaces the class as the"
                     + " bean, and CDI producers are not inherited, so these would no longer exist. Move the producers to"
                     + " another bean, or exclude the class with quarkus.resilience4cata.beans.exclude."));
         }
+    }
+
+    /**
+     * Build-time conditions ({@code @IfBuildProfile}, {@code @IfBuildProperty} and their {@code Unless} forms, directly
+     * or through a stereotype) are read from the annotated class itself, which is vetoed anyway: a class they disable
+     * gets its generated subclass vetoed too, or both profiles' implementations would be beans.
+     */
+    @BuildStep
+    void followBuildConditions(ResilienceBuildTimeConfig config, GeneratedTypesBuildItem generated,
+            List<BuildTimeConditionBuildItem> conditions, BuildProducer<AnnotationsTransformerBuildItem> transformers) {
+        if (!config.beans().enabled()) {
+            return;
+        }
+        for (BuildTimeConditionBuildItem condition : conditions) {
+            if (condition.isEnabled() || condition.getTarget().kind() != AnnotationTarget.Kind.CLASS) {
+                continue;
+            }
+            ClassInfo subclass = generated.subclasses().get(condition.getTarget().asClass().name().toString());
+            if (subclass == null) {
+                continue;
+            }
+            DotName subclassName = subclass.name();
+            transformers.produce(new AnnotationsTransformerBuildItem(AnnotationTransformation.forClasses()
+                    .when(context -> context.declaration().asClass().name().equals(subclassName))
+                    .transform(context -> context.add(AnnotationInstance.create(VETOED, subclass, List.of())))));
+        }
+    }
+
+    private static boolean hasLookupCondition(ClassInfo type) {
+        return LOOKUP_CONDITIONS.stream().anyMatch(type::hasDeclaredAnnotation);
+    }
+
+    /** R4C-QK-006: the generated class or wrapper is the bean, and Quarkus would not apply the lookup condition to it. */
+    private static DeploymentException lookupConditions(Set<String> classes) {
+        return new DeploymentException(ErrorCode.LOOKUP_CONDITION.message("Beans protected by resilience4cata have"
+                + " lookup conditions (@LookupIfProperty, @LookupUnlessProperty): " + String.join(", ", classes) + "."
+                + " The bean the application gets is the generated subclass or wrapper, and Quarkus reads these"
+                + " conditions only on the original class, so the bean would stay resolvable whatever the property."
+                + " Use a build-time condition (@IfBuildProperty, @IfBuildProfile), which is supported, or check the"
+                + " property in the code that looks the bean up."));
+    }
+
+    /** Whether {@code type}, a superclass or an interface it implements declares {@code @Path}: a REST resource. */
+    private static boolean isRestResource(ClassInfo type, IndexView index) {
+        for (ClassInfo current = type; current != null && !current.name().equals(OBJECT);
+                current = current.superName() == null ? null : index.getClassByName(current.superName())) {
+            if (current.hasDeclaredAnnotation(PATH)) {
+                return true;
+            }
+            for (DotName name : current.interfaceNames()) {
+                ClassInfo implemented = index.getClassByName(name);
+                if (implemented != null && (implemented.hasDeclaredAnnotation(PATH)
+                        || superInterfaces(implemented, index).stream()
+                                .map(i -> index.getClassByName(DotName.createSimple(i)))
+                                .anyMatch(i -> i != null && i.hasDeclaredAnnotation(PATH)))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** Producer methods and fields declared by {@code type}. */
@@ -250,6 +336,7 @@ public class ResilienceExtensionProcessor {
         IndexView index = combined.getIndex();
         Set<String> excluded = Set.copyOf(config.beans().exclude().orElse(List.of()));
         List<String> problems = new ArrayList<>();
+        Set<String> lookups = new TreeSet<>();
         for (BeanInfo bean : phase.getContext().beans()) {
             if (!bean.isClassBean() || bean.isInterceptor() || bean.isDecorator()) {
                 continue;
@@ -270,11 +357,16 @@ public class ResilienceExtensionProcessor {
                 continue;
             }
             ClassInfo type = annotated.get(0);
+            ClassInfo implementation = index.getClassByName(bean.getBeanClass());
+            if (implementation != null && hasLookupCondition(implementation)) {
+                lookups.add(beanClass + " (implements " + type.name() + ")");
+                continue;
+            }
             List<AnnotationInstance> qualifiers = bean.getQualifiers().stream().filter(q -> !q.name().equals(ANY)).toList();
             boolean dependent = BuiltinScope.DEPENDENT.is(bean.getScope());
             BeanConfigurator<Object> wrapper = phase.getContext().configure(generated.wrappers().get(type.name().toString()).name());
             wrapper.identifier("resilience4cata-wrapper-" + bean.getIdentifier())
-                    .addTypeClosure(type.name())
+                    .addTypeClosure(beanType(bean, type))
                     .scope(dependent ? BuiltinScope.DEPENDENT.getInfo() : BuiltinScope.SINGLETON.getInfo())
                     .alternative(true)
                     .priority(wrapperPriority(bean))
@@ -311,6 +403,9 @@ public class ResilienceExtensionProcessor {
                     .addInjectionPoint(ClassType.create(REGISTRY));
             configurators.produce(new BeanConfiguratorBuildItem(wrapper));
         }
+        if (!lookups.isEmpty()) {
+            throw lookupConditions(lookups);
+        }
         if (!problems.isEmpty()) {
             throw new DeploymentException(ErrorCode.SEVERAL_INTERFACES.message("Beans implement several annotated"
                     + " interfaces that do not extend one another: " + String.join("; ", problems) + ". A bean can be"
@@ -327,6 +422,15 @@ public class ResilienceExtensionProcessor {
     static int wrapperPriority(BeanInfo bean) {
         Integer priority = bean.isAlternative() ? bean.getPriority() : null;
         return priority == null ? WRAPPER_PRIORITY : WRAPPER_PRIORITY + 1 + Math.max(0, priority);
+    }
+
+    /**
+     * The bean's own type for {@code annotated}, with its type arguments ({@code Store<String>} for a bean implementing
+     * it): with the raw name the wrapper's types would be raw, and {@code @Inject Store<String>} would not match it.
+     */
+    private static Type beanType(BeanInfo bean, ClassInfo annotated) {
+        return bean.getTypes().stream().filter(t -> t.name().equals(annotated.name())).findFirst()
+                .orElseGet(() -> ClassType.create(annotated.name()));
     }
 
     /** The annotated interfaces among {@code types} that no other of them extends. */

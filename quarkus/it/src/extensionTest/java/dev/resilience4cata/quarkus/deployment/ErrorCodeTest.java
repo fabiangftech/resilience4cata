@@ -27,7 +27,9 @@ class ErrorCodeTest {
             ErrorCode.RETRY_INSIDE_TRANSACTION, RetryInsideTransactionTest.class,
             ErrorCode.SEVERAL_INTERFACES, SeveralInterfacesTest.class,
             ErrorCode.PRODUCER_ON_ANNOTATED_CLASS, ProducerOnAnnotatedClassTest.class,
-            ErrorCode.UNPROXYABLE_ANNOTATED_CLASS, UnproxyableAnnotatedClassTest.class);
+            ErrorCode.UNPROXYABLE_ANNOTATED_CLASS, UnproxyableAnnotatedClassTest.class,
+            ErrorCode.LOOKUP_CONDITION, LookupConditionTest.class,
+            ErrorCode.REST_RESOURCE, RestResourceTest.class);
 
     @Test
     void codesAreUniqueAndWellFormed() {

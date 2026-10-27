@@ -6,8 +6,15 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y 
 
 ## [Sin publicar] :id=unreleased
 
+### Cambiado
+
+- **Los tipos de retorno reactivos son un error de compilación.** Un método con anotaciones de resiliencia que devuelve un tipo reactivo perezoso (`Flow.Publisher` o el `Publisher` de Reactive Streams, es decir `Mono` y `Flux` de Reactor; `Uni` y `Multi` de Mutiny; los tipos de RxJava) compilaba como un método síncrono, así que las políticas solo protegían la construcción del pipeline y un fallo nunca se reintentaba ni tenía timeout. Ahora es [R4C-ASY-002](errors.md#r4c-asy-002); devuelve un `CompletionStage` en su lugar (`uni.subscribeAsCompletionStage()`, `mono.toFuture()`).
+- **Quarkus: dos casos que perdían la protección sin aviso son errores de build.** Un recurso de Quarkus REST que es una clase anotada ([R4C-QK-007](errors.md#r4c-qk-007): Quarkus REST crea las clases de recursos por su cuenta, así que la subclase generada nunca atendía los endpoints), y un bean protegido con `@LookupIfProperty`/`@LookupUnlessProperty` ([R4C-QK-006](errors.md#r4c-qk-006): la condición se ignoraba).
+
 ### Corregido
 
+- **Quarkus: condiciones de build en clases anotadas.** `@IfBuildProfile`, `@UnlessBuildProfile`, `@IfBuildProperty` y `@UnlessBuildProperty` en una clase anotada se ignoraban, así que tanto la implementación de producción como la de pruebas eran beans (una inyección ambigua). Ahora la subclase generada de una clase deshabilitada también queda deshabilitada.
+- **Quarkus: interfaces anotadas genéricas.** `@Inject Store<String>` de un `Store<T>` anotado recibía el bean sin proteger, porque los tipos del bean wrapper eran raw; ahora conservan los argumentos de tipo del bean.
 - **Las clases anotadas conservan los nombres de sus parámetros.** Los overrides de una subclase generada llamaban a sus parámetros `p0`, `p1`, …, así que fallaban en las clases anotadas las funciones que leen los nombres en el método invocado: `@Cacheable(key = "#sku")` y `@EventListener(condition = "#event.urgent")` de Spring, `@PathVariable`/`@QueryValue` sin nombre explícito en controladores de Spring MVC y Micronaut, y Bean Validation, que reportaba cada violación dos veces (`p0` y el nombre real). Ahora conservan los nombres declarados; solo se renombra un parámetro llamado `java`, `dev`, como la primera parte del paquete de un fallback estático, o que empiece por `r4c$`. Un método heredado de un archivo de clase solo tiene sus nombres si esa clase se compiló con `-parameters`, como hacen los builds de Spring Boot, Micronaut y Quarkus. Los wrappers de interfaces no cambian.
 
 ## [0.8.0] - 2026-10-27 :id=0.8.0
