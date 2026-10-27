@@ -37,6 +37,8 @@ dependencies {
     testImplementation libs.spring.core.test
     testImplementation libs.jackson.databind
     testImplementation libs.snakeyaml
+    // @MockitoBean / @MockitoSpyBean in the usability tests (on their own fixtures: inline mocks retransform classes).
+    testImplementation libs.mockito.core
     testImplementation project(':micrometer')
     testImplementation project(':testkit')
     testCompileOnly project(':annotations')

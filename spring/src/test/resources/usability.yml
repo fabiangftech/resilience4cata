@@ -1,0 +1,21 @@
+# Read by ProfilesTest (spring.config.name=usability).
+resilience4cata:
+  profiles:
+    active: ${spring.profiles.active:}
+    eu:
+      defaults:
+        timeout:
+          value: 7s
+  defaults:
+    retry:
+      max-attempts: 4
+      delay: 20ms
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+resilience4cata:
+  defaults:
+    retry:
+      max-attempts: 6
