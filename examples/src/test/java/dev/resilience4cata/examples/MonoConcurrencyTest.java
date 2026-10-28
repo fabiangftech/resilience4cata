@@ -72,10 +72,17 @@ class MonoConcurrencyTest {
             open.incrementAndGet();
             // Inside from the subscription to the first signal that ends it, seen before it goes downstream (and
             // so before the policies react to it): a value, an error, or the cancel.
-            java.util.concurrent.atomic.AtomicBoolean ended = new java.util.concurrent.atomic.AtomicBoolean();
+            // A cancel can race the value or the error. The signal that comes second must not go downstream (where
+            // it frees the slot) before the first one has counted the end, or the next call would be counted first.
+            AtomicInteger ended = new AtomicInteger(); // 0 inside, 1 ending, 2 counted
             Runnable end = () -> {
-                if (ended.compareAndSet(false, true)) {
+                if (ended.compareAndSet(0, 1)) {
                     inside.decrementAndGet();
+                    ended.set(2);
+                } else {
+                    while (ended.get() != 2) {
+                        Thread.onSpinWait();
+                    }
                 }
             };
             return outcome
