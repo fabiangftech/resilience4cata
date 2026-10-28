@@ -7,7 +7,7 @@ How Resilience4j's registries, configs, decorators and Spring annotations map to
 resilience4cata covers eight policies (retry, hedge, circuit breaker, rate limiter, adaptive limit, timeout, bulkhead, fallback) for plain Java 21+, with code generated at compile time. **Stay on Resilience4j** if you need any of these, which resilience4cata does not have yet:
 
 - Spring Boot 3, CDI or AspectJ integration (resilience4cata integrates with Spring Boot 4.1+ only, [below](#spring-boot));
-- Reactor, RxJava or Kotlin coroutine operators (resilience4cata supports `CompletionStage` / `CompletableFuture` only);
+- RxJava or Kotlin coroutine operators, or Reactor's for a `Flux` (resilience4cata supports `CompletionStage`, `CompletableFuture` and, with `resilience4cata-reactor`, Reactor's `Mono`: [below](#reactor));
 - a thread-pool bulkhead, a cache, or a time limiter for arbitrary futures;
 - changing a policy's configuration at runtime (resilience4cata resolves configuration once, by design);
 - a Java version before 21.
@@ -46,7 +46,8 @@ resilience4cata covers eight policies (retry, hedge, circuit breaker, rate limit
 | `IntervalFunction.ofExponentialBackoff(…)`, `ofExponentialRandomBackoff(…)` | `backoff`, `multiplier`, `maxDelay`, `jitter` |
 | `TimeLimiter` + an executor for blocking code | `@Timeout` on the caller's thread |
 | `resilience4j-hedge`: `Hedge.of(config).decorateCompletionStage(…)` | [`@Hedge`](../policies/hedge.md) on a method that returns a `CompletableFuture`, or `Pipeline…hedge(…)` with `executeAsync` ([mapping](#map-hedge)) |
-| `ThreadPoolBulkhead`, `Cache`, Reactor/RxJava/Kotlin operators | no equivalent |
+| `mono.transformDeferred(RetryOperator.of(retry))` and the other Reactor operators, on a `Mono` | a `Mono` method with the annotations, or `mono.transform(PipelineOperator.of(pipeline))` ([below](#reactor)) |
+| `ThreadPoolBulkhead`, `Cache`, RxJava/Kotlin operators, Reactor operators on a `Flux` | no equivalent |
 
 ## Configuration mapping :id=config-mapping
 
@@ -281,6 +282,27 @@ resilience4cata:
 ```
 
 Typos fail the startup with the file and line of the key, instead of being ignored.
+
+## From resilience4j-reactor :id=reactor
+
+A `Mono` decorated with Resilience4j's operators:
+
+<!-- not-compiled: Resilience4j code -->
+```java
+Mono<Price> price = webClient.get().uri("/prices/{sku}", sku).retrieve().bodyToMono(Price.class)
+        .transformDeferred(TimeLimiterOperator.of(timeLimiter))
+        .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
+        .transformDeferred(RetryOperator.of(retry));
+```
+
+becomes, with `resilience4cata-reactor`, a `Mono` method with the annotations (`@Retry`, `@CircuitBreaker`, `@Timeout` on `Mono<Price> price(String sku)`), or, for code you cannot annotate, one operator for the whole pipeline: `.transform(PipelineOperator.of(pipeline))`. See [Project Reactor](../guides/reactor.md).
+
+| resilience4j-reactor | resilience4cata-reactor |
+|---|---|
+| one operator per policy, nested by the order of `transformDeferred` | one annotation per policy, nested in the [default order](#order) or `@PolicyOrder`; one `PipelineOperator` for a pipeline |
+| the retry subscribes to the same `Mono` again | a `Mono` method is called again for each attempt (a new `Mono`); `PipelineOperator` subscribes to the same source again, `defer(...)` builds it again |
+| `TimeLimiterOperator`: `Mono.timeout` on Reactor's parallel scheduler, armed for every subscription | `@Timeout` on the library's timer, skipped for a value that is there at subscription |
+| operators for `Flux` too | `Mono` only ([`R4C-ASY-002`](../errors.md#r4c-asy-002) for a `Flux`) |
 
 ## Step by step :id=steps
 

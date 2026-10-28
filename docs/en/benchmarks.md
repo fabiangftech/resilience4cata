@@ -404,18 +404,31 @@ Base: `67e1ebd` (0.5.0 plus docs). New: the `@AdaptiveLimit` integration. Same m
 
 The rest of the suite did not move, except `Pipeline`: a pipeline built without `adaptiveLimit` now checks one more null field per call, +0.2 ns (`pipelineRetryCircuitBreaker` 3.0 → 3.2 ns; generated code is unchanged). Four 4-thread benchmarks moved by 15–48% in the first run (`CircuitBreakerBenchmark.resilience4cataMixed`, `PipelineBenchmark.pipelineFour`, `BulkheadBenchmark.resilience4cataWaiting`, `HedgeBenchmark.resilience4cataPending`) although their code did not change; with 6 forks each the base and the new ranges overlap completely (−7% to +5%), so they were noise.
 
-## Async rate limiter without parking, Reactor support (2026-10-27, Apple M1)
+## Reactor support and the async rate limiter, 0.11.0 (2026-10-27, AWS Graviton3)
 
-`RateLimiterPolicy.reserve` (the asynchronous path) used to park for 1 ns after losing the CAS on its `tat`, like the synchronous `tryAcquire`. An asynchronous caller may be an event loop thread, which must never park, and BlockHound reported it (`MonoBlockHoundTest` in examples), so `reserve` now retries the CAS at once (`Thread.onSpinWait()` is reported by BlockHound too). `AsyncBenchmark.resilience4cataRateLimiter`, Apple M1, JDK 21, 4 forks, ns/op:
+Base: `9a26494` (0.10.0 plus docs). New: `resilience4cata-reactor` and the asynchronous rate limiter that no longer parks. Same method as above (`infra/bench.sh`, `c7g.xlarge`, 3 forks; calibration 20.45–20.48 ns on 19 machines).
 
-| Version | 1 thread | 4 threads |
-|---|---:|---:|
-| `parkNanos(1)` after a lost CAS | 47.4 | 264.5 ± 52.2 (forks 222–330) |
-| retry at once | 54.2 ± 9.0 | 661.0 ± 29.0 |
-| `onSpinWait` with exponential backoff (up to 64 spins), rejected | 52.6 ± 14.1 | 659.9 ± 16.0 |
+**`Mono` methods against resilience4j-reactor 2.4.0.** `ReactorBenchmark` is new, so it has no base. Each benchmark builds the protected `Mono` and subscribes to it; Resilience4j uses its Reactor operators with `transformDeferred` and the settings of `AsyncBenchmark` (fairness notes in the benchmark's Javadoc). The source is `Mono.just` (the value is there at subscription), or for `*Pending` a `Sinks.One` filled right after subscribing, so that every layer waits. ns/op and B/op, 1 / 4 threads; bytes are the typical fork (see the note below):
 
-- **One thread does not change:** the CAS never fails there; the difference is within the error.
-- **Four threads saturating one limiter cost 2.5 times more.** Parking took the losers out of the fight for the cache line and for macOS's contended `System.nanoTime()`; nothing that keeps the thread running did the same. Bytes per call are unchanged (48 B). Not yet measured on Graviton (`infra/bench.sh`); the synchronous path still parks.
+| Benchmark | resilience4cata, ns/op | Resilience4j, ns/op | resilience4cata, B/op | Resilience4j, B/op |
+|---|---:|---:|---:|---:|
+| no policy (`baseline`) | 52.4 / 53.1 | — | 88 | — |
+| circuit breaker | **130.2 / 118.8** | 246.4 / 1378.7 | 200 | 248 |
+| retry, first attempt succeeds | **127.8 / 139.0** | 726.2 / 734.1 | 200 | 1000 |
+| timeout | **105.2 / 105.3** | 3165.5 / 6229.7 | 176 | 1344 |
+| bulkhead | **144.1 / 621.7** | 157.5 / 683.7 | 200 | 200 |
+| rate limiter | **166.5 / 351.6** | 184.2 / 659.3 | 200 | 240 / 195 |
+| retry + breaker + timeout + bulkhead | **227.3 / 587.7** | 4337.8 / 5598.1 | 368 | 2624 |
+| same stack, `PipelineOperator` | 251.0 / 606.2 | (the same Resilience4j stack) | 448 | — |
+| no policy, pending (`baselinePending`) | 152.7 / 154.3 | — | 168 | — |
+| timeout, pending | **441.0 / 560.5** | 3725.1 / 6332.8 | 480 | 1787 |
+| stack, pending | **703.1 / 935.5** | 4394.8 / 6513.9 | 912 | 2704 |
+
+- **Every pair is faster, on one thread and four.** The gaps: 1.9× (breaker, one thread) to 11.6× (breaker, four threads), 5.7× for the retry, 19× for the stack on one thread. The bulkhead is the closest: 9% on one thread, and within the error with four (621.7 ± 107.6 vs 683.7 ± 38.0), where both pay for one shared counter.
+- **The timeout:** a value that is there at subscription cannot miss its deadline, so `@Timeout` arms no timer for it (105 ns); Resilience4j's `TimeLimiterOperator` is `Mono.timeout`, which schedules a task on Reactor's parallel scheduler for every subscription. With a pending value both arm a timer, and resilience4cata stays 8.4× (one thread) and 11.3× (four) faster.
+- **Bytes per call, beyond the 88 B of subscribing:** one policy around a constant `Mono` costs 112 B (the method's `Mono` and its lambda, the subscription that delivers the value, the call lambda, the policy's future, the constant's completed future); its value is read without subscribing, as Reactor's own operators do. These objects are scalar-replaced in some forks and not in others: the same benchmark measured 200 B in one fork and 224–280 B in another, so the allocation gate's budgets are the highest fork, not these typical values.
+
+**The asynchronous rate limiter no longer parks.** `RateLimiterPolicy.reserve` used to park for 1 ns after losing the CAS on its `tat`, like the synchronous `tryAcquire`. An asynchronous caller may be an event loop thread, which must never park, and BlockHound reported it (`MonoBlockHoundTest` in examples), so `reserve` now retries the CAS at once (`Thread.onSpinWait()` is reported by BlockHound too). `AsyncBenchmark.resilience4cataRateLimiter`, base → new: 67.1 → 66.9 ns on one thread, 277.7 ± 0.6 → 297.2 ± 28.1 ns with four (+7%); 48 B either way. The other `AsyncBenchmark` methods measured did not move (circuit breaker 25.0 → 24.9 / 25.6 → 25.6, stack 123.6 → 123.4 / 589.0 → 558.0). On Apple M1 (JDK 21, 4 forks) the same change cost much more under contention, 264.5 ± 52.2 → 661.0 ± 29.0 ns with four threads, where parking also took the losers away from macOS's contended `System.nanoTime()`; an exponential `onSpinWait` backoff (up to 64 spins) measured the same 659.9 ± 16.0 ns there and was rejected. The synchronous path still parks.
 
 ## Allocation gate
 

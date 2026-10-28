@@ -58,6 +58,24 @@ Leyendo la tabla con honestidad:
 
 - Un `Pipeline` cuyo único call site `call.call()` ya vio otros cinco pipelines midió **7.9 ns** en lugar de 2.9 ns: con muchos pipelines en una aplicación, ese call site se vuelve megamórfico. El código generado tiene un call site por método y no paga esto.
 
+### Métodos Mono (Project Reactor) :id=reactor
+
+> [!MEASURED]
+> AWS `c7g.xlarge` (Graviton3), JDK 21, contra los operadores de resilience4j-reactor 2.4.0 con la misma configuración, todas las llamadas funcionan. De [Soporte de Reactor (2026-10-27, AWS Graviton3)](benchmarks.md#soporte-de-reactor-y-el-rate-limiter-async-0110-2026-10-27-aws-graviton3).
+
+| Escenario | Hilos | resilience4cata | Resilience4j 2.4.0 |
+|---|---:|---:|---:|
+| Circuit breaker | 1 | **130 ns**, 200 B | 246 ns, 248 B |
+| Circuit breaker | 4 | **119 ns**, 200 B | 1379 ns, 234 B |
+| Retry, el primer intento funciona | 1 | **128 ns**, 200 B | 726 ns, 1000 B |
+| Timeout, el valor ya está | 1 | **105 ns**, 176 B | 3166 ns, 1344 B |
+| Timeout, el valor llega después | 1 | **441 ns**, 480 B | 3725 ns, 1787 B |
+| Bulkhead | 1 | **144 ns**, 200 B | 158 ns, 200 B |
+| Retry + breaker + timeout + bulkhead | 1 | **227 ns**, 368 B | 4338 ns, 2624 B |
+
+- Suscribirse a un `Mono.just` sin políticas cuesta 52 ns y 88 B en esta máquina; cada fila lo incluye.
+- El bulkhead es el más ajustado: 9% con un hilo, dentro del error con cuatro. Los métodos `Mono` asignan memoria, como todo camino async; el gate de allocations controla sus bytes.
+
 ### Muchos servicios en una aplicación :id=many-services
 
 > [!MEASURED]
