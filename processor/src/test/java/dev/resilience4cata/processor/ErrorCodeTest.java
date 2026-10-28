@@ -54,6 +54,9 @@ class ErrorCodeTest {
     private static final Set<ProcessorError> WITHOUT_CORE =
             Set.of(ProcessorError.CLASSIFIER_MISSING_CORE, ProcessorError.HANDLER_MISSING_CORE);
 
+    /** Codes whose wrong example needs a classpath without resilience4cata-reactor. */
+    private static final Set<ProcessorError> WITHOUT_REACTOR = Set.of(ProcessorError.REACTOR_MISSING);
+
     /** Compiler options of the wrong example of codes that a processor option triggers. */
     private static final Map<ProcessorError, List<String>> OPTIONS =
             Map.of(ProcessorError.INVALID_INJECT_OPTION, List.of("-Ar4c.inject=spring"));
@@ -95,6 +98,8 @@ class ErrorCodeTest {
                     Map<String, String> wrong = unit(blocks.get(0));
                     Compilation failing = WITHOUT_CORE.contains(error)
                             ? Compilation.compileWithoutCore(dir.resolve("wrong"), wrong)
+                            : WITHOUT_REACTOR.contains(error)
+                            ? Compilation.compileWithoutReactor(dir.resolve("wrong"), wrong)
                             : OPTIONS.containsKey(error)
                             ? Compilation.compileWithOptions(dir.resolve("wrong"), wrong,
                                     OPTIONS.get(error).toArray(String[]::new))

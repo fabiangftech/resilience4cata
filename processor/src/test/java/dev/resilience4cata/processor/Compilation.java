@@ -65,13 +65,27 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
         return compile(workDir, sources, new ResilienceProcessor(), path);
     }
 
+    /**
+     * Compiles {@code sources} with the processor, on the test classpath without resilience4cata-reactor
+     * (reactor-core stays).
+     */
+    static Compilation compileWithoutReactor(Path workDir, Map<String, String> sources) {
+        String path = Stream.of(System.getProperty("java.class.path").split(File.pathSeparator))
+                .filter(entry -> !contains(Path.of(entry), "dev/resilience4cata/reactor/generated/Monos.class"))
+                .collect(Collectors.joining(File.pathSeparator));
+        return compile(workDir, sources, new ResilienceProcessor(), path);
+    }
+
     private static boolean containsCore(Path entry) {
-        String classifier = "dev/resilience4cata/Classifier.class";
+        return contains(entry, "dev/resilience4cata/Classifier.class");
+    }
+
+    private static boolean contains(Path entry, String classFile) {
         if (Files.isDirectory(entry)) {
-            return Files.exists(entry.resolve(classifier));
+            return Files.exists(entry.resolve(classFile));
         }
         try (ZipFile jar = new ZipFile(entry.toFile())) {
-            return jar.getEntry(classifier) != null;
+            return jar.getEntry(classFile) != null;
         } catch (IOException e) {
             return false;
         }

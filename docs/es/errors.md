@@ -642,10 +642,10 @@ public interface PriceClient {
 ### R4C-ASY-002
 
 **Causa:** un método anotado devuelve un tipo reactivo perezoso: un `Flow.Publisher` o un `Publisher` de Reactive
-Streams (`Mono` y `Flux` de Reactor, `Flowable` de RxJava), `Uni` o `Multi` de Mutiny, o `Single`, `Maybe`,
+Streams (`Flux` de Reactor, `Flowable` de RxJava), `Uni` o `Multi` de Mutiny, o `Single`, `Maybe`,
 `Completable` u `Observable` de RxJava. Un método así solo construye un pipeline que se ejecuta después, al
 suscribirse, así que las políticas protegerían su construcción, no el trabajo: un fallo nunca se reintentaría ni
-tendría timeout.
+tendría timeout. El `Mono` de Reactor está soportado con `resilience4cata-reactor` (ver [R4C-ASY-003](#r4c-asy-003)).
 
 **Incorrecto:**
 
@@ -662,8 +662,9 @@ public interface PriceClient {
 ```
 
 **Corrección:** devuelve `CompletionStage<T>` o `CompletableFuture<T>`, convirtiendo en la implementación
-(`uni.subscribeAsCompletionStage()`, `mono.toFuture()`), o mantén el tipo reactivo y usa los operadores de retry y
-timeout de la propia librería reactiva.
+(`uni.subscribeAsCompletionStage()`), o el `Mono<T>` de Reactor con `resilience4cata-reactor` (`flux.collectList()`
+para un `Flux` cuyos elementos caben en memoria), o mantén el tipo reactivo y usa los operadores de retry y timeout de
+la propia librería reactiva.
 
 ```java
 package com.acme;
@@ -674,6 +675,40 @@ import java.util.concurrent.CompletionStage;
 public interface PriceClient {
     @Retry
     CompletionStage<Integer> price(String sku);
+}
+```
+
+### R4C-ASY-003
+
+**Causa:** un método anotado devuelve el `Mono` de Reactor y `resilience4cata-reactor` no está en el classpath de
+compilación. El código generado de un método `Mono` llama a ese módulo.
+
+**Incorrecto:** con `reactor-core` pero sin `resilience4cata-reactor`:
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+import reactor.core.publisher.Mono;
+
+public interface PriceClient {
+    @Retry
+    Mono<Integer> price(String sku);
+}
+```
+
+**Corrección:** agrega `dev.resilience4cata:resilience4cata-reactor` (la misma versión que los demás módulos) a las
+dependencias, junto a `resilience4cata-core`. El código queda igual.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+import reactor.core.publisher.Mono;
+
+public interface PriceClient {
+    @Retry
+    Mono<Integer> price(String sku);
 }
 ```
 

@@ -72,6 +72,10 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private static final String DELEGATE = "this.delegate";
     private static final String OBJECT = "java.lang.Object";
     private static final String COMPLETION_STAGE = "java.util.concurrent.CompletionStage";
+    /** Methods that return it are asynchronous, like stages, when resilience4cata-reactor provides {@link #MONOS}. */
+    private static final String MONO = "reactor.core.publisher.Mono";
+    /** What generated {@code Mono} methods call: present only with resilience4cata-reactor on the class path. */
+    private static final String MONOS = "dev.resilience4cata.reactor.generated.Monos";
     /**
      * Lazy reactive types: the method only builds a pipeline that runs when subscribed, so policies around the call
      * would protect the building, not the work. Checked when present on the classpath.
@@ -335,9 +339,16 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     typeLevel.get(Kind.FALLBACK), method).isPresent();
             valid &= checkHedge(iface, method, type, asyncResult, typeLevel);
             if (annotated && asyncResult != null && asyncResult.getKind() == TypeKind.NONE) {
-                error(method, ProcessorError.UNSUPPORTED_ASYNC_TYPE, "An asynchronous method must return CompletionStage<T> or CompletableFuture<T>, where T"
-                        + " may also be ? or ? extends X (not ? super X), to use resilience annotations; it returns "
-                        + TypePrinter.print(type.getReturnType()) + ".");
+                error(method, ProcessorError.UNSUPPORTED_ASYNC_TYPE, "An asynchronous method must return CompletionStage<T> or CompletableFuture<T>"
+                        + " (or Mono<T>, with resilience4cata-reactor), where T may also be ? or ? extends X (not ? super X),"
+                        + " to use resilience annotations; it returns " + TypePrinter.print(type.getReturnType()) + ".");
+                valid = false;
+            }
+            if (annotated && asyncResult != null && isMono(type) && elements.getTypeElement(MONOS) == null) {
+                error(method, ProcessorError.REACTOR_MISSING, "The method returns " + TypePrinter.print(type.getReturnType())
+                        + ", and Mono methods need resilience4cata-reactor on the compile class path, next to"
+                        + " resilience4cata-core: add implementation 'dev.resilience4cata:resilience4cata-reactor:<version>'"
+                        + " (Gradle) or the dependency dev.resilience4cata:resilience4cata-reactor (Maven).");
                 valid = false;
             }
             String reactive = annotated && asyncResult == null ? reactiveType(type.getReturnType()) : null;
@@ -345,8 +356,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 error(method, ProcessorError.REACTIVE_TYPE, "The method returns " + TypePrinter.print(type.getReturnType())
                         + ", a " + reactive + ": it only builds a pipeline that runs later, when subscribed, so the"
                         + " policies would protect building it, not the work. Return CompletionStage<T> or"
-                        + " CompletableFuture<T> (for example Uni.subscribeAsCompletionStage() or Mono.toFuture() in"
-                        + " the implementation), or use the reactive library's own retry and timeout operators.");
+                        + " CompletableFuture<T> (for example Uni.subscribeAsCompletionStage() in the implementation),"
+                        + " or Reactor's Mono<T> with resilience4cata-reactor (for a Flux, flux.collectList()), or use"
+                        + " the reactive library's own retry and timeout operators.");
                 valid = false;
             }
             List<Kind> layers = layers(iface, typeOrder, method, policies);
@@ -521,14 +533,15 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private TypeMirror asyncResult(ExecutableType type) {
         TypeMirror returnType = type.getReturnType();
         TypeElement completionStage = elements.getTypeElement(COMPLETION_STAGE);
-        if (returnType.getKind() != TypeKind.DECLARED
-                || !types.isAssignable(types.erasure(returnType), types.erasure(completionStage.asType()))) {
+        boolean mono = isMono(type);
+        if (returnType.getKind() != TypeKind.DECLARED || !mono
+                && !types.isAssignable(types.erasure(returnType), types.erasure(completionStage.asType()))) {
             return null;
         }
         TypeElement declared = (TypeElement) ((DeclaredType) returnType).asElement();
         List<? extends TypeMirror> arguments = ((DeclaredType) returnType).getTypeArguments();
         String name = declared.getQualifiedName().toString();
-        if ((name.equals(COMPLETION_STAGE) || name.equals("java.util.concurrent.CompletableFuture"))
+        if ((mono || name.equals(COMPLETION_STAGE) || name.equals("java.util.concurrent.CompletableFuture"))
                 && arguments.size() == 1) {
             if (arguments.get(0).getKind() != TypeKind.WILDCARD) {
                 return arguments.get(0);
@@ -540,6 +553,15 @@ public final class ResilienceProcessor extends AbstractProcessor {
             }
         }
         return types.getNoType(TypeKind.NONE);
+    }
+
+    /**
+     * True if the method returns Reactor's {@code Mono} itself (not a subclass): an asynchronous method
+     * whose result is a {@code Mono} instead of a stage. Decided by name, so it needs no Reactor here.
+     */
+    private static boolean isMono(ExecutableType type) {
+        return type.getReturnType() instanceof DeclaredType declared
+                && ((TypeElement) declared.asElement()).getQualifiedName().contentEquals(MONO);
     }
 
     /** The reactive type among {@link #REACTIVE_TYPES} that {@code returnType} is, or null. */
@@ -563,14 +585,26 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return arguments.get(0).getKind() == TypeKind.WILDCARD;
     }
 
-    /** {@code CompletionStage<? extends result>}: what a stage-returning fallback of a wildcard method may return. */
-    private TypeMirror wildcardStageOf(TypeMirror result) {
-        return types.getDeclaredType(elements.getTypeElement(COMPLETION_STAGE),
-                types.getWildcardType(result, null));
+    /**
+     * {@code CompletionStage<? extends result>} ({@code Mono<? extends result>} for a {@code Mono} method):
+     * what a stage-returning fallback of a wildcard method may return.
+     */
+    private TypeMirror wildcardStageOf(ExecutableType type, TypeMirror result) {
+        return types.getDeclaredType(stageElement(type), types.getWildcardType(result, null));
     }
 
-    private TypeMirror stageOf(TypeMirror result) {
-        return types.getDeclaredType(elements.getTypeElement(COMPLETION_STAGE), result);
+    /** {@code CompletionStage<result>}, or {@code Mono<result>} for a {@code Mono} method. */
+    private TypeMirror stageOf(ExecutableType type, TypeMirror result) {
+        return types.getDeclaredType(stageElement(type), result);
+    }
+
+    private TypeElement stageElement(ExecutableType type) {
+        return elements.getTypeElement(isMono(type) ? MONO : COMPLETION_STAGE);
+    }
+
+    /** How error messages name the asynchronous type of {@code type}'s method. */
+    private static String stageName(ExecutableType type) {
+        return isMono(type) ? "Mono" : "CompletionStage";
     }
 
     /** Validates the attributes and turns them into builder calls. Returns null after reporting errors. */
@@ -964,10 +998,10 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private Handler asyncHandler(ExecutableElement method, ExecutableType type, TypeMirror asyncResult, String label,
             TypeElement handlerClass, TypeMirror result) {
         String name = handlerClass.getQualifiedName().toString();
-        if (types.isAssignable(result, stageOf(asyncResult))) {
+        if (types.isAssignable(result, stageOf(type, asyncResult))) {
             return new Handler(name, false, false);
         }
-        if (types.isAssignable(result, wildcardStageOf(asyncResult))) {
+        if (types.isAssignable(result, wildcardStageOf(type, asyncResult))) {
             return new Handler(name, false, true);
         }
         if (types.isAssignable(result, asyncResult)) {
@@ -980,7 +1014,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return invalidNull(method, ProcessorError.HANDLER_WRONG_TYPE, label + ": " + handlerClass.getSimpleName() + " implements FallbackHandler<"
                 + TypePrinter.print(result) + ">, but " + method.getSimpleName() + " returns "
                 + TypePrinter.print(returnType) + ". Implement FallbackHandler<" + TypePrinter.print(asyncResult)
-                + "> or FallbackHandler<java.util.concurrent.CompletionStage<" + TypePrinter.print(asyncResult) + ">>.");
+                + "> or FallbackHandler<" + stageElement(type).getQualifiedName() + "<" + TypePrinter.print(asyncResult) + ">>.");
     }
 
     /** True if {@code type} is a class (not an interface, enum, record or annotation type). */
@@ -1187,14 +1221,14 @@ public final class ResilienceProcessor extends AbstractProcessor {
         boolean widens = false;
         if (asyncResult != null) {
             // An async fallback may return the value or a stage of it; it may throw anything, which fails the future.
-            returnsValue = !types.isAssignable(candidateReturn, stageOf(asyncResult));
-            if (returnsValue && types.isAssignable(candidateReturn, wildcardStageOf(asyncResult))) {
+            returnsValue = !types.isAssignable(candidateReturn, stageOf(type, asyncResult));
+            if (returnsValue && types.isAssignable(candidateReturn, wildcardStageOf(type, asyncResult))) {
                 returnsValue = false;
                 widens = true;
             }
             if (returnsValue && !types.isAssignable(candidateReturn, asyncResult)) {
                 problems.add(signature + " returns " + TypePrinter.print(candidateReturn) + ", which is neither "
-                        + TypePrinter.print(asyncResult) + " nor a CompletionStage of it.");
+                        + TypePrinter.print(asyncResult) + " nor a " + stageName(type) + " of it.");
                 return null;
             }
         } else if (returnType.getKind() == TypeKind.VOID ? candidateReturn.getKind() != TypeKind.VOID
@@ -1659,10 +1693,17 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String result = TypePrinter.print(model.asyncResult());
         String recoverTypeArguments = model.type().getTypeVariables().isEmpty() ? ""
                 : "<" + TypePrinter.join(model.type().getTypeVariables(), ", ") + ">";
+        boolean mono = isMono(model.type());
+        // A Mono method's policies run inside Monos.defer, once per subscription, with the subscriber's context,
+        // which the delegate's Mono and a fallback's Mono are subscribed with.
         String recovery = "(r4c$e, r4c$attempts) -> this." + recoverTypeArguments + "r4c$recover" + index
-                + "(r4c$e, r4c$attempts" + (args.isEmpty() ? "" : ", " + args) + ")";
-        String expression = asyncExpression(model, index,
-                isWildcardStage(model.type()) ? widen(delegateCall, result) : delegateCall, recovery);
+                + "(r4c$e, r4c$attempts" + (mono ? ", r4c$subscriberContext" : "") + (args.isEmpty() ? "" : ", " + args) + ")";
+        String delegate = mono ? monoStage(delegateCall, result)
+                : isWildcardStage(model.type()) ? widen(delegateCall, result) : delegateCall;
+        String expression = asyncExpression(model, index, delegate, recovery);
+        if (mono) {
+            expression = MONOS + ".<" + result + ">defer(r4c$subscriberContext -> " + expression + ")";
+        }
         out.append("\n    @Override\n    ").append(modifiers).append(typeVariables).append(returnType).append(' ')
                 .append(signature).append(" {\n");
         appendLines(out, List.of("return " + expression + ";"));
@@ -1672,10 +1713,17 @@ public final class ResilienceProcessor extends AbstractProcessor {
         }
         String stage = COMPLETION_STAGE + "<" + result + ">";
         out.append("\n    private ").append(typeVariables).append(stage).append(" r4c$recover").append(index)
-                .append("(java.lang.Throwable r4c$e, int r4c$attempts").append(parameters.isEmpty() ? "" : ", " + parameters)
+                .append("(java.lang.Throwable r4c$e, int r4c$attempts")
+                .append(mono ? ", reactor.util.context.ContextView r4c$subscriberContext" : "")
+                .append(parameters.isEmpty() ? "" : ", " + parameters)
                 .append(") throws java.lang.Throwable {\n");
-        appendLines(out, asyncFallbackLines(fallback, index, arguments, result));
+        appendLines(out, asyncFallbackLines(fallback, index, arguments, result, mono));
         out.append("    }\n");
+    }
+
+    /** The stage of a {@code Mono} that a delegate or a fallback returned, subscribed with the caller's context. */
+    private static String monoStage(String mono, String result) {
+        return MONOS + ".<" + result + ">stage(" + mono + ", r4c$subscriberContext)";
     }
 
     /**
@@ -1718,14 +1766,15 @@ public final class ResilienceProcessor extends AbstractProcessor {
      * {@code handles} was already checked.
      */
     private static List<String> asyncFallbackLines(FallbackModel fallback, int index, List<String> arguments,
-            String result) {
+            String result, boolean mono) {
         List<String> lines = new ArrayList<>();
         if (fallback.handler() != null) {
             lines.add("final dev.resilience4cata.FallbackContext r4c$context = this.fallback" + index
                     + ".context(r4c$e, r4c$attempts, new java.lang.Object[] {" + String.join(", ", arguments) + "});");
             String apply = "this.fallbackHandler" + index + ".apply(r4c$context)";
-            lines.add("return " + (fallback.handlerWidens() ? widen(apply, result)
-                    : asStage(apply, fallback.handlerReturnsValue())) + ";");
+            lines.add("return " + (fallback.handlerReturnsValue() ? asStage(apply, true)
+                    : mono ? monoStage(apply, result)
+                    : fallback.handlerWidens() ? widen(apply, result) : apply) + ";");
             return lines;
         }
         for (int k = 0; k < fallback.targets().size(); k++) {
@@ -1736,13 +1785,13 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     callArguments.add("r4c$e");
                 }
                 lines.add("return " + asStage(target, target.receiver() + "." + target.name() + "("
-                        + String.join(", ", callArguments) + ")", result) + ";");
+                        + String.join(", ", callArguments) + ")", result, mono) + ";");
                 return lines;
             }
             callArguments.add("r4c$f" + k);
             lines.add("if (r4c$e instanceof " + target.exceptionType() + " r4c$f" + k + ") {");
             lines.add("    return " + asStage(target, target.receiver() + "." + target.name() + "("
-                    + String.join(", ", callArguments) + ")", result) + ";");
+                    + String.join(", ", callArguments) + ")", result, mono) + ";");
             lines.add("}");
         }
         lines.add("throw r4c$e;");
@@ -1753,8 +1802,11 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return returnsValue ? "java.util.concurrent.CompletableFuture.completedFuture(" + call + ")" : call;
     }
 
-    private static String asStage(FallbackTarget target, String call, String result) {
-        return target.widens() ? widen(call, result) : asStage(call, target.returnsValue());
+    private static String asStage(FallbackTarget target, String call, String result, boolean mono) {
+        if (target.returnsValue()) {
+            return asStage(call, true);
+        }
+        return mono ? monoStage(call, result) : target.widens() ? widen(call, result) : call;
     }
 
     /** Views a {@code CompletionStage<? extends result>} as a {@code CompletionStage<result>}. */

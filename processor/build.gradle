@@ -8,6 +8,8 @@ description = 'Annotation processor: validates resilience annotations and genera
 dependencies {
     implementation project(':annotations')
     testImplementation project(':core')
+    // Mono methods: the generated code calls resilience4cata-reactor (and through it reactor-core).
+    testImplementation project(':reactor')
 }
 
 tasks.named('test') {
