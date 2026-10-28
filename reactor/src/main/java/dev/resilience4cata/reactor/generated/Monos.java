@@ -1,5 +1,6 @@
 package dev.resilience4cata.reactor.generated;
 
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
@@ -7,6 +8,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 import reactor.core.CoreSubscriber;
+import reactor.core.Fuseable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Operators;
 import reactor.util.context.Context;
@@ -61,6 +63,9 @@ public final class Monos {
             return CompletableFuture.failedFuture(new NullPointerException(
                     "A method that returns a Mono returned null instead of a Mono"));
         }
+        if (mono instanceof Fuseable.ScalarCallable<?> scalar) {
+            return scalarStage(scalar);
+        }
         StageSubscriber<T> subscriber = new StageSubscriber<>(
                 context instanceof Context full ? full : Context.of(context));
         mono.subscribe(subscriber);
@@ -70,6 +75,19 @@ public final class Monos {
             return CompletableFuture.completedFuture(subscriber.getNow(null));
         }
         return subscriber;
+    }
+
+    /**
+     * The stage of a constant {@code Mono} ({@code Mono.just}, {@code Mono.empty}): its value is read
+     * without subscribing, as Reactor's own operators do for scalar sources; there is nothing to cancel.
+     */
+    @SuppressWarnings("unchecked")
+    private static <T> CompletionStage<T> scalarStage(Fuseable.ScalarCallable<?> scalar) {
+        try {
+            return CompletableFuture.completedFuture((T) scalar.call());
+        } catch (Exception failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
     }
 
     /**
@@ -99,7 +117,13 @@ public final class Monos {
             }
             Outcome<T> outcome = new Outcome<>(actual, future);
             actual.onSubscribe(outcome);
-            future.whenComplete(outcome);
+            switch (future.state()) {
+                // Done already (a value there at subscription, a rejection): no callback to register.
+                case SUCCESS -> outcome.accept(future.resultNow(), null);
+                case FAILED -> outcome.accept(null, future.exceptionNow());
+                case CANCELLED -> outcome.accept(null, new CancellationException());
+                case RUNNING -> future.whenComplete(outcome);
+            }
         }
     }
 

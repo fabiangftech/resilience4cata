@@ -292,6 +292,47 @@ class MonosTest {
         }
     }
 
+    @Test
+    void aConstantMonoIsReadWithoutSubscribing() {
+        assertThat(Monos.stage(Mono.just("x"), Context.empty()).toCompletableFuture()).isCompletedWithValue("x");
+        assertThat(Monos.stage(Mono.empty(), Context.empty()).toCompletableFuture()).isCompletedWithValue(null);
+        // A scalar source whose value cannot be produced is a failed stage, as its subscription would fail.
+        Mono<String> broken = new BrokenScalar();
+        assertThat(Monos.stage(broken, Context.empty()).toCompletableFuture()).isCompletedExceptionally();
+        // Not scalar: a Mono.just behind an operator is subscribed to.
+        assertThat(Monos.stage(tracked(Mono.just("y")), Context.empty()).toCompletableFuture()).isCompletedWithValue("y");
+        assertThat(subscriptions).hasValue(1);
+    }
+
+    /** A constant source whose value fails. */
+    private static final class BrokenScalar extends Mono<String> implements reactor.core.Fuseable.ScalarCallable<String> {
+        @Override
+        public String call() throws Exception {
+            throw new IOException("no value");
+        }
+
+        @Override
+        public void subscribe(reactor.core.CoreSubscriber<? super String> actual) {
+            reactor.core.publisher.Operators.error(actual, new IOException("no value"));
+        }
+    }
+
+    @Test
+    void aFutureDoneAtSubscriptionIsDeliveredAtOnce() {
+        StepVerifier.create(Monos.defer(context -> CompletableFuture.completedFuture("done"))).expectNext("done")
+                .expectComplete().verify(VERIFY);
+        StepVerifier.create(Monos.defer(context -> CompletableFuture.<String>completedFuture(null))).expectComplete()
+                .verify(VERIFY);
+        StepVerifier.create(Monos.defer(context -> CompletableFuture.<String>failedFuture(new IOException("failed"))))
+                .expectErrorMessage("failed").verify(VERIFY);
+        CompletableFuture<String> cancelled = new CompletableFuture<>();
+        cancelled.cancel(true);
+        StepVerifier.create(Monos.defer(context -> cancelled))
+                .expectError(java.util.concurrent.CancellationException.class).verify(VERIFY);
+        StepVerifier.create(Monos.defer(context -> CompletableFuture.completedFuture("later")), 0).expectSubscription()
+                .expectNoEvent(Duration.ofMillis(10)).thenRequest(1).expectNext("later").expectComplete().verify(VERIFY);
+    }
+
     // ---- context
 
     @Test

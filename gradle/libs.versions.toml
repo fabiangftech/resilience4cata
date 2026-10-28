@@ -75,6 +75,7 @@ resilience4j-timelimiter = { module = "io.github.resilience4j:resilience4j-timel
 resilience4j-bulkhead = { module = "io.github.resilience4j:resilience4j-bulkhead", version.ref = "resilience4j" }
 resilience4j-ratelimiter = { module = "io.github.resilience4j:resilience4j-ratelimiter", version.ref = "resilience4j" }
 resilience4j-hedge = { module = "io.github.resilience4j:resilience4j-hedge", version.ref = "resilience4j" }
+resilience4j-reactor = { module = "io.github.resilience4j:resilience4j-reactor", version.ref = "resilience4j" }
 # Netflix concurrency-limits: only the benchmark module uses it, to compare @AdaptiveLimit with SimpleLimiter.
 concurrency-limits-core = { module = "com.netflix.concurrency-limits:concurrency-limits-core", version.ref = "concurrencyLimits" }
 reactor-bom = { module = "io.projectreactor:reactor-bom", version.ref = "reactorBom" }
