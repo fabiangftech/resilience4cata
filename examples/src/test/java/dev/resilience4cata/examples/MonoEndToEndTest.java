@@ -318,7 +318,11 @@ class MonoEndToEndTest {
 
         first.tryEmitValue("first");
         Awaiting.until(() -> seen.size() == 2);
-        assertThat(seen).containsExactly("first", "second");
+        // The slot is freed when the first attempt's Mono completes, before its value reaches the caller,
+        // and the hand-off runs the second call on another thread: either value may arrive first.
+        assertThat(seen).containsExactlyInAnyOrder("first", "second");
+        assertThat(backend.calls("bulkheadedWithWait")).isEqualTo(2);
+        Awaiting.until(() -> registry.bulkhead("mono-bulkhead-wait").concurrentCalls() == 0);
     }
 
     @Test
