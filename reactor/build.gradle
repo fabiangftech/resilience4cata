@@ -1,0 +1,42 @@
+plugins {
+    id 'r4c.java-library'
+    id 'r4c.publish'
+}
+
+description = 'Project Reactor support: annotated methods that return Mono, and Pipeline as a Mono operator.'
+
+dependencies {
+    api project(':core')
+    // Compiled against the oldest supported Reactor; the application's own, newer Reactor wins at resolution.
+    api libs.reactor.core.minimum
+
+    // `test` runs on the latest Reactor, through its BOM.
+    testImplementation platform(libs.reactor.bom)
+    testImplementation libs.reactor.core
+    testImplementation libs.reactor.test
+    testImplementation project(':testkit')
+}
+
+// `test` runs on the latest Reactor; `minimumReactorTest` runs the same tests on the oldest supported one.
+testing {
+    suites {
+        minimumReactorTest(JvmTestSuite) {
+            sources {
+                java {
+                    srcDirs = ['src/test/java']
+                }
+            }
+            dependencies {
+                implementation project()
+                implementation project(':testkit')
+                // Explicit versions, no Reactor BOM.
+                implementation libs.reactor.test.minimum
+                implementation libs.assertj
+            }
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn testing.suites.minimumReactorTest
+}

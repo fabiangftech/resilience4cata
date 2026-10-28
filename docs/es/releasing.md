@@ -13,6 +13,7 @@ Cómo se publica resilience4cata en Maven Central. Todo usa los plugins propios 
 | `resilience4cata-micrometer` | lo mismo; depende de `resilience4cata-core` y de `io.micrometer:micrometer-core` (`compile`) |
 | `resilience4cata-testkit` | lo mismo; depende de `resilience4cata-core` (`compile`) |
 | `resilience4cata-opentelemetry` | lo mismo; depende de `resilience4cata-core` y de `io.opentelemetry:opentelemetry-api` (`compile`) |
+| `resilience4cata-reactor` | lo mismo; depende de `resilience4cata-core` y de `io.projectreactor:reactor-core` (`compile`, la versión más antigua soportada, 3.6.0) |
 | `resilience4cata-junit` | lo mismo; depende de `resilience4cata-testkit` y de `org.junit.jupiter:junit-jupiter-api` 5.10.5 (`compile`) |
 | `resilience4cata-all` | jar (solo `module-info`), fuentes, un jar de Javadoc con un README (javadoc rechaza un módulo sin paquetes), POM, metadatos de módulo; depende de `core`, `annotations` y `config` (`compile`) |
 | `resilience4cata-bom` | solo POM y metadatos de módulo: restricciones sobre todos los módulos anteriores, en la misma versión |

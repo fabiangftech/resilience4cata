@@ -16,6 +16,7 @@ dependencies {
         api project(':opentelemetry')
         api project(':junit')
         api project(':micrometer')
+        api project(':reactor')
         api project(':spring')
         api project(':micronaut')
         api project(':quarkus:runtime')

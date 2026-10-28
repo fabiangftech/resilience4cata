@@ -43,6 +43,12 @@ quarkusMinimum = "3.40.1"
 # Compile-only in the quarkus extension: the health check's API, at the version of quarkusMinimum's BOM.
 microprofileHealthMinimum = "4.0.1"
 
+# The reactor module compiles against the oldest supported Reactor (reactorMinimum: never bump it with the rest,
+# .github/dependabot.yml ignores the artifacts that use it), and minimumReactorTest runs its tests on it; the other
+# tests run on reactorBom, the latest Reactor release train at least two weeks old.
+reactorBom = "2025.0.7"
+reactorMinimum = "3.6.0"
+
 # The documentation site's pre-renderer (the unpublished site module).
 commonmark = "0.30.1"
 
@@ -67,6 +73,11 @@ resilience4j-ratelimiter = { module = "io.github.resilience4j:resilience4j-ratel
 resilience4j-hedge = { module = "io.github.resilience4j:resilience4j-hedge", version.ref = "resilience4j" }
 # Netflix concurrency-limits: only the benchmark module uses it, to compare @AdaptiveLimit with SimpleLimiter.
 concurrency-limits-core = { module = "com.netflix.concurrency-limits:concurrency-limits-core", version.ref = "concurrencyLimits" }
+reactor-bom = { module = "io.projectreactor:reactor-bom", version.ref = "reactorBom" }
+reactor-core = { module = "io.projectreactor:reactor-core" }
+reactor-test = { module = "io.projectreactor:reactor-test" }
+reactor-core-minimum = { module = "io.projectreactor:reactor-core", version.ref = "reactorMinimum" }
+reactor-test-minimum = { module = "io.projectreactor:reactor-test", version.ref = "reactorMinimum" }
 micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
 opentelemetry-api = { module = "io.opentelemetry:opentelemetry-api", version.ref = "opentelemetry" }
 opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "opentelemetry" }
