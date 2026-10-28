@@ -404,6 +404,19 @@ Base: `67e1ebd` (0.5.0 plus docs). New: the `@AdaptiveLimit` integration. Same m
 
 The rest of the suite did not move, except `Pipeline`: a pipeline built without `adaptiveLimit` now checks one more null field per call, +0.2 ns (`pipelineRetryCircuitBreaker` 3.0 → 3.2 ns; generated code is unchanged). Four 4-thread benchmarks moved by 15–48% in the first run (`CircuitBreakerBenchmark.resilience4cataMixed`, `PipelineBenchmark.pipelineFour`, `BulkheadBenchmark.resilience4cataWaiting`, `HedgeBenchmark.resilience4cataPending`) although their code did not change; with 6 forks each the base and the new ranges overlap completely (−7% to +5%), so they were noise.
 
+## Async rate limiter without parking, Reactor support (2026-10-27, Apple M1)
+
+`RateLimiterPolicy.reserve` (the asynchronous path) used to park for 1 ns after losing the CAS on its `tat`, like the synchronous `tryAcquire`. An asynchronous caller may be an event loop thread, which must never park, and BlockHound reported it (`MonoBlockHoundTest` in examples), so `reserve` now retries the CAS at once (`Thread.onSpinWait()` is reported by BlockHound too). `AsyncBenchmark.resilience4cataRateLimiter`, Apple M1, JDK 21, 4 forks, ns/op:
+
+| Version | 1 thread | 4 threads |
+|---|---:|---:|
+| `parkNanos(1)` after a lost CAS | 47.4 | 264.5 ± 52.2 (forks 222–330) |
+| retry at once | 54.2 ± 9.0 | 661.0 ± 29.0 |
+| `onSpinWait` with exponential backoff (up to 64 spins), rejected | 52.6 ± 14.1 | 659.9 ± 16.0 |
+
+- **One thread does not change:** the CAS never fails there; the difference is within the error.
+- **Four threads saturating one limiter cost 2.5 times more.** Parking took the losers out of the fight for the cache line and for macOS's contended `System.nanoTime()`; nothing that keeps the thread running did the same. Bytes per call are unchanged (48 B). Not yet measured on Graviton (`infra/bench.sh`); the synchronous path still parks.
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings (`-f 1 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`, about 4 minutes) and fails if one allocates its budget + 1 B/op or more, or is missing from the results. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.

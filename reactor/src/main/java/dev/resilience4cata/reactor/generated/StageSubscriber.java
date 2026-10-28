@@ -18,7 +18,8 @@ import reactor.util.context.Context;
  *
  * <p>The subscription is cancelled exactly once, whether the cancellation comes before or after
  * {@link #onSubscribe}: both sides swap {@link #upstream} atomically, and the side that finds the other's
- * value cancels.
+ * value cancels. It is cancelled before the future completes, so the policies' callbacks (a bulkhead freeing
+ * its slot) run once the {@code Mono} is gone.
  *
  * @param <T> the value type
  */
@@ -80,9 +81,15 @@ final class StageSubscriber<T> extends CompletableFuture<T> implements CoreSubsc
         }
     }
 
+    /**
+     * Completes with the failure. A failure after this subscriber cancelled (a timeout, a hedge, a caller
+     * that gave up, racing the failure) is ignored: the call was abandoned on purpose, and Reactor's default
+     * hook would log it as an error. A failure after the {@code Mono} already ended breaks the Reactive
+     * Streams rules and goes to {@code onErrorDropped}.
+     */
     @Override
     public void onError(Throwable failure) {
-        if (!super.completeExceptionally(failure)) {
+        if (!super.completeExceptionally(failure) && UPSTREAM.getVolatile(this) != CANCELLED) {
             Operators.onErrorDropped(failure, context);
         }
     }
@@ -92,26 +99,29 @@ final class StageSubscriber<T> extends CompletableFuture<T> implements CoreSubsc
         super.complete(null);
     }
 
+    /**
+     * Cancels the subscription, then the future. In that order: completing the future runs the policies'
+     * callbacks (a bulkhead frees its slot and may let the next call in), and by then this {@code Mono}
+     * must be gone, so that a bulkhead never has more subscriptions running than slots.
+     */
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
-        boolean cancelled = super.cancel(mayInterruptIfRunning);
-        if (cancelled) {
-            cancelUpstream();
+        if (!isDone()) {
+            cancelUpstream(); // harmless if the Mono completes meanwhile: a cancel after the end does nothing
         }
-        return cancelled;
+        return super.cancel(mayInterruptIfRunning);
     }
 
     /**
      * Completes the future with {@code failure}; a {@link CancellationException} (how a hedge cancels the
-     * attempts that lost) also cancels the subscription.
+     * attempts that lost) first cancels the subscription, as {@link #cancel} does.
      */
     @Override
     public boolean completeExceptionally(Throwable failure) {
-        boolean completed = super.completeExceptionally(failure);
-        if (completed && failure instanceof CancellationException) {
+        if (failure instanceof CancellationException && !isDone()) {
             cancelUpstream();
         }
-        return completed;
+        return super.completeExceptionally(failure);
     }
 
     private void cancelUpstream() {

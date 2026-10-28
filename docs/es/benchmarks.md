@@ -404,6 +404,19 @@ Base: `67e1ebd` (0.5.0 más docs). Nueva: la integración de `@AdaptiveLimit`. M
 
 El resto de la suite no se movió, salvo `Pipeline`: un pipeline construido sin `adaptiveLimit` ahora revisa un campo nulo más por llamada, +0.2 ns (`pipelineRetryCircuitBreaker` 3.0 → 3.2 ns; el código generado no cambia). Cuatro benchmarks de 4 hilos se movieron entre 15 y 48 % en la primera corrida (`CircuitBreakerBenchmark.resilience4cataMixed`, `PipelineBenchmark.pipelineFour`, `BulkheadBenchmark.resilience4cataWaiting`, `HedgeBenchmark.resilience4cataPending`) aunque su código no cambió; con 6 forks cada uno, los rangos de base y nueva se superponen por completo (−7 % a +5 %), así que era ruido.
 
+## Rate limiter async sin estacionar hilos, soporte de Reactor (2026-10-27, Apple M1)
+
+`RateLimiterPolicy.reserve` (el camino asíncrono) estacionaba el hilo 1 ns tras perder el CAS de su `tat`, como el `tryAcquire` síncrono. Un llamador asíncrono puede ser un hilo de event loop, que nunca debe estacionarse, y BlockHound lo reportó (`MonoBlockHoundTest` en examples), así que ahora `reserve` reintenta el CAS de inmediato (BlockHound también reporta `Thread.onSpinWait()`). `AsyncBenchmark.resilience4cataRateLimiter`, Apple M1, JDK 21, 4 forks, ns/op:
+
+| Versión | 1 hilo | 4 hilos |
+|---|---:|---:|
+| `parkNanos(1)` tras perder el CAS | 47.4 | 264.5 ± 52.2 (forks 222–330) |
+| reintento inmediato | 54.2 ± 9.0 | 661.0 ± 29.0 |
+| `onSpinWait` con backoff exponencial (hasta 64 spins), descartado | 52.6 ± 14.1 | 659.9 ± 16.0 |
+
+- **Con un hilo no cambia:** ahí el CAS nunca falla; la diferencia está dentro del error.
+- **Cuatro hilos saturando un mismo limiter cuestan 2,5 veces más.** Estacionar sacaba a los perdedores de la pelea por la línea de caché y por el `System.nanoTime()` con contención de macOS; nada que mantenga el hilo corriendo logró lo mismo. Los bytes por llamada no cambian (48 B). Aún no medido en Graviton (`infra/bench.sh`); el camino síncrono sigue estacionando.
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos (`-f 1 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`, unos 4 minutos) y falla si alguno asigna su presupuesto + 1 B/op o más, o si falta en los resultados. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.

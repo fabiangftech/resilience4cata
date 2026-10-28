@@ -207,6 +207,91 @@ class MonosTest {
                 .expectComplete().verify(VERIFY);
     }
 
+    @Test
+    void aFailureIsEmittedWithoutDemand() {
+        RetryPolicy retry = retry("no-demand", 1);
+        IOException failure = new IOException("no demand needed");
+        Mono<String> mono = Monos.defer(context -> retry.executeAsync(() -> Monos.stage(Mono.<String>error(failure), context)));
+
+        StepVerifier.create(mono, 0).expectSubscription()
+                .expectErrorSatisfies(e -> assertThat(e).isSameAs(failure)).verify(VERIFY);
+    }
+
+    @Test
+    void aLaterFailureIsEmittedWithoutDemand() {
+        TimeoutPolicy timeout = timeout("no-demand-later", Duration.ofSeconds(1));
+        Sinks.One<String> sink = Sinks.one();
+        Mono<String> mono = Monos.defer(context -> timeout.executeAsync(() -> Monos.stage(sink.asMono(), context)));
+
+        StepVerifier.create(mono, 0).expectSubscription()
+                .then(() -> sink.tryEmitError(new IOException("later")))
+                .expectErrorMessage("later").verify(VERIFY);
+    }
+
+    @Test
+    void anEmptyResultCompletesWithoutDemand() {
+        RetryPolicy retry = retry("empty-no-demand", 1);
+        Mono<String> mono = Monos.defer(context -> retry.executeAsync(() -> Monos.stage(Mono.<String>empty(), context)));
+
+        StepVerifier.create(mono, 0).expectSubscription().expectComplete().verify(VERIFY);
+    }
+
+    @Test
+    void aLaterValueWaitsForDemand() {
+        TimeoutPolicy timeout = timeout("demand-later", Duration.ofSeconds(1));
+        Sinks.One<String> sink = Sinks.one();
+        Mono<String> mono = Monos.defer(context -> timeout.executeAsync(() -> Monos.stage(sink.asMono(), context)));
+
+        StepVerifier.create(mono, 0).expectSubscription()
+                .then(() -> sink.tryEmitValue("v"))
+                .expectNoEvent(Duration.ofMillis(20))
+                .thenRequest(1)
+                .expectNext("v").expectComplete().verify(VERIFY);
+    }
+
+    @Test
+    void aCallThatThrowsWhileStartingIsAnError() {
+        Mono<String> mono = Monos.defer(context -> {
+            throw new IllegalStateException("could not start");
+        });
+        StepVerifier.create(mono).expectErrorMessage("could not start").verify(VERIFY);
+    }
+
+    @Test
+    void aResultAfterTheCancelIsDiscardedOrDropped() {
+        List<Object> discarded = new CopyOnWriteArrayList<>();
+        List<Throwable> dropped = new CopyOnWriteArrayList<>();
+        reactor.core.publisher.Hooks.onErrorDropped(dropped::add);
+        try {
+            CompletableFuture<String> value = new CompletableFuture<>() {
+                @Override
+                public boolean cancel(boolean mayInterrupt) {
+                    return false; // a future that ignores the cancel and completes anyway
+                }
+            };
+            Monos.defer(context -> value).doOnDiscard(String.class, discarded::add).subscribe().dispose();
+            value.complete("late");
+            assertThat(discarded).containsExactly("late");
+
+            CompletableFuture<String> failure = new CompletableFuture<>() {
+                @Override
+                public boolean cancel(boolean mayInterrupt) {
+                    return false;
+                }
+            };
+            Monos.defer(context -> failure).subscribe(v -> { }, e -> { }).dispose();
+            failure.completeExceptionally(new IOException("late"));
+            assertThat(dropped).as("the caller gave up on purpose").isEmpty();
+
+            CompletableFuture<String> cancelled = new CompletableFuture<>();
+            Monos.defer(context -> cancelled).subscribe(v -> { }, e -> { }).dispose();
+            assertThat(cancelled).isCancelled();
+            assertThat(dropped).as("our own cancel is not reported").isEmpty();
+        } finally {
+            reactor.core.publisher.Hooks.resetOnErrorDropped();
+        }
+    }
+
     // ---- context
 
     @Test

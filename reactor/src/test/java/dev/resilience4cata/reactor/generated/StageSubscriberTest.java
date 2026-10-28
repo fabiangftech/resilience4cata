@@ -150,14 +150,43 @@ class StageSubscriberTest {
     }
 
     @Test
-    void anErrorAfterTheCancelGoesToTheErrorDroppedHook() {
+    void anErrorAfterTheCancelIsIgnored() {
         List<Throwable> dropped = new CopyOnWriteArrayList<>();
         Hooks.onErrorDropped(dropped::add);
-        IOException late = new IOException("late");
         subscriber.onSubscribe(subscription);
         subscriber.cancel(true);
+        subscriber.onError(new IOException("raced the cancel"));
+        assertThat(dropped).as("the call was abandoned on purpose").isEmpty();
+        assertThat(subscriber).isCancelled();
+    }
+
+    @Test
+    void anErrorAfterTheEndGoesToTheErrorDroppedHook() {
+        List<Throwable> dropped = new CopyOnWriteArrayList<>();
+        Hooks.onErrorDropped(dropped::add);
+        IOException late = new IOException("after the end");
+        subscriber.onSubscribe(subscription);
+        subscriber.onNext("v");
         subscriber.onError(late);
-        assertThat(dropped).containsExactly(late);
+        assertThat(dropped).as("a broken publisher").containsExactly(late);
+        assertThat(subscriber).isCompletedWithValue("v");
+    }
+
+    @Test
+    void theSubscriptionIsCancelledBeforeTheFutureCompletes() {
+        subscriber.onSubscribe(subscription);
+        java.util.concurrent.atomic.AtomicInteger cancelsSeenByCallbacks = new java.util.concurrent.atomic.AtomicInteger(-1);
+        subscriber.whenComplete((v, e) -> cancelsSeenByCallbacks.set(subscription.cancels.get()));
+        subscriber.cancel(true);
+        assertThat(cancelsSeenByCallbacks).as("a bulkhead freeing its slot sees the Mono gone").hasValue(1);
+
+        StageSubscriber<String> hedged = new StageSubscriber<>(Context.empty());
+        Recording loser = new Recording();
+        hedged.onSubscribe(loser);
+        java.util.concurrent.atomic.AtomicInteger seen = new java.util.concurrent.atomic.AtomicInteger(-1);
+        hedged.whenComplete((v, e) -> seen.set(loser.cancels.get()));
+        hedged.completeExceptionally(new HedgeCancelledException("h"));
+        assertThat(seen).hasValue(1);
     }
 
     @Test

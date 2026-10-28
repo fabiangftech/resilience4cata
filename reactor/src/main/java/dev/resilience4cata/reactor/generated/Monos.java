@@ -1,10 +1,14 @@
 package dev.resilience4cata.reactor.generated;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
+import reactor.core.CoreSubscriber;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Operators;
 import reactor.util.context.Context;
 import reactor.util.context.ContextView;
 
@@ -39,7 +43,7 @@ public final class Monos {
      * @return the method's {@code Mono}
      */
     public static <T> Mono<T> defer(Function<? super ContextView, ? extends CompletionStage<T>> call) {
-        return Mono.deferContextual(context -> Mono.fromFuture(() -> call.apply(context).toCompletableFuture(), false));
+        return Deferred.of(call);
     }
 
     /**
@@ -66,5 +70,76 @@ public final class Monos {
             return CompletableFuture.completedFuture(subscriber.getNow(null));
         }
         return subscriber;
+    }
+
+    /**
+     * The {@code Mono} of {@link #defer}. Not {@code Mono.fromFuture}: that one only looks at the future
+     * once the subscriber requests, so a subscriber that has not requested yet would never see the
+     * failure, which Reactive Streams requires (rule 1.4, checked by the TCK in {@code examples}).
+     */
+    private static final class Deferred<T> extends Mono<T> {
+        private final Function<? super ContextView, ? extends CompletionStage<T>> call;
+
+        private Deferred(Function<? super ContextView, ? extends CompletionStage<T>> call) {
+            this.call = call;
+        }
+
+        static <T> Mono<T> of(Function<? super ContextView, ? extends CompletionStage<T>> call) {
+            return onAssembly(new Deferred<>(call));
+        }
+
+        @Override
+        public void subscribe(CoreSubscriber<? super T> actual) {
+            CompletableFuture<T> future;
+            try {
+                future = call.apply(actual.currentContext()).toCompletableFuture();
+            } catch (Throwable failure) {
+                Operators.error(actual, Operators.onOperatorError(failure, actual.currentContext()));
+                return;
+            }
+            Outcome<T> outcome = new Outcome<>(actual, future);
+            actual.onSubscribe(outcome);
+            future.whenComplete(outcome);
+        }
+    }
+
+    /**
+     * Delivers the future's outcome: a failure at once (no demand needed), a value when it is requested
+     * ({@link Operators.MonoSubscriber#complete}), nothing for {@code null}. Cancelling the subscription
+     * cancels the future, and so the call through every policy.
+     */
+    private static final class Outcome<T> extends Operators.MonoSubscriber<T, T> implements BiConsumer<T, Throwable> {
+        private final CompletableFuture<T> future;
+
+        Outcome(CoreSubscriber<? super T> actual, CompletableFuture<T> future) {
+            super(actual);
+            this.future = future;
+        }
+
+        @Override
+        public void accept(@Nullable T result, @Nullable Throwable failure) {
+            if (isCancelled()) {
+                // The subscriber cancelled; the outcome (the cancel itself, or one that raced it) has nowhere to go. A
+                // value may hold a resource; a failure is ignored, as the call was abandoned on purpose.
+                if (result != null) {
+                    Operators.onDiscard(result, actual.currentContext());
+                }
+                return;
+            }
+            if (failure != null) {
+                actual.onError(failure instanceof CompletionException wrapped && wrapped.getCause() != null
+                        ? wrapped.getCause() : failure);
+            } else if (result == null) {
+                actual.onComplete();
+            } else {
+                complete(result);
+            }
+        }
+
+        @Override
+        public void cancel() {
+            super.cancel();
+            future.cancel(true);
+        }
     }
 }

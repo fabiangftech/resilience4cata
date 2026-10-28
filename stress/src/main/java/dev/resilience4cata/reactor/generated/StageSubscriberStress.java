@@ -86,11 +86,13 @@ public final class StageSubscriberStress {
     }
 
     /**
-     * A timeout's cancel races the value. Either the value won (the result, nothing cancelled or
-     * discarded), or the cancel won (cancelled once, the value discarded).
+     * A timeout's cancel races the value. Either the value won (the result, nothing discarded; the cancel,
+     * which goes up before the future completes, may still reach the Mono after its value, which does
+     * nothing), or the cancel won (cancelled once, the value discarded). Never both lost.
      */
     @JCStressTest
     @Outcome(id = "0, 0, 0", expect = ACCEPTABLE, desc = "The value won.")
+    @Outcome(id = "0, 0, 1", expect = ACCEPTABLE, desc = "The value won; the cancel reached the Mono after its value.")
     @Outcome(id = "1, 1, 1", expect = ACCEPTABLE, desc = "The cancel won: the value went to the discard hook.")
     @Outcome(id = "1, 0, .*", expect = FORBIDDEN, desc = "The value was lost.")
     @Outcome(expect = FORBIDDEN, desc = "Anything else.")

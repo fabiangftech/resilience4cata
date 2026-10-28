@@ -19,6 +19,12 @@ dependencies {
     testImplementation project(':micrometer')
     // Only for the sample scrape in docs/en/guides/micrometer.md.
     testImplementation libs.micrometer.registry.prometheus
+    // Mono methods (MonoEndToEndTest and the other Mono* tests), on the latest Reactor.
+    testImplementation project(':reactor')
+    testImplementation platform(libs.reactor.bom)
+    testImplementation libs.reactor.test
+    testImplementation libs.reactive.streams.tck
+    testImplementation libs.blockhound
     testCompileOnly project(':annotations')
     testAnnotationProcessor project(':processor')
 }
@@ -43,4 +49,25 @@ dependencies {
     jacocoAggregation project(':junit')
     jacocoAggregation project(':micrometer')
     jacocoAggregation project(':opentelemetry')
+    jacocoAggregation project(':reactor')
+}
+
+// BlockHound instruments the JVM for good (and needs a JVM flag to do so on Java 21+), so its test runs alone, in a
+// JVM of its own; `test` leaves it out.
+tasks.named('test') {
+    exclude '**/*BlockHoundTest.class'
+}
+
+def blockHoundTest = tasks.register('blockHoundTest', Test) {
+    description = 'Runs the BlockHound test: no policy blocks a non-blocking Reactor thread.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    include '**/*BlockHoundTest.class'
+    jvmArgs '-XX:+AllowRedefinitionToAddDeleteMethods'
+}
+
+tasks.named('check') {
+    dependsOn blockHoundTest
 }
