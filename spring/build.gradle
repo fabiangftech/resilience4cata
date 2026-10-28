@@ -43,6 +43,11 @@ dependencies {
     testImplementation libs.mockito.core
     testImplementation project(':micrometer')
     testImplementation project(':testkit')
+    // Mono methods in a WebFlux application (WebFluxTest) and the reactive cases of the other tests.
+    testImplementation project(':reactor')
+    testImplementation libs.spring.boot.webflux
+    testImplementation libs.spring.boot.reactor.netty
+    testImplementation libs.reactor.test
     testCompileOnly project(':annotations')
     testAnnotationProcessor project(':processor')
 }
