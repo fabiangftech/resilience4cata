@@ -62,7 +62,7 @@ class ErrorCodeTest {
     void retryInsideTransactionCanBeAllowedAndNamesOnlyJoiningPropagations() {
         Set<String> messages = messages("R4C-MN-005", context -> context.getBean(TransactionalLedger.class));
         assertThat(String.join("\n", messages)).contains("@Retry on post (REQUIRED)")
-                .contains("@Retry on postLater (REQUIRED)").doesNotContain("read");
+                .contains("@Retry on postLater (REQUIRED)").contains("@Retry on postAll (REQUIRED)").doesNotContain("read");
         try (ApplicationContext context = ApplicationContext.run(Map.of("test.broken", "R4C-MN-005",
                 "resilience4cata.micronaut.allow-retry-inside-transaction", "true"))) {
             assertThat(context.getBean(TransactionalLedger.class)).isNotNull();

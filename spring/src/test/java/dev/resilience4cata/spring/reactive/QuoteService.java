@@ -7,9 +7,10 @@ import dev.resilience4cata.annotation.Jitter;
 import dev.resilience4cata.annotation.Retry;
 import dev.resilience4cata.annotation.Timeout;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-/** An annotated class with {@code Mono} methods: Spring creates its generated subclass. */
+/** An annotated class with {@code Mono} and {@code Flux} methods: Spring creates its generated subclass. */
 @Service
 public class QuoteService {
 
@@ -39,5 +40,12 @@ public class QuoteService {
     @Bulkhead(name = "slow-quotes", maxConcurrent = 1)
     public Mono<String> slowQuote(String sku) {
         return backend.quote(sku);
+    }
+
+    @Retry(name = "ticks", maxAttempts = 3, delay = "5ms", backoff = Backoff.FIXED, jitter = Jitter.NONE)
+    @Timeout("300ms")
+    @Bulkhead(name = "ticks", maxConcurrent = 1)
+    public Flux<String> ticks(String sku) {
+        return backend.ticks(sku);
     }
 }

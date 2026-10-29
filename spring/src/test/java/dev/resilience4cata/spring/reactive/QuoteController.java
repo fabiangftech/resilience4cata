@@ -4,14 +4,16 @@ import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.CallTimeoutException;
 import java.io.IOException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-/** The endpoints: each returns the protected bean's {@code Mono} as it is. */
+/** The endpoints: each returns the protected bean's {@code Mono} or {@code Flux} as it is (streams as server-sent events). */
 @RestController
 public class QuoteController {
 
@@ -41,6 +43,16 @@ public class QuoteController {
     @GetMapping("/rates/{currency}")
     Mono<String> rate(@PathVariable String currency) {
         return rates.rate(currency);
+    }
+
+    @GetMapping(value = "/ticks/{sku}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    Flux<String> ticks(@PathVariable String sku) {
+        return quotes.ticks(sku);
+    }
+
+    @GetMapping(value = "/rate-ticks/{currency}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    Flux<String> rateTicks(@PathVariable String currency) {
+        return rates.rateTicks(currency);
     }
 
     @ExceptionHandler(CallTimeoutException.class)

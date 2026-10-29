@@ -9,14 +9,15 @@ import io.quarkus.test.QuarkusExtensionTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
-/** R4C-QK-002 for retried and hedged {@code Mono} methods of an annotated class. */
+/** R4C-QK-002 for retried and hedged {@code Mono} and {@code Flux} methods of an annotated class. */
 class ReactiveRetryInsideTransactionTest {
 
     @RegisterExtension
     static final QuarkusExtensionTest TEST = new QuarkusExtensionTest()
             .withApplicationRoot(jar -> jar.addClasses(ReactiveLedgerService.class, ReactiveLedgerService$Resilient.class))
             .assertException(failure -> assertThat(Failures.messages(failure))
-                    .contains("[R4C-QK-002]", "@Retry on post (REQUIRED)", "@Hedge on read (REQUIRED)"));
+                    .contains("[R4C-QK-002]", "@Retry on post (REQUIRED)", "@Hedge on read (REQUIRED)",
+                            "@Retry on entries (REQUIRED)"));
 
     @Test
     void theBuildFails() {

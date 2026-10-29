@@ -25,8 +25,8 @@ class RepeatingMethodsTest {
         assertThat(names(RepeatingMethods.of(HedgedLedger$Resilient.class))).as("@Hedge, async")
                 .containsExactly(Map.entry("read", "@Hedge"));
         assertThat(names(RepeatingMethods.of(ReactiveLedger$Resilient.class)))
-                .as("Mono methods: the layers are in the lambda the override returns")
-                .containsExactly(Map.entry("post", "@Retry"), Map.entry("read", "@Hedge"));
+                .as("Mono and Flux methods: the layers are in the lambda the override returns")
+                .containsOnly(Map.entry("post", "@Retry"), Map.entry("read", "@Hedge"), Map.entry("entries", "@Retry"));
     }
 
     @Test

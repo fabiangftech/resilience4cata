@@ -39,12 +39,13 @@ public class TransactionTest {
     }
 
     @Test
-    void retriedAndHedgedMonoMethodsOfATransactionalClassFailTheStartup() {
+    void retriedAndHedgedMonoAndFluxMethodsOfATransactionalClassFailTheStartup() {
         runner.withBean(ReactiveLedger.class).run(context -> assertThat(context).hasFailed().getFailure()
                 .rootCause().hasMessageStartingWith("[R4C-SPR-004] Bean 'reactiveLedger' (" + ReactiveLedger.class.getName()
                         + ") has transactional methods that are retried or hedged:")
                 .hasMessageContaining("@Retry on post (REQUIRED)")
                 .hasMessageContaining("@Hedge on read (REQUIRED)")
+                .hasMessageContaining("@Retry on entries (REQUIRED)")
                 .satisfies(e -> assertThat(e.getMessage()).doesNotContain("guarded")));
     }
 
