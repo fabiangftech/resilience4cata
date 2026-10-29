@@ -158,19 +158,32 @@ class StreamPoliciesTest {
 
     @Test
     void onTheRealTimerAStreamThatKeepsEmittingDoesNotTimeOutAndASilentOneDoes() throws Exception {
-        TimeoutPolicy policy = new TimeoutPolicy("t", TimeoutConfig.builder().timeout(Duration.ofMillis(100)).build(),
+        long timeout = TimeUnit.MILLISECONDS.toNanos(200);
+        TimeoutPolicy policy = new TimeoutPolicy("t", TimeoutConfig.builder().timeout(Duration.ofNanos(timeout)).build(),
                 PolicyEnvironment.DEFAULT);
         CompletableFuture<Void> attempt = new CompletableFuture<>();
+        long previous = System.nanoTime();
         CompletableFuture<Void> result = policy.executeStreamAsync(() -> attempt, stream);
+        long longestGap = 0;
         for (int i = 0; i < 15; i++) {
             Thread.sleep(40);
             stream.element();
+            long now = System.nanoTime();
+            longestGap = Math.max(longestGap, now - previous);
+            previous = now;
         }
-        assertThat(result).as("600 ms of elements 40 ms apart").isNotDone();
-        long silenceStarted = System.nanoTime();
+        // On a slow machine a 40 ms sleep can last longer than the timeout: then the stream did go silent for that long.
+        if (longestGap < timeout) {
+            assertThat(result).as("600 ms of elements about 40 ms apart").isNotDone();
+        }
+        long silenceStarted = previous;
         assertThat(result).failsWithin(Duration.ofSeconds(5));
-        assertThat(System.nanoTime() - silenceStarted).as("never early").isGreaterThanOrEqualTo(
-                TimeUnit.MILLISECONDS.toNanos(100));
+        assertThat(System.nanoTime() - silenceStarted).as("never early").isGreaterThanOrEqualTo(timeout);
+        // The timeout fails the result, then cancels the attempt, on the timer's thread.
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (!attempt.isCancelled() && System.nanoTime() - deadline < 0) {
+            Thread.onSpinWait();
+        }
         assertThat(attempt).isCancelled();
     }
 
