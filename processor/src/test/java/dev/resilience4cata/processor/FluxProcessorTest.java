@@ -48,7 +48,7 @@ class FluxProcessorTest {
                 """))
                 .contains("public reactor.core.publisher.Flux<java.lang.Integer> prices(java.lang.String p0) {")
                 .contains("return " + FLUXES + ".<java.lang.Integer>defer(r4c$stream -> this.retry0.executeAsync("
-                        + "() -> r4c$stream.attempt(() -> r4c$stream.subscribe(this.delegate.prices(p0)))));")
+                        + "() -> r4c$stream.attempt(r4c$attempt -> r4c$attempt.subscribe(this.delegate.prices(p0)))));")
                 .doesNotContain("r4c$recover");
     }
 
@@ -64,14 +64,14 @@ class FluxProcessorTest {
                 }
                 """))
                 .contains("return " + FLUXES + ".<java.lang.String>defer(r4c$stream -> this.retry0.executeAsync(() -> "
-                        + "r4c$stream.attempt(() -> this.circuitBreaker0.executeStreamAsync(() -> "
+                        + "r4c$stream.attempt(r4c$attempt -> this.circuitBreaker0.executeStreamAsync(() -> "
                         + "this.rateLimiter0.executeAsync(() -> this.adaptiveLimit0.executeStreamAsync(() -> "
                         + "this.timeout0.executeStreamAsync(() -> this.bulkhead0.executeAsync(() -> "
-                        + "r4c$stream.subscribe(this.delegate.names(p0))), r4c$stream), r4c$stream)), r4c$stream))));");
+                        + "r4c$attempt.subscribe(this.delegate.names(p0))), r4c$attempt), r4c$attempt)), r4c$attempt))));");
     }
 
     @Test
-    void withoutARetryOrAFallbackThereIsNoBoundary() {
+    void withoutARetryOrAFallbackTheWholeCallIsOneAttempt() {
         assertThat(generated("""
                 package demo;
                 import dev.resilience4cata.annotation.Timeout;
@@ -81,9 +81,8 @@ class FluxProcessorTest {
                     Flux<String> ticks();
                 }
                 """))
-                .contains("return " + FLUXES + ".<java.lang.String>defer(r4c$stream -> this.timeout0.executeStreamAsync("
-                        + "() -> r4c$stream.subscribe(this.delegate.ticks()), r4c$stream));")
-                .doesNotContain("attempt(");
+                .contains("return " + FLUXES + ".<java.lang.String>defer(r4c$stream -> r4c$stream.attempt(r4c$attempt -> "
+                        + "this.timeout0.executeStreamAsync(() -> r4c$attempt.subscribe(this.delegate.ticks()), r4c$attempt)));");
     }
 
     @Test
@@ -166,7 +165,7 @@ class FluxProcessorTest {
                 }
                 """);
         assertThat(source)
-                .contains("this.retry0.executeAsync(() -> r4c$stream.attempt(() -> r4c$stream.subscribe(this.delegate.names(p0))),"
+                .contains("this.retry0.executeAsync(() -> r4c$stream.attempt(r4c$attempt -> r4c$attempt.subscribe(this.delegate.names(p0))),"
                         + " this.fallback0, (r4c$e, r4c$attempts) -> this.r4c$recover0(r4c$e, r4c$attempts, r4c$stream, p0))")
                 .contains("if (r4c$e instanceof java.io.IOException r4c$f0) {")
                 .contains("    return r4c$stream.recover(this.delegate.cached(p0, r4c$f0));")
@@ -186,8 +185,8 @@ class FluxProcessorTest {
                     default Flux<String> none(String id) { return Flux.empty(); }
                 }
                 """))
-                .contains("defer(r4c$stream -> this.fallback0.executeAsync(() -> r4c$stream.attempt(() -> "
-                        + "this.timeout0.executeStreamAsync(() -> r4c$stream.subscribe(this.delegate.names(p0)), r4c$stream)), "
+                .contains("defer(r4c$stream -> this.fallback0.executeAsync(() -> r4c$stream.attempt(r4c$attempt -> "
+                        + "this.timeout0.executeStreamAsync(() -> r4c$attempt.subscribe(this.delegate.names(p0)), r4c$attempt)), "
                         + "(r4c$e, r4c$attempts) -> this.r4c$recover0(r4c$e, r4c$attempts, r4c$stream, p0)));");
     }
 
@@ -271,7 +270,7 @@ class FluxProcessorTest {
         assertThat(result.diagnostics()).isEmpty();
         assertThat(result.generatedSource("demo.Client$Resilient"))
                 .contains("public reactor.core.publisher.Flux<java.lang.String> names(java.lang.String id, int page) {")
-                .contains("r4c$stream.subscribe(super.names(id, page))")
+                .contains("r4c$attempt.subscribe(super.names(id, page))")
                 .contains("return r4c$stream.recover(this.none(id, page));")
                 .doesNotContain("plain(");
     }

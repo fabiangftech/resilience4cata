@@ -10,7 +10,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.IntFunction;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import reactor.blockhound.BlockHound;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -24,27 +23,11 @@ import reactor.core.scheduler.Schedulers;
  */
 class MonoBlockHoundTest {
 
-    private static final List<String> BLOCKING = new CopyOnWriteArrayList<>();
+    private static final List<String> BLOCKING = BlockHounds.BLOCKING;
 
     @BeforeAll
     static void install() {
-        // install(...), not builder().install(): only install loads the integrations on the class path, Reactor's
-        // among them, which marks the Reactor schedulers' threads as non-blocking.
-        BlockHound.install(builder -> builder
-                // Cancelling a timer task (a bulkhead waiter's, a retry's backoff) removes it from the shared
-                // ScheduledThreadPoolExecutor's queue under its lock: the same short lock as scheduling (offer) and
-                // the timer thread's take, which Reactor's own BlockHound integration allows for its schedulers.
-                .allowBlockingCallsInside("java.util.concurrent.ScheduledThreadPoolExecutor$DelayedWorkQueue", "remove")
-                .blockingMethodCallback(method -> BLOCKING.add(method + " on " + Thread.currentThread().getName()
-                        + "\n" + stack())));
-    }
-
-    private static String stack() {
-        StringBuilder text = new StringBuilder();
-        for (StackTraceElement frame : new Throwable().getStackTrace()) {
-            text.append("    at ").append(frame).append('\n');
-        }
-        return text.toString();
+        BlockHounds.install();
     }
 
     /** The delegate: a value, a failure, or a value too late for the timeout, emitted on the parallel scheduler. */

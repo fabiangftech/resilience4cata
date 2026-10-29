@@ -1776,10 +1776,11 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
     /**
      * A {@code Flux} method: the policies run inside {@code Fluxes.defer}, once per subscription, with the call's
-     * {@code FluxCall} ({@code r4c$stream}). The layers inside the retry or the fallback are one attempt
-     * ({@code r4c$stream.attempt}), so that they act only before the stream's first element; the timeout, breaker
-     * and adaptive limit use their streaming form; the delegate's {@code Flux} is subscribed by
-     * {@code r4c$stream.subscribe}. The order is always the default one ({@link #checkFlux}).
+     * {@code FluxCall} ({@code r4c$stream}). The layers inside the retry or the fallback (all of them when there is
+     * neither) are one attempt ({@code r4c$stream.attempt(r4c$attempt -> ...)}), so that the retry and the fallback
+     * act only before the stream's first element; the timeout, breaker and adaptive limit use their streaming form
+     * with that attempt; the delegate's {@code Flux} is subscribed by {@code r4c$attempt.subscribe}. The order is
+     * always the default one ({@link #checkFlux}).
      */
     @SuppressWarnings("java:S107") // java:S107: the parts of the signature that writeMethod already computed
     private static void writeFluxMethod(StringBuilder out, MethodModel model, int index, String typeVariables,
@@ -1793,23 +1794,28 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String recovery = "(r4c$e, r4c$attempts) -> this." + recoverTypeArguments + "r4c$recover" + index
                 + "(r4c$e, r4c$attempts, r4c$stream" + (args.isEmpty() ? "" : ", " + args) + ")";
         boolean fused = fallbackFused(model);
-        String expression = "r4c$stream.subscribe(" + delegateCall + ")";
+        String expression = "r4c$attempt.subscribe(" + delegateCall + ")";
         List<Kind> layers = model.layers();
+        boolean bounded = false;
         for (int i = layers.size() - 1; i >= 0; i--) {
             Kind kind = layers.get(i);
             String field = "this." + kind.field + index;
             expression = switch (kind) {
                 case TIMEOUT, CIRCUIT_BREAKER, ADAPTIVE_LIMIT ->
-                        field + ".executeStreamAsync(() -> " + expression + ", r4c$stream)";
-                case RETRY -> field + ".executeAsync(() -> r4c$stream.attempt(() -> " + expression + ")"
+                        field + ".executeStreamAsync(() -> " + expression + ", r4c$attempt)";
+                case RETRY -> field + ".executeAsync(() -> " + boundary(expression)
                         + (fused ? ", this.fallback" + index + ", " + recovery : "") + ")";
                 case BULKHEAD, RATE_LIMITER -> field + EXECUTE_ASYNC + expression + ")";
                 case FALLBACK, HEDGE -> throw new IllegalStateException(kind + " is not a Flux layer (checkFlux)");
             };
+            bounded |= kind == Kind.RETRY;
         }
         if (fallback != null && !fused) {
-            expression = "this.fallback" + index + ".executeAsync(() -> r4c$stream.attempt(() -> " + expression + "), "
-                    + recovery + ")";
+            expression = "this.fallback" + index + ".executeAsync(() -> " + boundary(expression) + ", " + recovery + ")";
+            bounded = true;
+        }
+        if (!bounded) {
+            expression = boundary(expression);
         }
         expression = FLUXES + ".<" + result + ">defer(r4c$stream -> " + expression + ")";
         out.append("\n    @Override\n    ").append(modifiers).append(typeVariables).append(returnType).append(' ')
@@ -1826,6 +1832,11 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 .append(") throws java.lang.Throwable {\n");
         appendLines(out, asyncFallbackLines(fallback, index, arguments, result, AsyncStyle.FLUX));
         out.append("    }\n");
+    }
+
+    /** One attempt of a {@code Flux} method: {@code layers} run with their own {@code r4c$attempt}. */
+    private static String boundary(String layers) {
+        return "r4c$stream.attempt(r4c$attempt -> " + layers + ")";
     }
 
     /** What an asynchronous fallback's result becomes: a stage, a {@code Mono}'s stage, or a stream of the call. */

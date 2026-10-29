@@ -1,6 +1,5 @@
 package dev.resilience4cata.reactor.generated;
 
-import dev.resilience4cata.generated.AsyncCall;
 import dev.resilience4cata.generated.ElementListener;
 import dev.resilience4cata.generated.Elements;
 import java.lang.invoke.MethodHandles;
@@ -21,31 +20,35 @@ import reactor.util.context.ContextView;
  * One subscription to a generated method's {@code Flux}: the subscription its subscriber holds, and what
  * the generated code calls while the policies run (see {@link Fluxes}).
  *
- * <p>Each attempt is one subscription to the delegate's {@code Flux} ({@link #subscribe}), and its
- * elements go straight to the subscriber. The first element <em>commits</em> the call: from then on no
- * other attempt may start, so a failure is the call's failure, whatever the retry and the fallback would
- * do. {@link #attempt} is the boundary the retry and the fallback see: a failure before the commit is a
- * failure they act on; one after the commit reaches the subscriber, and they see a success.
+ * <p>Each attempt is an {@link Attempt}, created by {@link #attempt} and handed to the layers inside the
+ * retry or the fallback; they subscribe to the delegate's {@code Flux} through it, and the policies that
+ * need the elements listen through it. Its elements go straight to the subscriber. The first element
+ * <em>commits</em> the call: from then on no other attempt may emit, so a failure is the call's failure,
+ * whatever the retry and the fallback would do. {@link #attempt} returns the boundary the retry and the
+ * fallback see: a failure before the commit is one they act on; one after the commit reaches the
+ * subscriber, and they see a success.
  *
- * <p>Which attempt may commit is decided by one CAS on {@code gate}: it holds the number of the attempt
- * that may still commit, or {@code COMMITTED}. The first element of attempt {@code n} commits by moving
- * {@code n} to {@code COMMITTED}; the boundary, when attempt {@code n} fails, moves {@code n} to
- * {@code n + 1}. Exactly one of them wins, so an attempt that a timeout gave up on can never emit after
- * the retry started the next one.
+ * <p>Attempts are numbered in the order they start, and {@code gate} holds the number of the one that may
+ * still commit, or {@code COMMITTED}. The first element of attempt {@code n} commits by moving {@code n} to
+ * {@code COMMITTED}; when attempt {@code n} fails, its boundary moves {@code n} to {@code n + 1}. Exactly
+ * one of them wins. An attempt keeps its number, so one whose layers started it late (a bulkhead's hand-off
+ * after its timeout fired, while the retry or the fallback already moved on) can never commit, and its
+ * elements are discarded.
  *
- * <p>Demand: everything the subscriber requests is requested from the current attempt, and a new attempt
- * is asked for all of it (no attempt before the commit has emitted anything). Requests and the switch to
- * a new attempt are serialized by a drain loop, as Reactor's own multi-subscription operators do.
- * Elements and the end are serialized by a second, smaller one: elements come from one attempt at a time,
- * so only the end (a timeout or a failure on another thread) can race them.
+ * <p>Demand: everything the subscriber requests is requested from the newest attempt that subscribed, and
+ * a new attempt is asked for all of it (no attempt before the commit has emitted anything); an older
+ * attempt that subscribes late gets nothing. Requests and the switch to a new attempt are serialized by a
+ * drain loop, as Reactor's own multi-subscription operators do. Elements and the end are serialized by a
+ * second, smaller one: elements come from one attempt at a time, so only the end (a timeout or a failure on
+ * another thread) can race them.
  *
  * @param <T> the element type
  */
-public final class FluxCall<T> implements Elements, Subscription {
+public final class FluxCall<T> implements Subscription {
 
     private static final VarHandle WIP;
     private static final VarHandle MISSED_REQUESTED;
-    private static final VarHandle MISSED_SUBSCRIPTION;
+    private static final VarHandle MISSED_SUBSCRIBER;
     private static final VarHandle GATE;
     private static final VarHandle EMITTING;
     private static final VarHandle TERMINAL;
@@ -56,7 +59,7 @@ public final class FluxCall<T> implements Elements, Subscription {
             MethodHandles.Lookup lookup = MethodHandles.lookup();
             WIP = lookup.findVarHandle(FluxCall.class, "wip", int.class);
             MISSED_REQUESTED = lookup.findVarHandle(FluxCall.class, "missedRequested", long.class);
-            MISSED_SUBSCRIPTION = lookup.findVarHandle(FluxCall.class, "missedSubscription", Subscription.class);
+            MISSED_SUBSCRIBER = lookup.findVarHandle(FluxCall.class, "missedSubscriber", AttemptSubscriber.class);
             GATE = lookup.findVarHandle(FluxCall.class, "gate", int.class);
             EMITTING = lookup.findVarHandle(FluxCall.class, "emitting", int.class);
             TERMINAL = lookup.findVarHandle(FluxCall.class, "terminal", Object.class);
@@ -71,15 +74,15 @@ public final class FluxCall<T> implements Elements, Subscription {
 
     final CoreSubscriber<? super T> actual;
 
-    // Demand. requested and subscription are touched only inside the drain loop.
+    // Demand. requested and current are touched only inside the drain loop.
     @SuppressWarnings("unused") // accessed through WIP
     private volatile int wip;
     @SuppressWarnings("unused") // accessed through MISSED_REQUESTED
     private volatile long missedRequested;
-    @SuppressWarnings("unused") // accessed through MISSED_SUBSCRIPTION
-    private volatile @Nullable Subscription missedSubscription;
+    @SuppressWarnings("unused") // accessed through MISSED_SUBSCRIBER
+    private volatile @Nullable AttemptSubscriber<T> missedSubscriber;
     private long requested;
-    private @Nullable Subscription subscription;
+    private @Nullable AttemptSubscriber<T> current;
     private volatile boolean cancelled;
 
     // The attempt that may still commit, or COMMITTED.
@@ -98,12 +101,6 @@ public final class FluxCall<T> implements Elements, Subscription {
     // A failure after the commit, kept for the subscriber while the policies above the boundary see a success.
     private volatile @Nullable Throwable committedFailure;
 
-    // Listeners registered for the attempt that starts next. Attempts start one after another, each after the
-    // policies around it registered (on the same thread, or published to the attempt's thread by the hand-off).
-    private @Nullable ElementListener every;
-    private @Nullable ElementListener first;
-    private @Nullable ElementListener second;
-
     FluxCall(CoreSubscriber<? super T> actual) {
         this.actual = actual;
     }
@@ -117,83 +114,61 @@ public final class FluxCall<T> implements Elements, Subscription {
         return actual.currentContext();
     }
 
-    @Override
-    public void listen(ElementListener listener, boolean everyElement) {
-        if (everyElement) {
-            every = listener;
-        } else if (first == null) {
-            first = listener;
-        } else {
-            second = listener;
-        }
-    }
+    /**
+     * The layers of one attempt (generated code passes a lambda): given the attempt, they start it.
+     *
+     * @param <T> the element type
+     */
+    @FunctionalInterface
+    public interface Layers<T> {
 
-    private void clearListeners() {
-        every = null;
-        first = null;
-        second = null;
+        /**
+         * Runs the attempt's policies, ending with {@link Attempt#subscribe}.
+         *
+         * @param attempt this attempt
+         * @return the stage of the attempt's stream
+         * @throws Throwable if a layer fails before returning a stage
+         */
+        // java:S112: like AsyncCall, a layer may fail with anything
+        @SuppressWarnings("java:S112")
+        CompletionStage<Void> start(Attempt<T> attempt) throws Throwable;
     }
 
     /**
-     * The boundary of one attempt, for the retry and the fallback (generated code passes it the layers
-     * inside them): runs {@code next}, and returns a stage that fails only when the attempt failed before
-     * the call committed. A failure after the commit is kept for the subscriber and the stage succeeds, so
-     * no retry or fallback acts on it. Cancelling the stage cancels the attempt.
+     * The boundary of one attempt (generated code wraps the layers inside the retry or the fallback in it,
+     * or all the layers when there is neither): creates the attempt, runs {@code layers} with it, and
+     * returns a stage that fails only when the attempt failed before the call committed. A failure after
+     * the commit is kept for the subscriber and the stage succeeds, so no retry or fallback acts on it.
+     * Cancelling the stage cancels the attempt.
      *
-     * @param next the layers inside the retry or fallback, ending with {@link #subscribe}
+     * @param layers the layers inside the retry or fallback, ending with {@link Attempt#subscribe}
      * @return the stage the retry or fallback waits for
      */
-    public CompletionStage<Void> attempt(AsyncCall<Void> next) {
-        clearListeners();
+    public CompletionStage<Void> attempt(Layers<T> layers) {
+        Attempt<T> attempt = new Attempt<>(this, (int) GATE.getVolatile(this));
         CompletionStage<Void> stage;
         try {
-            stage = next.call();
+            stage = layers.start(attempt);
         } catch (Throwable failure) {
             stage = CompletableFuture.failedFuture(failure);
         }
         if (stage == null) {
             stage = CompletableFuture.failedFuture(new NullPointerException("a layer returned no stage"));
         }
-        Boundary boundary = new Boundary(this, stage);
+        Boundary boundary = new Boundary(this, attempt.number, stage);
         stage.whenComplete(boundary);
         return boundary;
     }
 
     /**
-     * Subscribes one attempt to the delegate's {@code Flux}, with the subscriber's context, and returns a
-     * stage that ends when the attempt's stream ends. The attempt takes the listeners registered since
-     * the previous one. A {@code null} {@code Flux} is a failed attempt.
-     *
-     * @param flux what the delegate returned
-     * @return the stage of the attempt's stream: {@code null} when it completes, or its error
-     */
-    public CompletionStage<Void> subscribe(@Nullable Flux<? extends T> flux) {
-        if (flux == null) {
-            clearListeners();
-            return CompletableFuture.failedFuture(new NullPointerException(
-                    "A method that returns a Flux returned null instead of a Flux"));
-        }
-        FluxAttempt<T> attempt = new FluxAttempt<>(this, (int) GATE.getVolatile(this), every, first, second);
-        clearListeners();
-        flux.subscribe(attempt);
-        if (attempt.isDone() && !attempt.isCompletedExceptionally()) {
-            // Ended during subscribe (Flux.just with demand): a plain completed future lets the policies take their
-            // already-complete shortcut.
-            return CompletableFuture.completedFuture(null);
-        }
-        return attempt;
-    }
-
-    /**
      * Subscribes the fallback's {@code Flux}, as one more attempt (the fallback only runs before the call
-     * committed). Listeners left by an attempt that never subscribed are dropped first.
+     * committed, after the retry's last attempt failed).
      *
      * @param flux what the fallback returned
      * @return the stage of the fallback's stream
      */
     public CompletionStage<Void> recover(@Nullable Flux<? extends T> flux) {
-        clearListeners();
-        return subscribe(flux);
+        return new Attempt<>(this, (int) GATE.getVolatile(this)).subscribe(flux);
     }
 
     /**
@@ -206,23 +181,73 @@ public final class FluxCall<T> implements Elements, Subscription {
         return recover(value == null ? Flux.empty() : Flux.just(value));
     }
 
+    /**
+     * One attempt of a {@link FluxCall}: the policies that need its elements listen through it
+     * ({@link Elements}), and its layers subscribe through it to the delegate's {@code Flux}.
+     *
+     * @param <T> the element type
+     */
+    public static final class Attempt<T> implements Elements {
+        private final FluxCall<T> call;
+        final int number;
+        // Registered by the policies around this attempt before it subscribes (on the thread that runs them, or
+        // published to the subscribing thread by the hand-off between them, a bulkhead's queue).
+        private @Nullable ElementListener every;
+        private @Nullable ElementListener first;
+        private @Nullable ElementListener second;
+
+        Attempt(FluxCall<T> call, int number) {
+            this.call = call;
+            this.number = number;
+        }
+
+        @Override
+        public void listen(ElementListener listener, boolean everyElement) {
+            if (everyElement) {
+                every = listener;
+            } else if (first == null) {
+                first = listener;
+            } else {
+                second = listener;
+            }
+        }
+
+        /**
+         * Subscribes this attempt to the delegate's {@code Flux}, with the subscriber's context, and returns a
+         * stage that ends when the attempt's stream ends. A {@code null} {@code Flux} is a failed attempt.
+         *
+         * @param flux what the delegate returned
+         * @return the stage of the attempt's stream: {@code null} when it completes, or its error
+         */
+        public CompletionStage<Void> subscribe(@Nullable Flux<? extends T> flux) {
+            if (flux == null) {
+                return CompletableFuture.failedFuture(new NullPointerException(
+                        "A method that returns a Flux returned null instead of a Flux"));
+            }
+            AttemptSubscriber<T> subscriber = new AttemptSubscriber<>(call, number, every, first, second);
+            flux.subscribe(subscriber);
+            if (subscriber.isDone() && !subscriber.isCompletedExceptionally()) {
+                // Ended during subscribe (Flux.just with demand): a plain completed future lets the policies take
+                // their already-complete shortcut.
+                return CompletableFuture.completedFuture(null);
+            }
+            return subscriber;
+        }
+    }
+
     // ---- the gate
 
     boolean commit(int attempt) {
-        return attempt == (int) GATE.getOpaque(this) && GATE.compareAndSet(this, attempt, COMMITTED);
+        return attempt != COMMITTED && attempt == (int) GATE.getOpaque(this)
+                && GATE.compareAndSet(this, attempt, COMMITTED);
     }
 
-    /** An attempt failed: closes it for good, unless it committed first; {@code true} if it had. */
-    boolean closeOrCommitted() {
-        int current = (int) GATE.getVolatile(this);
-        while (current != COMMITTED) {
-            int witness = (int) GATE.compareAndExchange(this, current, current + 1);
-            if (witness == current) {
-                return false;
-            }
-            current = witness;
-        }
-        return true;
+    /**
+     * Attempt {@code attempt} failed: closes it for good, unless the call committed first; {@code true} if it
+     * had. Attempts run one after another, so when one fails the gate holds its number or {@code COMMITTED}.
+     */
+    boolean closeOrCommitted(int attempt) {
+        return (int) GATE.compareAndExchange(this, attempt, attempt + 1) == COMMITTED;
     }
 
     // ---- elements and the end
@@ -303,13 +328,13 @@ public final class FluxCall<T> implements Elements, Subscription {
             cancel();
             return;
         }
-        long current = (long) MISSED_REQUESTED.getVolatile(this);
+        long pending = (long) MISSED_REQUESTED.getVolatile(this);
         for (;;) {
-            long witness = (long) MISSED_REQUESTED.compareAndExchange(this, current, Operators.addCap(current, n));
-            if (witness == current) {
+            long witness = (long) MISSED_REQUESTED.compareAndExchange(this, pending, Operators.addCap(pending, n));
+            if (witness == pending) {
                 break;
             }
-            current = witness;
+            pending = witness;
         }
         drain();
     }
@@ -320,10 +345,6 @@ public final class FluxCall<T> implements Elements, Subscription {
             return;
         }
         cancelled = true;
-        cancelFuture();
-    }
-
-    private void cancelFuture() {
         CompletableFuture<Void> started = (CompletableFuture<Void>) FUTURE.getVolatile(this);
         if (started != null) {
             started.cancel(true);
@@ -334,13 +355,26 @@ public final class FluxCall<T> implements Elements, Subscription {
         return cancelled;
     }
 
-    /** A new attempt subscribed: it gets everything requested so far. */
-    void arbitrate(Subscription next) {
+    /**
+     * An attempt subscribed: if it is newer than the current one, it becomes the one asked for elements, and
+     * gets everything requested so far. After the subscriber cancelled, nothing: the attempt itself is
+     * cancelled through the policies (its subscription must be cancelled once, by it).
+     */
+    void arbitrate(AttemptSubscriber<T> next) {
         if (cancelled) {
-            next.cancel();
             return;
         }
-        MISSED_SUBSCRIPTION.setVolatile(this, next);
+        AttemptSubscriber<T> pending = (AttemptSubscriber<T>) MISSED_SUBSCRIBER.getVolatile(this);
+        for (;;) {
+            if (pending != null && pending.number >= next.number) {
+                break; // a newer attempt is waiting already: this one gets nothing
+            }
+            AttemptSubscriber<T> witness = (AttemptSubscriber<T>) MISSED_SUBSCRIBER.compareAndExchange(this, pending, next);
+            if (witness == pending) {
+                break;
+            }
+            pending = witness;
+        }
         drain();
     }
 
@@ -352,18 +386,20 @@ public final class FluxCall<T> implements Elements, Subscription {
         long amount = 0;
         Subscription target = null;
         for (;;) {
-            Subscription next = (Subscription) MISSED_SUBSCRIPTION.getAndSet(this, null);
+            AttemptSubscriber<T> next = (AttemptSubscriber<T>) MISSED_SUBSCRIBER.getAndSet(this, null);
             long more = (long) MISSED_REQUESTED.getAndSet(this, 0L);
             if (more != 0) {
                 requested = Operators.addCap(requested, more);
             }
-            if (next != null) {
-                subscription = next;
-                target = next;
+            AttemptSubscriber<T> now = current;
+            if (next != null && (now == null || next.number > now.number)) {
+                current = next;
+                target = next.upstream();
                 amount = requested; // nothing was emitted before the commit, so the new attempt gets it all
-            } else if (more != 0 && subscription != null) {
-                if (target != subscription) {
-                    target = subscription;
+            } else if (more != 0 && now != null) {
+                Subscription upstream = now.upstream();
+                if (target != upstream) {
+                    target = upstream;
                     amount = 0;
                 }
                 amount = Operators.addCap(amount, more);
@@ -385,11 +421,13 @@ public final class FluxCall<T> implements Elements, Subscription {
      */
     private static final class Boundary extends CompletableFuture<Void> implements BiConsumer<Void, Throwable> {
         private final FluxCall<?> call;
+        private final int attempt;
         private final CompletionStage<Void> inner;
         private volatile boolean cancelling;
 
-        Boundary(FluxCall<?> call, CompletionStage<Void> inner) {
+        Boundary(FluxCall<?> call, int attempt, CompletionStage<Void> inner) {
             this.call = call;
+            this.attempt = attempt;
             this.inner = inner;
         }
 
@@ -400,7 +438,7 @@ public final class FluxCall<T> implements Elements, Subscription {
             }
             if (failure == null) {
                 super.complete(null);
-            } else if (call.closeOrCommitted()) {
+            } else if (call.closeOrCommitted(attempt)) {
                 call.committedFailure = unwrap(failure);
                 super.complete(null);
             } else {

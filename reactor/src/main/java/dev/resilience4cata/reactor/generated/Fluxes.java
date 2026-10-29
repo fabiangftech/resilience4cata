@@ -10,14 +10,15 @@ import reactor.core.publisher.Operators;
 /**
  * Turns the asynchronous form of the policies into a {@code Flux}, for generated methods that return one.
  * A generated method returns {@link #defer} of nested {@code executeAsync} calls, as a {@code Mono} method
- * does, with three differences: the layers inside the retry or fallback are wrapped in
- * {@link FluxCall#attempt}; the timeout, circuit breaker and adaptive limit use their streaming form
- * ({@code executeStreamAsync(call, elements)}, with the {@link FluxCall} as the elements); and the
- * delegate's {@code Flux} is subscribed by {@link FluxCall#subscribe}:
+ * does, with three differences: the layers inside the retry or fallback (all of them when there is
+ * neither) are one attempt, run by {@link FluxCall#attempt} with their own {@link FluxCall.Attempt}; the
+ * timeout, circuit breaker and adaptive limit use their streaming form
+ * ({@code executeStreamAsync(call, elements)}, with that attempt as the elements); and the delegate's
+ * {@code Flux} is subscribed by {@link FluxCall.Attempt#subscribe}:
  *
  * <pre>{@code
- * return Fluxes.defer(r4c$stream -> this.retry0.executeAsync(() -> r4c$stream.attempt(
- *         () -> this.timeout0.executeStreamAsync(() -> r4c$stream.subscribe(this.delegate.prices(p0)), r4c$stream))));
+ * return Fluxes.defer(r4c$stream -> this.retry0.executeAsync(() -> r4c$stream.attempt(r4c$attempt ->
+ *         this.timeout0.executeStreamAsync(() -> r4c$attempt.subscribe(this.delegate.prices(p0)), r4c$attempt))));
  * }</pre>
  *
  * <p>Each subscription is one call through the policies. Elements go to the subscriber as each attempt

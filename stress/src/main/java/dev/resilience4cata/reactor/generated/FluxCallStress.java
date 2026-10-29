@@ -111,7 +111,7 @@ public final class FluxCallStress {
 
         @Actor
         public void close(II_Result r) {
-            r.r2 = call.closeOrCommitted() ? 1 : 0;
+            r.r2 = call.closeOrCommitted(0) ? 1 : 0;
         }
     }
 
@@ -163,9 +163,11 @@ public final class FluxCallStress {
         final FluxCall<String> call = new FluxCall<>(new Recorder());
         final Recording old = new Recording();
         final Recording fresh = new Recording();
+        final AttemptSubscriber<String> oldAttempt = new AttemptSubscriber<>(call, 0, null, null, null);
+        final AttemptSubscriber<String> freshAttempt = new AttemptSubscriber<>(call, 1, null, null, null);
 
         {
-            call.arbitrate(old);
+            oldAttempt.onSubscribe(old);
             call.request(2);
         }
 
@@ -176,12 +178,57 @@ public final class FluxCallStress {
 
         @Actor
         public void newAttempt() {
-            call.arbitrate(fresh);
+            freshAttempt.onSubscribe(fresh);
         }
 
         @Arbiter
         public void count(JJ_Result r) {
             r.r1 = old.requested.get();
+            r.r2 = fresh.requested.get();
+        }
+    }
+
+    /**
+     * An attempt whose layers started it late (a bulkhead's hand-off after its timeout) subscribes while the
+     * next attempt does, and the subscriber requests more. Whatever the order, only the newer attempt is asked for
+     * elements, and for exactly what was requested; the late one gets nothing after its first request.
+     */
+    @JCStressTest
+    @Outcome(id = "0, 5", expect = ACCEPTABLE, desc = "The newer attempt got everything.")
+    @Outcome(id = "2, 5", expect = ACCEPTABLE, desc = "The late one subscribed first and got what was requested then.")
+    @Outcome(id = "5, 5", expect = ACCEPTABLE, desc = "The late one got the later request too, before the newer one came.")
+    @Outcome(id = "2, 3", expect = FORBIDDEN, desc = "The newer attempt lost the first request.")
+    @Outcome(expect = FORBIDDEN, desc = "The newer attempt was asked for too little or too much.")
+    @State
+    public static class LateAttemptVsNewAttempt {
+        final FluxCall<String> call = new FluxCall<>(new Recorder());
+        final Recording late = new Recording();
+        final Recording fresh = new Recording();
+        final AttemptSubscriber<String> lateAttempt = new AttemptSubscriber<>(call, 0, null, null, null);
+        final AttemptSubscriber<String> freshAttempt = new AttemptSubscriber<>(call, 1, null, null, null);
+
+        {
+            call.request(2);
+        }
+
+        @Actor
+        public void late() {
+            lateAttempt.onSubscribe(late);
+        }
+
+        @Actor
+        public void fresh() {
+            freshAttempt.onSubscribe(fresh);
+        }
+
+        @Actor
+        public void request() {
+            call.request(3);
+        }
+
+        @Arbiter
+        public void count(JJ_Result r) {
+            r.r1 = late.requested.get();
             r.r2 = fresh.requested.get();
         }
     }

@@ -1,6 +1,7 @@
 package dev.resilience4cata;
 
 import dev.resilience4cata.generated.AsyncCall;
+import dev.resilience4cata.generated.AttemptLayers;
 import dev.resilience4cata.generated.AdaptiveLimitPolicy;
 import dev.resilience4cata.generated.BulkheadPolicy;
 import dev.resilience4cata.generated.CircuitBreakerPolicy;
@@ -10,6 +11,7 @@ import dev.resilience4cata.generated.HedgePolicy;
 import dev.resilience4cata.generated.RateLimiterPolicy;
 import dev.resilience4cata.generated.Recovery;
 import dev.resilience4cata.generated.RetryPolicy;
+import dev.resilience4cata.generated.StreamAttempt;
 import dev.resilience4cata.generated.StreamCall;
 import dev.resilience4cata.generated.TimeoutPolicy;
 import java.util.List;
@@ -573,7 +575,7 @@ public final class Pipeline<T> {
     /**
      * Runs one call of a stream through the pipeline, for the reactor module's {@code Flux} operator; use
      * that operator rather than this method. Each attempt is one subscription to the source
-     * ({@link StreamCall#subscribe()}). The retry and the fallback act only on a failure before the
+     * ({@link StreamAttempt#subscribe()}). The retry and the fallback act only on a failure before the
      * stream's first element ({@link StreamCall#attempt}); the timeout restarts on every element; the
      * circuit breaker and the adaptive limit time the stream until its first element and hold it until it
      * ends; the bulkhead holds its slot until it ends; the rate limiter takes one permit per attempt. The
@@ -592,33 +594,33 @@ public final class Pipeline<T> {
                     + " streams, and a classifier judges one result while a stream has many. Remove "
                     + (hedge != null ? ".hedge(...)" : "the classifier") + ", or use a separate pipeline for the Flux."));
         }
-        AsyncCall<Void> next = call::subscribe;
+        AttemptLayers next = StreamAttempt::subscribe;
         BulkheadPolicy bulkheadPolicy = this.bulkhead;
         if (bulkheadPolicy != null) {
-            AsyncCall<Void> inner = next;
-            next = () -> bulkheadPolicy.executeAsync(inner);
+            AttemptLayers inner = next;
+            next = attempt -> bulkheadPolicy.executeAsync(() -> inner.start(attempt));
         }
         TimeoutPolicy timeoutPolicy = this.timeout;
         if (timeoutPolicy != null) {
-            AsyncCall<Void> inner = next;
-            next = () -> timeoutPolicy.executeStreamAsync(inner, call);
+            AttemptLayers inner = next;
+            next = attempt -> timeoutPolicy.executeStreamAsync(() -> inner.start(attempt), attempt);
         }
         AdaptiveLimitPolicy limitPolicy = this.adaptiveLimit;
         if (limitPolicy != null) {
-            AsyncCall<Void> inner = next;
-            next = () -> limitPolicy.executeStreamAsync(inner, call);
+            AttemptLayers inner = next;
+            next = attempt -> limitPolicy.executeStreamAsync(() -> inner.start(attempt), attempt);
         }
         RateLimiterPolicy limiter = this.rateLimiter;
         if (limiter != null) {
-            AsyncCall<Void> inner = next;
-            next = () -> limiter.executeAsync(inner);
+            AttemptLayers inner = next;
+            next = attempt -> limiter.executeAsync(() -> inner.start(attempt));
         }
         CircuitBreakerPolicy breaker = this.circuitBreaker;
         if (breaker != null) {
-            AsyncCall<Void> inner = next;
-            next = () -> breaker.executeStreamAsync(inner, call);
+            AttemptLayers inner = next;
+            next = attempt -> breaker.executeStreamAsync(() -> inner.start(attempt), attempt);
         }
-        AsyncCall<Void> layers = next;
+        AttemptLayers layers = next;
         AsyncCall<Void> attempt = () -> call.attempt(layers);
         Recovery<T> recoveryCall = this.recovery;
         Recovery<Void> streamRecovery = recoveryCall == null ? null

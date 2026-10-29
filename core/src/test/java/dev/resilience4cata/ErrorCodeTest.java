@@ -102,22 +102,12 @@ class ErrorCodeTest {
     /** A stream call that is never started: the pipeline rejects it first. */
     private static final class NoStream implements dev.resilience4cata.generated.StreamCall<String> {
         @Override
-        public java.util.concurrent.CompletionStage<Void> attempt(dev.resilience4cata.generated.AsyncCall<Void> next) {
-            throw new AssertionError("not started");
-        }
-
-        @Override
-        public java.util.concurrent.CompletionStage<Void> subscribe() {
+        public java.util.concurrent.CompletionStage<Void> attempt(dev.resilience4cata.generated.AttemptLayers layers) {
             throw new AssertionError("not started");
         }
 
         @Override
         public java.util.concurrent.CompletionStage<Void> recover(@org.jspecify.annotations.Nullable String value) {
-            throw new AssertionError("not started");
-        }
-
-        @Override
-        public void listen(dev.resilience4cata.generated.ElementListener listener, boolean everyElement) {
             throw new AssertionError("not started");
         }
     }

@@ -1,8 +1,9 @@
 package dev.resilience4cata.reactor;
 
 import dev.resilience4cata.Pipeline;
-import dev.resilience4cata.generated.AsyncCall;
+import dev.resilience4cata.generated.AttemptLayers;
 import dev.resilience4cata.generated.ElementListener;
+import dev.resilience4cata.generated.StreamAttempt;
 import dev.resilience4cata.generated.StreamCall;
 import dev.resilience4cata.reactor.generated.FluxCall;
 import dev.resilience4cata.reactor.generated.Fluxes;
@@ -91,9 +92,19 @@ public final class FluxPipelineOperator<T> implements UnaryOperator<Flux<T>> {
     private record Attempts<T>(FluxCall<T> stream, Supplier<? extends Flux<? extends T>> source) implements StreamCall<T> {
 
         @Override
-        public CompletionStage<Void> attempt(AsyncCall<Void> next) {
-            return stream.attempt(next);
+        public CompletionStage<Void> attempt(AttemptLayers layers) {
+            return stream.attempt(attempt -> layers.start(new SourceAttempt<>(attempt, source)));
         }
+
+        @Override
+        public CompletionStage<Void> recover(@Nullable T value) {
+            return stream.recoverValue(value);
+        }
+    }
+
+    /** One attempt: subscribes to the source, built again by the supplier. */
+    private record SourceAttempt<T>(FluxCall.Attempt<T> attempt, Supplier<? extends Flux<? extends T>> source)
+            implements StreamAttempt {
 
         @Override
         public CompletionStage<Void> subscribe() {
@@ -103,17 +114,12 @@ public final class FluxPipelineOperator<T> implements UnaryOperator<Flux<T>> {
             } catch (RuntimeException | Error failure) {
                 return CompletableFuture.failedFuture(failure);
             }
-            return stream.subscribe(flux);
-        }
-
-        @Override
-        public CompletionStage<Void> recover(@Nullable T value) {
-            return stream.recover(value == null ? Flux.empty() : Flux.just(value));
+            return attempt.subscribe(flux);
         }
 
         @Override
         public void listen(ElementListener listener, boolean everyElement) {
-            stream.listen(listener, everyElement);
+            attempt.listen(listener, everyElement);
         }
     }
 }

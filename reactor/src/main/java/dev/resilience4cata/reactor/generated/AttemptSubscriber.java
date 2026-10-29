@@ -12,7 +12,7 @@ import reactor.core.publisher.Operators;
 import reactor.util.context.Context;
 
 /**
- * One attempt of a {@link FluxCall}: a subscription to the delegate's {@code Flux} whose elements go to
+ * The subscriber of one {@link FluxCall.Attempt}: a subscription to the delegate's {@code Flux} whose elements go to
  * the call's subscriber, and a future that ends when the attempt's stream does ({@code null} when it
  * completes, its error otherwise), which the policies wait for.
  *
@@ -24,13 +24,13 @@ import reactor.util.context.Context;
  *
  * @param <T> the element type
  */
-final class FluxAttempt<T> extends CompletableFuture<Void> implements CoreSubscriber<T> {
+final class AttemptSubscriber<T> extends CompletableFuture<Void> implements CoreSubscriber<T> {
 
     private static final VarHandle UPSTREAM;
 
     static {
         try {
-            UPSTREAM = MethodHandles.lookup().findVarHandle(FluxAttempt.class, "upstream", Subscription.class);
+            UPSTREAM = MethodHandles.lookup().findVarHandle(AttemptSubscriber.class, "upstream", Subscription.class);
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(e);
         }
@@ -49,7 +49,7 @@ final class FluxAttempt<T> extends CompletableFuture<Void> implements CoreSubscr
     };
 
     private final FluxCall<T> call;
-    private final int number;
+    final int number;
     private final @Nullable ElementListener every;
     private final @Nullable ElementListener first;
     private final @Nullable ElementListener second;
@@ -62,7 +62,7 @@ final class FluxAttempt<T> extends CompletableFuture<Void> implements CoreSubscr
     private boolean emitted;
     private boolean discarding;
 
-    FluxAttempt(FluxCall<T> call, int number, @Nullable ElementListener every, @Nullable ElementListener first,
+    AttemptSubscriber(FluxCall<T> call, int number, @Nullable ElementListener every, @Nullable ElementListener first,
             @Nullable ElementListener second) {
         this.call = call;
         this.number = number;
@@ -80,7 +80,7 @@ final class FluxAttempt<T> extends CompletableFuture<Void> implements CoreSubscr
     @Override
     public void onSubscribe(Subscription subscription) {
         if (UPSTREAM.compareAndSet(this, null, subscription)) {
-            call.arbitrate(subscription);
+            call.arbitrate(this);
         } else {
             subscription.cancel(); // cancelled before subscribing, or a second subscription (a broken publisher)
         }
@@ -141,6 +141,12 @@ final class FluxAttempt<T> extends CompletableFuture<Void> implements CoreSubscr
         if (subscription != null && subscription != CANCELLED) {
             subscription.cancel();
         }
+    }
+
+    /** The attempt's subscription, for the demand: a no-op once it was cancelled. */
+    Subscription upstream() {
+        Subscription subscription = (Subscription) UPSTREAM.getVolatile(this);
+        return subscription != null ? subscription : CANCELLED;
     }
 
     /** Test seam: whether the attempt's subscription was cancelled. */

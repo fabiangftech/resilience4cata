@@ -99,7 +99,7 @@ class FluxesTest {
     /** Retry around a timeout around the delegate, as a generated method with both. */
     private Flux<String> retriedWithTimeout(RetryPolicy retry, TimeoutPolicy timeout) {
         return Fluxes.<String>defer(stream -> retry.executeAsync(() -> stream.attempt(
-                () -> timeout.executeStreamAsync(() -> stream.subscribe(delegate()), stream))));
+                attempt -> timeout.executeStreamAsync(() -> attempt.subscribe(delegate()), attempt))));
     }
 
     // ---- laziness, elements and demand
@@ -109,7 +109,7 @@ class FluxesTest {
         attempts.add(() -> Flux.just("a", "b"));
         RetryPolicy retry = retry("lazy", 3);
         Flux<String> flux = Fluxes.<String>defer(stream -> retry.executeAsync(() -> stream.attempt(
-                () -> stream.subscribe(delegate()))));
+                attempt -> attempt.subscribe(delegate()))));
         assertThat(calls).hasValue(0);
         StepVerifier.create(flux).expectNext("a", "b").expectComplete().verify(VERIFY);
         StepVerifier.create(flux).expectNext("a", "b").expectComplete().verify(VERIFY);
@@ -119,7 +119,7 @@ class FluxesTest {
     @Test
     void elementsFollowTheSubscribersDemand() {
         attempts.add(() -> Flux.range(1, 10).map(String::valueOf));
-        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(() -> stream.subscribe(delegate())));
+        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(attempt -> attempt.subscribe(delegate())));
         StepVerifier.create(flux, 0)
                 .expectSubscription().expectNoEvent(Duration.ofMillis(10))
                 .thenRequest(2).expectNext("1", "2")
@@ -131,21 +131,21 @@ class FluxesTest {
     @Test
     void anEmptyStreamCompletes() {
         attempts.add(Flux::empty);
-        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(() -> stream.subscribe(delegate())));
+        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(attempt -> attempt.subscribe(delegate())));
         StepVerifier.create(flux).expectComplete().verify(VERIFY);
     }
 
     @Test
     void aFailureArrivesWithoutDemand() {
         attempts.add(() -> Flux.error(new IOException("x")));
-        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(() -> stream.subscribe(delegate())));
+        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(attempt -> attempt.subscribe(delegate())));
         StepVerifier.create(flux, 0).expectError(IOException.class).verify(VERIFY);
     }
 
     @Test
     void aNonPositiveRequestFailsTheCall() {
         attempts.add(() -> Flux.never());
-        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(() -> stream.subscribe(delegate())));
+        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(attempt -> attempt.subscribe(delegate())));
         List<Throwable> failures = new ArrayList<>();
         flux.subscribe(new BaseSubscriber<>() {
             @Override
@@ -165,7 +165,7 @@ class FluxesTest {
     @Test
     void aNonPositiveRequestDuringTheCallCancelsIt() {
         attempts.add(() -> Flux.never());
-        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(() -> stream.subscribe(delegate())));
+        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(attempt -> attempt.subscribe(delegate())));
         List<Throwable> failures = new ArrayList<>();
         java.util.concurrent.atomic.AtomicReference<Subscription> raw = new java.util.concurrent.atomic.AtomicReference<>();
         BaseSubscriber<String> subscriber = new BaseSubscriber<>() {
@@ -199,7 +199,7 @@ class FluxesTest {
             return Flux.just("ok");
         }));
         Flux<String> flux = Fluxes.<String>defer(stream -> retry("context", 2).executeAsync(() -> stream.attempt(
-                () -> stream.subscribe(delegate()))));
+                attempt -> attempt.subscribe(delegate()))));
         StepVerifier.create(flux.contextWrite(Context.of("who", "me")))
                 .then(() -> clock.advance(Duration.ofMillis(100)))
                 .expectNext("ok").expectComplete().verify(VERIFY);
@@ -211,7 +211,7 @@ class FluxesTest {
         attempts.add(() -> null);
         attempts.add(() -> Flux.just("ok"));
         Flux<String> flux = Fluxes.<String>defer(stream -> retry("null", 2).executeAsync(() -> stream.attempt(
-                () -> stream.subscribe(delegate()))));
+                attempt -> attempt.subscribe(delegate()))));
         StepVerifier.create(flux).then(() -> clock.advance(Duration.ofMillis(100)))
                 .expectNext("ok").expectComplete().verify(VERIFY);
     }
@@ -223,7 +223,7 @@ class FluxesTest {
         attempts.add(() -> Flux.error(new IOException("x")));
         attempts.add(() -> Flux.just("a", "b"));
         Flux<String> flux = Fluxes.<String>defer(stream -> retry("before", 3).executeAsync(() -> stream.attempt(
-                () -> stream.subscribe(delegate()))));
+                attempt -> attempt.subscribe(delegate()))));
         StepVerifier.create(flux).then(() -> clock.advance(Duration.ofMillis(100)))
                 .expectNext("a", "b").expectComplete().verify(VERIFY);
         assertThat(calls).hasValue(2);
@@ -233,7 +233,7 @@ class FluxesTest {
     void aFailureAfterTheFirstElementReachesTheSubscriberAndIsNotRetried() {
         attempts.add(() -> Flux.just("a").concatWith(Flux.error(new IOException("broken"))));
         Flux<String> flux = Fluxes.<String>defer(stream -> retry("after", 3).executeAsync(() -> stream.attempt(
-                () -> stream.subscribe(delegate()))));
+                attempt -> attempt.subscribe(delegate()))));
         StepVerifier.create(flux).expectNext("a").expectErrorMessage("broken").verify(VERIFY);
         assertThat(calls).hasValue(1);
         assertThat(events).noneMatch(event -> event instanceof RetryEvent);
@@ -245,7 +245,7 @@ class FluxesTest {
         attempts.add(() -> Flux.error(new IOException("x")));
         FallbackPolicy fallback = registry.fallbackPolicy("fallback", List.of(Throwable.class), List.of());
         Flux<String> flux = Fluxes.<String>defer(stream -> retry("fallback", 2).executeAsync(
-                () -> stream.attempt(() -> stream.subscribe(delegate())), fallback,
+                () -> stream.attempt(attempt -> attempt.subscribe(delegate())), fallback,
                 (failure, attempts) -> stream.recover(Flux.just("cached " + attempts, "values"))));
         StepVerifier.create(flux).then(() -> clock.advance(Duration.ofMillis(100)))
                 .expectNext("cached 2", "values").expectComplete().verify(VERIFY);
@@ -257,7 +257,7 @@ class FluxesTest {
         FallbackPolicy fallback = registry.fallbackPolicy("no-fallback", List.of(Throwable.class), List.of());
         AtomicInteger recovered = new AtomicInteger();
         Flux<String> flux = Fluxes.<String>defer(stream -> fallback.executeAsync(
-                () -> stream.attempt(() -> stream.subscribe(delegate())),
+                () -> stream.attempt(attempt -> attempt.subscribe(delegate())),
                 (failure, attempts) -> {
                     recovered.incrementAndGet();
                     return stream.recover(Flux.just("fallback"));
@@ -271,7 +271,7 @@ class FluxesTest {
         attempts.add(() -> Flux.error(new IOException("x")));
         attempts.add(() -> Flux.range(1, 10).map(String::valueOf));
         Flux<String> flux = Fluxes.<String>defer(stream -> retry("demand", 2).executeAsync(() -> stream.attempt(
-                () -> stream.subscribe(delegate()))));
+                attempt -> attempt.subscribe(delegate()))));
         StepVerifier.create(flux, 3)
                 .then(() -> clock.advance(Duration.ofMillis(100)))
                 .expectNext("1", "2", "3")
@@ -361,6 +361,68 @@ class FluxesTest {
         assertThat(discarded).containsExactly("stale");
     }
 
+    @Test
+    void anAttemptThatStartsLateNeitherEmitsNorTakesTheDemand() {
+        // As a bulkhead's hand-off after the attempt's timeout fired: the attempt failed, the fallback's stream runs,
+        // and only then do the attempt's layers subscribe to the delegate.
+        List<FluxCall.Attempt<String>> late = new ArrayList<>();
+        Sinks.Many<String> fallbackStream = Sinks.many().unicast().onBackpressureBuffer();
+        FallbackPolicy fallback = registry.fallbackPolicy("late", List.of(Throwable.class), List.of());
+        Flux<String> flux = Fluxes.<String>defer(stream -> fallback.executeAsync(
+                () -> stream.attempt(attempt -> {
+                    late.add(attempt);
+                    return java.util.concurrent.CompletableFuture.failedFuture(new IOException("timed out in the queue"));
+                }),
+                (failure, attempts) -> stream.recover(fallbackStream.asFlux()))).doOnDiscard(String.class, discarded::add);
+        StepVerifier.create(flux, 1)
+                .then(() -> fallbackStream.tryEmitNext("fallback 1"))
+                .expectNext("fallback 1")
+                .then(() -> late.getFirst().subscribe(Flux.just("stale 1", "stale 2")))
+                .thenRequest(1)
+                .then(() -> fallbackStream.tryEmitNext("fallback 2"))
+                .expectNext("fallback 2")
+                .then(fallbackStream::tryEmitComplete)
+                .expectComplete().verify(VERIFY);
+        assertThat(discarded).as("nothing of the late attempt reached the subscriber").doesNotContain("fallback 1", "fallback 2");
+    }
+
+    @Test
+    void anAttemptThatStartsLateCannotCommitBeforeTheFallbacksStream() {
+        // The late attempt subscribes before the fallback's stream emitted, to a publisher that emits without demand
+        // (as one racing its cancel): only its own, closed number stops it.
+        List<FluxCall.Attempt<String>> late = new ArrayList<>();
+        Sinks.Many<String> fallbackStream = Sinks.many().unicast().onBackpressureBuffer();
+        FallbackPolicy fallback = registry.fallbackPolicy("late-first", List.of(Throwable.class), List.of());
+        Flux<String> eager = Flux.from(subscriber -> {
+            subscriber.onSubscribe(new Subscription() {
+                @Override
+                public void request(long n) {
+                    // ignored
+                }
+
+                @Override
+                public void cancel() {
+                    // ignored
+                }
+            });
+            subscriber.onNext("stale");
+            subscriber.onComplete();
+        });
+        Flux<String> flux = Fluxes.<String>defer(stream -> fallback.executeAsync(
+                () -> stream.attempt(attempt -> {
+                    late.add(attempt);
+                    return java.util.concurrent.CompletableFuture.failedFuture(new IOException("timed out in the queue"));
+                }),
+                (failure, attempts) -> stream.recover(fallbackStream.asFlux()))).doOnDiscard(String.class, discarded::add);
+        StepVerifier.create(flux)
+                .then(() -> late.getFirst().subscribe(eager))
+                .then(() -> fallbackStream.tryEmitNext("fallback"))
+                .then(fallbackStream::tryEmitComplete)
+                .expectNext("fallback")
+                .expectComplete().verify(VERIFY);
+        assertThat(discarded).containsExactly("stale");
+    }
+
     // ---- policies that hold something for the whole stream
 
     @Test
@@ -368,7 +430,7 @@ class FluxesTest {
         BulkheadPolicy bulkhead = registry.bulkheadPolicy("slot", "", "", b -> b.maxConcurrent(1));
         attempts.add(timed("a@100", "b@5000", ".@6000"));
         Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(
-                () -> bulkhead.executeAsync(() -> stream.subscribe(delegate()))));
+                attempt -> bulkhead.executeAsync(() -> attempt.subscribe(delegate()))));
         List<String> seen = new CopyOnWriteArrayList<>();
         Disposable first = flux.subscribe(seen::add);
         clock.advance(Duration.ofMillis(100));
@@ -388,7 +450,7 @@ class FluxesTest {
         CircuitBreakerPolicy breaker = registry.circuitBreakerPolicy("broken", "", "", b -> b.windowSize(2).minimumCalls(2));
         attempts.add(() -> Flux.just("a").concatWith(Flux.error(new IOException("broken"))));
         Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(
-                () -> breaker.executeStreamAsync(() -> stream.subscribe(delegate()), stream)));
+                attempt -> breaker.executeStreamAsync(() -> attempt.subscribe(delegate()), attempt)));
         StepVerifier.create(flux).expectNext("a").expectError(IOException.class).verify(VERIFY);
         assertThat(registry.snapshot().circuitBreakers().getFirst().failedCalls()).isOne();
     }
@@ -399,7 +461,7 @@ class FluxesTest {
                 .slowCallDuration(Duration.ofSeconds(1)));
         attempts.add(timed("a@200", "b@5000", ".@6000"));
         Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(
-                () -> breaker.executeStreamAsync(() -> stream.subscribe(delegate()), stream)));
+                attempt -> breaker.executeStreamAsync(() -> attempt.subscribe(delegate()), attempt)));
         StepVerifier.create(flux).then(() -> clock.advance(Duration.ofSeconds(6)))
                 .expectNext("a", "b").expectComplete().verify(VERIFY);
         assertThat(registry.snapshot().circuitBreakers().getFirst().slowCalls()).isZero();
@@ -411,7 +473,7 @@ class FluxesTest {
                 .minWindowSamples(1).window(Duration.ofSeconds(1)));
         attempts.add(timed("a@300", ".@4000"));
         Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(
-                () -> limit.executeStreamAsync(() -> stream.subscribe(delegate()), stream)));
+                attempt -> limit.executeStreamAsync(() -> attempt.subscribe(delegate()), attempt)));
         List<String> seen = new CopyOnWriteArrayList<>();
         flux.subscribe(seen::add);
         clock.advance(Duration.ofMillis(300));
@@ -427,7 +489,7 @@ class FluxesTest {
         TimeoutPolicy timeout = timeout("cancel", Duration.ofSeconds(1));
         attempts.add(timed("a@100", "b@200", "c@300"));
         Flux<String> flux = Fluxes.<String>defer(stream -> retry("cancel", 3).executeAsync(() -> stream.attempt(
-                () -> timeout.executeStreamAsync(() -> bulkhead.executeAsync(() -> stream.subscribe(delegate())), stream))));
+                attempt -> timeout.executeStreamAsync(() -> bulkhead.executeAsync(() -> attempt.subscribe(delegate())), attempt))));
         StepVerifier.create(flux)
                 .then(() -> clock.advance(Duration.ofMillis(150)))
                 .expectNext("a")
@@ -446,7 +508,7 @@ class FluxesTest {
         attempts.add(timed("a@100", "b@1500"));
         TimeoutPolicy timeout = timeout("late", Duration.ofSeconds(1));
         Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(
-                () -> timeout.executeStreamAsync(() -> stream.subscribe(delegate()), stream)));
+                attempt -> timeout.executeStreamAsync(() -> attempt.subscribe(delegate()), attempt)));
         StepVerifier.create(flux)
                 .then(() -> clock.advance(Duration.ofMillis(100)))
                 .expectNext("a")
