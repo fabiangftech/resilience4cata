@@ -6,7 +6,7 @@
 
 Annotation-driven resilience for **plain Java 21+**: retry, hedging, circuit breaker, rate limiter, adaptive concurrency limit, timeout, bulkhead and fallback, declared with annotations that work **without Spring, CDI, AspectJ or agents**. A compile-time annotation processor turns them into plain, straight-line Java that calls an allocation-free policy protocol, so the overhead stays in the low nanoseconds and the success path allocates nothing.
 
-Sync and async (`CompletionStage`, and Reactor's `Mono` with `resilience4cata-reactor`), interfaces and annotated classes, composed annotations, named configurations with external overrides, typed events and snapshots, a programmatic `Pipeline` for code you cannot annotate, and a `testkit` with a manual clock.
+Sync and async (`CompletionStage`, and Reactor's `Mono` and `Flux` with `resilience4cata-reactor`), interfaces and annotated classes, composed annotations, named configurations with external overrides, typed events and snapshots, a programmatic `Pipeline` for code you cannot annotate, and a `testkit` with a manual clock.
 
 **Documentation: [resilience4cata.dev](https://resilience4cata.dev)** (English and Spanish). Status: 0.10.0 on Maven Central; names can still change before 1.0.
 
@@ -42,7 +42,7 @@ Maven:
 </annotationProcessorPaths>
 ```
 
-The Gradle Kotlin DSL, the BOM and the individual modules (to keep the annotations compile-only), `testkit`, IDEs, JPMS and other annotation processors (Lombok, MapStruct) are covered in [installation](docs/en/start/installation.md). For Spring Boot 4.1+, `resilience4cata-spring` configures the registry from `application.yml` and protects annotated beans without AOP ([Spring Boot guide](docs/en/guides/spring.md)). For Micronaut 5.2+ (Java 25), `resilience4cata-micronaut` does the same ([Micronaut guide](docs/en/guides/micronaut.md)). For Project Reactor, `resilience4cata-reactor` protects methods that return `Mono` ([Reactor guide](docs/en/guides/reactor.md)).
+The Gradle Kotlin DSL, the BOM and the individual modules (to keep the annotations compile-only), `testkit`, IDEs, JPMS and other annotation processors (Lombok, MapStruct) are covered in [installation](docs/en/start/installation.md). For Spring Boot 4.1+, `resilience4cata-spring` configures the registry from `application.yml` and protects annotated beans without AOP ([Spring Boot guide](docs/en/guides/spring.md)). For Micronaut 5.2+ (Java 25), `resilience4cata-micronaut` does the same ([Micronaut guide](docs/en/guides/micronaut.md)). For Project Reactor, `resilience4cata-reactor` protects methods that return `Mono` or `Flux` ([Reactor guide](docs/en/guides/reactor.md)).
 
 ## Example
 

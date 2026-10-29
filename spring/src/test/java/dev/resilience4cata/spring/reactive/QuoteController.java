@@ -45,10 +45,12 @@ public class QuoteController {
         return rates.rate(currency);
     }
 
+    // tag::spring-reactive-endpoint[]
     @GetMapping(value = "/ticks/{sku}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     Flux<String> ticks(@PathVariable String sku) {
-        return quotes.ticks(sku);
+        return quotes.ticks(sku);   // the bean's Flux as it is: server-sent events
     }
+    // end::spring-reactive-endpoint[]
 
     @GetMapping(value = "/rate-ticks/{currency}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     Flux<String> rateTicks(@PathVariable String currency) {

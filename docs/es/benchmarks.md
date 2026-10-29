@@ -430,8 +430,54 @@ Base: `9a26494` (0.10.0 más docs). Nuevo: `resilience4cata-reactor` y el rate l
 
 **El rate limiter asíncrono ya no estaciona hilos.** `RateLimiterPolicy.reserve` se estacionaba 1 ns tras perder el CAS de su `tat`, como el `tryAcquire` síncrono. Un llamador asíncrono puede ser un hilo de event loop, que nunca debe estacionarse, y BlockHound lo reportó (`MonoBlockHoundTest` en examples), así que ahora `reserve` reintenta el CAS de inmediato (BlockHound también reporta `Thread.onSpinWait()`). `AsyncBenchmark.resilience4cataRateLimiter`, base → nuevo: 67.1 → 66.9 ns con un hilo, 277.7 ± 0.6 → 297.2 ± 28.1 ns con cuatro (+7%); 48 B en ambos casos. Los demás métodos de `AsyncBenchmark` medidos no se movieron (circuit breaker 25.0 → 24.9 / 25.6 → 25.6, stack 123.6 → 123.4 / 589.0 → 558.0). En un Apple M1 (JDK 21, 4 forks) el mismo cambio costó mucho más con contención, 264.5 ± 52.2 → 661.0 ± 29.0 ns con cuatro hilos, donde estacionar también alejaba a los perdedores del `System.nanoTime()` con contención de macOS; un backoff exponencial con `onSpinWait` (hasta 64 spins) midió los mismos 659.9 ± 16.0 ns ahí y se descartó. El camino síncrono sigue estacionando.
 
+## Métodos Flux y stages ya completos, 0.11.0 (2026-10-29, AWS Graviton3) :id=flux-and-done-stages
+
+Base: `4649484` (el soporte de `Flux` antes de este ajuste). Nuevo: `53cba0a`: los elementos de un intento sin timeout van al suscriptor tal cual, un serializador más barato cuando escucha un timeout, sin frontera de intento cuando no hay retry ni fallback, los caminos rápidos del árbitro, y el atajo de stage ya completo del circuit breaker, el bulkhead, el rate limiter y el adaptive limit. El mismo método que arriba (`infra/bench.sh`, `c7g.xlarge`, 3 forks; calibración 20.51–20.54 ns en 19 máquinas).
+
+**Métodos `Flux` contra resilience4j-reactor 2.4.0.** `FluxBenchmark` es nuevo, así que no tiene base. Cada benchmark construye el `Flux` protegido, se suscribe, y cada elemento llega a un `Blackhole`; una operación es un stream completo. Resilience4j usa sus operadores de Reactor con `transformDeferred` y la configuración de `ReactorBenchmark`; sobre un `Flux` su time limiter es `flux.timeout`, un plazo que reinicia cada elemento como `@Timeout` (notas de equidad en el Javadoc del benchmark). Diez elementos ya disponibles al suscribirse salvo que se indique; `pending`: diez elementos emitidos justo después de suscribirse, así que cada capa espera y los dos timeouts arman un timer; `1000 elements`: mil elementos ya disponibles al suscribirse. ns/op con 1 / 4 hilos, B/op del fork típico con un hilo:
+
+| Benchmark | resilience4cata, ns/op | Resilience4j, ns/op | resilience4cata, B/op | Resilience4j, B/op |
+|---|---:|---:|---:|---:|
+| sin política (`baseline`) | 56.0 / 57.3 | — | 96 | — |
+| circuit breaker | **195.1 / 189.3** | 272.3 / 1322.0 | 283 | 216 |
+| retry, el primer intento funciona | **270.3 / 215.8** | 1196.8 / 1257.1 | 392 | 1024 |
+| timeout | **680.5 / 688.4** | 28896.1 / 63439.9 | 384 | 3983 |
+| bulkhead | **212.3** / 754.9 | 244.6 / **697.2** | 288 | 219 |
+| rate limiter | 240.1 / **354.1** | **234.3** / 885.4 | 283 | 248 |
+| retry + breaker + timeout + bulkhead | **788.8 / 984.3** | 30583.2 / 63403.4 | 616 | 5104 |
+| la misma pila, `FluxPipelineOperator` | 824.4 / 1040.0 | (la misma pila de Resilience4j) | 752 | — |
+| sin política, pendiente (`baselinePending`) | 1088.3 / 1004.5 | — | 1248 | — |
+| timeout, pendiente | **1842.8 / 2135.3** | 30396.9 / 50648.3 | 1656 | 5390 |
+| pila, pendiente | **2157.6 / 2703.1** | 31580.6 / 55194.6 | 2224 | 6264 |
+| sin política, 1000 elementos (`baselineLong`) | 1043.2 / 1042.6 | — | 96 | — |
+| timeout, 1000 elementos | **45057.8 / 45107.2** | 2632248.7 / 5172988.8 | 384 | 241529 |
+| pila, 1000 elementos | **46189.5 / 46545.0** | 2822600.4 / 5586559.5 | 579 | 242903 |
+
+- **La diferencia está en el timeout:** el `flux.timeout` de Reactor programa una tarea en el scheduler parallel por cada elemento (unos 2.6 µs y 240 B por elemento aquí); `@Timeout` lee el reloj y escribe un campo por elemento y no mueve ningún timer (unos 44 ns por elemento, 0 B), así que mil elementos tardan 45 µs contra 2.6 ms. Con diez elementos: 42× con un hilo, 92× con cuatro; la pila 39× y 64×.
+- **El circuit breaker** es 1.4× más rápido con un hilo y 7× con cuatro, donde el breaker de Resilience4j tiene contención. **El retry** es 4.4× y 5.8× más rápido: el `RetryOperator` de Resilience4j arma un contexto de retry y la maquinaria de resuscripción por suscripción.
+- **Dos casos quedan dentro del error:** el bulkhead con cuatro hilos (754.9 ± 36.7 contra 697.2 ± 41.8; los dos pagan un contador compartido, como en los métodos `Mono`) y el rate limiter con un hilo (240.1 ± 9.7 contra 234.3 ± 0.9). El bulkhead con un hilo y el rate limiter con cuatro son más rápidos (1.2× y 2.5×).
+- **Bytes:** un stream protegido asigna su `Flux`, la suscripción de la llamada, el intento y su suscriptor, y las lambdas de las capas, unos 190 B además de suscribirse, una vez por stream; sus elementos no asignan nada. Resilience4j asigna menos para un breaker, un bulkhead o un rate limiter solos (un suscriptor cada uno) y muchísimo más en cuanto hay un retry o un timeout.
+
+**El ajuste, medido en Apple M1 mientras se hacía (JDK 21, 2 forks, diez elementos):** la primera versión perdía en las políticas solas (circuit breaker 428 ns contra 148 ns). Dos CAS por elemento para serializar los elementos contra el final costaban unos 8.5 ns por elemento; el par store-buffering que los reemplazó, unos 7–11 ns (su lectura volátil después de una escritura volátil espera al buffer de escritura), así que los elementos de un intento sin timeout, cuyo final solo puede venir de su propio stream, no lo usan (circuit breaker 217 → 146 ns ahí). El atajo de stage ya completo y la frontera que se omite sin retry hicieron el resto.
+
+**El atajo de stage ya completo en los benchmarks existentes**, base → nuevo, ns/op con 1 / 4 hilos (bytes con un hilo):
+
+| Benchmark | Base | Nuevo |
+|---|---:|---:|
+| `AsyncBenchmark` circuit breaker | 24.9 / 25.5 (48 B) | **9.7 / 9.2** (24 B) |
+| `AsyncBenchmark` bulkhead | 42.7 / 396.1 (48 B) | **28.4 / 312.1** (24 B) |
+| `AsyncBenchmark` rate limiter | 67.1 / 283.8 (48 B) | **52.5** / 289.6 (24 B) |
+| `AsyncBenchmark` pila | 123.4 / 586.2 (200 B) | **91.2 / 474.5** (152 B) |
+| `AdaptiveLimitBenchmark` async | 108.6 / 505.1 (48 B) | **94.7** / 499.8 (24 B) |
+| `ReactorBenchmark` circuit breaker | 129.3 / 121.7 | **105.7 / 105.3** (176 B) |
+| `ReactorBenchmark` bulkhead | 140.8 / 514.5 | **126.4** / 525.3 (176 B) |
+| `ReactorBenchmark` rate limiter | 166.7 / 360.7 | **146.5** / 377.6 (176 B) |
+| `ReactorBenchmark` pila | 228.5 / 567.4 | **201.4 / 540.8** (376 B) |
+
+Un stage que ya está completo cuando la llamada vuelve (un valor en caché, `Mono.just`, un stream que terminó durante su suscripción) ahora se registra al momento y se responde con una copia completada, como ya hacía el timeout, en vez de un future enlazado, una lambda y el future dependiente de `whenComplete`. El retry, el timeout, el hedge, los stages pendientes y todos los caminos síncronos no se movieron más allá del error (`PipelineBenchmark`, `HedgeBenchmark`, `AsyncBenchmark.resilience4cataRetry`/`Timeout*`, `ReactorBenchmark.*Pending`: dentro de ±9%, todos dentro de sus barras de error). Los números de Resilience4j en `ReactorBenchmark` tampoco se movieron (circuit breaker 243.3 / 1290.7, pila 4318.7 / 6671.2), así que contra resilience4j-reactor el circuit breaker de un método `Mono` ahora es 2.3× más rápido con un hilo y 12.3× con cuatro.
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos (`-f 1 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`, unos 4 minutos) y falla si alguno asigna su presupuesto + 1 B/op o más, o si falta en los resultados. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.
 
-Presupuestos: 0 B/op en todo camino sincrónico de éxito y de rechazo (retry, circuit breaker por cantidad/tiempo/abierto, rate limiter libre/agotado, bulkhead libre/lleno/con espera, timeout, classifiers, código generado y `Pipeline`, incluidos `run` y una lambda que captura, subclase y wrapper). Los caminos async asignan sus futures: 48 B por política, 24 B para un timeout sobre un stage ya completado, 200 B para el stack de cuatro políticas y 200 B para un timeout sobre un stage pendiente (medido 191–192 B; el trabajo compartido del thread del timer varía unos pocos bytes, y 8 B de margen siguen siendo menos que un objeto por llamada). Medido en local con JDK 21 (Apple M1), 2026-10-24. `CircuitBreakerBenchmark.*Open` (breaker forzado a abierto, todas las llamadas rechazadas) se agregó para el gate; ahí Resilience4j usa `writableStackTraceEnabled(false)`, para que la comparación sea justa.
+Presupuestos: 0 B/op en todo camino sincrónico de éxito y de rechazo (retry, circuit breaker por cantidad/tiempo/abierto, rate limiter libre/agotado, bulkhead libre/lleno/con espera, timeout, classifiers, código generado y `Pipeline`, incluidos `run` y una lambda que captura, subclase y wrapper). Los caminos async asignan sus futures: 48 B para el retry; desde 0.11.0, 24 B (una copia completada) para el circuit breaker, el bulkhead, el rate limiter, el adaptive limit y el timeout sobre un stage ya completado ([arriba](#flux-and-done-stages)), y 152 B para el stack de cuatro políticas (200 B antes) y 200 B para un timeout sobre un stage pendiente (medido 191–192 B; el trabajo compartido del thread del timer varía unos pocos bytes, y 8 B de margen siguen siendo menos que un objeto por llamada). Medido en local con JDK 21 (Apple M1), 2026-10-24. `CircuitBreakerBenchmark.*Open` (breaker forzado a abierto, todas las llamadas rechazadas) se agregó para el gate; ahí Resilience4j usa `writableStackTraceEnabled(false)`, para que la comparación sea justa.

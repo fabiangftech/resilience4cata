@@ -430,8 +430,54 @@ Base: `9a26494` (0.10.0 plus docs). New: `resilience4cata-reactor` and the async
 
 **The asynchronous rate limiter no longer parks.** `RateLimiterPolicy.reserve` used to park for 1 ns after losing the CAS on its `tat`, like the synchronous `tryAcquire`. An asynchronous caller may be an event loop thread, which must never park, and BlockHound reported it (`MonoBlockHoundTest` in examples), so `reserve` now retries the CAS at once (`Thread.onSpinWait()` is reported by BlockHound too). `AsyncBenchmark.resilience4cataRateLimiter`, base → new: 67.1 → 66.9 ns on one thread, 277.7 ± 0.6 → 297.2 ± 28.1 ns with four (+7%); 48 B either way. The other `AsyncBenchmark` methods measured did not move (circuit breaker 25.0 → 24.9 / 25.6 → 25.6, stack 123.6 → 123.4 / 589.0 → 558.0). On Apple M1 (JDK 21, 4 forks) the same change cost much more under contention, 264.5 ± 52.2 → 661.0 ± 29.0 ns with four threads, where parking also took the losers away from macOS's contended `System.nanoTime()`; an exponential `onSpinWait` backoff (up to 64 spins) measured the same 659.9 ± 16.0 ns there and was rejected. The synchronous path still parks.
 
+## Flux methods and already-done stages, 0.11.0 (2026-10-29, AWS Graviton3) :id=flux-and-done-stages
+
+Base: `4649484` (`Flux` support before this tuning). New: `53cba0a`: elements of an attempt without a timeout go to the subscriber as they are, a cheaper serializer when a timeout listens, no attempt boundary without a retry or a fallback, the arbiter's fast paths, and the already-done shortcut of the circuit breaker, bulkhead, rate limiter and adaptive limit. Same method as above (`infra/bench.sh`, `c7g.xlarge`, 3 forks; calibration 20.51–20.54 ns on 19 machines).
+
+**`Flux` methods against resilience4j-reactor 2.4.0.** `FluxBenchmark` is new, so it has no base. Each benchmark builds the protected `Flux`, subscribes, and every element reaches a `Blackhole`; one operation is one whole stream. Resilience4j uses its Reactor operators with `transformDeferred` and the settings of `ReactorBenchmark`; on a `Flux` its time limiter is `flux.timeout`, a deadline restarted by every element like `@Timeout` (fairness notes in the benchmark's Javadoc). Ten elements there at subscription unless noted; `pending`: ten elements emitted right after subscribing, so that every layer waits and both timeouts arm a timer; `1000 elements`: a thousand elements there at subscription. ns/op 1 / 4 threads, B/op of the typical fork on one thread:
+
+| Benchmark | resilience4cata, ns/op | Resilience4j, ns/op | resilience4cata, B/op | Resilience4j, B/op |
+|---|---:|---:|---:|---:|
+| no policy (`baseline`) | 56.0 / 57.3 | — | 96 | — |
+| circuit breaker | **195.1 / 189.3** | 272.3 / 1322.0 | 283 | 216 |
+| retry, first attempt succeeds | **270.3 / 215.8** | 1196.8 / 1257.1 | 392 | 1024 |
+| timeout | **680.5 / 688.4** | 28896.1 / 63439.9 | 384 | 3983 |
+| bulkhead | **212.3** / 754.9 | 244.6 / **697.2** | 288 | 219 |
+| rate limiter | 240.1 / **354.1** | **234.3** / 885.4 | 283 | 248 |
+| retry + breaker + timeout + bulkhead | **788.8 / 984.3** | 30583.2 / 63403.4 | 616 | 5104 |
+| same stack, `FluxPipelineOperator` | 824.4 / 1040.0 | (the same Resilience4j stack) | 752 | — |
+| no policy, pending (`baselinePending`) | 1088.3 / 1004.5 | — | 1248 | — |
+| timeout, pending | **1842.8 / 2135.3** | 30396.9 / 50648.3 | 1656 | 5390 |
+| stack, pending | **2157.6 / 2703.1** | 31580.6 / 55194.6 | 2224 | 6264 |
+| no policy, 1000 elements (`baselineLong`) | 1043.2 / 1042.6 | — | 96 | — |
+| timeout, 1000 elements | **45057.8 / 45107.2** | 2632248.7 / 5172988.8 | 384 | 241529 |
+| stack, 1000 elements | **46189.5 / 46545.0** | 2822600.4 / 5586559.5 | 579 | 242903 |
+
+- **The timeout is where the gap is:** Reactor's `flux.timeout` schedules a task on the parallel scheduler for every element (about 2.6 µs and 240 B per element here); `@Timeout` reads the clock and writes one field per element and moves no timer (about 44 ns per element, 0 B), so a thousand elements take 45 µs against 2.6 ms. With ten elements: 42× on one thread, 92× with four; the stack 39× and 64×.
+- **The circuit breaker** is 1.4× faster on one thread and 7× with four, where Resilience4j's breaker contends. **The retry** is 4.4× and 5.8× faster: Resilience4j's `RetryOperator` builds a retry context and resubscription machinery per subscription.
+- **Two cases are within the error:** the bulkhead with four threads (754.9 ± 36.7 vs 697.2 ± 41.8, both paying for one shared counter, as for `Mono` methods) and the rate limiter on one thread (240.1 ± 9.7 vs 234.3 ± 0.9). The bulkhead on one thread and the rate limiter with four are faster (1.2× and 2.5×).
+- **Bytes:** a protected stream allocates its `Flux`, the call's subscription, the attempt and its subscriber, and the layers' lambdas, about 190 B beyond subscribing, once per stream; its elements allocate nothing. Resilience4j allocates less for a single breaker, bulkhead or rate limiter (one subscriber each) and far more as soon as a retry or a timeout is involved.
+
+**Tuning, measured on Apple M1 while it was done (JDK 21, 2 forks, ten elements):** the first version lost the single policies (circuit breaker 428 ns against 148 ns). Two CASes per element to serialize elements against the end cost about 8.5 ns per element; the store-buffering pair that replaced them, about 7–11 ns (its volatile read after a volatile write waits for the store buffer), so elements of an attempt without a timeout, whose end can only come from its own stream, skip it altogether (circuit breaker 217 → 146 ns there). The already-done shortcut and the boundary that is skipped without a retry took the rest.
+
+**The already-done shortcut in the existing benchmarks**, base → new, ns/op 1 / 4 threads (bytes on one thread):
+
+| Benchmark | Base | New |
+|---|---:|---:|
+| `AsyncBenchmark` circuit breaker | 24.9 / 25.5 (48 B) | **9.7 / 9.2** (24 B) |
+| `AsyncBenchmark` bulkhead | 42.7 / 396.1 (48 B) | **28.4 / 312.1** (24 B) |
+| `AsyncBenchmark` rate limiter | 67.1 / 283.8 (48 B) | **52.5** / 289.6 (24 B) |
+| `AsyncBenchmark` stack | 123.4 / 586.2 (200 B) | **91.2 / 474.5** (152 B) |
+| `AdaptiveLimitBenchmark` async | 108.6 / 505.1 (48 B) | **94.7** / 499.8 (24 B) |
+| `ReactorBenchmark` circuit breaker | 129.3 / 121.7 | **105.7 / 105.3** (176 B) |
+| `ReactorBenchmark` bulkhead | 140.8 / 514.5 | **126.4** / 525.3 (176 B) |
+| `ReactorBenchmark` rate limiter | 166.7 / 360.7 | **146.5** / 377.6 (176 B) |
+| `ReactorBenchmark` stack | 228.5 / 567.4 | **201.4 / 540.8** (376 B) |
+
+A stage that is already complete when the call returns (a cached value, `Mono.just`, a stream that ended during its subscription) is now recorded at once and answered with a completed copy, as the timeout already did, instead of a linked future, a lambda and `whenComplete`'s dependent future. The retry, the timeout, the hedge, pending stages and every synchronous path did not move beyond the error (`PipelineBenchmark`, `HedgeBenchmark`, `AsyncBenchmark.resilience4cataRetry`/`Timeout*`, `ReactorBenchmark.*Pending`: within ±9%, all inside their error bars). Resilience4j's numbers in `ReactorBenchmark` did not move either (circuit breaker 243.3 / 1290.7, stack 4318.7 / 6671.2), so against resilience4j-reactor the `Mono` circuit breaker is now 2.3× faster on one thread and 12.3× with four.
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings (`-f 1 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`, about 4 minutes) and fails if one allocates its budget + 1 B/op or more, or is missing from the results. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.
 
-Budgets: 0 B/op for every sync success and rejection path (retry, circuit breaker count/time/open, rate limiter free/exhausted, bulkhead free/full/waiting, timeout, classifiers, generated code and `Pipeline` including `run` and a capturing lambda, subclass and wrapper). Async paths allocate their futures: 48 B per policy, 24 B for a timeout on a completed stage, 200 B for the four-policy stack, and 200 B for a timeout on a pending stage (measured 191–192 B; the timer thread's shared work varies by a few bytes, and 8 B of slack is still less than one object per call). Measured locally on JDK 21 (Apple M1), 2026-10-24. `CircuitBreakerBenchmark.*Open` (breaker forced open, every call rejected) was added for the gate; Resilience4j gets `writableStackTraceEnabled(false)` there, for fairness.
+Budgets: 0 B/op for every sync success and rejection path (retry, circuit breaker count/time/open, rate limiter free/exhausted, bulkhead free/full/waiting, timeout, classifiers, generated code and `Pipeline` including `run` and a capturing lambda, subclass and wrapper). Async paths allocate their futures: 48 B for the retry; since 0.11.0, 24 B (a completed copy) for the circuit breaker, bulkhead, rate limiter, adaptive limit and timeout on a completed stage ([above](#flux-and-done-stages)), and 152 B for the four-policy stack (200 B before); and 200 B for a timeout on a pending stage (measured 191–192 B; the timer thread's shared work varies by a few bytes, and 8 B of slack is still less than one object per call). Measured locally on JDK 21 (Apple M1), 2026-10-24. `CircuitBreakerBenchmark.*Open` (breaker forced open, every call rejected) was added for the gate; Resilience4j gets `writableStackTraceEnabled(false)` there, for fairness.

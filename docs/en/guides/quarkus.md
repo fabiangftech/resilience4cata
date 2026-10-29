@@ -229,6 +229,39 @@ public class StockReport {
 }
 ```
 
+## Reactive beans :id=reactive
+
+Bean methods that return Reactor's `Mono` or `Flux` are protected the same way, with `resilience4cata-reactor` on the class path (it is not part of `resilience4cata-all`: [installation](../start/installation.md)). Each subscription is one call through the policies; for a `Flux`, the retry and the fallback act before the first element only, and `@Timeout` is the time without an element ([Project Reactor](reactor.md)). Mutiny's `Uni` and `Multi` are not supported ([R4C-ASY-002](../errors.md#r4c-asy-002)): convert in the implementation (`uni.subscribeAsCompletionStage()`).
+
+<!-- snippet: quarkus-reactive -->
+```java
+@ApplicationScoped
+public class PriceService {
+
+    @Inject
+    PriceBackend backend;
+
+    @Retry(maxAttempts = 3, delay = "10ms")
+    @Timeout("2s")
+    public Mono<Integer> price(String sku) {
+        return backend.price(sku);
+    }
+
+    @Retry(maxAttempts = 3, delay = "10ms")
+    @Timeout("2s")                                  // to the first element, and between two
+    @Fallback(method = "noTicks")
+    public Flux<Integer> ticks(String sku) {
+        return backend.ticks(sku);
+    }
+
+    protected Flux<Integer> noTicks(String sku) {
+        return Flux.empty();
+    }
+}
+```
+
+A `jakarta.transaction.Transactional` around a retried or hedged `Mono` or `Flux` method of an annotated class fails the build, as for other methods ([R4C-QK-002](../errors.md#r4c-qk-002)).
+
 ## Configuration :id=configuration
 
 The policies read the application's configuration under `resilience4cata.` (or `r4c.`), with the keys of the

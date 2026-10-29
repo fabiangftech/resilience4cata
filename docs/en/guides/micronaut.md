@@ -269,6 +269,42 @@ public class StockReport {
   for beans created later. Why a marker and no automatic wrapping: it is explicit, and needs no class lookup for
   every bean.
 
+## Reactive beans :id=reactive
+
+Bean methods that return Reactor's `Mono` or `Flux` are protected the same way, with `resilience4cata-reactor` on the class path (it is not part of `resilience4cata-all`: [installation](../start/installation.md)). Each subscription is one call through the policies; for a `Flux`, the retry and the fallback act before the first element only, and `@Timeout` is the time without an element ([Project Reactor](reactor.md)).
+
+<!-- snippet: micronaut-reactive -->
+```java
+@Singleton
+public class PriceService {
+
+    private final PriceBackend backend;
+
+    public PriceService(PriceBackend backend) {
+        this.backend = backend;
+    }
+
+    @Retry(maxAttempts = 3, delay = "10ms")
+    @Timeout("2s")
+    public Mono<Integer> price(String sku) {
+        return backend.price(sku);
+    }
+
+    @Retry(maxAttempts = 3, delay = "10ms")
+    @Timeout("2s")                                  // to the first element, and between two
+    @Fallback(method = "noTicks")
+    public Flux<Integer> ticks(String sku) {
+        return backend.ticks(sku);
+    }
+
+    protected Flux<Integer> noTicks(String sku) {
+        return Flux.empty();
+    }
+}
+```
+
+A Micronaut `@Transactional` around a retried `Mono` or `Flux` method of an annotated class fails the startup, as for other methods ([R4C-MN-005](../errors.md#r4c-mn-005)).
+
 ## Configuration :id=configuration
 
 The policies read the application's configuration under `resilience4cata`, with the keys of the

@@ -58,23 +58,36 @@ Reading the table honestly:
 
 - A `Pipeline` whose single `call.call()` site has seen five other pipelines measured **7.9 ns** instead of 2.9 ns: with many pipelines in one application that call site turns megamorphic. Generated code has one call site per method and does not pay this.
 
-### Mono methods (Project Reactor) :id=reactor
+### Mono and Flux methods (Project Reactor) :id=reactor
 
 > [!MEASURED]
-> AWS `c7g.xlarge` (Graviton3), JDK 21, against resilience4j-reactor 2.4.0's operators with the same settings, every call succeeds. From [Reactor support (2026-10-27, AWS Graviton3)](benchmarks.md#reactor-support-and-the-async-rate-limiter-0110-2026-10-27-aws-graviton3).
+> AWS `c7g.xlarge` (Graviton3), JDK 21, against resilience4j-reactor 2.4.0's operators with the same settings, every call succeeds. From [Flux methods and already-done stages (2026-10-29, AWS Graviton3)](benchmarks.md#flux-and-done-stages).
+
+`Mono` methods, a value there at subscription unless noted:
 
 | Scenario | Threads | resilience4cata | Resilience4j 2.4.0 |
 |---|---:|---:|---:|
-| Circuit breaker | 1 | **130 ns**, 200 B | 246 ns, 248 B |
-| Circuit breaker | 4 | **119 ns**, 200 B | 1379 ns, 234 B |
-| Retry, first attempt succeeds | 1 | **128 ns**, 200 B | 726 ns, 1000 B |
-| Timeout, value already there | 1 | **105 ns**, 176 B | 3166 ns, 1344 B |
-| Timeout, value comes later | 1 | **441 ns**, 480 B | 3725 ns, 1787 B |
-| Bulkhead | 1 | **144 ns**, 200 B | 158 ns, 200 B |
-| Retry + breaker + timeout + bulkhead | 1 | **227 ns**, 368 B | 4338 ns, 2624 B |
+| Circuit breaker | 1 | **106 ns**, 176 B | 243 ns, 248 B |
+| Circuit breaker | 4 | **105 ns**, 176 B | 1291 ns, 240 B |
+| Retry, first attempt succeeds | 1 | **135 ns**, 227 B | 725 ns, 1000 B |
+| Timeout | 1 | **105 ns**, 176 B | 3184 ns, 1344 B |
+| Timeout, value comes later | 1 | **430 ns**, 480 B | 3686 ns, 1797 B |
+| Bulkhead | 1 | **126 ns**, 176 B | 157 ns, 200 B |
+| Retry + breaker + timeout + bulkhead | 1 | **201 ns**, 376 B | 4319 ns, 2624 B |
 
-- Subscribing to a `Mono.just` with no policy costs 52 ns and 88 B on this machine; every row includes it.
-- The bulkhead is the closest: 9% on one thread, within the error with four. `Mono` methods allocate, as every async path does; the allocation gate tracks their bytes.
+`Flux` methods, one whole stream of ten elements unless noted:
+
+| Scenario | Threads | resilience4cata | Resilience4j 2.4.0 |
+|---|---:|---:|---:|
+| Circuit breaker | 1 | **195 ns**, 283 B | 272 ns, 216 B |
+| Circuit breaker | 4 | **189 ns**, 317 B | 1322 ns, 218 B |
+| Retry, first attempt succeeds | 1 | **270 ns**, 392 B | 1197 ns, 1024 B |
+| Timeout (restarted by every element) | 1 | **681 ns**, 384 B | 28896 ns, 3983 B |
+| Timeout, a thousand elements | 1 | **45 µs**, 384 B | 2632 µs, 241529 B |
+| Retry + breaker + timeout + bulkhead | 1 | **789 ns**, 616 B | 30583 ns, 5104 B |
+
+- Subscribing with no policy costs 52 ns and 88 B for a `Mono.just`, 56 ns and 96 B for ten elements, on this machine; every row includes it.
+- The closest cases: a bulkhead around a `Mono` with four threads, and around a `Flux` with four threads (755 vs 697 ns) or a rate limiter on one (240 vs 234 ns), within the error. A `Flux` timeout costs about 44 ns per element, with no timer per element; Resilience4j's schedules one per element. Reactive methods allocate, as every async path does; the allocation gate tracks their bytes.
 
 ### Many services in one application :id=many-services
 
@@ -90,7 +103,7 @@ With four decorated suppliers sharing Resilience4j's call site, its success path
 
 ## The zero-allocation gate :id=allocation-gate
 
-Allocation is checked on every pull request. `./gradlew :benchmark:allocationCheck` runs the benchmarks listed in `benchmark/allocation-budgets.properties` with `-prof gc` and fails if one allocates its budget + 1 B per call. **Every sync success and rejection path has a budget of 0 B**: retry, circuit breaker (count and time windows, open), rate limiter, bulkhead, timeout, classifiers, generated code and `Pipeline` (also with a capturing lambda). Async paths have budgets for their futures (48 B per policy). Details in [Allocation gate](benchmarks.md#allocation-gate).
+Allocation is checked on every pull request. `./gradlew :benchmark:allocationCheck` runs the benchmarks listed in `benchmark/allocation-budgets.properties` with `-prof gc` and fails if one allocates its budget + 1 B per call. **Every sync success and rejection path has a budget of 0 B**: retry, circuit breaker (count and time windows, open), rate limiter, bulkhead, timeout, classifiers, generated code and `Pipeline` (also with a capturing lambda). Async paths have budgets for their futures (48 B for a retry, 24 B for another policy whose stage is already complete). Details in [Allocation gate](benchmarks.md#allocation-gate).
 
 Events allocate only when someone listens: an event type without listeners costs one null check on the failure or rejection path, which measured as 0.3 ns on a full bulkhead.
 

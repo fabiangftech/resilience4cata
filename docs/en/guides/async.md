@@ -116,7 +116,7 @@ public interface ParcelClient {
 ## What is not supported
 
 - **Other stage types are compile errors** ([`R4C-ASY-001`](../errors.md#r4c-asy-001)): raw `CompletionStage`, `? super X`, and subtypes of `CompletionStage` other than `CompletableFuture`.
-- **Reactor's `Mono` is supported** with `resilience4cata-reactor`: see [Project Reactor](reactor.md). **Other reactive types are compile errors** ([`R4C-ASY-002`](../errors.md#r4c-asy-002)): `Flow.Publisher` and Reactive Streams `Publisher` (Reactor's `Flux`), Mutiny's `Uni` and `Multi`, and RxJava's types. They only build a pipeline that runs when subscribed, so the policies would protect building it, not the work. Convert to a `CompletionStage` in the implementation (`uni.subscribeAsCompletionStage()`), or to a `Mono` (`flux.collectList()`).
+- **Reactor's `Mono` and `Flux` are supported** with `resilience4cata-reactor`: see [Project Reactor](reactor.md). **Other reactive types are compile errors** ([`R4C-ASY-002`](../errors.md#r4c-asy-002)): `Flow.Publisher` and other Reactive Streams `Publisher`s (RxJava's `Flowable`), Mutiny's `Uni` and `Multi`, and RxJava's types. They only build a pipeline that runs when subscribed, so the policies would protect building it, not the work. Convert to a `CompletionStage` in the implementation (`uni.subscribeAsCompletionStage()`), or to a `Mono` or a `Flux`.
 - **Other asynchronous types are treated as synchronous.** A method returning `java.util.concurrent.Future` or anything else is protected like any synchronous method: the policies see only the call that *returns* the object, not the work it represents.
 
 > [!WARNING]
