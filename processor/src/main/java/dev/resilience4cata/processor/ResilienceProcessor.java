@@ -76,6 +76,10 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private static final String MONO = "reactor.core.publisher.Mono";
     /** What generated {@code Mono} methods call: present only with resilience4cata-reactor on the class path. */
     private static final String MONOS = "dev.resilience4cata.reactor.generated.Monos";
+    /** Methods that return it are asynchronous streams, when resilience4cata-reactor provides {@link #FLUXES}. */
+    private static final String FLUX = "reactor.core.publisher.Flux";
+    /** What generated {@code Flux} methods call: resilience4cata-reactor 0.11.0 or newer. */
+    private static final String FLUXES = "dev.resilience4cata.reactor.generated.Fluxes";
     /**
      * Lazy reactive types: the method only builds a pipeline that runs when subscribed, so policies around the call
      * would protect the building, not the work. Checked when present on the classpath.
@@ -340,15 +344,18 @@ public final class ResilienceProcessor extends AbstractProcessor {
             valid &= checkHedge(iface, method, type, asyncResult, typeLevel);
             if (annotated && asyncResult != null && asyncResult.getKind() == TypeKind.NONE) {
                 error(method, ProcessorError.UNSUPPORTED_ASYNC_TYPE, "An asynchronous method must return CompletionStage<T> or CompletableFuture<T>"
-                        + " (or Mono<T>, with resilience4cata-reactor), where T may also be ? or ? extends X (not ? super X),"
+                        + " (or Mono<T> or Flux<T>, with resilience4cata-reactor), where T may also be ? or ? extends X (not ? super X),"
                         + " to use resilience annotations; it returns " + TypePrinter.print(type.getReturnType()) + ".");
                 valid = false;
             }
-            if (annotated && asyncResult != null && isMono(type) && elements.getTypeElement(MONOS) == null) {
+            if (annotated && asyncResult != null && (isMono(type) && elements.getTypeElement(MONOS) == null
+                    || isFlux(type) && elements.getTypeElement(FLUXES) == null)) {
+                String kind = isMono(type) ? "Mono" : "Flux";
                 error(method, ProcessorError.REACTOR_MISSING, "The method returns " + TypePrinter.print(type.getReturnType())
-                        + ", and Mono methods need resilience4cata-reactor on the compile class path, next to"
-                        + " resilience4cata-core: add implementation 'dev.resilience4cata:resilience4cata-reactor:<version>'"
-                        + " (Gradle) or the dependency dev.resilience4cata:resilience4cata-reactor (Maven).");
+                        + ", and " + kind + " methods need resilience4cata-reactor" + (isFlux(type) ? " 0.11.0 or newer" : "")
+                        + " on the compile class path, next to resilience4cata-core: add implementation"
+                        + " 'dev.resilience4cata:resilience4cata-reactor:<version>' (Gradle) or the dependency"
+                        + " dev.resilience4cata:resilience4cata-reactor (Maven).");
                 valid = false;
             }
             String reactive = annotated && asyncResult == null ? reactiveType(type.getReturnType()) : null;
@@ -357,12 +364,15 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         + ", a " + reactive + ": it only builds a pipeline that runs later, when subscribed, so the"
                         + " policies would protect building it, not the work. Return CompletionStage<T> or"
                         + " CompletableFuture<T> (for example Uni.subscribeAsCompletionStage() in the implementation),"
-                        + " or Reactor's Mono<T> with resilience4cata-reactor (for a Flux, flux.collectList()), or use"
-                        + " the reactive library's own retry and timeout operators.");
+                        + " or Reactor's Mono<T> or Flux<T> with resilience4cata-reactor, or use the reactive library's"
+                        + " own retry and timeout operators.");
                 valid = false;
             }
             List<Kind> layers = layers(iface, typeOrder, method, policies);
             valid &= layers != null;
+            if (annotated && isFlux(type) && asyncResult != null && asyncResult.getKind() != TypeKind.NONE) {
+                valid &= checkFlux(iface, method, typeLevel, policies, layers);
+            }
             if (annotated || iface.getKind() == ElementKind.INTERFACE) { // a subclass overrides only protected methods
                 methods.add(new MethodModel(method, type, policies, fallback,
                     asyncResult == null || asyncResult.getKind() == TypeKind.NONE ? null : asyncResult,
@@ -378,6 +388,35 @@ public final class ResilienceProcessor extends AbstractProcessor {
             return;
         }
         write(iface, binaryName, methods);
+    }
+
+    /**
+     * A {@code Flux} method's policies act on a stream: a hedge would merge two streams, a classifier judges one
+     * result while a stream has many, and the rule that the retry and the fallback stop at the first element is
+     * defined for the default order. Returns false after reporting an error.
+     */
+    private boolean checkFlux(TypeElement iface, ExecutableElement method,
+            Map<Kind, Optional<Map<String, AnnotationValue>>> typeLevel, Map<Kind, PolicyModel> policies, List<Kind> layers) {
+        List<String> problems = new ArrayList<>();
+        if (effective(Kind.HEDGE, iface, typeLevel.get(Kind.HEDGE), method).isPresent()) {
+            problems.add("@Hedge (it would merge the elements of two streams; use @Retry)");
+        }
+        for (Map.Entry<Kind, PolicyModel> policy : policies.entrySet()) {
+            if (policy.getValue().classifier() != null) {
+                problems.add("a classifier on @" + policy.getKey().annotation.getSimpleName()
+                        + " (it judges one result, and a stream has many; use retryOn/abortOn or recordOn/ignoreOn)");
+            }
+        }
+        if (layers != null && !layers.equals(List.copyOf(policies.keySet()))) {
+            problems.add("@PolicyOrder (the retry and the fallback stop at the stream's first element in the default"
+                    + " order only; remove it)");
+        }
+        if (problems.isEmpty()) {
+            return true;
+        }
+        return invalid(method, ProcessorError.FLUX_UNSUPPORTED, method.getSimpleName() + " returns "
+                + TypePrinter.print(method.getReturnType()) + ", and a Flux method cannot use " + String.join(", nor ", problems)
+                + ". Remove it, or return a Mono or a CompletionStage where you need it.");
     }
 
     /**
@@ -533,7 +572,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private TypeMirror asyncResult(ExecutableType type) {
         TypeMirror returnType = type.getReturnType();
         TypeElement completionStage = elements.getTypeElement(COMPLETION_STAGE);
-        boolean mono = isMono(type);
+        boolean mono = isMono(type) || isFlux(type);
         if (returnType.getKind() != TypeKind.DECLARED || !mono
                 && !types.isAssignable(types.erasure(returnType), types.erasure(completionStage.asType()))) {
             return null;
@@ -562,6 +601,15 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private static boolean isMono(ExecutableType type) {
         return type.getReturnType() instanceof DeclaredType declared
                 && ((TypeElement) declared.asElement()).getQualifiedName().contentEquals(MONO);
+    }
+
+    /**
+     * True if the method returns Reactor's {@code Flux} itself (not a subclass): an asynchronous stream. Decided
+     * by name, so it needs no Reactor here.
+     */
+    private static boolean isFlux(ExecutableType type) {
+        return type.getReturnType() instanceof DeclaredType declared
+                && ((TypeElement) declared.asElement()).getQualifiedName().contentEquals(FLUX);
     }
 
     /** The reactive type among {@link #REACTIVE_TYPES} that {@code returnType} is, or null. */
@@ -599,12 +647,12 @@ public final class ResilienceProcessor extends AbstractProcessor {
     }
 
     private TypeElement stageElement(ExecutableType type) {
-        return elements.getTypeElement(isMono(type) ? MONO : COMPLETION_STAGE);
+        return elements.getTypeElement(isMono(type) ? MONO : isFlux(type) ? FLUX : COMPLETION_STAGE);
     }
 
     /** How error messages name the asynchronous type of {@code type}'s method. */
     private static String stageName(ExecutableType type) {
-        return isMono(type) ? "Mono" : "CompletionStage";
+        return isMono(type) ? "Mono" : isFlux(type) ? "Flux" : "CompletionStage";
     }
 
     /** Validates the attributes and turns them into builder calls. Returns null after reporting errors. */
@@ -1688,6 +1736,11 @@ public final class ResilienceProcessor extends AbstractProcessor {
     private static void writeAsyncMethod(StringBuilder out, MethodModel model, int index, String typeVariables,
             String returnType, String modifiers, String signature, String parameters, List<String> arguments,
             String delegateCall) {
+        if (isFlux(model.type())) {
+            writeFluxMethod(out, model, index, typeVariables, returnType, modifiers, signature, parameters, arguments,
+                    delegateCall);
+            return;
+        }
         FallbackModel fallback = model.fallback();
         String args = String.join(", ", arguments);
         String result = TypePrinter.print(model.asyncResult());
@@ -1717,8 +1770,67 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 .append(mono ? ", reactor.util.context.ContextView r4c$subscriberContext" : "")
                 .append(parameters.isEmpty() ? "" : ", " + parameters)
                 .append(") throws java.lang.Throwable {\n");
-        appendLines(out, asyncFallbackLines(fallback, index, arguments, result, mono));
+        appendLines(out, asyncFallbackLines(fallback, index, arguments, result, mono ? AsyncStyle.MONO : AsyncStyle.STAGE));
         out.append("    }\n");
+    }
+
+    /**
+     * A {@code Flux} method: the policies run inside {@code Fluxes.defer}, once per subscription, with the call's
+     * {@code FluxCall} ({@code r4c$stream}). The layers inside the retry or the fallback are one attempt
+     * ({@code r4c$stream.attempt}), so that they act only before the stream's first element; the timeout, breaker
+     * and adaptive limit use their streaming form; the delegate's {@code Flux} is subscribed by
+     * {@code r4c$stream.subscribe}. The order is always the default one ({@link #checkFlux}).
+     */
+    @SuppressWarnings("java:S107") // java:S107: the parts of the signature that writeMethod already computed
+    private static void writeFluxMethod(StringBuilder out, MethodModel model, int index, String typeVariables,
+            String returnType, String modifiers, String signature, String parameters, List<String> arguments,
+            String delegateCall) {
+        FallbackModel fallback = model.fallback();
+        String args = String.join(", ", arguments);
+        String result = TypePrinter.print(model.asyncResult());
+        String recoverTypeArguments = model.type().getTypeVariables().isEmpty() ? ""
+                : "<" + TypePrinter.join(model.type().getTypeVariables(), ", ") + ">";
+        String recovery = "(r4c$e, r4c$attempts) -> this." + recoverTypeArguments + "r4c$recover" + index
+                + "(r4c$e, r4c$attempts, r4c$stream" + (args.isEmpty() ? "" : ", " + args) + ")";
+        boolean fused = fallbackFused(model);
+        String expression = "r4c$stream.subscribe(" + delegateCall + ")";
+        List<Kind> layers = model.layers();
+        for (int i = layers.size() - 1; i >= 0; i--) {
+            Kind kind = layers.get(i);
+            String field = "this." + kind.field + index;
+            expression = switch (kind) {
+                case TIMEOUT, CIRCUIT_BREAKER, ADAPTIVE_LIMIT ->
+                        field + ".executeStreamAsync(() -> " + expression + ", r4c$stream)";
+                case RETRY -> field + ".executeAsync(() -> r4c$stream.attempt(() -> " + expression + ")"
+                        + (fused ? ", this.fallback" + index + ", " + recovery : "") + ")";
+                case BULKHEAD, RATE_LIMITER -> field + EXECUTE_ASYNC + expression + ")";
+                case FALLBACK, HEDGE -> throw new IllegalStateException(kind + " is not a Flux layer (checkFlux)");
+            };
+        }
+        if (fallback != null && !fused) {
+            expression = "this.fallback" + index + ".executeAsync(() -> r4c$stream.attempt(() -> " + expression + "), "
+                    + recovery + ")";
+        }
+        expression = FLUXES + ".<" + result + ">defer(r4c$stream -> " + expression + ")";
+        out.append("\n    @Override\n    ").append(modifiers).append(typeVariables).append(returnType).append(' ')
+                .append(signature).append(" {\n");
+        appendLines(out, List.of("return " + expression + ";"));
+        out.append("    }\n");
+        if (fallback == null) {
+            return;
+        }
+        out.append("\n    private ").append(typeVariables).append(COMPLETION_STAGE).append("<java.lang.Void> r4c$recover")
+                .append(index).append("(java.lang.Throwable r4c$e, int r4c$attempts, ")
+                .append("dev.resilience4cata.reactor.generated.FluxCall<").append(result).append("> r4c$stream")
+                .append(parameters.isEmpty() ? "" : ", " + parameters)
+                .append(") throws java.lang.Throwable {\n");
+        appendLines(out, asyncFallbackLines(fallback, index, arguments, result, AsyncStyle.FLUX));
+        out.append("    }\n");
+    }
+
+    /** What an asynchronous fallback's result becomes: a stage, a {@code Mono}'s stage, or a stream of the call. */
+    private enum AsyncStyle {
+        STAGE, MONO, FLUX
     }
 
     /** The stage of a {@code Mono} that a delegate or a fallback returned, subscribed with the caller's context. */
@@ -1766,15 +1878,14 @@ public final class ResilienceProcessor extends AbstractProcessor {
      * {@code handles} was already checked.
      */
     private static List<String> asyncFallbackLines(FallbackModel fallback, int index, List<String> arguments,
-            String result, boolean mono) {
+            String result, AsyncStyle style) {
         List<String> lines = new ArrayList<>();
         if (fallback.handler() != null) {
             lines.add("final dev.resilience4cata.FallbackContext r4c$context = this.fallback" + index
                     + ".context(r4c$e, r4c$attempts, new java.lang.Object[] {" + String.join(", ", arguments) + "});");
             String apply = "this.fallbackHandler" + index + ".apply(r4c$context)";
-            lines.add("return " + (fallback.handlerReturnsValue() ? asStage(apply, true)
-                    : mono ? monoStage(apply, result)
-                    : fallback.handlerWidens() ? widen(apply, result) : apply) + ";");
+            lines.add("return " + recoveryStage(style, apply, fallback.handlerReturnsValue(), fallback.handlerWidens(),
+                    result) + ";");
             return lines;
         }
         for (int k = 0; k < fallback.targets().size(); k++) {
@@ -1784,29 +1895,33 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 if (target.exceptionType() != null) {
                     callArguments.add("r4c$e");
                 }
-                lines.add("return " + asStage(target, target.receiver() + "." + target.name() + "("
-                        + String.join(", ", callArguments) + ")", result, mono) + ";");
+                lines.add("return " + recoveryStage(style, target.receiver() + "." + target.name() + "("
+                        + String.join(", ", callArguments) + ")", target.returnsValue(), target.widens(), result) + ";");
                 return lines;
             }
             callArguments.add("r4c$f" + k);
             lines.add("if (r4c$e instanceof " + target.exceptionType() + " r4c$f" + k + ") {");
-            lines.add("    return " + asStage(target, target.receiver() + "." + target.name() + "("
-                    + String.join(", ", callArguments) + ")", result, mono) + ";");
+            lines.add("    return " + recoveryStage(style, target.receiver() + "." + target.name() + "("
+                    + String.join(", ", callArguments) + ")", target.returnsValue(), target.widens(), result) + ";");
             lines.add("}");
         }
         lines.add("throw r4c$e;");
         return lines;
     }
 
-    private static String asStage(String call, boolean returnsValue) {
-        return returnsValue ? "java.util.concurrent.CompletableFuture.completedFuture(" + call + ")" : call;
-    }
-
-    private static String asStage(FallbackTarget target, String call, String result, boolean mono) {
-        if (target.returnsValue()) {
-            return asStage(call, true);
+    /**
+     * What an asynchronous fallback's {@code call} becomes in {@code r4c$recover}: a completed stage for a value, the
+     * stage of a returned {@code Mono}, a returned stage (widened for {@code ? extends}), or, for a {@code Flux}
+     * method, one more stream of the call (a value becomes a stream of that one element).
+     */
+    private static String recoveryStage(AsyncStyle style, String call, boolean returnsValue, boolean widens, String result) {
+        if (style == AsyncStyle.FLUX) {
+            return "r4c$stream." + (returnsValue ? "recoverValue(" : "recover(") + call + ")";
         }
-        return mono ? monoStage(call, result) : target.widens() ? widen(call, result) : call;
+        if (returnsValue) {
+            return "java.util.concurrent.CompletableFuture.completedFuture(" + call + ")";
+        }
+        return style == AsyncStyle.MONO ? monoStage(call, result) : widens ? widen(call, result) : call;
     }
 
     /** Views a {@code CompletionStage<? extends result>} as a {@code CompletionStage<result>}. */

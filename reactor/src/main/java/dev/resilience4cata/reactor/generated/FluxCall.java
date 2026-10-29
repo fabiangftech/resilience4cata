@@ -196,6 +196,16 @@ public final class FluxCall<T> implements Elements, Subscription {
         return subscribe(flux);
     }
 
+    /**
+     * The fallback's value, as a stream of that one element ({@code null}: an empty stream).
+     *
+     * @param value what the fallback returned
+     * @return the stage of that stream
+     */
+    public CompletionStage<Void> recoverValue(@Nullable T value) {
+        return recover(value == null ? Flux.empty() : Flux.just(value));
+    }
+
     // ---- the gate
 
     boolean commit(int attempt) {
