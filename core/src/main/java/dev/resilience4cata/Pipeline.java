@@ -10,6 +10,7 @@ import dev.resilience4cata.generated.HedgePolicy;
 import dev.resilience4cata.generated.RateLimiterPolicy;
 import dev.resilience4cata.generated.Recovery;
 import dev.resilience4cata.generated.RetryPolicy;
+import dev.resilience4cata.generated.StreamCall;
 import dev.resilience4cata.generated.TimeoutPolicy;
 import java.util.List;
 import java.util.Objects;
@@ -567,6 +568,70 @@ public final class Pipeline<T> {
             return fallbackPolicy.executeAsync(next, recoveryCall);
         }
         return outer != null ? outer.call() : start(next);
+    }
+
+    /**
+     * Runs one call of a stream through the pipeline, for the reactor module's {@code Flux} operator; use
+     * that operator rather than this method. Each attempt is one subscription to the source
+     * ({@link StreamCall#subscribe()}). The retry and the fallback act only on a failure before the
+     * stream's first element ({@link StreamCall#attempt}); the timeout restarts on every element; the
+     * circuit breaker and the adaptive limit time the stream until its first element and hold it until it
+     * ends; the bulkhead holds its slot until it ends; the rate limiter takes one permit per attempt. The
+     * fallback's value becomes a stream of that one element.
+     *
+     * @param call the stream's call
+     * @return a future that completes when the stream ends (with its failure, if it fails before its first
+     *     element and nothing recovers it)
+     * @throws IllegalStateException if the pipeline has a hedge or a classifier, which streams do not support
+     */
+    public CompletableFuture<Void> executeStreamAsync(StreamCall<T> call) {
+        Objects.requireNonNull(call, "call");
+        if (hedge != null || retryClassifier != null || circuitBreakerClassifier != null) {
+            throw new IllegalStateException(ErrorCode.NOT_FOR_STREAMS.message(PIPELINE_PREFIX + id + "' has "
+                    + (hedge != null ? "a hedge" : "a classifier") + ", which a Flux cannot use: a hedge would merge two"
+                    + " streams, and a classifier judges one result while a stream has many. Remove "
+                    + (hedge != null ? ".hedge(...)" : "the classifier") + ", or use a separate pipeline for the Flux."));
+        }
+        AsyncCall<Void> next = call::subscribe;
+        BulkheadPolicy bulkheadPolicy = this.bulkhead;
+        if (bulkheadPolicy != null) {
+            AsyncCall<Void> inner = next;
+            next = () -> bulkheadPolicy.executeAsync(inner);
+        }
+        TimeoutPolicy timeoutPolicy = this.timeout;
+        if (timeoutPolicy != null) {
+            AsyncCall<Void> inner = next;
+            next = () -> timeoutPolicy.executeStreamAsync(inner, call);
+        }
+        AdaptiveLimitPolicy limitPolicy = this.adaptiveLimit;
+        if (limitPolicy != null) {
+            AsyncCall<Void> inner = next;
+            next = () -> limitPolicy.executeStreamAsync(inner, call);
+        }
+        RateLimiterPolicy limiter = this.rateLimiter;
+        if (limiter != null) {
+            AsyncCall<Void> inner = next;
+            next = () -> limiter.executeAsync(inner);
+        }
+        CircuitBreakerPolicy breaker = this.circuitBreaker;
+        if (breaker != null) {
+            AsyncCall<Void> inner = next;
+            next = () -> breaker.executeStreamAsync(inner, call);
+        }
+        AsyncCall<Void> layers = next;
+        AsyncCall<Void> attempt = () -> call.attempt(layers);
+        Recovery<T> recoveryCall = this.recovery;
+        Recovery<Void> streamRecovery = recoveryCall == null ? null
+                : (failure, attempts) -> recoveryCall.recover(failure, attempts).thenCompose(call::recover);
+        RetryPolicy retryPolicy = this.retry;
+        if (retryPolicy != null) {
+            return retryPolicy.executeAsync(attempt, fallback, streamRecovery);
+        }
+        FallbackPolicy fallbackPolicy = this.fallback;
+        if (fallbackPolicy != null && streamRecovery != null) {
+            return fallbackPolicy.executeAsync(attempt, streamRecovery);
+        }
+        return start(attempt);
     }
 
     /**

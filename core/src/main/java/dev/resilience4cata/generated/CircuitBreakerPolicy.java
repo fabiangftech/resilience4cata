@@ -345,6 +345,53 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         }
     }
 
+    /**
+     * The asynchronous form for a streaming call (a method that returns a {@code Flux}): as
+     * {@link #executeAsync(AsyncCall)}, one call per attempt recorded when the stream ends, but a slow
+     * call is one whose first element (or end, if it has none) took {@code slowCallDuration} or more:
+     * a stream's length says nothing about the dependency. Without slow-call detection it is
+     * {@link #executeAsync(AsyncCall)}.
+     *
+     * @param call the next layer
+     * @param elements the streaming call, told of this attempt's listener before {@code call} starts
+     * @param <T> the result type
+     * @return a future that completes with the call's outcome, or fails with {@link CallNotPermittedException}
+     */
+    public <T> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
+        if (!timed) {
+            return executeAsync(call);
+        }
+        long token = acquire();
+        if (token < 0) {
+            return CompletableFuture.failedFuture(rejection());
+        }
+        long started = ticker.getAsLong();
+        FirstElement first = new FirstElement(ticker);
+        elements.listen(first, false);
+        CompletionStage<T> stage = AsyncSupport.call(call);
+        LinkedFuture<T> result = new LinkedFuture<>(stage);
+        stage.whenComplete((value, failure) -> {
+            int slow = first.time() - started >= slowCallNanos ? SlidingWindow.SLOW : 0;
+            if (failure == null) {
+                if (slow != 0 || token != (long) QUIET.getOpaque(this)) {
+                    record(token, slow);
+                }
+                result.complete(value);
+            } else if (result.cancelling()) {
+                release(token);
+            } else {
+                Throwable cause = AsyncSupport.unwrap(failure);
+                switch (classification.get(cause.getClass())) {
+                    case FAILURE -> record(token, SlidingWindow.FAILURE | slow);
+                    case SUCCESS -> record(token, slow);
+                    case IGNORED -> release(token);
+                }
+                result.fail(cause);
+            }
+        });
+        return result;
+    }
+
     private int slowBit(long start) {
         return timed && ticker.getAsLong() - start >= slowCallNanos ? SlidingWindow.SLOW : 0;
     }

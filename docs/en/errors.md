@@ -2504,6 +2504,14 @@ hedge starts the call again while the first attempt is still running, which need
 **Fix:** keep one: a hedge already starts a new attempt when one fails (`hedgeOn`), and a retry around it would
 multiply the attempts. This is the runtime twin of [R4C-HDG-002](#r4c-hdg-002).
 
+### R4C-RT-020
+
+**Trigger:** a `Flux` is protected with a pipeline (`FluxPipelineOperator`) that has a hedge or a classifier
+(`IllegalStateException`, delivered to the `Flux`'s subscriber). A hedge would merge the elements of two
+streams, and a classifier judges one result while a stream has many.
+
+**Fix:** remove `.hedge(...)` or the classifier, or build a separate pipeline for the `Flux`.
+
 ## Runtime: registry and policy configuration (R4C-REG)
 
 These are thrown by `resilience4cata-core` when a policy configuration is built (`RetryConfig.builder()` and

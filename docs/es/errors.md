@@ -2513,6 +2513,14 @@ devuelva un `CompletionStage`.
 **Corrección:** quédate con uno: un hedge ya lanza un intento nuevo cuando uno falla (`hedgeOn`), y un retry
 alrededor multiplicaría los intentos. Es el equivalente en ejecución de [R4C-HDG-002](#r4c-hdg-002).
 
+### R4C-RT-020
+
+**Causa:** un `Flux` se protege con un pipeline (`FluxPipelineOperator`) que tiene un hedge o un classifier
+(`IllegalStateException`, entregada al suscriptor del `Flux`). Un hedge mezclaría los elementos de dos streams, y
+un classifier juzga un resultado mientras que un stream tiene muchos.
+
+**Corrección:** quita `.hedge(...)` o el classifier, o construye un pipeline aparte para el `Flux`.
+
 ## Ejecución: registro y configuración de políticas (R4C-REG)
 
 Los lanza `resilience4cata-core` cuando se construye la configuración de una política (`RetryConfig.builder()`
