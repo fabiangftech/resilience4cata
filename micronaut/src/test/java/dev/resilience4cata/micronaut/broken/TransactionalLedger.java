@@ -16,6 +16,13 @@ public class TransactionalLedger {
         return cents;
     }
 
+    /** A Mono method: its retry layer is in the lambda the generated override returns. */
+    @Transactional
+    @Retry(maxAttempts = 3)
+    public reactor.core.publisher.Mono<Integer> postLater(int cents) {
+        return reactor.core.publisher.Mono.just(cents);
+    }
+
     @Transactional(propagation = io.micronaut.transaction.TransactionDefinition.Propagation.NOT_SUPPORTED)
     @Retry(maxAttempts = 3)
     public int read() {

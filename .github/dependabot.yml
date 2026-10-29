@@ -42,6 +42,11 @@ updates:
       - dependency-name: 'io.quarkus:quarkus-extension-processor'
       - dependency-name: 'io.quarkus:quarkus-devui-deployment-spi'
       - dependency-name: 'org.eclipse.microprofile.health:microprofile-health-api'
+      # The oldest Reactor that resilience4cata-reactor supports (reactorMinimum): its main code compiles against
+      # reactor-core at that version and minimumReactorTest runs on it. Its other tests get Reactor through the
+      # reactor-bom entry (reactorBom), which these rules do not touch.
+      - dependency-name: 'io.projectreactor:reactor-core'
+      - dependency-name: 'io.projectreactor:reactor-test'
     groups:
       junit:
         patterns: ['org.junit*']

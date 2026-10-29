@@ -15,4 +15,9 @@ dependencies {
     implementation libs.resilience4j.ratelimiter
     implementation libs.resilience4j.hedge
     implementation libs.concurrency.limits.core
+    // ReactorBenchmark: Mono methods against Resilience4j's Reactor operators, on the latest Reactor.
+    implementation project(':reactor')
+    implementation platform(libs.reactor.bom)
+    implementation libs.reactor.core
+    implementation libs.resilience4j.reactor
 }

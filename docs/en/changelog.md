@@ -4,6 +4,21 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
+## [Unreleased] :id=unreleased
+
+### Added
+
+- **`resilience4cata-reactor`: Project Reactor's `Mono`.** An annotated method that returns `Mono<T>` (or `Mono<? extends T>`, `Mono<?>`) gets every policy in its asynchronous form, hedges included: nothing runs before a subscription, each subscription is one call, each attempt calls the method again, the subscriber's `Context` reaches every attempt and the fallback, and cancelling the subscription cancels the call through every policy (the breaker records nothing, the bulkhead and adaptive limit free their slot). Fallbacks may return the value or a `Mono` of it. The generated `Mono` passes the Reactive Streams TCK, and no policy blocks a Reactor thread (checked with BlockHound). For code you cannot annotate, `PipelineOperator.of(pipeline)` applies a `Pipeline` with `Mono.transform`. Reactor 3.6 or newer; `Flux` stays a compile error. A `Mono` method compiled without the module is the new error [R4C-ASY-003](errors.md#r4c-asy-003). In the BOM. See [Project Reactor](guides/reactor.md).
+- The Spring Boot, Micronaut and Quarkus checks of a retried or hedged method inside a transaction ([R4C-SPR-004](errors.md#r4c-spr-004), [R4C-MN-005](errors.md#r4c-mn-005), [R4C-QK-002](errors.md#r4c-qk-002)) also see `Mono` methods, whose retry and hedge layers are in a lambda of the generated code.
+
+### Changed
+
+- [R4C-ASY-002](errors.md#r4c-asy-002) no longer covers Reactor's `Mono`, and its message suggests `Mono` with `resilience4cata-reactor` (or `collectList()` for a `Flux`).
+
+### Fixed
+
+- **The asynchronous rate limiter no longer parks the calling thread.** After losing the race for a permit it parked for 1 ns before trying again, which an event loop thread (Netty, Reactor) must never do; it now tries again at once. Under heavy contention on one limiter this costs more per call ([benchmarks](benchmarks.md)). The synchronous rate limiter is unchanged.
+
 ## [0.10.0] - 2026-10-27 :id=0.10.0
 
 ### Added

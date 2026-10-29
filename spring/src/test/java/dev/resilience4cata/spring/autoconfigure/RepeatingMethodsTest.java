@@ -6,6 +6,7 @@ import dev.resilience4cata.spring.fixtures.PaymentsGateway$Resilient;
 import dev.resilience4cata.spring.fixtures.PricingService$Resilient;
 import dev.resilience4cata.spring.tx.GuardedLedger$Resilient;
 import dev.resilience4cata.spring.tx.HedgedLedger$Resilient;
+import dev.resilience4cata.spring.tx.ReactiveLedger$Resilient;
 import dev.resilience4cata.spring.tx.RetriedLedger$Resilient;
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -23,6 +24,9 @@ class RepeatingMethodsTest {
                 .containsExactly(Map.entry("post", "@Retry"));
         assertThat(names(RepeatingMethods.of(HedgedLedger$Resilient.class))).as("@Hedge, async")
                 .containsExactly(Map.entry("read", "@Hedge"));
+        assertThat(names(RepeatingMethods.of(ReactiveLedger$Resilient.class)))
+                .as("Mono methods: the layers are in the lambda the override returns")
+                .containsExactly(Map.entry("post", "@Retry"), Map.entry("read", "@Hedge"));
     }
 
     @Test

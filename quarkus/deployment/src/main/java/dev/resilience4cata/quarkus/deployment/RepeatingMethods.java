@@ -3,8 +3,12 @@ package dev.resilience4cata.quarkus.deployment;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -15,15 +19,19 @@ import org.jspecify.annotations.Nullable;
  * decided is in the generated code instead. Retry and hedge are the outermost layers after the fallback, which
  * is fused into the retry, so an override that has one of them reads its {@code RetryPolicy} or
  * {@code HedgePolicy} field in its own body ({@code final RetryPolicy r4c$retry = this.retry0;} for a sync
- * method, {@code this.hedge0.executeAsync(...)} for an async one), and an override without them does not. This
+ * method, {@code this.hedge0.executeAsync(...)} for an async one), or in the lambda it returns for a {@code Mono}
+ * method ({@code Monos.defer(c -> this.retry0.executeAsync(...))}), and an override without them does not. This
  * class finds those field reads in the class file, by walking the bytecode of each method instruction by
- * instruction. Returns an empty map when the class file is not readable (a native image has none).
+ * instruction and following its {@code invokedynamic}s to the lambda bodies of the same class (through the
+ * {@code BootstrapMethods} attribute). Returns an empty map when the class file is not readable (a native image has
+ * none).
  */
 final class RepeatingMethods {
 
     private static final String RETRY = "Ldev/resilience4cata/generated/RetryPolicy;";
     private static final String HEDGE = "Ldev/resilience4cata/generated/HedgePolicy;";
     private static final int GETFIELD = 0xb4;
+    private static final int INVOKEDYNAMIC = 0xba;
 
     private RepeatingMethods() {
     }
@@ -60,7 +68,8 @@ final class RepeatingMethods {
             in.skipBytes(6);
             skipAttributes(in);
         }
-        Map<String, String> found = new HashMap<>();
+        Map<String, String> direct = new HashMap<>();
+        Map<String, List<Integer>> bootstraps = new HashMap<>();
         int methods = in.readUnsignedShort();
         for (int i = 0; i < methods; i++) {
             in.readUnsignedShort(); // access
@@ -80,9 +89,92 @@ final class RepeatingMethods {
                 in.skipBytes(length - 8 - code.length);
                 String policy = policyRead(code, pool, owner);
                 if (policy != null) {
-                    found.put(name + descriptor, policy);
+                    direct.put(name + descriptor, policy);
+                }
+                bootstraps.put(name + descriptor, invokedynamics(code, pool));
+            }
+        }
+        List<List<String>> lambdas = bootstrapMethods(in, pool, owner);
+        Map<String, String> found = new HashMap<>();
+        for (String method : bootstraps.keySet()) {
+            String policy = reached(method, direct, bootstraps, lambdas, new HashSet<>());
+            if (policy != null) {
+                found.put(method, policy);
+            }
+        }
+        return found;
+    }
+
+    /** The policy {@code method} reads, itself or in a lambda of this class that it creates, or {@code null}. */
+    private static @Nullable String reached(String method, Map<String, String> direct, Map<String, List<Integer>> bootstraps,
+            List<List<String>> lambdas, Set<String> visited) {
+        if (!visited.add(method)) {
+            return null;
+        }
+        String policy = direct.get(method);
+        if (policy != null) {
+            return policy;
+        }
+        for (int bootstrap : bootstraps.getOrDefault(method, List.of())) {
+            if (bootstrap < lambdas.size()) {
+                for (String lambda : lambdas.get(bootstrap)) {
+                    policy = reached(lambda, direct, bootstraps, lambdas, visited);
+                    if (policy != null) {
+                        return policy;
+                    }
                 }
             }
+        }
+        return null;
+    }
+
+    /**
+     * For each entry of the class's {@code BootstrapMethods} attribute, the methods of {@code owner} its arguments
+     * refer to ({@code name + descriptor}): for a lambda, its body. Reads the class attributes, which follow the
+     * methods.
+     */
+    private static List<List<String>> bootstrapMethods(DataInputStream in, ConstantPool pool, String owner)
+            throws IOException {
+        int attributes = in.readUnsignedShort();
+        for (int a = 0; a < attributes; a++) {
+            String attribute = pool.utf8(in.readUnsignedShort());
+            int length = in.readInt();
+            if (!attribute.equals("BootstrapMethods")) {
+                in.skipBytes(length);
+                continue;
+            }
+            int count = in.readUnsignedShort();
+            List<List<String>> methods = new ArrayList<>(count);
+            for (int b = 0; b < count; b++) {
+                in.readUnsignedShort(); // the bootstrap method itself (LambdaMetafactory)
+                int arguments = in.readUnsignedShort();
+                List<String> targets = new ArrayList<>();
+                for (int i = 0; i < arguments; i++) {
+                    String target = pool.methodOf(in.readUnsignedShort(), owner);
+                    if (target != null) {
+                        targets.add(target);
+                    }
+                }
+                methods.add(targets);
+            }
+            return methods;
+        }
+        return List.of();
+    }
+
+    /** The bootstrap method indexes of the {@code invokedynamic} instructions in {@code code}. */
+    private static List<Integer> invokedynamics(byte[] code, ConstantPool pool) {
+        List<Integer> found = new ArrayList<>();
+        int pc = 0;
+        while (pc < code.length) {
+            int opcode = code[pc] & 0xff;
+            if (opcode == INVOKEDYNAMIC) {
+                int bootstrap = pool.bootstrapOf(((code[pc + 1] & 0xff) << 8) | (code[pc + 2] & 0xff));
+                if (bootstrap >= 0) {
+                    found.add(bootstrap);
+                }
+            }
+            pc += length(code, pc, opcode);
         }
         return found;
     }
@@ -150,13 +242,20 @@ final class RepeatingMethods {
         return ((code[at] & 0xff) << 24) | ((code[at + 1] & 0xff) << 16) | ((code[at + 2] & 0xff) << 8) | (code[at + 3] & 0xff);
     }
 
-    /** The parts of the constant pool this reader needs: UTF-8 entries, field references and their names and types. */
+    /**
+     * The parts of the constant pool this reader needs: UTF-8 entries, field and method references and their names
+     * and types, method handles and {@code invokedynamic} entries.
+     */
     private record ConstantPool(Object[] entries) {
 
         private static final int UTF8 = 1;
         private static final int CLASS = 7;
         private static final int FIELDREF = 9;
+        private static final int METHODREF = 10;
+        private static final int INTERFACE_METHODREF = 11;
         private static final int NAME_AND_TYPE = 12;
+        private static final int METHOD_HANDLE = 15;
+        private static final int INVOKE_DYNAMIC = 18;
 
         static ConstantPool read(DataInputStream in) throws IOException {
             Object[] entries = new Object[in.readUnsignedShort()];
@@ -170,9 +269,9 @@ final class RepeatingMethods {
                         in.skipBytes(8);
                         i++; // takes two entries
                     }
-                    case FIELDREF, 10, 11, NAME_AND_TYPE, 17, 18 ->
+                    case FIELDREF, METHODREF, INTERFACE_METHODREF, NAME_AND_TYPE, 17, INVOKE_DYNAMIC ->
                             entries[i] = new int[] {tag, in.readUnsignedShort(), in.readUnsignedShort()};
-                    case 15 -> in.skipBytes(3);
+                    case METHOD_HANDLE -> entries[i] = new int[] {tag, in.readUnsignedByte(), in.readUnsignedShort()};
                     default -> throw new IOException("unknown constant pool tag " + tag);
                 }
             }
@@ -194,6 +293,28 @@ final class RepeatingMethods {
             }
             int[] nameAndType = (int[]) entries[ref[2]];
             return utf8(nameAndType[2]);
+        }
+
+        /**
+         * {@code name + descriptor} of the method that the method handle at {@code index} refers to, if it is a
+         * method of {@code owner}; {@code null} for another entry or another class.
+         */
+        @Nullable String methodOf(int index, String owner) {
+            if (!(entries[index] instanceof int[] handle) || handle[0] != METHOD_HANDLE
+                    || !(entries[handle[2]] instanceof int[] ref) || (ref[0] != METHODREF && ref[0] != INTERFACE_METHODREF)) {
+                return null;
+            }
+            int[] type = (int[]) entries[ref[1]];
+            if (!owner.equals(utf8(type[1]))) {
+                return null;
+            }
+            int[] nameAndType = (int[]) entries[ref[2]];
+            return utf8(nameAndType[1]) + utf8(nameAndType[2]);
+        }
+
+        /** The bootstrap method index of the {@code invokedynamic} entry at {@code index}, or {@code -1}. */
+        int bootstrapOf(int index) {
+            return entries[index] instanceof int[] ref && ref[0] == INVOKE_DYNAMIC ? ref[1] : -1;
         }
     }
 }

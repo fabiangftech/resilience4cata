@@ -331,7 +331,9 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
             if (cell.weakCompareAndSet(current, next)) {
                 return Math.max(wait, 0);
             }
-            LockSupport.parkNanos(1);
+            // Retried at once, not after parkNanos as in tryAcquire: an asynchronous caller may be an event loop
+            // thread (Netty, Reactor's parallel scheduler), which must never park or busy-wait (BlockHound reports
+            // both: MonoBlockHoundTest in examples). This costs more under heavy contention (docs/en/benchmarks.md).
             current = cell.getOpaque();
         }
     }

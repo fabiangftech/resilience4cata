@@ -4,6 +4,21 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Unreleased] :id=unreleased
+
+### Agregado
+
+- **`resilience4cata-reactor`: el `Mono` de Project Reactor.** Un método anotado que devuelve `Mono<T>` (o `Mono<? extends T>`, `Mono<?>`) recibe cada política en su forma asíncrona, hedges incluidos: nada corre antes de una suscripción, cada suscripción es una llamada, cada intento vuelve a llamar al método, el `Context` del suscriptor llega a cada intento y al fallback, y cancelar la suscripción cancela la llamada a través de cada política (el breaker no registra nada, el bulkhead y el adaptive limit liberan su slot). Los fallbacks pueden devolver el valor o un `Mono` de él. El `Mono` generado pasa el TCK de Reactive Streams, y ninguna política bloquea un hilo de Reactor (verificado con BlockHound). Para código que no puedes anotar, `PipelineOperator.of(pipeline)` aplica un `Pipeline` con `Mono.transform`. Reactor 3.6 o posterior; `Flux` sigue siendo un error de compilación. Un método `Mono` compilado sin el módulo es el nuevo error [R4C-ASY-003](errors.md#r4c-asy-003). En el BOM. Consulta [Project Reactor](guides/reactor.md).
+- Los chequeos de Spring Boot, Micronaut y Quarkus de un método con retry o hedge dentro de una transacción ([R4C-SPR-004](errors.md#r4c-spr-004), [R4C-MN-005](errors.md#r4c-mn-005), [R4C-QK-002](errors.md#r4c-qk-002)) también ven los métodos `Mono`, cuyas capas de retry y hedge están en una lambda del código generado.
+
+### Cambiado
+
+- [R4C-ASY-002](errors.md#r4c-asy-002) ya no cubre el `Mono` de Reactor, y su mensaje sugiere `Mono` con `resilience4cata-reactor` (o `collectList()` para un `Flux`).
+
+### Corregido
+
+- **El rate limiter asíncrono ya no estaciona el hilo que llama.** Tras perder la carrera por un permiso se estacionaba 1 ns antes de reintentar, algo que un hilo de event loop (Netty, Reactor) nunca debe hacer; ahora reintenta de inmediato. Con mucha contención sobre un mismo limiter esto cuesta más por llamada ([benchmarks](benchmarks.md)). El rate limiter síncrono no cambia.
+
 ## [0.10.0] - 2026-10-27 :id=0.10.0
 
 ### Agregado

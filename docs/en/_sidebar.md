@@ -18,6 +18,7 @@
   - [Micronaut](/en/guides/micronaut.md)
   - [Quarkus](/en/guides/quarkus.md)
   - [Async methods](/en/guides/async.md)
+  - [Project Reactor](/en/guides/reactor.md)
   - [Annotated classes](/en/guides/annotated-classes.md)
   - [Bundles](/en/guides/bundles.md)
   - [Classifiers](/en/guides/classifiers.md)

@@ -6,4 +6,5 @@ description = 'jcstress tests of the lock-free policies. Not published.'
 
 dependencies {
     implementation project(':core')
+    implementation project(':reactor')
 }

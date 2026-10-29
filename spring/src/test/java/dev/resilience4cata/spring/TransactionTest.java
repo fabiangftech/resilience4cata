@@ -8,6 +8,7 @@ import dev.resilience4cata.spring.tx.JakartaClassLedger;
 import dev.resilience4cata.spring.tx.JakartaLedger;
 import dev.resilience4cata.spring.tx.LedgerClient;
 import dev.resilience4cata.spring.tx.OutsideLedger;
+import dev.resilience4cata.spring.tx.ReactiveLedger;
 import dev.resilience4cata.spring.tx.RetriedLedger;
 import dev.resilience4cata.spring.tx.TransactionalLedgerClient;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -35,6 +36,16 @@ public class TransactionTest {
                         + ") has transactional methods that are retried or hedged: @Retry on post (REQUIRED)")
                 .hasMessageContaining("UnexpectedRollbackException")
                 .hasMessageContaining("resilience4cata.spring.allow-retry-inside-transaction=true"));
+    }
+
+    @Test
+    void retriedAndHedgedMonoMethodsOfATransactionalClassFailTheStartup() {
+        runner.withBean(ReactiveLedger.class).run(context -> assertThat(context).hasFailed().getFailure()
+                .rootCause().hasMessageStartingWith("[R4C-SPR-004] Bean 'reactiveLedger' (" + ReactiveLedger.class.getName()
+                        + ") has transactional methods that are retried or hedged:")
+                .hasMessageContaining("@Retry on post (REQUIRED)")
+                .hasMessageContaining("@Hedge on read (REQUIRED)")
+                .satisfies(e -> assertThat(e.getMessage()).doesNotContain("guarded")));
     }
 
     @Test

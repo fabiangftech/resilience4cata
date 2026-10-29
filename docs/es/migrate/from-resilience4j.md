@@ -7,7 +7,7 @@ Cómo se corresponden los registries, configs, decoradores y anotaciones de Spri
 resilience4cata cubre ocho políticas (retry, hedge, circuit breaker, rate limiter, adaptive limit, timeout, bulkhead, fallback) para Java 21+ puro, con código generado en tiempo de compilación. **Quédate en Resilience4j** si necesitas algo de esto, que resilience4cata todavía no tiene:
 
 - integración con Spring Boot 3, CDI o AspectJ (resilience4cata se integra solo con Spring Boot 4.1+, [más abajo](#spring-boot));
-- operadores de Reactor, RxJava o corrutinas de Kotlin (resilience4cata solo admite `CompletionStage` / `CompletableFuture`);
+- operadores de RxJava o de corrutinas de Kotlin, o los de Reactor para un `Flux` (resilience4cata admite `CompletionStage`, `CompletableFuture` y, con `resilience4cata-reactor`, el `Mono` de Reactor: [más abajo](#reactor));
 - un bulkhead con pool de threads, una caché o un time limiter para futures arbitrarios;
 - cambiar la configuración de una política en tiempo de ejecución (resilience4cata resuelve la configuración una sola vez, por diseño);
 - una versión de Java anterior a la 21.
@@ -46,7 +46,8 @@ resilience4cata cubre ocho políticas (retry, hedge, circuit breaker, rate limit
 | `IntervalFunction.ofExponentialBackoff(…)`, `ofExponentialRandomBackoff(…)` | `backoff`, `multiplier`, `maxDelay`, `jitter` |
 | `TimeLimiter` + un executor para código bloqueante | `@Timeout` en el thread de quien llama |
 | `resilience4j-hedge`: `Hedge.of(config).decorateCompletionStage(…)` | [`@Hedge`](../policies/hedge.md) en un método que devuelve un `CompletableFuture`, o `Pipeline…hedge(…)` con `executeAsync` ([correspondencia](#map-hedge)) |
-| `ThreadPoolBulkhead`, `Cache`, operadores de Reactor/RxJava/Kotlin | sin equivalente |
+| `mono.transformDeferred(RetryOperator.of(retry))` y los demás operadores de Reactor, sobre un `Mono` | un método `Mono` con las anotaciones, o `mono.transform(PipelineOperator.of(pipeline))` ([más abajo](#reactor)) |
+| `ThreadPoolBulkhead`, `Cache`, operadores de RxJava/Kotlin, operadores de Reactor sobre un `Flux` | sin equivalente |
 
 ## Correspondencia de configuración :id=config-mapping
 
@@ -281,6 +282,27 @@ resilience4cata:
 ```
 
 Las erratas detienen el arranque con el fichero y la línea de la clave, en lugar de ignorarse.
+
+## Desde resilience4j-reactor :id=reactor
+
+Un `Mono` decorado con los operadores de Resilience4j:
+
+<!-- not-compiled: Resilience4j code -->
+```java
+Mono<Price> price = webClient.get().uri("/prices/{sku}", sku).retrieve().bodyToMono(Price.class)
+        .transformDeferred(TimeLimiterOperator.of(timeLimiter))
+        .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
+        .transformDeferred(RetryOperator.of(retry));
+```
+
+pasa a ser, con `resilience4cata-reactor`, un método `Mono` con las anotaciones (`@Retry`, `@CircuitBreaker`, `@Timeout` en `Mono<Price> price(String sku)`) o, para código que no puedes anotar, un solo operador para todo el pipeline: `.transform(PipelineOperator.of(pipeline))`. Consulta [Project Reactor](../guides/reactor.md).
+
+| resilience4j-reactor | resilience4cata-reactor |
+|---|---|
+| un operador por política, anidados según el orden de `transformDeferred` | una anotación por política, anidadas en el [orden por defecto](#order) o con `@PolicyOrder`; un `PipelineOperator` para un pipeline |
+| el retry se vuelve a suscribir al mismo `Mono` | un método `Mono` se vuelve a llamar en cada intento (un `Mono` nuevo); `PipelineOperator` se vuelve a suscribir a la misma fuente, `defer(...)` la construye de nuevo |
+| `TimeLimiterOperator`: `Mono.timeout` en el scheduler parallel de Reactor, armado en cada suscripción | `@Timeout` en el timer de la librería, omitido para un valor que ya está al suscribirse |
+| operadores también para `Flux` | solo `Mono` ([`R4C-ASY-002`](../errors.md#r4c-asy-002) para un `Flux`) |
 
 ## Paso a paso :id=steps
 

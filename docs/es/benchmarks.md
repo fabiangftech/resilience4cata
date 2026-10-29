@@ -404,6 +404,32 @@ Base: `67e1ebd` (0.5.0 más docs). Nueva: la integración de `@AdaptiveLimit`. M
 
 El resto de la suite no se movió, salvo `Pipeline`: un pipeline construido sin `adaptiveLimit` ahora revisa un campo nulo más por llamada, +0.2 ns (`pipelineRetryCircuitBreaker` 3.0 → 3.2 ns; el código generado no cambia). Cuatro benchmarks de 4 hilos se movieron entre 15 y 48 % en la primera corrida (`CircuitBreakerBenchmark.resilience4cataMixed`, `PipelineBenchmark.pipelineFour`, `BulkheadBenchmark.resilience4cataWaiting`, `HedgeBenchmark.resilience4cataPending`) aunque su código no cambió; con 6 forks cada uno, los rangos de base y nueva se superponen por completo (−7 % a +5 %), así que era ruido.
 
+## Soporte de Reactor y el rate limiter async, 0.11.0 (2026-10-27, AWS Graviton3)
+
+Base: `9a26494` (0.10.0 más docs). Nuevo: `resilience4cata-reactor` y el rate limiter asíncrono que ya no estaciona hilos. Mismo método que arriba (`infra/bench.sh`, `c7g.xlarge`, 3 forks; calibración 20.45–20.48 ns en 19 máquinas).
+
+**Métodos `Mono` contra resilience4j-reactor 2.4.0.** `ReactorBenchmark` es nuevo, así que no tiene base. Cada benchmark construye el `Mono` protegido y se suscribe; Resilience4j usa sus operadores de Reactor con `transformDeferred` y la configuración de `AsyncBenchmark` (notas de equidad en el Javadoc del benchmark). La fuente es `Mono.just` (el valor ya está al suscribirse) o, en `*Pending`, un `Sinks.One` que se llena justo después de suscribirse, para que cada capa espere. ns/op y B/op, 1 / 4 hilos; los bytes son los del fork típico (ver la nota más abajo):
+
+| Benchmark | resilience4cata, ns/op | Resilience4j, ns/op | resilience4cata, B/op | Resilience4j, B/op |
+|---|---:|---:|---:|---:|
+| sin política (`baseline`) | 52.4 / 53.1 | — | 88 | — |
+| circuit breaker | **130.2 / 118.8** | 246.4 / 1378.7 | 200 | 248 |
+| retry, el primer intento funciona | **127.8 / 139.0** | 726.2 / 734.1 | 200 | 1000 |
+| timeout | **105.2 / 105.3** | 3165.5 / 6229.7 | 176 | 1344 |
+| bulkhead | **144.1 / 621.7** | 157.5 / 683.7 | 200 | 200 |
+| rate limiter | **166.5 / 351.6** | 184.2 / 659.3 | 200 | 240 / 195 |
+| retry + breaker + timeout + bulkhead | **227.3 / 587.7** | 4337.8 / 5598.1 | 368 | 2624 |
+| el mismo stack, `PipelineOperator` | 251.0 / 606.2 | (el mismo stack de Resilience4j) | 448 | — |
+| sin política, pendiente (`baselinePending`) | 152.7 / 154.3 | — | 168 | — |
+| timeout, pendiente | **441.0 / 560.5** | 3725.1 / 6332.8 | 480 | 1787 |
+| stack, pendiente | **703.1 / 935.5** | 4394.8 / 6513.9 | 912 | 2704 |
+
+- **Cada par es más rápido, con uno y con cuatro hilos.** Las diferencias: de 1,9× (breaker, un hilo) a 11,6× (breaker, cuatro hilos), 5,7× en el retry, 19× en el stack con un hilo. El bulkhead es el más ajustado: 9% con un hilo, y dentro del error con cuatro (621.7 ± 107.6 contra 683.7 ± 38.0), donde los dos pagan un contador compartido.
+- **El timeout:** un valor que ya está al suscribirse no puede pasarse de su deadline, así que `@Timeout` no arma timer para él (105 ns); el `TimeLimiterOperator` de Resilience4j es `Mono.timeout`, que programa una tarea en el scheduler parallel de Reactor en cada suscripción. Con un valor pendiente los dos arman un timer, y resilience4cata sigue siendo 8,4× (un hilo) y 11,3× (cuatro) más rápido.
+- **Bytes por llamada, además de los 88 B de suscribirse:** una política alrededor de un `Mono` constante cuesta 112 B (el `Mono` del método y su lambda, la suscripción que entrega el valor, la lambda de la llamada, el future de la política, el future completado de la constante); su valor se lee sin suscribirse, como hacen los propios operadores de Reactor. El JIT elimina estos objetos (scalar replacement) en algunos forks y en otros no: el mismo benchmark midió 200 B en un fork y 224–280 B en otro, así que los presupuestos del gate de allocations son los del peor fork, no estos valores típicos.
+
+**El rate limiter asíncrono ya no estaciona hilos.** `RateLimiterPolicy.reserve` se estacionaba 1 ns tras perder el CAS de su `tat`, como el `tryAcquire` síncrono. Un llamador asíncrono puede ser un hilo de event loop, que nunca debe estacionarse, y BlockHound lo reportó (`MonoBlockHoundTest` en examples), así que ahora `reserve` reintenta el CAS de inmediato (BlockHound también reporta `Thread.onSpinWait()`). `AsyncBenchmark.resilience4cataRateLimiter`, base → nuevo: 67.1 → 66.9 ns con un hilo, 277.7 ± 0.6 → 297.2 ± 28.1 ns con cuatro (+7%); 48 B en ambos casos. Los demás métodos de `AsyncBenchmark` medidos no se movieron (circuit breaker 25.0 → 24.9 / 25.6 → 25.6, stack 123.6 → 123.4 / 589.0 → 558.0). En un Apple M1 (JDK 21, 4 forks) el mismo cambio costó mucho más con contención, 264.5 ± 52.2 → 661.0 ± 29.0 ns con cuatro hilos, donde estacionar también alejaba a los perdedores del `System.nanoTime()` con contención de macOS; un backoff exponencial con `onSpinWait` (hasta 64 spins) midió los mismos 659.9 ± 16.0 ns ahí y se descartó. El camino síncrono sigue estacionando.
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos (`-f 1 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`, unos 4 minutos) y falla si alguno asigna su presupuesto + 1 B/op o más, o si falta en los resultados. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.
