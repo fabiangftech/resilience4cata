@@ -234,6 +234,11 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
         FirstElement first = new FirstElement(ticker);
         elements.listen(first, false);
         CompletionStage<T> stage = AsyncSupport.call(call);
+        if (AsyncSupport.succeeded(stage)) { // ended during its subscription
+            long end = ticker.getAsLong();
+            sample(end, first.time(end) - start, inFlight.decrement(), false);
+            return AsyncSupport.copy(stage);
+        }
         LinkedFuture<T> result = new LinkedFuture<>(stage);
         stage.whenComplete((value, failure) -> {
             if (failure == null) {
@@ -415,6 +420,10 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
             return CompletableFuture.failedFuture(e);
         }
         CompletionStage<T> stage = AsyncSupport.call(call);
+        if (AsyncSupport.succeeded(stage)) {
+            onSuccess(start);
+            return AsyncSupport.copy(stage);
+        }
         LinkedFuture<T> result = new LinkedFuture<>(stage);
         stage.whenComplete((value, failure) -> {
             if (failure == null) {

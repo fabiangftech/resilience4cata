@@ -282,6 +282,22 @@ class StreamPoliciesTest {
         assertThat(policy.snapshot().windows()).isZero();
     }
 
+    @Test
+    void aCallDoneAtOnceFreesItsSlotAtOnceAndIsSampled() {
+        AdaptiveLimitPolicy policy = new AdaptiveLimitPolicy("limit", AdaptiveLimitConfig.builder().initialLimit(1)
+                .minLimit(1).maxLimit(1).minWindowSamples(1).window(Duration.ofSeconds(1)).build(), environment);
+        for (int i = 0; i < 3; i++) {
+            assertThat(policy.executeAsync(() -> CompletableFuture.completedFuture("v"))).as("a limit of one, call %d", i)
+                    .isCompletedWithValue("v");
+            assertThat(policy.executeStreamAsync(() -> CompletableFuture.completedFuture((Void) null), stream))
+                    .isCompleted();
+        }
+        assertThat(policy.inFlight()).isZero();
+        ticker.advance(SECOND);
+        policy.executeAsync(() -> CompletableFuture.completedFuture("v"));
+        assertThat(policy.snapshot().windows()).as("the samples ended a window").isOne();
+    }
+
     /** A ticker whose tasks run when it is advanced past their time, in order; cancelled ones never run. */
     private static final class ManualTicker implements Ticker {
         private record Task(long due, FutureTask<Void> future) {

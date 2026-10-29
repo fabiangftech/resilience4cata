@@ -369,6 +369,13 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         FirstElement first = new FirstElement(ticker);
         elements.listen(first, false);
         CompletionStage<T> stage = AsyncSupport.call(call);
+        if (AsyncSupport.succeeded(stage)) { // ended during its subscription
+            int slow = first.time() - started >= slowCallNanos ? SlidingWindow.SLOW : 0;
+            if (slow != 0 || token != (long) QUIET.getOpaque(this)) {
+                record(token, slow);
+            }
+            return AsyncSupport.copy(stage);
+        }
         LinkedFuture<T> result = new LinkedFuture<>(stage);
         stage.whenComplete((value, failure) -> {
             int slow = first.time() - started >= slowCallNanos ? SlidingWindow.SLOW : 0;
@@ -645,6 +652,10 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         }
         long started = startTimer();
         CompletionStage<T> stage = AsyncSupport.call(call);
+        if (AsyncSupport.succeeded(stage)) { // done already (a value there at once): no link, no callback
+            onSuccess(token, started);
+            return AsyncSupport.copy(stage);
+        }
         LinkedFuture<T> result = new LinkedFuture<>(stage);
         stage.whenComplete((value, failure) -> {
             if (failure == null) {

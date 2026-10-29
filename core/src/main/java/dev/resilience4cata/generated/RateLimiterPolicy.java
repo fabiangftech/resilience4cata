@@ -263,6 +263,9 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
         }
         if (wait == 0) {
             CompletionStage<T> stage = AsyncSupport.call(call);
+            if (AsyncSupport.succeeded(stage)) {
+                return AsyncSupport.copy(stage);
+            }
             LinkedFuture<T> result = new LinkedFuture<>(stage);
             AsyncSupport.relay(stage, result);
             return result;

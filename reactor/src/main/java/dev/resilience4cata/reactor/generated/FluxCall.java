@@ -50,7 +50,7 @@ public final class FluxCall<T> implements Subscription {
     private static final VarHandle MISSED_REQUESTED;
     private static final VarHandle MISSED_SUBSCRIBER;
     private static final VarHandle GATE;
-    private static final VarHandle EMITTING;
+    private static final VarHandle EMITTER;
     private static final VarHandle TERMINAL;
     private static final VarHandle FUTURE;
 
@@ -61,7 +61,7 @@ public final class FluxCall<T> implements Subscription {
             MISSED_REQUESTED = lookup.findVarHandle(FluxCall.class, "missedRequested", long.class);
             MISSED_SUBSCRIBER = lookup.findVarHandle(FluxCall.class, "missedSubscriber", AttemptSubscriber.class);
             GATE = lookup.findVarHandle(FluxCall.class, "gate", int.class);
-            EMITTING = lookup.findVarHandle(FluxCall.class, "emitting", int.class);
+            EMITTER = lookup.findVarHandle(FluxCall.class, "emitter", Thread.class);
             TERMINAL = lookup.findVarHandle(FluxCall.class, "terminal", Object.class);
             FUTURE = lookup.findVarHandle(FluxCall.class, "future", CompletableFuture.class);
         } catch (ReflectiveOperationException e) {
@@ -85,13 +85,17 @@ public final class FluxCall<T> implements Subscription {
     private @Nullable AttemptSubscriber<T> current;
     private volatile boolean cancelled;
 
+    /** The stage of an attempt that ended during its subscription: shared, as it only ever reads as done. */
+    private static final CompletableFuture<Void> ENDED = CompletableFuture.completedFuture(null);
+
     // The attempt that may still commit, or COMMITTED.
     @SuppressWarnings("unused") // accessed through GATE
     private volatile int gate;
 
     // Elements against the end.
-    @SuppressWarnings("unused") // accessed through EMITTING
-    private volatile int emitting;
+    @SuppressWarnings("unused") // accessed through EMITTER
+    private volatile @Nullable Thread emitter; // the thread delivering an element, or null
+    private boolean endDeferred; // the end arrived on the delivering thread, from inside onNext
     @SuppressWarnings("unused") // accessed through TERMINAL
     private volatile @Nullable Object terminal;
 
@@ -155,9 +159,30 @@ public final class FluxCall<T> implements Subscription {
         if (stage == null) {
             stage = CompletableFuture.failedFuture(new NullPointerException("a layer returned no stage"));
         }
+        if (stage.getClass() == CompletableFuture.class
+                && ((CompletableFuture<Void>) stage).state() == java.util.concurrent.Future.State.SUCCESS) {
+            return stage; // ended during its subscription: nothing for the boundary to decide
+        }
         Boundary boundary = new Boundary(this, attempt.number, stage);
         stage.whenComplete(boundary);
         return boundary;
+    }
+
+    /**
+     * The only attempt of a call without a retry or a fallback (generated code wraps all the layers in it):
+     * creates the attempt and runs {@code layers} with it. No boundary is needed: nothing acts on the outcome
+     * but the subscriber.
+     *
+     * @param layers the layers, ending with {@link Attempt#subscribe}
+     * @return the stage of the attempt's stream
+     */
+    public CompletionStage<Void> single(Layers<T> layers) {
+        try {
+            CompletionStage<Void> stage = layers.start(new Attempt<>(this, 0));
+            return stage != null ? stage : CompletableFuture.failedFuture(new NullPointerException("a layer returned no stage"));
+        } catch (Throwable failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
     }
 
     /**
@@ -228,8 +253,8 @@ public final class FluxCall<T> implements Subscription {
             flux.subscribe(subscriber);
             if (subscriber.isDone() && !subscriber.isCompletedExceptionally()) {
                 // Ended during subscribe (Flux.just with demand): a plain completed future lets the policies take
-                // their already-complete shortcut.
-                return CompletableFuture.completedFuture(null);
+                // their already-complete shortcut. The policies only read it (a cancel of a done future does nothing).
+                return ENDED;
             }
             return subscriber;
         }
@@ -252,26 +277,71 @@ public final class FluxCall<T> implements Subscription {
 
     // ---- elements and the end
 
+    /**
+     * Delivers one element of an attempt with a timeout: its end may come from the timer's thread while an
+     * element is being delivered. Without a timeout, the end only ever comes from the attempt's own stream
+     * (every policy completes on the thread that completes the stage), so elements go as they are
+     * ({@link #emitDirectly}). Elements come one at a time (from the committed attempt), so only the end can
+     * race them: a store-buffering pair with volatile accesses
+     * on both sides ({@code emitter} written then {@code terminal} read here; the reverse in
+     * {@link #terminate}), so at least one side sees the other. An element that sees the end is discarded; an
+     * end that sees an element being delivered on another thread waits for it, and one that arrives on the
+     * delivering thread itself (from inside {@code onNext}) is delivered by it once {@code onNext} returns. Per
+     * element: a volatile write, a volatile read and a release write, no read-modify-write
+     * ({@code stlr}/{@code ldar} on ARM).
+     */
     void emit(T element) {
-        if (EMITTING.compareAndSet(this, 0, 1)) {
-            actual.onNext(element);
-            if (!EMITTING.compareAndSet(this, 1, 0)) {
-                deliverTerminal(); // the end arrived while the element was delivered
+        Thread me = Thread.currentThread();
+        boolean nested = (Thread) EMITTER.getOpaque(this) == me; // an element emitted from inside onNext
+        if (!nested) {
+            EMITTER.setVolatile(this, me);
+        }
+        if (TERMINAL.getVolatile(this) != null) {
+            if (!nested) {
+                EMITTER.setRelease(this, null);
             }
-        } else {
             Operators.onDiscard(element, actual.currentContext()); // after the end: nowhere to go
+            return;
+        }
+        actual.onNext(element);
+        if (!nested) {
+            EMITTER.setRelease(this, null);
+            if (endDeferred) {
+                deliverTerminal();
+            }
         }
     }
 
+    /** Delivers one element of an attempt without a timeout: nothing else can end the call meanwhile. */
+    void emitDirectly(T element) {
+        actual.onNext(element);
+    }
+
+    /**
+     * Delivers the end, once. If an element is being delivered on another thread (the end of a timeout between
+     * elements), waits until it is: a rare race, as long as one {@code onNext}. If it is being delivered on this
+     * thread, the end goes after it.
+     */
     void terminate(Object end) {
-        if (TERMINAL.compareAndSet(this, null, end) && (int) EMITTING.getAndAdd(this, 1) == 0) {
-            deliverTerminal();
+        if (!TERMINAL.compareAndSet(this, null, end)) {
+            return;
         }
+        Thread me = Thread.currentThread();
+        Thread emitting = (Thread) EMITTER.getVolatile(this);
+        if (emitting == me) {
+            endDeferred = true; // only this thread reads it, after its onNext returns
+            return;
+        }
+        while (emitting != null) {
+            Thread.onSpinWait();
+            emitting = (Thread) EMITTER.getVolatile(this);
+        }
+        deliverTerminal();
     }
 
     private void deliverTerminal() {
         if (cancelled) {
-            return;
+            return; // the subscriber cancelled: no signal
         }
         Object end = TERMINAL.getVolatile(this);
         if (end == COMPLETE) {
@@ -321,11 +391,21 @@ public final class FluxCall<T> implements Subscription {
     @Override
     public void request(long n) {
         if (n <= 0) {
-            // Rule 3.9: a non-positive request ends the call with an IllegalArgumentException; then the call is
-            // cancelled like any other (one that has not started yet is cancelled when it starts).
-            terminate(new IllegalArgumentException(
-                    "§3.9 violated: positive request amount required but it was " + n));
-            cancel();
+            // As Reactor's own operators do for a CoreSubscriber: reported, ignored. Any other subscriber is wrapped by
+            // Reactor's StrictSubscriber, which signals rule 3.9's IllegalArgumentException itself (the TCK checks it).
+            Operators.reportBadRequest(n);
+            return;
+        }
+        if ((int) WIP.getOpaque(this) == 0 && WIP.compareAndSet(this, 0, 1)) {
+            // Nobody drains: add the demand and forward it ourselves (two atomics, as Reactor's own fast path).
+            requested = Operators.addCap(requested, n);
+            AttemptSubscriber<T> now = current;
+            if ((int) WIP.getAndAdd(this, -1) != 1) {
+                drainLoop();
+            }
+            if (now != null) {
+                now.upstream().request(n);
+            }
             return;
         }
         long pending = (long) MISSED_REQUESTED.getVolatile(this);
@@ -364,6 +444,22 @@ public final class FluxCall<T> implements Subscription {
         if (cancelled) {
             return;
         }
+        if ((int) WIP.getOpaque(this) == 0 && WIP.compareAndSet(this, 0, 1)) {
+            // Nobody drains: switch to it ourselves if it is newer, and ask it for everything requested so far.
+            AttemptSubscriber<T> now = current;
+            boolean newer = now == null || next.number > now.number;
+            long amount = requested;
+            if (newer) {
+                current = next;
+            }
+            if ((int) WIP.getAndAdd(this, -1) != 1) {
+                drainLoop();
+            }
+            if (newer && amount != 0) {
+                next.upstream().request(amount);
+            }
+            return;
+        }
         AttemptSubscriber<T> pending = (AttemptSubscriber<T>) MISSED_SUBSCRIBER.getVolatile(this);
         for (;;) {
             if (pending != null && pending.number >= next.number) {
@@ -382,6 +478,11 @@ public final class FluxCall<T> implements Subscription {
         if ((int) WIP.getAndAdd(this, 1) != 0) {
             return;
         }
+        drainLoop();
+    }
+
+    /** Runs with the drain's ownership taken (wip at least 1): applies what others left, until nothing is left. */
+    private void drainLoop() {
         int missed = 1;
         long amount = 0;
         Subscription target = null;

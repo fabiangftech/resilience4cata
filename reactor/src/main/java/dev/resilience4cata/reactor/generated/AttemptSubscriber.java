@@ -104,8 +104,10 @@ final class AttemptSubscriber<T> extends CompletableFuture<Void> implements Core
         }
         if (every != null) {
             every.element();
+            call.emit(element); // a timeout listens: its end may race this element
+        } else {
+            call.emitDirectly(element);
         }
-        call.emit(element);
     }
 
     @Override

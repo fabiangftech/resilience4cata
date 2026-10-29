@@ -81,7 +81,7 @@ class FluxProcessorTest {
                     Flux<String> ticks();
                 }
                 """))
-                .contains("return " + FLUXES + ".<java.lang.String>defer(r4c$stream -> r4c$stream.attempt(r4c$attempt -> "
+                .contains("return " + FLUXES + ".<java.lang.String>defer(r4c$stream -> r4c$stream.single(r4c$attempt -> "
                         + "this.timeout0.executeStreamAsync(() -> r4c$attempt.subscribe(this.delegate.ticks()), r4c$attempt)));");
     }
 

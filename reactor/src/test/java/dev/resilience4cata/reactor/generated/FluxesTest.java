@@ -143,48 +143,114 @@ class FluxesTest {
     }
 
     @Test
-    void aNonPositiveRequestFailsTheCall() {
-        attempts.add(() -> Flux.never());
-        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(attempt -> attempt.subscribe(delegate())));
-        List<Throwable> failures = new ArrayList<>();
+    void aNonPositiveRequestOfACoreSubscriberIsReportedAndIgnoredAsByReactorsOperators() {
+        attempts.add(() -> Flux.just("a"));
+        Flux<String> flux = Fluxes.<String>defer(stream -> stream.single(attempt -> attempt.subscribe(delegate())));
+        List<String> signals = new CopyOnWriteArrayList<>();
         flux.subscribe(new BaseSubscriber<>() {
             @Override
             protected void hookOnSubscribe(Subscription subscription) {
                 subscription.request(0);
+                subscription.request(1);
+            }
+
+            @Override
+            protected void hookOnNext(String value) {
+                signals.add(value);
+            }
+
+            @Override
+            protected void hookOnComplete() {
+                signals.add("complete");
             }
 
             @Override
             protected void hookOnError(Throwable failure) {
-                failures.add(failure);
+                signals.add("error");
             }
         });
-        assertThat(failures).singleElement().isInstanceOf(IllegalArgumentException.class);
-        assertThat(calls).as("requested in onSubscribe: the call never starts").hasValue(0);
+        assertThat(signals).containsExactly("a", "complete");
     }
 
     @Test
-    void aNonPositiveRequestDuringTheCallCancelsIt() {
+    void anOutsideSubscriberGetsRule39FromReactorsStrictSubscriber() {
         attempts.add(() -> Flux.never());
-        Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(attempt -> attempt.subscribe(delegate())));
-        List<Throwable> failures = new ArrayList<>();
-        java.util.concurrent.atomic.AtomicReference<Subscription> raw = new java.util.concurrent.atomic.AtomicReference<>();
-        BaseSubscriber<String> subscriber = new BaseSubscriber<>() {
+        Flux<String> flux = Fluxes.<String>defer(stream -> stream.single(attempt -> attempt.subscribe(delegate())));
+        List<Throwable> failures = new CopyOnWriteArrayList<>();
+        flux.subscribe(new org.reactivestreams.Subscriber<String>() {
             @Override
-            protected void hookOnSubscribe(Subscription subscription) {
-                raw.set(subscription); // no demand yet
+            public void onSubscribe(Subscription subscription) {
+                subscription.request(-1);
             }
 
             @Override
-            protected void hookOnError(Throwable failure) {
+            public void onNext(String value) {
+                // none
+            }
+
+            @Override
+            public void onError(Throwable failure) {
                 failures.add(failure);
+            }
+
+            @Override
+            public void onComplete() {
+                // none
+            }
+        });
+        assertThat(failures).singleElement().isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void anEndThatArrivesFromInsideOnNextIsDeliveredAfterIt() {
+        // A timeout listens, so elements go through the serializer; the source completes inside the request that the
+        // subscriber makes from onNext, so the end arrives on the delivering thread while onNext runs.
+        attempts.add(() -> Flux.from(subscriber -> subscriber.onSubscribe(new Subscription() {
+            private int requests;
+
+            @Override
+            public void request(long n) {
+                if (requests++ == 0) {
+                    subscriber.onNext("a");
+                } else {
+                    subscriber.onComplete();
+                }
+            }
+
+            @Override
+            public void cancel() {
+                // nothing to stop
+            }
+        })));
+        TimeoutPolicy timeout = timeout("inside", Duration.ofSeconds(1));
+        Flux<String> flux = Fluxes.<String>defer(stream -> stream.single(
+                attempt -> timeout.executeStreamAsync(() -> attempt.subscribe(delegate()), attempt)));
+        List<String> signals = new CopyOnWriteArrayList<>();
+        java.util.concurrent.atomic.AtomicBoolean inside = new java.util.concurrent.atomic.AtomicBoolean();
+        BaseSubscriber<String> subscriber = new BaseSubscriber<>() {
+            @Override
+            protected void hookOnSubscribe(Subscription subscription) {
+                // no demand yet: the call starts (its end is then delivered through the policies) before the element
+            }
+
+            @Override
+            protected void hookOnNext(String value) {
+                inside.set(true);
+                signals.add("next " + value);
+                request(1); // the source completes inside this call
+                signals.add("onNext returns");
+                inside.set(false);
+            }
+
+            @Override
+            protected void hookOnComplete() {
+                signals.add(inside.get() ? "complete inside onNext" : "complete");
             }
         };
         flux.subscribe(subscriber);
-        assertThat(calls).hasValue(1);
         subscriber.request(1);
-        raw.get().request(-1);
-        assertThat(failures).singleElement().isInstanceOf(IllegalArgumentException.class);
-        assertThat(cancellations).as("the attempt is cancelled").hasValue(1);
+        assertThat(signals).containsExactly("next a", "onNext returns", "complete");
+        assertThat(clock.pendingTasks()).isZero();
     }
 
     @Test

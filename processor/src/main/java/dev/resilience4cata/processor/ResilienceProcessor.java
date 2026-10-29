@@ -1776,9 +1776,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
     /**
      * A {@code Flux} method: the policies run inside {@code Fluxes.defer}, once per subscription, with the call's
-     * {@code FluxCall} ({@code r4c$stream}). The layers inside the retry or the fallback (all of them when there is
-     * neither) are one attempt ({@code r4c$stream.attempt(r4c$attempt -> ...)}), so that the retry and the fallback
-     * act only before the stream's first element; the timeout, breaker and adaptive limit use their streaming form
+     * {@code FluxCall} ({@code r4c$stream}). The layers inside the retry or the fallback are one attempt
+     * ({@code r4c$stream.attempt(r4c$attempt -> ...)}), so that the retry and the fallback act only before the
+     * stream's first element (without either, all the layers are the only attempt, {@code r4c$stream.single}); the timeout, breaker and adaptive limit use their streaming form
      * with that attempt; the delegate's {@code Flux} is subscribed by {@code r4c$attempt.subscribe}. The order is
      * always the default one ({@link #checkFlux}).
      */
@@ -1815,7 +1815,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             bounded = true;
         }
         if (!bounded) {
-            expression = boundary(expression);
+            expression = "r4c$stream.single(r4c$attempt -> " + expression + ")"; // nothing acts on the outcome: no boundary
         }
         expression = FLUXES + ".<" + result + ">defer(r4c$stream -> " + expression + ")";
         out.append("\n    @Override\n    ").append(modifiers).append(typeVariables).append(returnType).append(' ')
