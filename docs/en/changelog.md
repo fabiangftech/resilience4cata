@@ -19,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- **Work the library runs later no longer inherits another request's thread context, nor an old class loader after a reload.** The library's timer threads are started once per JVM, and used to inherit the context class loader and the `InheritableThreadLocal` values of whichever request started them; the virtual threads they start (a retry's next attempt, a hedge, an async timeout that fires) inherited them in turn, and a queued bulkhead call inherited those of the call that freed its slot. So after a live reload (Quarkus dev mode, Spring DevTools) later attempts ran with the old application's class loader, which also stayed in memory, and with an inheritable security context or MDC an attempt could run with another request's values. The timer threads now hold the library's class loader and inherit nothing; the work runs with the context class loader of the thread that made the call and no inherited values.
 - **The asynchronous rate limiter no longer parks the calling thread.** After losing the race for a permit it parked for 1 ns before trying again, which an event loop thread (Netty, Reactor) must never do; it now tries again at once. Under heavy contention on one limiter this costs more per call ([benchmarks](benchmarks.md)). The synchronous rate limiter is unchanged.
 
 ## [0.10.0] - 2026-10-27 :id=0.10.0

@@ -63,8 +63,9 @@ final class TimeoutTimer {
     }
 
     private static final class Shared {
-        static final TimeoutTimer INSTANCE = new TimeoutTimer(
-                task -> Thread.ofVirtual().name("resilience4cata-async").start(task), true);
+        // An entry fires with the context class loader of the call that scheduled it (Threads).
+        static final TimeoutTimer INSTANCE = new TimeoutTimer(task -> Threads.startVirtual("resilience4cata-async",
+                task instanceof TimerEntry entry ? entry.contextLoader : null, task), true);
     }
 
     /** Creates a timer that only moves when {@link #tick(long)} is called; fired tasks go to {@code launcher}. */
@@ -98,6 +99,7 @@ final class TimeoutTimer {
             register(lane); // once per lane (a race only repeats it, harmlessly)
         }
         entry.lane = lane;
+        entry.contextLoader = Threads.callers(); // published with the entry by the inbox push
         stripe().push(Heads.INBOX, entry);
     }
 
@@ -116,7 +118,7 @@ final class TimeoutTimer {
         lane.registered = true;
         AtomicBoolean once = started;
         if (once != null && !once.get() && once.compareAndSet(false, true)) {
-            Thread timer = Thread.ofPlatform().daemon().name("resilience4cata-timeout-async").unstarted(this::run);
+            Thread timer = Threads.daemon("resilience4cata-timeout-async", this::run);
             thread = timer;
             timer.start();
         } else if (wanted < before) {

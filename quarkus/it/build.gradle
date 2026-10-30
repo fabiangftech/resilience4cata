@@ -72,6 +72,8 @@ dependencies {
     testAnnotationProcessor project(':processor')
 
     extensionTestImplementation libs.quarkus.junit.internal
+    // Dev mode's compiler finds annotation processors on the class path (ReloadTest recompiles an annotated class).
+    extensionTestRuntimeOnly project(':processor')
     // DevUiTest: JsonRPC calls to the Dev UI of a dev-mode application.
     extensionTestImplementation libs.quarkus.devui.test.spi
     // QuarkusExtensionTest builds its applications with the deployment modules on the test class path, as in an
@@ -89,6 +91,8 @@ def extensionTest = tasks.register('extensionTest', Test) {
     // state that does not survive a second Quarkus application in the same JVM.
     forkEvery = 1
     include '**/*Test.class'
+    // QuarkusDevModeTest's modifySourceFile (ReloadTest) looks for the test's sources here, not in src/test/java.
+    systemProperty 'quarkus.test.source-path', file('src/extensionTest/java').absolutePath
     // ErrorCodeTest checks the error codes against the error reference pages.
     inputs.files('../../docs/en/errors.md', '../../docs/es/errors.md').withPropertyName('errorPages')
             .withPathSensitivity(PathSensitivity.RELATIVE)

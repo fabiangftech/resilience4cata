@@ -37,6 +37,8 @@ abstract class TimerEntry implements Runnable {
 
     /** Written before the entry is pushed (published by the push), final afterwards. */
     TimeoutTimer.@Nullable Lane lane;
+    /** The context class loader of the call that scheduled this entry, which it fires with. */
+    @Nullable ClassLoader contextLoader;
     /**
      * Link in an inbox while {@code NEW}, then in a cancelled stack after {@code SCHEDULED → CANCELLED}.
      * The two uses never overlap: the timer reads and clears the inbox link before it moves the entry

@@ -6,10 +6,10 @@ import io.micronaut.context.annotation.Requires;
 import jakarta.inject.Singleton;
 
 /**
- * The registry's clock in every test context of this module but the load tests', which run on the system clock (also
- * a snippet of the Micronaut guide).
+ * The registry's clock in every test context of this module but the load and lifecycle tests', which run on the
+ * system clock (also a snippet of the Micronaut guide).
  */
-@Requires(notEnv = "load")
+@Requires(notEnv = {"load", "lifecycle"})
 // tag::micronaut-test-clock[]
 @Factory
 public class Clocks {

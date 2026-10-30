@@ -355,7 +355,8 @@ public final class BulkheadPolicy implements BulkheadHandle {
     /** Runs a waiter's call, which now holds a slot, on a new virtual thread: never on the releasing thread. */
     private <T> void grant(BulkheadWaiters.Waiter<T> waiter) {
         waiter.cancelTimer();
-        Thread.ofVirtual().name("resilience4cata-bulkhead").start(() -> runGranted(waiter));
+        // With the queued call's own context class loader, not the releasing call's (Threads).
+        Threads.startVirtual("resilience4cata-bulkhead", waiter.contextLoader, () -> runGranted(waiter));
     }
 
     /** Number of asynchronous callers waiting for a slot; for tests. */

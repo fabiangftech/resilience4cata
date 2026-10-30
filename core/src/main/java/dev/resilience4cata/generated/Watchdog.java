@@ -67,7 +67,7 @@ final class Watchdog {
         private static Watchdog start() {
             Watchdog watchdog = new Watchdog(0);
             watchdog.lastReal = System.nanoTime();
-            Thread.ofPlatform().daemon().name("resilience4cata-timeout").start(watchdog::run);
+            Threads.daemon("resilience4cata-timeout", watchdog::run).start();
             return watchdog;
         }
     }

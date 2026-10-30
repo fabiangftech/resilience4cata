@@ -19,6 +19,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y 
 
 ### Corregido
 
+- **El trabajo que la librería ejecuta más tarde ya no hereda el contexto de hilo de otro request, ni un class loader viejo después de una recarga.** Los hilos de timer de la librería se inician una vez por JVM, y heredaban el context class loader y los valores `InheritableThreadLocal` del request que los iniciaba; los virtual threads que lanzan (el siguiente intento de un retry, un hedge, un timeout async que vence) los heredaban a su vez, y una llamada en cola de un bulkhead heredaba los de la llamada que liberó su lugar. Así, después de una recarga en caliente (dev mode de Quarkus, Spring DevTools) los intentos posteriores corrían con el class loader de la aplicación vieja, que además quedaba en memoria, y con un security context o un MDC heredables un intento podía correr con los valores de otro request. Los hilos de timer ahora tienen el class loader de la librería y no heredan nada; el trabajo corre con el context class loader del hilo que hizo la llamada y sin valores heredados.
 - **El rate limiter asíncrono ya no estaciona el hilo que llama.** Tras perder la carrera por un permiso se estacionaba 1 ns antes de reintentar, algo que un hilo de event loop (Netty, Reactor) nunca debe hacer; ahora reintenta de inmediato. Con mucha contención sobre un mismo limiter esto cuesta más por llamada ([benchmarks](benchmarks.md)). El rate limiter síncrono no cambia.
 
 ## [0.10.0] - 2026-10-27 :id=0.10.0

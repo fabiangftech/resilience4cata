@@ -30,7 +30,7 @@ final class AsyncSupport {
 
         private static ScheduledThreadPoolExecutor create() {
             ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(1,
-                    Thread.ofPlatform().daemon().name("resilience4cata-async-timer").factory());
+                    Threads.daemons("resilience4cata-async-timer"));
             timer.setRemoveOnCancelPolicy(true); // most timeouts are cancelled: do not keep them until they expire
             return timer;
         }
@@ -94,17 +94,20 @@ final class AsyncSupport {
         return current;
     }
 
-    /** Runs {@code task} on a new virtual thread after {@code delayNanos}; at once if the delay is not positive. */
+    /**
+     * Runs {@code task} on a new virtual thread after {@code delayNanos}; at once if the delay is not positive. The
+     * task runs with the caller's context class loader and no inherited thread-local values ({@link Threads}).
+     */
     @SuppressWarnings("java:S1452") // the JDK's own type for a scheduled Runnable; callers only cancel it
     static @Nullable ScheduledFuture<?> later(long delayNanos, Runnable task) {
         Objects.requireNonNull(task, "task");
+        ClassLoader loader = Threads.callers();
         if (delayNanos <= 0) {
-            Thread.ofVirtual().name("resilience4cata-async").start(task);
+            Threads.startVirtual("resilience4cata-async", loader, task);
             return null;
         }
-        return Timer.INSTANCE.schedule(() -> {
-            Thread.ofVirtual().name("resilience4cata-async").start(task);
-        }, delayNanos, TimeUnit.NANOSECONDS);
+        return Timer.INSTANCE.schedule(() -> Threads.startVirtual("resilience4cata-async", loader, task),
+                delayNanos, TimeUnit.NANOSECONDS);
     }
 
     /**
