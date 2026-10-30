@@ -8,8 +8,8 @@ The module `resilience4cata-micronaut` (available from 0.5.0) adds nothing to th
 `@Around` advice and no interceptor. A protected bean *is* the class that the annotation processor generated, so
 a call costs what it costs without Micronaut.
 
-**Requirements:** Micronaut 5.2 or newer (the module is compiled against Micronaut core 5.2.0 and tested on
-platform 5.2.2) and **Java 25**, which Micronaut 5 itself requires. This module is the one exception to
+**Requirements:** Micronaut 5.2 or newer (the module is compiled against Micronaut core 5.2.0, and its tests run both
+on core 5.2.0 and on platform 5.2.2) and **Java 25**, which Micronaut 5 itself requires. This module is the one exception to
 resilience4cata's Java 21 baseline: it is compiled with `--release 25`; every other module stays on Java 21.
 Micronaut 4 is not supported.
 

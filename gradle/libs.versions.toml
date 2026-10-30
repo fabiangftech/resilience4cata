@@ -34,10 +34,15 @@ jacksonAnnotations = "2.22"
 # Micronaut platform BOM (micronautPlatform), which manages every Micronaut module.
 micronautPlatform = "5.2.2"
 micronautMinimum = "5.2.0"
+# The oldest Micronaut platform BOM, for the other Micronaut modules in the micronaut module's minimumMicronautTest suite
+# (no platform ships core 5.2.0: platform 5.2.0 has core 5.2.8, so the suite forces core to micronautMinimum).
+micronautPlatformMinimum = "5.2.0"
 # The quarkus extension (runtime and deployment) compiles against the oldest supported Quarkus (quarkusMinimum: never
 # bump it with the rest, .github/dependabot.yml ignores the artifacts that use it, and it is the Quarkus core version
 # written to META-INF/quarkus-extension.yaml); its tests (quarkus:it) run on quarkus, the Quarkus Gradle plugin and
 # BOM, the latest release at least two weeks old.
+# While quarkus equals quarkusMinimum the tests already run on the minimum; once quarkus moves past it, quarkus:it
+# needs a suite on quarkusMinimum, like spring's minimumSpringBootTest and micronaut's minimumMicronautTest.
 quarkus = "3.40.1"
 quarkusMinimum = "3.40.1"
 # Compile-only in the quarkus extension: the health check's API, at the version of quarkusMinimum's BOM.
@@ -92,6 +97,8 @@ opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testi
 opentelemetry-exporter-prometheus = { module = "io.opentelemetry:opentelemetry-exporter-prometheus", version.ref = "opentelemetry-prometheus" }
 micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }
 spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "springBoot" }
+# The spring module's minimumSpringBootTest suite: the same tests with every Boot-managed version of springBootMinimum.
+spring-boot-dependencies-minimum = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "springBootMinimum" }
 # The spring module's main code, at the oldest supported Spring Boot.
 spring-boot-autoconfigure-minimum = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "springBootMinimum" }
 spring-boot-health-minimum = { module = "org.springframework.boot:spring-boot-health", version.ref = "springBootMinimum" }
@@ -154,6 +161,8 @@ jackson-databind = { module = "tools.jackson.core:jackson-databind" }
 snakeyaml = { module = "org.yaml:snakeyaml" }
 mockito-core = { module = "org.mockito:mockito-core" }
 micronaut-platform = { module = "io.micronaut.platform:micronaut-platform", version.ref = "micronautPlatform" }
+micronaut-platform-minimum = { module = "io.micronaut.platform:micronaut-platform", version.ref = "micronautPlatformMinimum" }
+micronaut-core-bom-minimum = { module = "io.micronaut:micronaut-core-bom", version.ref = "micronautMinimum" }
 # The micronaut module's main code, at the oldest supported Micronaut core.
 micronaut-inject-minimum = { module = "io.micronaut:micronaut-inject", version.ref = "micronautMinimum" }
 micronaut-inject-java-minimum = { module = "io.micronaut:micronaut-inject-java", version.ref = "micronautMinimum" }

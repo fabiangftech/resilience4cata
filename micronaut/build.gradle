@@ -15,6 +15,37 @@ configurations {
     }
 }
 
+// The test libraries, shared by `test` and `minimumMicronautTest`, which differ only in the Micronaut versions.
+def micronautTestLibraries = [
+        libs.micronaut.inject,
+        libs.micronaut.management,
+        libs.micronaut.micrometer.core,
+        libs.micronaut.http.server.netty,
+        libs.micronaut.http.client,
+        libs.micronaut.serde.jackson,
+        libs.micronaut.test.junit5,
+        libs.micronaut.data.tx,
+        libs.logback.classic,
+        project(':micrometer'),
+        project(':testkit'),
+        project(':reactor')
+]
+
+testing {
+    suites {
+        minimumMicronautTest(JvmTestSuite) {
+            sources {
+                java {
+                    srcDirs = ['src/test/java']
+                }
+                resources {
+                    srcDirs = ['src/test/resources']
+                }
+            }
+        }
+    }
+}
+
 dependencies {
     api project(':core')
     api project(':config')
@@ -27,26 +58,29 @@ dependencies {
     // Micronaut's bean definitions for this module's beans.
     annotationProcessor libs.micronaut.inject.java.minimum
 
-    // Tests run on the latest Micronaut, through its platform BOM, with both processors: Micronaut's and ours.
+    // Tests run on the latest Micronaut, through its platform BOM, with both processors: Micronaut's and ours;
+    // minimumMicronautTest runs them on the oldest supported core.
     testImplementation platform(libs.micronaut.platform)
-    testImplementation libs.micronaut.inject
-    testImplementation libs.micronaut.management
-    testImplementation libs.micronaut.micrometer.core
-    testImplementation libs.micronaut.http.server.netty
-    testImplementation libs.micronaut.http.client
-    testImplementation libs.micronaut.serde.jackson
-    testImplementation libs.micronaut.test.junit5
-    testImplementation libs.micronaut.data.tx
+    micronautTestLibraries.each { testImplementation it }
     testRuntimeOnly libs.snakeyaml
-    testImplementation libs.logback.classic
-    testImplementation project(':micrometer')
-    testImplementation project(':testkit')
-    // A retried Mono method in the R4C-MN-005 fixture (its retry is inside the Monos.defer lambda).
-    testImplementation project(':reactor')
     testCompileOnly project(':annotations')
     testAnnotationProcessor platform(libs.micronaut.platform)
     testAnnotationProcessor libs.micronaut.inject.java
     testAnnotationProcessor project(':processor')
+
+    // The same tests on Micronaut core micronautMinimum (forced, also Micronaut's annotation processor), with the
+    // oldest platform's versions of the other Micronaut modules.
+    minimumMicronautTestImplementation project()
+    minimumMicronautTestImplementation enforcedPlatform(libs.micronaut.core.bom.minimum)
+    minimumMicronautTestImplementation platform(libs.micronaut.platform.minimum)
+    micronautTestLibraries.each { minimumMicronautTestImplementation it }
+    minimumMicronautTestImplementation libs.assertj
+    minimumMicronautTestRuntimeOnly libs.snakeyaml
+    minimumMicronautTestCompileOnly project(':annotations')
+    minimumMicronautTestAnnotationProcessor enforcedPlatform(libs.micronaut.core.bom.minimum)
+    minimumMicronautTestAnnotationProcessor platform(libs.micronaut.platform.minimum)
+    minimumMicronautTestAnnotationProcessor libs.micronaut.inject.java
+    minimumMicronautTestAnnotationProcessor project(':processor')
 
     processorPath platform(libs.micronaut.platform)
     processorPath libs.micronaut.inject.java
@@ -61,7 +95,7 @@ tasks.withType(JavaCompile).configureEach {
     options.compilerArgs.add('-Xlint:-classfile')
 }
 
-tasks.named('compileTestJava') {
+tasks.matching { it.name in ['compileTestJava', 'compileMinimumMicronautTestJava'] }.configureEach {
     // Annotated classes become Micronaut beans: their generated subclasses carry the class's scope and
     // @Replaces(C.class) (the setup the Micronaut guide recommends).
     options.compilerArgs.add('-Ar4c.inject=micronaut')
@@ -72,10 +106,14 @@ tasks.named('jar') {
     manifest.attributes('Automatic-Module-Name': 'dev.resilience4cata.micronaut')
 }
 
-tasks.named('test') {
+tasks.withType(Test).configureEach {
     jvmArgumentProviders.add(new dev.resilience4cata.build.ClasspathProperty('test.processorPath', configurations.processorPath))
     // ErrorCodeTest checks the error codes against the error reference pages.
     inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+tasks.named('check') {
+    dependsOn testing.suites.minimumMicronautTest
 }
 
 // No module-info (Automatic-Module-Name only): the API packages that apiCompatibility compares.

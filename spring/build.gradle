@@ -5,6 +5,34 @@ plugins {
 
 description = 'Spring Boot 4 auto-configuration: the registry from application properties, generated classes as beans, metrics, health and an actuator endpoint.'
 
+// The test libraries, shared by `test` and `minimumSpringBootTest`, which differ only in Boot's BOM.
+def springTestLibraries = [
+        libs.spring.boot.autoconfigure,
+        libs.spring.boot.health,
+        libs.spring.boot.actuator,
+        libs.spring.boot.actuator.autoconfigure,
+        libs.spring.boot.micrometer.metrics,
+        libs.spring.boot.test,
+        libs.spring.test,
+        libs.spring.tx,
+        libs.jakarta.transaction.api,
+        libs.spring.core.test,
+        libs.jackson.databind,
+        libs.snakeyaml,
+        libs.mockito.core,
+        project(':micrometer'),
+        project(':testkit'),
+        project(':reactor'),
+        libs.spring.boot.webflux,
+        libs.spring.boot.reactor.netty,
+        libs.spring.boot.webmvc,
+        libs.spring.boot.tomcat,
+        libs.aspectjweaver,
+        libs.hibernate.validator,
+        libs.tomcat.embed.el,
+        libs.reactor.test
+]
+
 dependencies {
     api project(':core')
     api project(':config')
@@ -25,36 +53,9 @@ dependencies {
     annotationProcessor libs.spring.boot.autoconfigure.processor.minimum
     annotationProcessor libs.spring.boot.configuration.processor.minimum
 
-    // Tests run on the latest Spring Boot, through its BOM.
+    // Tests run on the latest Spring Boot, through its BOM; minimumSpringBootTest runs them on the oldest supported one.
     testImplementation platform(libs.spring.boot.dependencies)
-    testImplementation libs.spring.boot.autoconfigure
-    testImplementation libs.spring.boot.health
-    testImplementation libs.spring.boot.actuator
-    testImplementation libs.spring.boot.actuator.autoconfigure
-    testImplementation libs.spring.boot.micrometer.metrics
-    testImplementation libs.spring.boot.test
-    testImplementation libs.spring.test
-    testImplementation libs.spring.tx
-    testImplementation libs.jakarta.transaction.api
-    testImplementation libs.spring.core.test
-    testImplementation libs.jackson.databind
-    testImplementation libs.snakeyaml
-    // @MockitoBean / @MockitoSpyBean in the usability tests (on their own fixtures: inline mocks retransform classes).
-    testImplementation libs.mockito.core
-    testImplementation project(':micrometer')
-    testImplementation project(':testkit')
-    // Mono methods in a WebFlux application (WebFluxTest) and the reactive cases of the other tests.
-    testImplementation project(':reactor')
-    testImplementation libs.spring.boot.webflux
-    testImplementation libs.spring.boot.reactor.netty
-    // A Spring MVC application on Tomcat under concurrent load (LoadTest); the WebFlux tests ask for a reactive one.
-    testImplementation libs.spring.boot.webmvc
-    testImplementation libs.spring.boot.tomcat
-    // Proxies around protected beans in ProxiesTest: an @Aspect, and method validation (@Validated).
-    testImplementation libs.aspectjweaver
-    testImplementation libs.hibernate.validator
-    testImplementation libs.tomcat.embed.el
-    testImplementation libs.reactor.test
+    springTestLibraries.each { testImplementation it }
     testCompileOnly project(':annotations')
     testAnnotationProcessor project(':processor')
 }
@@ -73,7 +74,48 @@ tasks.named('compileTestJava') {
     options.compilerArgs.add('-parameters')
 }
 
-tasks.named('test') {
+// `test` runs on the latest Spring Boot; `minimumSpringBootTest` compiles and runs the same tests with every version
+// that Boot's BOM manages forced to the oldest supported Boot's (enforcedPlatform beats the latest BOM), as in an
+// application on that Boot.
+testing {
+    suites {
+        minimumSpringBootTest(JvmTestSuite) {
+            sources {
+                java {
+                    srcDirs = ['src/test/java']
+                }
+                resources {
+                    srcDirs = ['src/test/resources']
+                }
+            }
+            dependencies {
+                implementation project()
+                // Boot's own minimum versions, also for the libraries it manages (Reactor, Jackson, Mockito...).
+                implementation enforcedPlatform(libs.spring.boot.dependencies.minimum)
+                implementation libs.assertj
+            }
+        }
+    }
+}
+
+configurations {
+    minimumSpringBootTestCompileOnly.extendsFrom testCompileOnly
+    minimumSpringBootTestAnnotationProcessor.extendsFrom testAnnotationProcessor
+}
+
+dependencies {
+    springTestLibraries.each { minimumSpringBootTestImplementation it }
+}
+
+tasks.named('compileMinimumSpringBootTestJava') {
+    options.compilerArgs.add('-parameters')
+}
+
+tasks.withType(Test).configureEach {
     // ErrorCodeTest checks the error codes against the error reference pages.
     inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+tasks.named('check') {
+    dependsOn testing.suites.minimumSpringBootTest
 }
