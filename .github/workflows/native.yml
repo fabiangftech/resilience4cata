@@ -1,0 +1,75 @@
+# Builds the Quarkus guide's application (quarkus:it) as a GraalVM native image and runs the @QuarkusIntegrationTest
+# classes against it: the annotated class, the interface and REST client wrappers, health, metrics, and the Mono and
+# Flux beans (src/integrationTest). The same tests run against the jar with ./gradlew :quarkus:it:quarkusIntTest.
+# Locally (GraalVM for JDK 25):
+#   ./gradlew :quarkus:it:testNative -Dquarkus.native.enabled=true -Dquarkus.package.jar.enabled=false \
+#     -Dquarkus.native.graalvm-home=<GraalVM>
+#
+# Not on every PR: a native build takes several minutes. It runs on PRs that touch what ends up in the image, after
+# every merge to main and nightly.
+name: native
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'core/**'
+      - 'processor/**'
+      - 'reactor/**'
+      - 'micrometer/**'
+      - 'quarkus/**'
+      - 'gradle/libs.versions.toml'
+      - '.github/workflows/native.yml'
+  schedule:
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # JDK 21 is the compile toolchain (--release 21).
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # GraalVM for JDK 25 builds the image; it becomes JAVA_HOME (Gradle runs on it) and sets GRAALVM_HOME.
+      - uses: graalvm/setup-graalvm@27b360dbb857524eaf0b4c4cef364d38e5b4f173 # v1.6.7
+        with:
+          java-version: '25'
+          distribution: graalvm-community
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Native image tests
+        run: >-
+          ./gradlew :quarkus:it:testNative
+          -Dquarkus.native.enabled=true -Dquarkus.package.jar.enabled=false
+          -Dquarkus.native.graalvm-home="$GRAALVM_HOME"
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-test-reports
+          path: |
+            quarkus/it/build/reports/tests/
+            quarkus/it/build/test-results/
+          retention-days: 14

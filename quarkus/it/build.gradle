@@ -41,6 +41,8 @@ dependencies {
     // An application gets the module from a repository, which Quarkus loads with the extension.
     micrometerJar project(':micrometer')
     implementation files(configurations.micrometerJar)
+    // The reactive beans (src/main/java/dev/resilience4cata/quarkus/reactive), also in the native image.
+    implementation project(':reactor')
     compileOnly project(':annotations')
     annotationProcessor project(':processor')
 
@@ -51,8 +53,6 @@ dependencies {
     // extensionTest ones: QuarkusExtensionTest builds its applications from the test source set's application model.
     testImplementation libs.quarkus.smallrye.fault.tolerance
     testImplementation libs.quarkus.narayana.jta
-    // A retried Mono method in an R4C-QK-002 fixture (its retry is inside the Monos.defer lambda).
-    testImplementation project(':reactor')
     // Usability tests (usability packages): Quarkus features users combine with the policies, and @InjectMock.
     testImplementation libs.quarkus.hibernate.validator
     testImplementation libs.quarkus.scheduler

@@ -520,8 +520,10 @@ sus campos.
 El procesador escribe metadatos de alcanzabilidad de GraalVM para cada clase generada, y `core` inicializa sus hilos
 en segundo plano en ejecución, así que una construcción nativa (`-Dquarkus.native.enabled=true`) no necesita
 configuración adicional: el código generado por ArC instancia las clases anotadas, y `Resilient.of` los envoltorios
-de interfaces, que encuentra gracias a esos metadatos. La configuración se lee en ejecución. La CI del proyecto no
-construye imágenes nativas; el [registro de cambios](../changelog.md) indica qué se comprobó a mano.
+de interfaces, que encuentra gracias a esos metadatos. La configuración se lee en ejecución. La CI del proyecto
+construye la aplicación de esta guía como imagen nativa (GraalVM para JDK 25) y la prueba por HTTP: una clase
+anotada, envoltorios de interfaces y de clientes REST, la comprobación de disponibilidad, las métricas, y métodos
+`Mono` y `Flux` servidos con `Uni` y `Multi` ([beans reactivos](#reactive)).
 
 ## Límites :id=limits
 
