@@ -173,7 +173,9 @@ class LoadTest {
         warehouse.failing = false;
         awaitUntil(() -> {
             try {
-                return fire(1, i -> "/stock/probe").containsKey(200);
+                // one probe at a time until the half-open breaker has seen enough successes to close
+                fire(1, i -> "/stock/probe");
+                return registry.circuitBreaker("load-stock").state() == CircuitBreakerState.CLOSED;
             } catch (Exception e) {
                 throw new IllegalStateException(e);
             }

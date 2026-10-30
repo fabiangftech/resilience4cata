@@ -2911,6 +2911,23 @@ transaction proxy: one transaction per attempt); or move `@Transactional` to ano
 method calls; or, if one shared transaction for every attempt is intended, set
 `resilience4cata.spring.allow-retry-inside-transaction=true`. `NOT_SUPPORTED` and `NEVER` are not reported.
 
+### R4C-SPR-005
+
+**Trigger:** a bean implements an annotated interface but Spring created it before resilience4cata's
+post-processor was registered, so it was never wrapped and its policies would not run. Spring creates a bean that
+early when a `BeanPostProcessor` or `BeanFactoryPostProcessor` depends on it (a constructor parameter or a field
+of that post-processor), and logs that the bean "is not eligible for getting processed by all BeanPostProcessors"
+(`ResilienceBeanException`, once every singleton is created).
+
+```text
+[R4C-SPR-005] Bean 'stockClient' (com.acme.HttpStockClient) implements com.acme.StockClient, which has resilience4cata annotations, but it was created before resilience4cata's post-processor was registered, ... It was needed by 'auditPostProcessor'. ...
+```
+
+**Fix:** inject the bean lazily into that post-processor (`ObjectProvider<StockClient>` or `@Lazy`), so that it is
+created later, through every post-processor; or annotate the class instead of the interface (its generated
+subclass is instantiated in place of the class, early or not). To leave the bean unprotected on purpose, list its
+name in `resilience4cata.spring.exclude`.
+
 ## Runtime: Micronaut integration (R4C-MN)
 
 `resilience4cata-micronaut` checks the beans and fails with these codes when a bean would silently lose its

@@ -16,7 +16,11 @@ import org.springframework.aop.scope.ScopedProxyUtils;
 import org.springframework.aop.support.AopUtils;
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.config.SmartInstantiationAwareBeanPostProcessor;
 import org.springframework.beans.factory.support.MergedBeanDefinitionPostProcessor;
 import org.springframework.beans.factory.support.RootBeanDefinition;
@@ -37,9 +41,13 @@ import org.springframework.util.ClassUtils;
  *
  * <p>The registry is looked up when the first bean is wrapped, never when this post-processor is
  * created, so that it and its dependencies go through every post-processor.
+ *
+ * <p>A bean that another post-processor depends on is created while the post-processors are registered, before
+ * this one is, so it never gets here. Once every singleton exists, the ones that should have been processed are
+ * checked, and startup fails with R4C-SPR-005 for a bean that should have been wrapped.
  */
 final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPostProcessor,
-        MergedBeanDefinitionPostProcessor {
+        MergedBeanDefinitionPostProcessor, BeanFactoryAware, SmartInitializingSingleton {
 
     private static final String JAKARTA_INJECT = "jakarta.inject.Inject";
 
@@ -51,6 +59,7 @@ final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPo
     private final GeneratedClasses generated = new GeneratedClasses();
     private final Map<Class<?>, Plan> plans = new ConcurrentHashMap<>();
     private final Map<String, Object> earlyReferences = new ConcurrentHashMap<>();
+    private @Nullable ConfigurableListableBeanFactory beanFactory;
 
     ResilientBeansPostProcessor(Supplier<ResilienceRegistry> registry, boolean wrap, Set<String> excluded) {
         this.registry = registry;
@@ -146,6 +155,62 @@ final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPo
             case Unprotected(Class<?> annotated, Class<?> subclass) -> throw unprotected(beanName, bean, annotated, subclass);
             case Several(List<Class<?>> interfaces) -> throw several(beanName, bean, interfaces);
         };
+    }
+
+    @Override
+    public void setBeanFactory(BeanFactory beanFactory) {
+        if (beanFactory instanceof ConfigurableListableBeanFactory listable) {
+            this.beanFactory = listable;
+        }
+    }
+
+    /**
+     * Fails for a singleton this post-processor never saw: one that a post-processor depends on, which Spring created
+     * before registering this one. Objects registered as singletons by hand (no bean definition) are not processed by
+     * any post-processor and are left alone, as are a test's Mockito mocks and spies.
+     */
+    @Override
+    public void afterSingletonsInstantiated() {
+        ConfigurableListableBeanFactory factory = beanFactory;
+        if (factory == null) {
+            return;
+        }
+        for (String name : factory.getBeanDefinitionNames()) {
+            if (excluded.contains(name) || ScopedProxyUtils.isScopedTarget(name)) {
+                continue;
+            }
+            Object bean = factory.getSingleton(name);
+            if (bean == null || Spies.isMock(bean)) {
+                continue; // a test's @MockitoBean or @MockitoSpyBean, which is injected as it is
+            }
+            Plan plan = AopUtils.isAopProxy(bean) ? plan(bean.getClass(), AopUtils.getTargetClass(bean))
+                    : plans.computeIfAbsent(bean.getClass(), type -> plan(type, type));
+            switch (plan) {
+                case Keep keep -> { }
+                case Wrap(Class<?> type) -> {
+                    if (wrap) {
+                        throw createdEarly(name, bean, type, List.of(factory.getDependentBeans(name)));
+                    }
+                }
+                case Unprotected(Class<?> annotated, Class<?> subclass) -> throw unprotected(name, bean, annotated, subclass);
+                case Several(List<Class<?>> interfaces) -> throw several(name, bean, interfaces);
+            }
+        }
+    }
+
+    private static ResilienceBeanException createdEarly(String beanName, Object bean, Class<?> type,
+            List<String> dependents) {
+        String neededBy = dependents.isEmpty() ? "" : " It was needed by " + dependents.stream()
+                .map(d -> "'" + d + "'").collect(java.util.stream.Collectors.joining(", ")) + ".";
+        return new ResilienceBeanException(ErrorCode.CREATED_BEFORE_POST_PROCESSORS, "Bean '" + beanName + "' ("
+                + AopUtils.getTargetClass(bean).getName() + ") implements " + type.getName() + ", which has"
+                + " resilience4cata annotations, but it was created before resilience4cata's post-processor was"
+                + " registered, so it is not wrapped and its policies would not run. Spring creates a bean that early"
+                + " when a BeanPostProcessor or a BeanFactoryPostProcessor depends on it (it logs that the bean \"is"
+                + " not eligible for getting processed by all BeanPostProcessors\")." + neededBy, "Inject it lazily"
+                + " into that post-processor (ObjectProvider<" + type.getSimpleName() + "> or @Lazy), or annotate the"
+                + " class instead of the interface (Spring then instantiates its generated subclass, early or not), or"
+                + " list the bean in resilience4cata.spring.exclude to leave it unprotected.");
     }
 
     @SuppressWarnings("unchecked")

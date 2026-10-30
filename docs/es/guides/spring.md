@@ -195,6 +195,10 @@ public class StockReport {
 - Un bean que implementa dos interfaces anotadas, sin que una extienda a la otra, detiene el arranque con
   [`R4C-SPR-003`](../errors.md#r4c-spr-003). Un bean que ya es una clase generada (un método `@Bean` que devuelve
   él mismo `Resilient.of(...)`) se deja como está.
+- Un bean del que depende un `BeanPostProcessor` de la aplicación se crea antes de que exista el post-procesador
+  del envoltorio, así que quedaría sin envolver: el arranque se detiene con
+  [`R4C-SPR-005`](../errors.md#r4c-spr-005). Inyéctalo en ese post-procesador con `ObjectProvider<StockClient>` o
+  `@Lazy`. Las clases anotadas no se ven afectadas.
 
 ## Beans reactivos :id=reactive
 

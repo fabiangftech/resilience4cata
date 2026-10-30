@@ -196,6 +196,9 @@ public class StockReport {
 - A bean that implements two annotated interfaces, neither extending the other, fails the startup with
   [`R4C-SPR-003`](../errors.md#r4c-spr-003). A bean that already is a generated class (a `@Bean` method that
   returns `Resilient.of(...)` itself) is left as it is.
+- A bean that a `BeanPostProcessor` of the application depends on is created before the wrapper's post-processor
+  exists, so it would stay unwrapped: the startup fails with [`R4C-SPR-005`](../errors.md#r4c-spr-005). Inject it
+  into that post-processor through `ObjectProvider<StockClient>` or `@Lazy`. Annotated classes are not affected.
 
 ## Reactive beans :id=reactive
 
