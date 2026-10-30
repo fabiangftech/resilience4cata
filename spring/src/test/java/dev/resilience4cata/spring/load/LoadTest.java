@@ -223,7 +223,7 @@ class LoadTest {
     }
 
     private static void awaitUntil(BooleanSupplier condition) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
         while (!condition.getAsBoolean()) {
             assertThat(System.nanoTime() - deadline).as("waited too long").isNegative();
             Thread.sleep(20);

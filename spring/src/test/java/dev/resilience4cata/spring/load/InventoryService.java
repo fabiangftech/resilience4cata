@@ -28,8 +28,10 @@ public class InventoryService {
     }
 
     @Retry(name = "load-stock", maxAttempts = 3, delay = "1ms", backoff = Backoff.FIXED, jitter = Jitter.NONE)
+    // waitInOpen is long enough for a batch of rejections on a slow runner (CI with coverage): with 300ms the
+    // breaker went half-open in the middle of the batch that must find it open.
     @CircuitBreaker(name = "load-stock", windowSize = 20, minimumCalls = 10, failureRateThreshold = 50,
-            waitInOpen = "300ms", halfOpenCalls = 2)
+            waitInOpen = "5s", halfOpenCalls = 2)
     public int stock(String sku) {
         return warehouse.work(sku);
     }
