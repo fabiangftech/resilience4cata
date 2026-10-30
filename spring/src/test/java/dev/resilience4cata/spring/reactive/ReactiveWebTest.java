@@ -25,7 +25,8 @@ import reactor.test.StepVerifier;
  * statuses through {@code @ExceptionHandler}, and a client that disconnects cancels the call through the
  * policies, so the bulkhead slot is freed.
  */
-@SpringBootTest(classes = ReactiveWebTest.App.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(classes = ReactiveWebTest.App.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "spring.main.web-application-type=reactive") // Spring MVC is on the test class path too
 class ReactiveWebTest {
 
     @SpringBootApplication(scanBasePackageClasses = ReactiveWebTest.class)

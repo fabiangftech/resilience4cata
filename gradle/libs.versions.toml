@@ -140,6 +140,8 @@ spring-boot-actuator-autoconfigure = { module = "org.springframework.boot:spring
 spring-boot-micrometer-metrics = { module = "org.springframework.boot:spring-boot-micrometer-metrics" }
 spring-boot-webflux = { module = "org.springframework.boot:spring-boot-webflux" }
 spring-boot-reactor-netty = { module = "org.springframework.boot:spring-boot-reactor-netty" }
+spring-boot-webmvc = { module = "org.springframework.boot:spring-boot-webmvc" }
+spring-boot-tomcat = { module = "org.springframework.boot:spring-boot-tomcat" }
 spring-boot-test = { module = "org.springframework.boot:spring-boot-test" }
 spring-test = { module = "org.springframework:spring-test" }
 spring-tx = { module = "org.springframework:spring-tx" }

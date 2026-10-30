@@ -47,6 +47,9 @@ dependencies {
     testImplementation project(':reactor')
     testImplementation libs.spring.boot.webflux
     testImplementation libs.spring.boot.reactor.netty
+    // A Spring MVC application on Tomcat under concurrent load (LoadTest); the WebFlux tests ask for a reactive one.
+    testImplementation libs.spring.boot.webmvc
+    testImplementation libs.spring.boot.tomcat
     testImplementation libs.reactor.test
     testCompileOnly project(':annotations')
     testAnnotationProcessor project(':processor')
