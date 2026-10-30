@@ -59,6 +59,8 @@ Reactor's `Mono` and `Flux`, yes, with `resilience4cata-reactor`: every policy a
 
 Yes. Call paths take no locks and use no `synchronized`, so they do not pin a virtual thread to its carrier. The library's own delayed callbacks (async retries, async timeouts) run on new virtual threads.
 
+Synchronous policies are made for a thread per request: a timeout interrupts a blocked virtual thread and clears the interrupt before it throws, a bulkhead's or rate limiter's wait and a retry's pause park the virtual thread and free its carrier, and the timeout's bookkeeping for a thread goes away with the thread. The test suite runs thousands of virtual threads through every blocking policy while a JFR recording checks that none is pinned, and runs the frameworks' load tests with requests on virtual threads: Spring Boot with `spring.threads.virtual.enabled=true`, Micronaut's blocking executor (virtual threads on Java 21 and newer), and Quarkus endpoints with `@RunOnVirtualThread`.
+
 ### Can I change a configuration at runtime? :id=reload
 
 No, by design. Annotations, named configs and external configuration are resolved once, when each instance is created. To retune in production, change the external configuration (for example `instances.<id>.*`) and restart. To force a breaker's state, use its handle: `registry.circuitBreaker(id).forceOpen()`, `disable()`, `reset()`.

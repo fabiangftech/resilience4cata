@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class Warehouse {
 
     private final AtomicInteger calls = new AtomicInteger();
+    private final AtomicInteger virtualCalls = new AtomicInteger();
     private final AtomicInteger inside = new AtomicInteger();
     private final AtomicInteger maxInside = new AtomicInteger();
     private final AtomicInteger interrupted = new AtomicInteger();
@@ -24,6 +25,7 @@ public class Warehouse {
 
     public void reset() {
         calls.set(0);
+        virtualCalls.set(0);
         inside.set(0);
         maxInside.set(0);
         interrupted.set(0);
@@ -49,6 +51,11 @@ public class Warehouse {
         return calls.get();
     }
 
+    /** Calls that ran on a virtual thread. */
+    public int virtualCalls() {
+        return virtualCalls.get();
+    }
+
     public int inside() {
         return inside.get();
     }
@@ -67,6 +74,9 @@ public class Warehouse {
 
     public int work(String id) {
         calls.incrementAndGet();
+        if (Thread.currentThread().isVirtual()) {
+            virtualCalls.incrementAndGet();
+        }
         int attempt = attemptsPerId.computeIfAbsent(id, k -> new AtomicInteger()).incrementAndGet();
         maxInside.accumulateAndGet(inside.incrementAndGet(), Math::max);
         try {

@@ -1,18 +1,12 @@
 package dev.resilience4cata.quarkus.deployment.load;
 
-import dev.resilience4cata.BulkheadFullException;
-import dev.resilience4cata.CallNotPermittedException;
-import dev.resilience4cata.CallTimeoutException;
-import dev.resilience4cata.RateLimitExceededException;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
-import jakarta.ws.rs.core.Response;
 import java.util.concurrent.CompletionStage;
-import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 
-/** One endpoint per protected method (blocking ones on worker threads); each rejection or failure maps to a status. */
+/** One endpoint per protected method (blocking ones on worker threads); {@link LoadExceptionMappers} maps the failures. */
 @Path("/load")
 public class LoadResource {
 
@@ -62,30 +56,5 @@ public class LoadResource {
     @Path("/ship/{id}")
     public int ship(@PathParam("id") String id) {
         return shipping.ship(id);
-    }
-
-    @ServerExceptionMapper
-    public Response full(BulkheadFullException e) {
-        return Response.status(503).entity("full").build();
-    }
-
-    @ServerExceptionMapper
-    public Response open(CallNotPermittedException e) {
-        return Response.status(503).entity("open").build();
-    }
-
-    @ServerExceptionMapper
-    public Response limited(RateLimitExceededException e) {
-        return Response.status(429).entity("limited").build();
-    }
-
-    @ServerExceptionMapper
-    public Response timedOut(CallTimeoutException e) {
-        return Response.status(504).entity("timed out").build();
-    }
-
-    @ServerExceptionMapper
-    public Response failed(IllegalStateException e) {
-        return Response.status(502).entity("failed").build();
     }
 }

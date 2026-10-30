@@ -24,12 +24,13 @@ import java.util.function.IntFunction;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.runtime.server.EmbeddedServer;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * A Micronaut application on Netty (the controller on the blocking executor), its protected beans called by hundreds
+ * A Micronaut application on Netty (the controller on the blocking executor, virtual threads), its protected beans called by hundreds
  * of concurrent HTTP requests on the system clock (environment {@code load}: no {@code ManualClock}). What must hold:
  * the bulkhead never lets more calls in than its limit and frees every slot, a bulkhead with a wait hands its slots on,
  * the rate limiter lets exactly its permits through, the breaker opens under failures, stops the calls, and recovers,
@@ -69,6 +70,12 @@ class LoadTest {
         registry = context.getBean(ResilienceRegistry.class);
         meters = context.getBean(MeterRegistry.class);
         warehouse.reset();
+    }
+
+    /** Micronaut's blocking executor is a virtual thread per task on Java 21 and newer. */
+    @AfterEach
+    void everyCallRanOnAVirtualThread() {
+        assertThat(warehouse.virtualCalls).as("calls on virtual threads").hasValue(warehouse.calls.get());
     }
 
     private String url(String path) {
