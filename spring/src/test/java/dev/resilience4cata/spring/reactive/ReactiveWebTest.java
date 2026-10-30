@@ -101,7 +101,8 @@ class ReactiveWebTest {
         backend.hang = true;
         client.get().uri("/slow-quotes/c").exchange().expectStatus().isEqualTo(504);
         awaitUntil(() -> backend.cancellations.get() == 1);
-        assertThat(registry.bulkhead("slow-quotes").concurrentCalls()).isZero();
+        // the slot is freed after the backend is cancelled, on the thread that cancelled it: wait for it too
+        awaitUntil(() -> registry.bulkhead("slow-quotes").concurrentCalls() == 0);
     }
 
     @Test
