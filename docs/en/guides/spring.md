@@ -7,8 +7,8 @@ The module `resilience4cata-spring` (available from 0.4.0) is a Spring Boot auto
 nothing to the call path: there are no proxies, aspects or interceptors. A protected bean *is* the class that
 the annotation processor generated, so a call costs what it costs without Spring.
 
-**Requirements:** Spring Boot 4.1 or newer (the module is compiled against 4.1.0 and tested on 4.1.1) and
-Java 21. Spring Boot 3 is not supported.
+**Requirements:** Spring Boot 4.1 or newer (the module is compiled against 4.1.0, and its tests run both on 4.1.0 and
+on 4.1.2) and Java 21. Spring Boot 3 is not supported.
 
 ## Install :id=install
 

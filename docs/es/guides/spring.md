@@ -7,7 +7,8 @@ El módulo `resilience4cata-spring` (disponible desde 0.4.0) es una autoconfigur
 nada al camino de la llamada: no hay proxies, aspectos ni interceptores. Un bean protegido *es* la clase que
 generó el procesador de anotaciones, así que una llamada cuesta lo mismo que sin Spring.
 
-**Requisitos:** Spring Boot 4.1 o posterior (el módulo se compila contra 4.1.0 y se prueba en 4.1.1) y Java 21.
+**Requisitos:** Spring Boot 4.1 o posterior (el módulo se compila contra 4.1.0, y sus tests se ejecutan tanto en 4.1.0
+como en 4.1.2) y Java 21.
 Spring Boot 3 no está soportado.
 
 ## Instalación :id=install
