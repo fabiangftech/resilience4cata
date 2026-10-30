@@ -260,6 +260,28 @@ public class PriceService {
 }
 ```
 
+Quarkus REST does not subscribe to Reactor's types: an endpoint that returns a `Mono` writes the object as an entity and the call never runs. Convert to Mutiny in the resource; Mutiny takes a JDK `Flow.Publisher`, which Reactor's `JdkFlowAdapter` provides:
+
+<!-- snippet: quarkus-reactive-endpoint -->
+```java
+@GET
+@Path("/quotes/{sku}")
+@Produces(MediaType.TEXT_PLAIN)
+public Uni<String> quote(@PathParam("sku") String sku) {
+    return Uni.createFrom().publisher(JdkFlowAdapter.publisherToFlowPublisher(quotes.quote(sku)));
+}
+
+@GET
+@Path("/ticks/{sku}")
+@Produces(MediaType.SERVER_SENT_EVENTS)
+public Multi<String> ticks(@PathParam("sku") String sku) {
+    return Multi.createFrom().publisher(JdkFlowAdapter.publisherToFlowPublisher(quotes.ticks(sku)));
+}
+```
+
+- **A failure of a `Uni`** goes through your `@ServerExceptionMapper`s like any other (a `CallTimeoutException` mapped to 504, say). A server-sent event stream has sent its headers before its first element, so a failure, even before the first event, ends the stream by closing the connection.
+- **A client that disconnects** cancels the call through every policy, before a stream's first event too: the delegate's `Mono` or `Flux` is cancelled and the bulkhead frees its slot.
+
 A `jakarta.transaction.Transactional` around a retried or hedged `Mono` or `Flux` method of an annotated class fails the build, as for other methods ([R4C-QK-002](../errors.md#r4c-qk-002)).
 
 ## Configuration :id=configuration

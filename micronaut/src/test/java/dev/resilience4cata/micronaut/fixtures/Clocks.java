@@ -2,9 +2,14 @@ package dev.resilience4cata.micronaut.fixtures;
 
 import dev.resilience4cata.testkit.ManualClock;
 import io.micronaut.context.annotation.Factory;
+import io.micronaut.context.annotation.Requires;
 import jakarta.inject.Singleton;
 
-/** The registry's clock in every test context of this module (also a snippet of the Micronaut guide). */
+/**
+ * The registry's clock in every test context of this module but the load, lifecycle, proxies and reactive web tests', which run on the
+ * system clock (also a snippet of the Micronaut guide).
+ */
+@Requires(notEnv = {"load", "lifecycle", "proxies", "reactiveweb"})
 // tag::micronaut-test-clock[]
 @Factory
 public class Clocks {

@@ -19,4 +19,9 @@ final class Spies {
     static boolean isSpy(Object bean) {
         return MOCKITO && Mockito.mockingDetails(bean).isSpy();
     }
+
+    /** A Mockito mock or spy: a test's {@code @MockitoBean} replaces the bean with one, never processed. */
+    static boolean isMock(Object bean) {
+        return MOCKITO && Mockito.mockingDetails(bean).isMock();
+    }
 }

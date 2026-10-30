@@ -9,6 +9,9 @@ import dev.resilience4cata.spring.broken.AnnotatedConfiguration;
 import dev.resilience4cata.spring.broken.TwoFacedClient;
 import dev.resilience4cata.spring.fixtures.Money;
 import dev.resilience4cata.spring.fixtures.PricingService;
+import dev.resilience4cata.spring.proxies.Backend;
+import dev.resilience4cata.spring.proxies.BackendEarlyClient;
+import dev.resilience4cata.spring.proxies.ClientUsingPostProcessor;
 import dev.resilience4cata.spring.tx.RetriedLedger;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -57,6 +60,8 @@ class ErrorCodeTest {
         reported.addAll(codes(runner.withBean(TwoFacedClient.class, TwoFacedClient::new)));
         reported.addAll(codes(runner.withUserConfiguration(TransactionTest.Transactions.class)
                 .withBean(RetriedLedger.class)));
+        reported.addAll(codes(runner.withBean(Backend.class).withBean(BackendEarlyClient.class)
+                .withBean(ClientUsingPostProcessor.class)));
 
         assertThat(reported).containsExactlyInAnyOrderElementsOf(
                 Arrays.stream(ErrorCode.values()).map(ErrorCode::code).toList());

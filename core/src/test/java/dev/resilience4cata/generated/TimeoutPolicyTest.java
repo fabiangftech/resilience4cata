@@ -7,6 +7,7 @@ import dev.resilience4cata.CallTimeoutException;
 import dev.resilience4cata.TimeoutConfig;
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -161,6 +162,22 @@ class TimeoutPolicyTest {
 
         watchdog.tick(MS);
         assertThat(watchdog.registeredThreads()).isZero();
+    }
+
+    @Test
+    void deadVirtualThreadsAreForgottenToo() throws InterruptedException {
+        TimeoutPolicy timeout = timeout(Duration.ofMillis(100));
+        List<Thread> threads = new java.util.ArrayList<>();
+        for (int i = 0; i < 1_000; i++) {
+            threads.add(Thread.ofVirtual().start(() -> timeout.succeeded(timeout.enter())));
+        }
+        for (Thread thread : threads) {
+            thread.join();
+        }
+        assertThat(watchdog.registeredThreads()).as("one virtual thread per call").isEqualTo(1_000);
+
+        watchdog.tick(MS);
+        assertThat(watchdog.registeredThreads()).as("a thread per request leaves nothing behind").isZero();
     }
 
     // java:S2925: the call must really block so that the shared watchdog thread interrupts it

@@ -91,6 +91,8 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
         final AsyncCall<T> call;
         /** Linked to this waiter while it waits, so that a cancel takes it out of the queue ({@link #cancelled()}). */
         final LinkedFuture<T> result = new LinkedFuture<>(this);
+        /** The context class loader of the thread that queued the call: the call runs with it. */
+        final @Nullable ClassLoader contextLoader = Threads.callers();
         private final BulkheadWaiters owner;
         private final BulkheadPolicy policy;
 

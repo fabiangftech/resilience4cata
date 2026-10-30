@@ -1,0 +1,230 @@
+package dev.resilience4cata.micronaut.load;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import dev.resilience4cata.CircuitBreakerState;
+import dev.resilience4cata.ResilienceRegistry;
+import io.micrometer.core.instrument.MeterRegistry;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
+import java.util.function.IntFunction;
+import io.micronaut.context.ApplicationContext;
+import io.micronaut.runtime.server.EmbeddedServer;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+/**
+ * A Micronaut application on Netty (the controller on the blocking executor, virtual threads), its protected beans called by hundreds
+ * of concurrent HTTP requests on the system clock (environment {@code load}: no {@code ManualClock}). What must hold:
+ * the bulkhead never lets more calls in than its limit and frees every slot, a bulkhead with a wait hands its slots on,
+ * the rate limiter lets exactly its permits through, the breaker opens under failures, stops the calls, and recovers,
+ * timeouts interrupt the blocked calls and answer at once, concurrent retries do not interfere, and the metrics, the
+ * registry and the management endpoint agree with what the clients saw.
+ */
+class LoadTest {
+
+    private static ExecutorService clients;
+    private static HttpClient http;
+    private static EmbeddedServer server;
+
+    private Warehouse warehouse;
+    private ResilienceRegistry registry;
+    private MeterRegistry meters;
+
+    @BeforeAll
+    static void start() {
+        server = ApplicationContext.run(EmbeddedServer.class, Map.of("micronaut.server.port", "-1",
+                "endpoints.resilience4cata.enabled", "true", "endpoints.resilience4cata.sensitive", "false"), "load");
+        clients = Executors.newVirtualThreadPerTaskExecutor();
+        http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).executor(clients)
+                .connectTimeout(Duration.ofSeconds(10)).build();
+    }
+
+    @AfterAll
+    static void close() {
+        http.close();
+        clients.close();
+        server.close();
+    }
+
+    @BeforeEach
+    void reset() {
+        ApplicationContext context = server.getApplicationContext();
+        warehouse = context.getBean(Warehouse.class);
+        registry = context.getBean(ResilienceRegistry.class);
+        meters = context.getBean(MeterRegistry.class);
+        warehouse.reset();
+    }
+
+    /** Micronaut's blocking executor is a virtual thread per task on Java 21 and newer. */
+    @AfterEach
+    void everyCallRanOnAVirtualThread() {
+        assertThat(warehouse.virtualCalls).as("calls on virtual threads").hasValue(warehouse.calls.get());
+    }
+
+    private String url(String path) {
+        return server.getURL() + (path.startsWith("/resilience4cata") ? path : "/load" + path);
+    }
+
+    /** Sends {@code requests} requests at once (each waits for the others to be ready) and counts the statuses. */
+    private Map<Integer, Integer> fire(int requests, IntFunction<String> path) throws Exception {
+        CountDownLatch ready = new CountDownLatch(requests);
+        CountDownLatch go = new CountDownLatch(1);
+        List<Future<Integer>> responses = new ArrayList<>();
+        for (int i = 0; i < requests; i++) {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url(path.apply(i)))).timeout(Duration.ofSeconds(30)).build();
+            responses.add(clients.submit(() -> {
+                ready.countDown();
+                go.await();
+                return http.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
+            }));
+        }
+        assertThat(ready.await(30, TimeUnit.SECONDS)).as("every client ready").isTrue();
+        go.countDown();
+        Map<Integer, Integer> statuses = new TreeMap<>();
+        for (Future<Integer> response : responses) {
+            statuses.merge(response.get(60, TimeUnit.SECONDS), 1, Integer::sum);
+        }
+        return statuses;
+    }
+
+    private String get(String path) throws Exception {
+        return http.send(HttpRequest.newBuilder(URI.create(url(path))).build(), HttpResponse.BodyHandlers.ofString()).body();
+    }
+
+    private double rejected(String kind, String instance) {
+        var counter = meters.find("r4c.calls.rejected").tags("kind", kind, "instance", instance).counter();
+        return counter == null ? 0 : counter.count();
+    }
+
+    @Test
+    void theBulkheadNeverLetsMoreThanItsLimitInAndFreesEverySlot() throws Exception {
+        warehouse.latencyMillis = 50;
+        Map<Integer, Integer> statuses = fire(200, i -> "/reserve/sku-" + i);
+
+        assertThat(statuses.keySet()).as(statuses.toString()).containsOnly(200, 503);
+        assertThat(statuses.get(200)).as("some got in").isGreaterThanOrEqualTo(5);
+        assertThat(warehouse.maxInside).as("calls inside the bulkhead at once").hasValueLessThanOrEqualTo(5);
+        assertThat(warehouse.calls).as("every admitted call reached the warehouse, no rejected one did")
+                .hasValue(statuses.get(200));
+        assertThat(registry.bulkhead("load-bulkhead").concurrentCalls()).as("every slot freed").isZero();
+        assertThat(rejected("bulkhead", "load-bulkhead")).as("the rejection metric counts the 503s")
+                .isEqualTo(statuses.getOrDefault(503, 0).doubleValue());
+    }
+
+    @Test
+    void aBulkheadWithMaxWaitHandsItsSlotsOnAndLetsEveryCallInInTurn() throws Exception {
+        warehouse.latencyMillis = 20;
+        Map<Integer, Integer> statuses = fire(100, i -> "/queued/sku-" + i);
+
+        assertThat(statuses).as("100 calls of 20 ms through 5 slots: about 400 ms, well within the wait")
+                .containsOnlyKeys(200).containsEntry(200, 100);
+        assertThat(warehouse.maxInside).hasValueLessThanOrEqualTo(5);
+        assertThat(warehouse.calls).hasValue(100);
+        assertThat(registry.bulkhead("load-queue").concurrentCalls()).isZero();
+        assertThat(registry.bulkhead("load-queue").waitingCalls()).isZero();
+    }
+
+    @Test
+    void anAsyncBulkheadWithMaxWaitQueuesWithoutBlockingAndHandsItsSlotsOn() throws Exception {
+        warehouse.latencyMillis = 20;
+        Map<Integer, Integer> statuses = fire(100, i -> "/later/sku-" + i);
+
+        assertThat(statuses).containsOnlyKeys(200).containsEntry(200, 100);
+        assertThat(warehouse.maxInside).as("async calls inside the bulkhead at once").hasValueLessThanOrEqualTo(5);
+        assertThat(warehouse.calls).hasValue(100);
+        awaitUntil(() -> registry.bulkhead("load-async").concurrentCalls() == 0);
+        assertThat(registry.bulkhead("load-async").waitingCalls()).isZero();
+    }
+
+    @Test
+    void theRateLimiterLetsExactlyItsPermitsThrough() throws Exception {
+        Map<Integer, Integer> statuses = fire(200, i -> "/quote/sku-" + i);
+
+        assertThat(statuses).as("50 permits for the hour").containsEntry(200, 50).containsEntry(429, 150).hasSize(2);
+        assertThat(warehouse.calls).hasValue(50);
+        assertThat(rejected("ratelimiter", "load-limiter")).isEqualTo(150);
+    }
+
+    @Test
+    void theBreakerOpensUnderFailuresStopsTheCallsAndRecovers() throws Exception {
+        registry.circuitBreaker("load-stock").reset();
+        warehouse.failing = true;
+        Map<Integer, Integer> failing = fire(100, i -> "/stock/sku-" + i);
+        assertThat(failing.keySet()).as(failing.toString()).containsAnyOf(502, 503).isSubsetOf(502, 503);
+        assertThat(registry.circuitBreaker("load-stock").state()).isEqualTo(CircuitBreakerState.OPEN);
+        assertThat(warehouse.calls).as("at most three attempts per request").hasValueLessThanOrEqualTo(300);
+        assertThat(warehouse.inside).as("every attempt left").hasValue(0);
+
+        int callsWhileOpen = warehouse.calls.get();
+        Map<Integer, Integer> open = fire(100, i -> "/stock/sku-" + i);
+        assertThat(open).as("rejected while open, not retried").containsOnlyKeys(503);
+        assertThat(warehouse.calls).as("nothing reached the warehouse").hasValue(callsWhileOpen);
+
+        warehouse.failing = false;
+        awaitUntil(() -> {
+            try {
+                // one probe at a time until the half-open breaker has seen enough successes to close
+                fire(1, i -> "/stock/probe");
+                return registry.circuitBreaker("load-stock").state() == CircuitBreakerState.CLOSED;
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        Map<Integer, Integer> recovered = fire(100, i -> "/stock/sku-" + i);
+        assertThat(recovered).as("closed again").containsOnlyKeys(200);
+        assertThat(registry.circuitBreaker("load-stock").state()).isEqualTo(CircuitBreakerState.CLOSED);
+        assertThat(get("/resilience4cata")).contains("load-stock").contains("CLOSED");
+    }
+
+    @Test
+    void timeoutsInterruptTheBlockedCallsAndAnswerAtOnce() throws Exception {
+        warehouse.latencyMillis = 5_000;
+        long started = System.nanoTime();
+        Map<Integer, Integer> statuses = fire(50, i -> "/slow/sku-" + i);
+        long took = System.nanoTime() - started;
+
+        assertThat(statuses).containsOnlyKeys(504).containsEntry(504, 50);
+        assertThat(Duration.ofNanos(took)).as("well before the warehouse's five seconds").isLessThan(Duration.ofSeconds(4));
+        awaitUntil(() -> warehouse.interrupted.get() == 50);
+        assertThat(warehouse.inside).as("every blocked call let go").hasValue(0);
+
+        warehouse.latencyMillis = 0;
+        assertThat(fire(50, i -> "/slow/sku-" + i)).as("the request threads are fine afterwards").containsOnlyKeys(200);
+    }
+
+    @Test
+    void concurrentRetriesOfAWrappedInterfaceDoNotInterfere() throws Exception {
+        warehouse.failFirstAttempt = true;
+        Map<Integer, Integer> statuses = fire(200, i -> "/ship/order-" + i);
+
+        assertThat(statuses).containsOnlyKeys(200).containsEntry(200, 200);
+        assertThat(warehouse.calls).as("exactly two attempts per request").hasValue(400);
+        assertThat(warehouse.attemptsPerId.values()).allSatisfy(attempts -> assertThat(attempts).hasValue(2));
+        assertThat(meters.find("r4c.retry.retries").tags("instance", "load-shipping").counter().count()).isEqualTo(200);
+    }
+
+    private static void awaitUntil(BooleanSupplier condition) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (!condition.getAsBoolean()) {
+            assertThat(System.nanoTime() - deadline).as("waited too long").isNegative();
+            Thread.sleep(20);
+        }
+    }
+}

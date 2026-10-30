@@ -25,7 +25,10 @@ import org.jspecify.annotations.Nullable;
  *
  * <ul>
  *   <li>A beans predicate leaves out {@code C}'s own definition, recognized by its name ({@code p.$C$Definition}, and
- *       {@code p.$C$Definition$…} for its AOP proxy). Beans of type {@code C} from {@code @Factory} methods (a test's
+ *       {@code p.$C$Definition$…} for its AOP proxy), and the adapters Micronaut generates for {@code C}'s methods
+ *       ({@code p.$C$ApplicationEventListener$on1$Intercepted$Definition} for an {@code @EventListener} method): the
+ *       subclass's override carries the method's annotations, so it has its own adapter, and both would call the
+ *       subclass bean, delivering every event twice. Beans of type {@code C} from {@code @Factory} methods (a test's
  *       {@code @MockBean} among them) and subclasses of {@code C} stay: a {@code @Replaces(C.class)} on the generated
  *       class would have removed them too.
  *   <li>When an unqualified lookup of {@code C} finds several beans, Micronaut prefers the one whose type is exactly
@@ -39,6 +42,8 @@ import org.jspecify.annotations.Nullable;
 public final class AnnotatedClassesFilter implements ApplicationContextConfigurer {
 
     private static final String DEFINITION = "$Definition";
+    private static final String ADAPTER = "io.micronaut.aop.Adapter";
+    private static final String INTERCEPTED = "$Intercepted";
 
     private final GeneratedClasses generated = new GeneratedClasses();
 
@@ -66,7 +71,30 @@ public final class AnnotatedClassesFilter implements ApplicationContextConfigure
             return true;
         }
         String className = definedClass(reference.getBeanDefinitionName());
+        if (className != null && reference.hasDeclaredAnnotation(ADAPTER)) {
+            className = adaptedClass(className);
+        }
         return className == null || !replaced(className, reference.getClass().getClassLoader());
+    }
+
+    /**
+     * The bean class an adapter class adapts: {@code p.C} for {@code p.C$ApplicationEventListener$on1$Intercepted}
+     * (Micronaut names it bean class, adapted interface, method and index, {@code $Intercepted}). Exactly those
+     * segments are removed, so that the adapter of a nested class {@code C$Inner} is never taken for one of {@code C}.
+     */
+    static @Nullable String adaptedClass(String adapterClass) {
+        if (!adapterClass.endsWith(INTERCEPTED)) {
+            return null;
+        }
+        String name = adapterClass.substring(0, adapterClass.length() - INTERCEPTED.length());
+        for (int segment = 0; segment < 2; segment++) {
+            int dollar = name.lastIndexOf('$');
+            if (dollar <= name.lastIndexOf('.') + 1) {
+                return null;
+            }
+            name = name.substring(0, dollar);
+        }
+        return name;
     }
 
     /**

@@ -112,15 +112,16 @@ class MonoConcurrencyTest {
     @RepeatedTest(5)
     void aPolicyStackKeepsItsInvariants() {
         run(client::stack, 3_000, ConcurrentMonoClient.MAX_CONCURRENT);
-        assertThat(registry.bulkhead("cc-stack").concurrentCalls()).isZero();
+        // A slot is freed just after the delegate's stream ends, on the thread that ends it: wait for the last ones.
+        awaitUntil(() -> registry.bulkhead("cc-stack").concurrentCalls() == 0);
         assertThat(registry.bulkhead("cc-stack").waitingCalls()).isZero();
-        assertThat(registry.adaptiveLimit("cc-stack").inFlight()).isZero();
+        awaitUntil(() -> registry.adaptiveLimit("cc-stack").inFlight() == 0);
     }
 
     @RepeatedTest(5)
     void hedgesKeepTheirInvariants() {
         run(client::hedged, 2_000, ConcurrentMonoClient.MAX_CONCURRENT * 3);
-        assertThat(registry.bulkhead("cc-hedge").concurrentCalls()).isZero();
+        awaitUntil(() -> registry.bulkhead("cc-hedge").concurrentCalls() == 0);
     }
 
     private void run(IntFunction<Mono<String>> call, int calls, int limit) {
