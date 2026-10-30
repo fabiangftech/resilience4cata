@@ -77,8 +77,11 @@ public final class JmhConventionPlugin implements Plugin<Project> {
     /** Budgets of the allocation gate, relative to the project directory. */
     static final String BUDGETS = "allocation-budgets.properties";
 
-    /** Short run: bytes per operation settle within a few hundred milliseconds; timing is ignored. */
-    private static final String ALLOCATION_RUN = "-f 1 -wi 3 -w 200ms -i 3 -r 200ms -t 1";
+    /**
+     * Short run: bytes per operation settle within a few hundred milliseconds; timing is ignored. Three forks,
+     * because C2's scalar replacement differs between JVMs: {@link AllocationCheck} gates on the lowest fork.
+     */
+    private static final String ALLOCATION_RUN = "-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1";
 
     private static void registerAllocationCheck(Project project, File budgets, Provider<Integer> jdk,
             JavaToolchainService toolchains, SourceSetContainer sourceSets) {

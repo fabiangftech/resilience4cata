@@ -30,6 +30,12 @@ import org.gradle.work.DisableCachingByDefault;
  * benchmark passes if it allocates less than its budget plus {@value #TOLERANCE} byte, so a budget of
  * 0 accepts the fractions of a byte that JMH's own bookkeeping adds over a short run, but not one
  * object per call (16 bytes at least).
+ *
+ * <p>Each benchmark runs in several forks, and the fork that allocates least is the one compared with
+ * the budget. Whether C2 scalar-replaces an object is decided once per JVM: a fork keeps the same
+ * bytes in every iteration, and the next fork can allocate an object or two more (the Flux and Mono
+ * benchmarks do on the CI runner, up to 56 B). An allocation the code started making shows in every
+ * fork, so the lowest still catches it, while one unlucky fork no longer fails the gate.
  */
 @DisableCachingByDefault(because = "The results come from a fresh benchmark run every time")
 public abstract class AllocationCheck extends DefaultTask {
@@ -56,28 +62,31 @@ public abstract class AllocationCheck extends DefaultTask {
     @TaskAction
     void check() throws IOException {
         Map<String, Double> budgets = readBudgets(getBudgets().get().getAsFile().toPath());
-        Map<String, Double> measured = readResults(getResults().get().getAsFile().toPath());
+        Map<String, List<Double>> forks = readResults(getResults().get().getAsFile().toPath());
 
         List<String[]> rows = new ArrayList<>();
         List<String> failures = new ArrayList<>();
         budgets.forEach((name, budget) -> {
-            Double bytes = measured.get(name);
+            List<Double> perFork = forks.get(name);
+            Double bytes = perFork == null ? null : perFork.stream().min(Double::compare).orElseThrow();
             String status;
             if (bytes == null) {
                 status = "MISSING";
                 failures.add(name + ": no " + METRIC + " result");
             } else if (bytes >= budget + TOLERANCE) {
                 status = "OVER BUDGET";
-                failures.add(String.format(Locale.ROOT, "%s: %.2f B/op, budget %s B/op", name, bytes, format(budget)));
+                failures.add(String.format(Locale.ROOT, "%s: %.2f B/op in its lowest fork (forks: %s), budget %s B/op",
+                        name, bytes, forks(perFork), format(budget)));
             } else {
                 status = "ok";
             }
-            rows.add(new String[] {name, bytes == null ? "-" : String.format(Locale.ROOT, "%.2f", bytes), format(budget), status});
+            rows.add(new String[] {name, bytes == null ? "-" : String.format(Locale.ROOT, "%.2f", bytes), format(budget), status,
+                    perFork == null ? "-" : forks(perFork)});
         });
 
         String table = table(rows);
         Files.writeString(getReport().get().getAsFile().toPath(), markdown(rows, failures.isEmpty()), StandardCharsets.UTF_8);
-        getLogger().lifecycle("Allocation per operation (JMH -prof gc, " + METRIC + "):\n" + table);
+        getLogger().lifecycle("Allocation per operation (JMH -prof gc, " + METRIC + ", lowest fork):\n" + table);
         if (!failures.isEmpty()) {
             throw new GradleException("Allocation gate failed for " + failures.size() + " of " + budgets.size()
                     + " benchmarks:\n  " + String.join("\n  ", failures)
@@ -109,9 +118,13 @@ public abstract class AllocationCheck extends DefaultTask {
         return budgets;
     }
 
-    /** Maps {@code <BenchmarkClass>.<method>} to its bytes per operation. */
-    private static Map<String, Double> readResults(Path file) throws IOException {
-        Map<String, Double> measured = new TreeMap<>();
+    /**
+     * Maps {@code <BenchmarkClass>.<method>} to its bytes per operation in each fork: the mean of the fork's
+     * iterations ({@code rawData}), or the score when there is no raw data. A benchmark listed twice (several
+     * parameter sets) keeps the run whose lowest fork is highest.
+     */
+    private static Map<String, List<Double>> readResults(Path file) throws IOException {
+        Map<String, List<Double>> measured = new TreeMap<>();
         if (!(JsonReader.parse(Files.readString(file, StandardCharsets.UTF_8)) instanceof List<?> runs)) {
             throw new GradleException(file + " is not a JMH JSON result file");
         }
@@ -123,10 +136,39 @@ public abstract class AllocationCheck extends DefaultTask {
                     && metric.get("score") instanceof Double score) {
                 String[] parts = benchmark.split("\\.");
                 String name = parts.length < 2 ? benchmark : parts[parts.length - 2] + "." + parts[parts.length - 1];
-                measured.merge(name, score, Math::max);
+                List<Double> perFork = perFork(metric.get("rawData"), score);
+                measured.merge(name, perFork, (a, b) -> lowest(a) >= lowest(b) ? a : b);
             }
         }
         return measured;
+    }
+
+    private static List<Double> perFork(Object rawData, double score) {
+        List<Double> perFork = new ArrayList<>();
+        if (rawData instanceof List<?> forks) {
+            for (Object fork : forks) {
+                if (fork instanceof List<?> iterations && !iterations.isEmpty()) {
+                    double sum = 0;
+                    for (Object iteration : iterations) {
+                        sum += ((Number) iteration).doubleValue();
+                    }
+                    perFork.add(sum / iterations.size());
+                }
+            }
+        }
+        return perFork.isEmpty() ? List.of(score) : perFork;
+    }
+
+    private static double lowest(List<Double> perFork) {
+        return perFork.stream().min(Double::compare).orElseThrow();
+    }
+
+    private static String forks(List<Double> perFork) {
+        List<String> values = new ArrayList<>();
+        for (double bytes : perFork) {
+            values.add(String.format(Locale.ROOT, "%.0f", bytes));
+        }
+        return String.join(" / ", values);
     }
 
     /** Include patterns for JMH, one per budgeted benchmark. */
@@ -147,7 +189,7 @@ public abstract class AllocationCheck extends DefaultTask {
     }
 
     private static String table(List<String[]> rows) {
-        String[] header = {"Benchmark", "B/op", "Budget", "Status"};
+        String[] header = {"Benchmark", "B/op", "Budget", "Status", "Forks"};
         int[] width = new int[header.length];
         for (int i = 0; i < header.length; i++) {
             width[i] = header[i].length();
@@ -173,7 +215,8 @@ public abstract class AllocationCheck extends DefaultTask {
         for (int i = 0; i < cells.length; i++) {
             String cell = cells[i];
             // Left-align the name and status, right-align the numbers.
-            line.append(i == 1 || i == 2 ? " ".repeat(width[i] - cell.length()) + cell : cell + " ".repeat(width[i] - cell.length()));
+            line.append(i == 1 || i == 2 ? " ".repeat(width[i] - cell.length()) + cell
+                    : cell + " ".repeat(width[i] - cell.length()));
             line.append("  ");
         }
         out.append(line.toString().stripTrailing()).append('\n');
@@ -181,10 +224,11 @@ public abstract class AllocationCheck extends DefaultTask {
 
     private static String markdown(List<String[]> rows, boolean passed) {
         StringBuilder out = new StringBuilder("## Allocation gate: ").append(passed ? "passed" : "FAILED").append("\n\n");
-        out.append("| Benchmark | B/op | Budget | Status |\n|---|---:|---:|---|\n");
+        out.append("B/op is the lowest fork's.\n\n");
+        out.append("| Benchmark | B/op | Budget | Status | Forks |\n|---|---:|---:|---|---|\n");
         for (String[] row : rows) {
             out.append("| `").append(row[0]).append("` | ").append(row[1]).append(" | ").append(row[2]).append(" | ")
-                    .append(row[3].equals("ok") ? "ok" : "**" + row[3] + "**").append(" |\n");
+                    .append(row[3].equals("ok") ? "ok" : "**" + row[3] + "**").append(" | ").append(row[4]).append(" |\n");
         }
         return out.toString();
     }
