@@ -146,7 +146,9 @@ ella las anotaciones propias de la clase (`@Singleton`, calificadores como `@Nam
 integración deja fuera la que Micronaut compiló para el propio `OrderService`, y Micronaut crea
 `OrderService$Resilient` dondequiera que habría creado `OrderService`:
 
-- el bean sigue siendo un `OrderService`, con su ámbito, sus calificadores y sus requisitos;
+- el bean sigue siendo un `OrderService`, con su ámbito, sus calificadores y sus requisitos (con `@RequestScope` o
+  `@Refreshable`, cada petición o refresco tiene su propia instancia de la clase generada, y todas comparten las
+  políticas con nombre);
 - las llamadas sobre `this` (`findAgain` llamando a `find`) pasan por las políticas, a diferencia del `@Retryable`
   del propio Micronaut;
 - la inyección por constructor funciona como antes: los constructores generados reciben el `ResilienceRegistry`

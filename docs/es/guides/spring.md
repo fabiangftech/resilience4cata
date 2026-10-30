@@ -118,7 +118,8 @@ instancie dondequiera que una definición de bean nombre `OrderService` (escaneo
 `registerBean`). Así:
 
 - el bean sigue siendo un `OrderService`: se inyecta por su clase, sus interfaces, `@Qualifier`, `List<…>`, y
-  conserva su nombre, su ámbito y `@Primary`;
+  conserva su nombre, su ámbito y `@Primary` (en el ámbito de petición o de sesión, cada petición o sesión tiene
+  su propia instancia de la clase generada, y todas comparten las políticas con nombre);
 - las llamadas sobre `this` (`findAgain` llamando a `find`) pasan por las políticas, a diferencia de Spring AOP y
   del propio `@Retryable` de Spring;
 - la inyección por constructor funciona como antes: los constructores generados reciben el `ResilienceRegistry`
@@ -193,6 +194,8 @@ public class StockReport {
 - El envoltorio se aplica después de todos los demás post-procesadores, así que envuelve sus proxies: una llamada
   reintentada a través de un proxy `@Transactional` obtiene una transacción nueva por intento.
 - Las llamadas sobre `this` dentro de `HttpStockClient` no están protegidas (el envoltorio está fuera del objeto).
+- Un bean con ámbito de petición o de sesión se envuelve una sola vez, alrededor de su proxy de ámbito: cada
+  llamada llega a la instancia de la petición o la sesión en curso.
 - Un bean que implementa dos interfaces anotadas, sin que una extienda a la otra, detiene el arranque con
   [`R4C-SPR-003`](../errors.md#r4c-spr-003). Un bean que ya es una clase generada (un método `@Bean` que devuelve
   él mismo `Resilient.of(...)`) se deja como está.

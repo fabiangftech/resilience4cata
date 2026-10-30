@@ -118,7 +118,8 @@ instantiate it wherever a bean definition names `OrderService` (component scanni
 `registerBean`). So:
 
 - the bean is still an `OrderService`: it is injected by its class, its interfaces, `@Qualifier`, `List<…>`, and
-  keeps its name, scope and `@Primary`;
+  keeps its name, scope and `@Primary` (in the request or session scope, each request or session gets its own
+  instance of the generated class, and they all share the named policies);
 - calls on `this` (`findAgain` calling `find`) go through the policies, unlike Spring AOP and Spring's own
   `@Retryable`;
 - constructor injection works as before: the generated constructors take the `ResilienceRegistry` (injected by
@@ -193,6 +194,8 @@ public class StockReport {
 - The wrapper is applied after every other post-processor, so it wraps their proxies: a retried call through a
   `@Transactional` proxy gets a new transaction per attempt.
 - Calls inside `HttpStockClient` on `this` are not protected (the wrapper is outside the object).
+- A request- or session-scoped bean is wrapped once, around its scoped proxy: each call reaches the current
+  request's or session's instance.
 - A bean that implements two annotated interfaces, neither extending the other, fails the startup with
   [`R4C-SPR-003`](../errors.md#r4c-spr-003). A bean that already is a generated class (a `@Bean` method that
   returns `Resilient.of(...)` itself) is left as it is.
