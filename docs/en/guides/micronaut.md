@@ -147,7 +147,9 @@ repeats the class's own annotations on it (`@Singleton`, qualifiers such as `@Na
 the one Micronaut compiled for `OrderService` itself, and Micronaut creates `OrderService$Resilient` wherever it
 would have created `OrderService`:
 
-- the bean is still an `OrderService`, with its scope, qualifiers and requirements;
+- the bean is still an `OrderService`, with its scope, qualifiers and requirements (with `@RequestScope` or
+  `@Refreshable`, each request or refresh gets its own instance of the generated class, and they all share the
+  named policies);
 - calls on `this` (`findAgain` calling `find`) go through the policies, unlike Micronaut's own `@Retryable`;
 - constructor injection works as before: the generated constructors take the `ResilienceRegistry` (injected by
   type) followed by the original parameters, with their names and annotations (`@Inject` on one of several
