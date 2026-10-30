@@ -14,8 +14,8 @@ You need Java 21 or newer and a Gradle or Maven project. Everything below is one
 
 ```groovy
 dependencies {
-    implementation 'dev.resilience4cata:resilience4cata-all:0.10.0'
-    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:0.10.0'
+    implementation 'dev.resilience4cata:resilience4cata-all:0.11.0'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:0.11.0'
 }
 ```
 
@@ -23,8 +23,8 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("dev.resilience4cata:resilience4cata-all:0.10.0")
-    annotationProcessor("dev.resilience4cata:resilience4cata-processor:0.10.0")
+    implementation("dev.resilience4cata:resilience4cata-all:0.11.0")
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor:0.11.0")
 }
 ```
 
@@ -34,7 +34,7 @@ dependencies {
 <dependency>
   <groupId>dev.resilience4cata</groupId>
   <artifactId>resilience4cata-all</artifactId>
-  <version>0.10.0</version>
+  <version>0.11.0</version>
 </dependency>
 
 <!-- in the maven-compiler-plugin <configuration> -->
@@ -42,7 +42,7 @@ dependencies {
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>0.10.0</version>
+    <version>0.11.0</version>
   </path>
 </annotationProcessorPaths>
 ```
