@@ -303,6 +303,19 @@ public class PriceService {
 }
 ```
 
+In a controller, return the bean's `Mono` as it is. Micronaut writes server-sent events from `Event<T>`, so map a `Flux`'s elements to events:
+
+<!-- snippet: micronaut-reactive-endpoint -->
+```java
+@Get(uri = "/ticks/{sku}", produces = MediaType.TEXT_EVENT_STREAM)
+Flux<Event<String>> ticks(String sku) {
+    return quotes.ticks(sku).map(Event::of);   // Micronaut frames server-sent events from Event<T>
+}
+```
+
+- **A failure of a `Mono`** goes through the controller's `@Error` handlers like any other (a `CallTimeoutException` mapped to 504, say). A server-sent event stream that fails before its first event is answered with 500 by Micronaut, whatever the handlers; after the first event the response has started, so a failure ends the stream instead.
+- **A client that disconnects** cancels a `Mono` call, or a stream that has sent an event, through every policy: the delegate's `Mono` or `Flux` is cancelled and the bulkhead frees its slot. Before a stream's first event Micronaut does not notice the disconnect, so the call goes on until its `@Timeout`: give streaming methods one.
+
 A Micronaut `@Transactional` around a retried `Mono` or `Flux` method of an annotated class fails the startup, as for other methods ([R4C-MN-005](../errors.md#r4c-mn-005)).
 
 ## Configuration :id=configuration
