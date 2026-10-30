@@ -425,3 +425,7 @@ JVM; native images themselves are not built by its CI.
 - Methods that the constructor calls on `this` run before the policies are set up
   ([annotated classes](annotated-classes.md)).
 - No per-call observations, no event history in the endpoint, no hot reload of the configuration.
+- Spring Boot DevTools restarts work: each restart uses the generated classes of the new restart class loader, and
+  work the library runs later (a retry's next attempt, an async timeout) runs with that loader. A restart builds a
+  new registry, so the policies start over (breakers closed, windows empty). A change to the annotations takes effect
+  once the build DevTools watches has run the annotation processor again (the Gradle or Maven build does).

@@ -434,3 +434,8 @@ procesamiento AOT en la JVM; su CI no construye imágenes nativas.
   ([clases anotadas](annotated-classes.md)).
 - Sin observaciones por llamada, sin historial de eventos en el endpoint, sin recarga en caliente de la
   configuración.
+- Los reinicios de Spring Boot DevTools funcionan: cada reinicio usa las clases generadas del nuevo class loader de
+  reinicio, y el trabajo que la librería ejecuta después (el siguiente intento de un retry, un timeout async) corre
+  con ese loader. Un reinicio construye un registro nuevo, así que las políticas empiezan de cero (breakers cerrados,
+  ventanas vacías). Un cambio en las anotaciones se aplica cuando el build que vigila DevTools vuelve a ejecutar el
+  procesador de anotaciones (el build de Gradle o Maven lo hace).
