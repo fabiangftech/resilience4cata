@@ -509,8 +509,10 @@ fields.
 The processor writes GraalVM reachability metadata for every generated class, and `core` initializes its
 background threads at run time, so a native build (`-Dquarkus.native.enabled=true`) needs no extra configuration:
 annotated classes are instantiated by ArC's generated code, interface wrappers by `Resilient.of`, which finds them
-through that metadata. Configuration is read at run time. The project's CI does not build native images; the
-[changelog](../changelog.md) records what was checked by hand.
+through that metadata. Configuration is read at run time. The project's CI builds this guide's application as a
+native image (GraalVM for JDK 25) and tests it over HTTP: an annotated class, interface and REST client wrappers,
+the readiness check, the metrics, and `Mono` and `Flux` methods served through `Uni` and `Multi`
+([reactive beans](#reactive)).
 
 ## Limits :id=limits
 
