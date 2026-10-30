@@ -33,7 +33,8 @@ enum ProcessorError {
 
     UNSUPPORTED_ASYNC_TYPE("R4C-ASY-001", "unsupported asynchronous return type"),
     REACTIVE_TYPE("R4C-ASY-002", "reactive return type"),
-    REACTOR_MISSING("R4C-ASY-003", "a Mono method without resilience4cata-reactor"),
+    REACTOR_MISSING("R4C-ASY-003", "a Mono or Flux method without resilience4cata-reactor"),
+    FLUX_UNSUPPORTED("R4C-ASY-004", "a hedge, a classifier or @PolicyOrder on a Flux method"),
 
     HEDGE_NOT_ASYNC("R4C-HDG-001", "@Hedge on a synchronous method"),
     HEDGE_WITH_RETRY("R4C-HDG-002", "@Hedge and @Retry on the same method"),

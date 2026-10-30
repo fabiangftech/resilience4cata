@@ -642,10 +642,11 @@ public interface PriceClient {
 ### R4C-ASY-002
 
 **Causa:** un método anotado devuelve un tipo reactivo perezoso: un `Flow.Publisher` o un `Publisher` de Reactive
-Streams (`Flux` de Reactor, `Flowable` de RxJava), `Uni` o `Multi` de Mutiny, o `Single`, `Maybe`,
+Streams (`Flowable` de RxJava, una subclase del `Flux` de Reactor), `Uni` o `Multi` de Mutiny, o `Single`, `Maybe`,
 `Completable` u `Observable` de RxJava. Un método así solo construye un pipeline que se ejecuta después, al
 suscribirse, así que las políticas protegerían su construcción, no el trabajo: un fallo nunca se reintentaría ni
-tendría timeout. El `Mono` de Reactor está soportado con `resilience4cata-reactor` (ver [R4C-ASY-003](#r4c-asy-003)).
+tendría timeout. El `Mono` y el `Flux` de Reactor están soportados con `resilience4cata-reactor` (ver
+[R4C-ASY-003](#r4c-asy-003)).
 
 **Incorrecto:**
 
@@ -662,9 +663,8 @@ public interface PriceClient {
 ```
 
 **Corrección:** devuelve `CompletionStage<T>` o `CompletableFuture<T>`, convirtiendo en la implementación
-(`uni.subscribeAsCompletionStage()`), o el `Mono<T>` de Reactor con `resilience4cata-reactor` (`flux.collectList()`
-para un `Flux` cuyos elementos caben en memoria), o mantén el tipo reactivo y usa los operadores de retry y timeout de
-la propia librería reactiva.
+(`uni.subscribeAsCompletionStage()`), o el `Mono<T>` o el `Flux<T>` de Reactor con `resilience4cata-reactor`, o
+mantén el tipo reactivo y usa los operadores de retry y timeout de la propia librería reactiva.
 
 ```java
 package com.acme;
@@ -680,8 +680,9 @@ public interface PriceClient {
 
 ### R4C-ASY-003
 
-**Causa:** un método anotado devuelve el `Mono` de Reactor y `resilience4cata-reactor` no está en el classpath de
-compilación. El código generado de un método `Mono` llama a ese módulo.
+**Causa:** un método anotado devuelve el `Mono` o el `Flux` de Reactor y `resilience4cata-reactor` no está en el
+classpath de compilación (para un `Flux`, la versión 0.11.0 o posterior). El código generado de estos métodos llama a
+ese módulo.
 
 **Incorrecto:** con `reactor-core` pero sin `resilience4cata-reactor`:
 
@@ -709,6 +710,43 @@ import reactor.core.publisher.Mono;
 public interface PriceClient {
     @Retry
     Mono<Integer> price(String sku);
+}
+```
+
+### R4C-ASY-004
+
+**Causa:** un método anotado que devuelve el `Flux` de Reactor tiene un `@Hedge`, un classifier en `@Retry` o en
+`@CircuitBreaker`, o un `@PolicyOrder` que cambia su orden. Un hedge mezclaría los elementos de dos streams; un
+classifier juzga un resultado, y un stream tiene muchos; y la regla de que el retry y el fallback solo actúan antes
+del primer elemento del stream está definida para el orden por defecto.
+
+**Incorrecto:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Hedge;
+import reactor.core.publisher.Flux;
+
+public interface QuoteClient {
+    @Hedge(delay = "50ms")
+    Flux<Integer> quotes(String sku);
+}
+```
+
+**Corrección:** usa `@Retry` (con `retryOn`/`abortOn`, o `recordOn`/`ignoreOn` en el breaker, en vez de un
+classifier), mantén el orden por defecto, o devuelve un `Mono` o un `CompletionStage` donde necesites el hedge o el
+classifier.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+import reactor.core.publisher.Flux;
+
+public interface QuoteClient {
+    @Retry
+    Flux<Integer> quotes(String sku);
 }
 ```
 
@@ -2512,6 +2550,14 @@ devuelva un `CompletionStage`.
 
 **Corrección:** quédate con uno: un hedge ya lanza un intento nuevo cuando uno falla (`hedgeOn`), y un retry
 alrededor multiplicaría los intentos. Es el equivalente en ejecución de [R4C-HDG-002](#r4c-hdg-002).
+
+### R4C-RT-020
+
+**Causa:** un `Flux` se protege con un pipeline (`FluxPipelineOperator`) que tiene un hedge o un classifier
+(`IllegalStateException`, entregada al suscriptor del `Flux`). Un hedge mezclaría los elementos de dos streams, y
+un classifier juzga un resultado mientras que un stream tiene muchos.
+
+**Corrección:** quita `.hedge(...)` o el classifier, o construye un pipeline aparte para el `Flux`.
 
 ## Ejecución: registro y configuración de políticas (R4C-REG)
 

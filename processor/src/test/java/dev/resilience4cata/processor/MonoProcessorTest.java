@@ -445,24 +445,24 @@ class MonoProcessorTest {
                 }
                 """);
         assertThat(result.errorCodes()).containsExactly("R4C-ASY-001", "R4C-ASY-001");
-        assertThat(result.errors()).allSatisfy(e -> assertThat(e).contains("(or Mono<T>, with resilience4cata-reactor)"));
+        assertThat(result.errors()).allSatisfy(e -> assertThat(e).contains("(or Mono<T> or Flux<T>, with resilience4cata-reactor)"));
     }
 
     @Test
-    void aFluxIsStillAReactiveTypeError() {
+    void otherPublishersAreStillAReactiveTypeError() {
         Compilation result = compile("demo.Client", """
                 package demo;
                 import dev.resilience4cata.annotation.Retry;
-                import reactor.core.publisher.Flux;
+                import org.reactivestreams.Publisher;
                 public interface Client {
                     @Retry
-                    Flux<Integer> prices();
+                    Publisher<Integer> prices();
                 }
                 """);
         assertThat(result.errorCodes()).containsExactly("R4C-ASY-002");
         assertThat(result.errors()).singleElement().asString()
                 .contains("a org.reactivestreams.Publisher")
-                .contains("Reactor's Mono<T> with resilience4cata-reactor (for a Flux, flux.collectList())");
+                .contains("Reactor's Mono<T> or Flux<T> with resilience4cata-reactor");
     }
 
     @Test

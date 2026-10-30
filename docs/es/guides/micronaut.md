@@ -270,6 +270,42 @@ public class StockReport {
   incluso para beans que se crean más tarde. Por qué una marca y no un envoltorio automático: es explícito y no
   necesita buscar una clase para cada bean.
 
+## Beans reactivos :id=reactive
+
+Los métodos de beans que devuelven el `Mono` o el `Flux` de Reactor se protegen igual, con `resilience4cata-reactor` en el classpath (no forma parte de `resilience4cata-all`: [instalación](../start/installation.md)). Cada suscripción es una llamada a través de las políticas; en un `Flux`, el retry y el fallback solo actúan antes del primer elemento, y `@Timeout` es el tiempo sin un elemento ([Project Reactor](reactor.md)).
+
+<!-- snippet: micronaut-reactive -->
+```java
+@Singleton
+public class PriceService {
+
+    private final PriceBackend backend;
+
+    public PriceService(PriceBackend backend) {
+        this.backend = backend;
+    }
+
+    @Retry(maxAttempts = 3, delay = "10ms")
+    @Timeout("2s")
+    public Mono<Integer> price(String sku) {
+        return backend.price(sku);
+    }
+
+    @Retry(maxAttempts = 3, delay = "10ms")
+    @Timeout("2s")                                  // to the first element, and between two
+    @Fallback(method = "noTicks")
+    public Flux<Integer> ticks(String sku) {
+        return backend.ticks(sku);
+    }
+
+    protected Flux<Integer> noTicks(String sku) {
+        return Flux.empty();
+    }
+}
+```
+
+Un `@Transactional` de Micronaut alrededor de un método `Mono` o `Flux` con retry de una clase anotada hace fallar el arranque, como en los demás métodos ([R4C-MN-005](../errors.md#r4c-mn-005)).
+
 ## Configuración :id=configuration
 
 Las políticas leen la configuración de la aplicación bajo `resilience4cata`, con las claves de la

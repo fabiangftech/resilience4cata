@@ -71,6 +71,8 @@ class ErrorCodeTest {
         triggers.put(ErrorCode.HEDGE_NOT_ASYNC, () -> Pipeline.builder(registry, "hedged", String.class).hedge().build()
                 .execute(() -> "sync"));
         triggers.put(ErrorCode.RETRY_WITH_HEDGE, () -> Pipeline.builder(registry, "p").retry().hedge().build());
+        triggers.put(ErrorCode.NOT_FOR_STREAMS, () -> Pipeline.builder(registry, "streamed", String.class).hedge().build()
+                .executeStreamAsync(new NoStream()));
         triggers.put(ErrorCode.INVALID_VALUE, () -> RetryConfig.builder().maxAttempts(0).build());
         triggers.put(ErrorCode.INVALID_NAMED_CONFIG, () -> ResilienceRegistry.builder()
                 .retry("bad", r -> r.maxAttempts(0)).build());
@@ -95,5 +97,18 @@ class ErrorCodeTest {
     static Set<String> headings(Path file) throws IOException {
         Matcher matcher = HEADING.matcher(Files.readString(file));
         return matcher.results().map(m -> m.group(1)).collect(Collectors.toSet());
+    }
+
+    /** A stream call that is never started: the pipeline rejects it first. */
+    private static final class NoStream implements dev.resilience4cata.generated.StreamCall<String> {
+        @Override
+        public java.util.concurrent.CompletionStage<Void> attempt(dev.resilience4cata.generated.AttemptLayers layers) {
+            throw new AssertionError("not started");
+        }
+
+        @Override
+        public java.util.concurrent.CompletionStage<Void> recover(@org.jspecify.annotations.Nullable String value) {
+            throw new AssertionError("not started");
+        }
     }
 }

@@ -6,6 +6,7 @@ import dev.resilience4cata.CallTimeoutException;
 import dev.resilience4cata.Pipeline;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
+import dev.resilience4cata.reactor.FluxPipelineOperator;
 import dev.resilience4cata.reactor.PipelineOperator;
 import dev.resilience4cata.testkit.ManualClock;
 import dev.resilience4cata.testkit.ResilienceTesting;
@@ -14,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
@@ -70,6 +72,50 @@ class ReactorTest {
         Mono<String> rates = webClientCall.transform(resilient);   // each attempt subscribes to webClientCall again
         // end::reactor-operator[]
         assertThat(rates.block()).isEqualTo("rates");
+        assertThat(calls).hasValue(2);
+    }
+
+    @Test
+    void aFluxMethodRetriesBeforeTheFirstElementOnly() {
+        AtomicInteger subscriptions = new AtomicInteger();
+        PriceFeed exchange = sku -> Flux.defer(() -> subscriptions.incrementAndGet() <= 2
+                ? Flux.error(new IOException("feed unavailable"))
+                : Flux.just(new BigDecimal(41), new BigDecimal(42), new BigDecimal(43)));
+        // tag::reactor-flux-call[]
+        PriceFeed feed = Resilient.of(PriceFeed.class, exchange, ResilienceRegistry.builder().build());
+
+        feed.prices("sku-1")
+                .doOnNext(price -> System.out.println(price))   // two failed attempts, then 41, 42, 43
+                .blockLast();
+        // end::reactor-flux-call[]
+        assertThat(feed.prices("sku-1").collectList().block()).as("each subscription is one call")
+                .extracting(BigDecimal::intValue).containsExactly(41, 42, 43);
+        assertThat(subscriptions).hasValue(4);
+
+        PriceFeed broken = sku -> Flux.just(new BigDecimal(41)).concatWith(Flux.error(new IOException("feed broke")));
+        PriceFeed committed = Resilient.of(PriceFeed.class, broken, ResilienceRegistry.builder().build());
+        // tag::reactor-flux-committed[]
+        StepVerifier.create(committed.prices("sku-1"))
+                .expectNext(new BigDecimal(41))       // the first element: no retry, no fallback from now on
+                .expectErrorMessage("feed broke")     // so the failure reaches the subscriber as it is
+                .verify();
+        // end::reactor-flux-committed[]
+    }
+
+    @Test
+    void aPipelineAsAFluxOperator() {
+        ResilienceRegistry registry = ResilienceRegistry.builder().build();
+        Flux<String> webClientStream = Flux.defer(() -> calls.incrementAndGet() == 1
+                ? Flux.error(new IOException("first")) : Flux.just("EUR", "USD"));
+        // tag::reactor-flux-operator[]
+        FluxPipelineOperator<String> resilient = FluxPipelineOperator.of(Pipeline.builder(registry, "quotes", String.class)
+                .retry(r -> r.maxAttempts(3).delay(Duration.ofMillis(50)))
+                .timeout(t -> t.timeout(Duration.ofSeconds(5)))
+                .build());
+
+        Flux<String> quotes = webClientStream.transform(resilient);   // an attempt subscribes to webClientStream again
+        // end::reactor-flux-operator[]
+        assertThat(quotes.collectList().block()).containsExactly("EUR", "USD");
         assertThat(calls).hasValue(2);
     }
 

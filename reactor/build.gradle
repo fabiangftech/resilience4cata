@@ -3,7 +3,7 @@ plugins {
     id 'r4c.publish'
 }
 
-description = 'Project Reactor support: annotated methods that return Mono, and Pipeline as a Mono operator.'
+description = 'Project Reactor support: annotated methods that return Mono or Flux, and Pipeline as a Mono or Flux operator.'
 
 dependencies {
     api project(':core')

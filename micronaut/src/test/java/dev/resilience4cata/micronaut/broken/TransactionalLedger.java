@@ -23,6 +23,13 @@ public class TransactionalLedger {
         return reactor.core.publisher.Mono.just(cents);
     }
 
+    /** A Flux method: its retry layer is in the lambda the generated override returns too. */
+    @Transactional
+    @Retry(maxAttempts = 3)
+    public reactor.core.publisher.Flux<Integer> postAll(int cents) {
+        return reactor.core.publisher.Flux.just(cents, cents);
+    }
+
     @Transactional(propagation = io.micronaut.transaction.TransactionDefinition.Propagation.NOT_SUPPORTED)
     @Retry(maxAttempts = 3)
     public int read() {

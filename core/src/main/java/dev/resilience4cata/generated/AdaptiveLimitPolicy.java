@@ -210,6 +210,57 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
         }
     }
 
+    /**
+     * The asynchronous form for a streaming call (a method that returns a {@code Flux}): as
+     * {@link #executeAsync(AsyncCall)}, the slot is held until the stream ends, but the latency sample is
+     * the time to the stream's first element (or its end, if it has none): a stream's length says nothing
+     * about the dependency.
+     *
+     * @param call the next layer
+     * @param elements the streaming call, told of this attempt's listener before {@code call} starts
+     * @param <T> the result type
+     * @return a future that completes with the call's outcome, or fails with {@link LimitExceededException}
+     */
+    public <T> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
+        if (!enabled) {
+            return executeAsync(call);
+        }
+        long start;
+        try {
+            start = acquire();
+        } catch (LimitExceededException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+        FirstElement first = new FirstElement(ticker);
+        elements.listen(first, false);
+        CompletionStage<T> stage = AsyncSupport.call(call);
+        if (AsyncSupport.succeeded(stage)) { // ended during its subscription
+            long end = ticker.getAsLong();
+            sample(end, first.time(end) - start, inFlight.decrement(), false);
+            return AsyncSupport.copy(stage);
+        }
+        LinkedFuture<T> result = new LinkedFuture<>(stage);
+        stage.whenComplete((value, failure) -> {
+            if (failure == null) {
+                long end = ticker.getAsLong(); // the window ends by the stream's end, its sample is the first element
+                sample(end, first.time(end) - start, inFlight.decrement(), false);
+                result.complete(value);
+            } else if (result.cancelling()) {
+                release();
+            } else {
+                Throwable cause = AsyncSupport.unwrap(failure);
+                if (drops.get(cause.getClass())) {
+                    long end = ticker.getAsLong();
+                    sample(end, first.time(end) - start, inFlight.decrement(), true);
+                } else {
+                    inFlight.decrement();
+                }
+                result.fail(cause);
+            }
+        });
+        return result;
+    }
+
     /** Frees a slot without a sample: the call was cancelled by its caller. */
     public void release() {
         if (enabled) {
@@ -369,6 +420,10 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
             return CompletableFuture.failedFuture(e);
         }
         CompletionStage<T> stage = AsyncSupport.call(call);
+        if (AsyncSupport.succeeded(stage)) {
+            onSuccess(start);
+            return AsyncSupport.copy(stage);
+        }
         LinkedFuture<T> result = new LinkedFuture<>(stage);
         stage.whenComplete((value, failure) -> {
             if (failure == null) {

@@ -53,7 +53,7 @@ In the interface style, the policies live in the generated wrapper; a call from 
 
 ### Does it support reactive types (`Mono`, `Flux`, `Single`)? :id=reactive
 
-Reactor's `Mono`, yes, with `resilience4cata-reactor`: every policy applies once per subscription, with the subscriber's context, and is cancelled with the subscription. See [Project Reactor](guides/reactor.md). Other reactive types (`Flux`, Mutiny's `Uni` and `Multi`, RxJava's types) are not supported yet: with resilience annotations they are a compile error, [R4C-ASY-002](errors.md#r4c-asy-002), because the policies would protect only building the pipeline, not the work. Convert to a `CompletionStage` or a `Mono` in the implementation. See [Async methods](guides/async.md).
+Reactor's `Mono` and `Flux`, yes, with `resilience4cata-reactor`: every policy applies once per subscription, with the subscriber's context, and is cancelled with the subscription; on a `Flux`, the retry and the fallback act before the first element only, and the timeout restarts on every element. See [Project Reactor](guides/reactor.md). Other reactive types (Mutiny's `Uni` and `Multi`, RxJava's types) are not supported yet: with resilience annotations they are a compile error, [R4C-ASY-002](errors.md#r4c-asy-002), because the policies would protect only building the pipeline, not the work. Convert to a `CompletionStage`, a `Mono` or a `Flux` in the implementation. See [Async methods](guides/async.md).
 
 ### Does it work with virtual threads? :id=virtual-threads
 
@@ -101,7 +101,7 @@ On AWS Graviton3, a retry whose first attempt succeeds costs 1.2 ns and a circui
 
 ### What is not supported yet? :id=not-supported
 
-Caching and thread-pool bulkheads; the Vegas algorithm and waiting (`maxWait`) for adaptive limits; synchronous hedging (`@Hedge` works on async methods); `Flux`, Mutiny and RxJava types (Reactor's `Mono` is supported); `? super` async types; runtime reconfiguration; integration modules for frameworks other than Spring Boot, Micronaut and Quarkus. See [Design decisions](design.md) for what is planned and what is excluded by decision.
+Caching and thread-pool bulkheads; the Vegas algorithm and waiting (`maxWait`) for adaptive limits; synchronous hedging (`@Hedge` works on async methods); Mutiny and RxJava types (Reactor's `Mono` and `Flux` are supported); `? super` async types; runtime reconfiguration; integration modules for frameworks other than Spring Boot, Micronaut and Quarkus. See [Design decisions](design.md) for what is planned and what is excluded by decision.
 
 ### What is on the roadmap? :id=roadmap
 
@@ -115,7 +115,7 @@ Planned, not promised; names and scope can change:
 | YAML configuration | v1 | separate module, so `core` stays dependency-free |
 | Configurable execution order (`@PolicyOrder`) | done in 0.10.0 | annotations only; a `Pipeline` keeps the default order ([Changing the order](policies/README.md#changing-the-order)) |
 | `locked` attribute (annotation values that external configuration cannot override) | done in 0.7.0 | `locked = true` on the annotation, `Pipeline.Builder.locked()` ([Locking an instance](guides/configuration.md#locking-an-instance)) |
-| `@Cached`, `Flux`, Mutiny and RxJava, Kotlin coroutines, fault injection, deadline propagation | later | |
+| `@Cached`, Mutiny and RxJava, Kotlin coroutines, fault injection, deadline propagation | later | |
 
 Until then, [testkit](guides/testing.md) covers tests.
 

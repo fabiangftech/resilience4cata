@@ -638,10 +638,10 @@ public interface PriceClient {
 ### R4C-ASY-002
 
 **Trigger:** an annotated method returns a lazy reactive type: a `Flow.Publisher` or Reactive Streams `Publisher`
-(Reactor's `Flux`, RxJava's `Flowable`), Mutiny's `Uni` or `Multi`, or RxJava's `Single`, `Maybe`,
+(RxJava's `Flowable`, a subclass of Reactor's `Flux`), Mutiny's `Uni` or `Multi`, or RxJava's `Single`, `Maybe`,
 `Completable` or `Observable`. Such a method only builds a pipeline that runs later, when it is subscribed, so the
-policies would protect building it, not the work: a failure would never be retried or timed out. Reactor's `Mono` is
-supported with `resilience4cata-reactor` (see [R4C-ASY-003](#r4c-asy-003)).
+policies would protect building it, not the work: a failure would never be retried or timed out. Reactor's `Mono` and
+`Flux` are supported with `resilience4cata-reactor` (see [R4C-ASY-003](#r4c-asy-003)).
 
 **Wrong:**
 
@@ -658,9 +658,8 @@ public interface PriceClient {
 ```
 
 **Fix:** return `CompletionStage<T>` or `CompletableFuture<T>`, converting in the implementation
-(`uni.subscribeAsCompletionStage()`), or Reactor's `Mono<T>` with `resilience4cata-reactor` (`flux.collectList()` for a
-`Flux` whose items fit in memory), or keep the reactive type and use the reactive library's own retry and timeout
-operators.
+(`uni.subscribeAsCompletionStage()`), or Reactor's `Mono<T>` or `Flux<T>` with `resilience4cata-reactor`, or keep the
+reactive type and use the reactive library's own retry and timeout operators.
 
 ```java
 package com.acme;
@@ -676,8 +675,8 @@ public interface PriceClient {
 
 ### R4C-ASY-003
 
-**Trigger:** an annotated method returns Reactor's `Mono`, and `resilience4cata-reactor` is not on the compile class
-path. The generated code of a `Mono` method calls that module.
+**Trigger:** an annotated method returns Reactor's `Mono` or `Flux`, and `resilience4cata-reactor` is not on the
+compile class path (for a `Flux`, version 0.11.0 or newer). The generated code of these methods calls that module.
 
 **Wrong:** with `reactor-core` but without `resilience4cata-reactor`:
 
@@ -705,6 +704,42 @@ import reactor.core.publisher.Mono;
 public interface PriceClient {
     @Retry
     Mono<Integer> price(String sku);
+}
+```
+
+### R4C-ASY-004
+
+**Trigger:** an annotated method that returns Reactor's `Flux` has a `@Hedge`, a classifier on `@Retry` or
+`@CircuitBreaker`, or a `@PolicyOrder` that changes its order. A hedge would merge the elements of two streams; a
+classifier judges one result, and a stream has many; and the rule that the retry and the fallback act only before the
+stream's first element is defined for the default order.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Hedge;
+import reactor.core.publisher.Flux;
+
+public interface QuoteClient {
+    @Hedge(delay = "50ms")
+    Flux<Integer> quotes(String sku);
+}
+```
+
+**Fix:** use `@Retry` (with `retryOn`/`abortOn`, or `recordOn`/`ignoreOn` on the breaker, instead of a classifier),
+keep the default order, or return a `Mono` or a `CompletionStage` where you need the hedge or the classifier.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+import reactor.core.publisher.Flux;
+
+public interface QuoteClient {
+    @Retry
+    Flux<Integer> quotes(String sku);
 }
 ```
 
@@ -2503,6 +2538,14 @@ hedge starts the call again while the first attempt is still running, which need
 
 **Fix:** keep one: a hedge already starts a new attempt when one fails (`hedgeOn`), and a retry around it would
 multiply the attempts. This is the runtime twin of [R4C-HDG-002](#r4c-hdg-002).
+
+### R4C-RT-020
+
+**Trigger:** a `Flux` is protected with a pipeline (`FluxPipelineOperator`) that has a hedge or a classifier
+(`IllegalStateException`, delivered to the `Flux`'s subscriber). A hedge would merge the elements of two
+streams, and a classifier judges one result while a stream has many.
+
+**Fix:** remove `.hedge(...)` or the classifier, or build a separate pipeline for the `Flux`.
 
 ## Runtime: registry and policy configuration (R4C-REG)
 

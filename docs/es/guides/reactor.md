@@ -1,12 +1,12 @@
 # Project Reactor
 
-Un método que devuelve el `Mono<T>` de Reactor recibe la forma asíncrona de cada política, una vez por suscripción, con el contexto del suscriptor, y se cancela a través de las políticas cuando el suscriptor cancela.
+Un método que devuelve el `Mono<T>` o el `Flux<T>` de Reactor recibe la forma asíncrona de cada política, una vez por suscripción, con el contexto del suscriptor, y se cancela a través de las políticas cuando el suscriptor cancela.
 
 <div class="r4c-facts">
 
 | Módulo | Reactor | Tipos | Desde |
 |---|---|---|---|
-| `resilience4cata-reactor` | 3.6 o posterior | `Mono<T>` (no `Flux`) | 0.11.0 |
+| `resilience4cata-reactor` | 3.6 o posterior | `Mono<T>`, `Flux<T>` | 0.11.0 |
 
 </div>
 
@@ -101,11 +101,60 @@ Mono<BigDecimal> price = prices.price("sku-1")
 Qué hilo emite: el primer intento se suscribe en el hilo que se suscribe. Los delays de retry, los hedges, los timeouts y las esperas del rate limiter se disparan en el timer de la librería, que entrega el trabajo a un virtual thread nuevo, así que el valor de un intento posterior llega ahí. Agrega `publishOn(...)` después del método si los operadores siguientes necesitan un scheduler en particular.
 
 > [!MEASURED]
-> En AWS Graviton3, un método `Mono` con circuit breaker cuesta 130 ns por llamada contra 246 ns del operador de resilience4j-reactor 2.4.0 (119 contra 1379 ns con cuatro hilos), y un stack de retry, breaker, timeout y bulkhead 227 ns contra 4338 ns, incluidos los 52 ns de suscribirse al `Mono`. Consulta [Rendimiento](../performance.md#reactor).
+> En AWS Graviton3, un método `Mono` con circuit breaker cuesta 106 ns por llamada contra 243 ns del operador de resilience4j-reactor 2.4.0 (105 contra 1291 ns con cuatro hilos), y un stack de retry, breaker, timeout y bulkhead 201 ns contra 4319 ns, incluidos los 52 ns de suscribirse al `Mono`. Consulta [Rendimiento](../performance.md#reactor).
 
 ## Fallbacks
 
 Un fallback de un método `Mono` devuelve el valor (`BigDecimal`) o un `Mono` de él (`Mono<BigDecimal>`), como método hermano o como [`FallbackHandler`](../policies/fallback.md); un `CompletionStage` no se acepta. Su `Mono` se suscribe con el contexto del llamador.
+
+## Métodos Flux :id=flux
+
+Un método que devuelve `Flux<T>` recibe las mismas políticas, adaptadas a un stream: cada suscripción es una llamada, cada intento se vuelve a suscribir al `Flux` del método, y sus elementos llegan al suscriptor a medida que llegan, con la demanda y el contexto del suscriptor.
+
+<!-- snippet: reactor-flux-interface -->
+```java
+public interface PriceFeed {
+
+    @Retry(maxAttempts = 3, delay = "50ms")
+    @Timeout("5s")                       // at most 5 s to the first price, and between prices
+    @Fallback(method = "closed")
+    Flux<BigDecimal> prices(String sku);
+
+    default Flux<BigDecimal> closed(String sku, Throwable failure) {
+        return Flux.empty();
+    }
+}
+```
+
+<!-- snippet: reactor-flux-call -->
+```java
+PriceFeed feed = Resilient.of(PriceFeed.class, exchange, ResilienceRegistry.builder().build());
+
+feed.prices("sku-1")
+        .doOnNext(price -> System.out.println(price))   // two failed attempts, then 41, 42, 43
+        .blockLast();
+```
+
+- **El primer elemento compromete la llamada.** Antes de él, un fallo se reintenta o lo reemplaza el fallback, como en un `Mono`. Después, el fallo llega tal cual al suscriptor: un retry volvería a enviar los elementos, y un fallback mezclaría dos fuentes.
+
+<!-- snippet: reactor-flux-committed -->
+```java
+StepVerifier.create(committed.prices("sku-1"))
+        .expectNext(new BigDecimal(41))       // the first element: no retry, no fallback from now on
+        .expectErrorMessage("feed broke")     // so the failure reaches the subscriber as it is
+        .verify();
+```
+
+- **`@Timeout` es el tiempo sin un elemento:** hasta el primero, entre dos, y hasta el final. Un stream que sigue emitiendo nunca hace timeout, dure lo que dure; uno que se traba sí, antes de su primer elemento (entonces se reintenta) o después (el suscriptor recibe `CallTimeoutException`). El tiempo que se espera la demanda del suscriptor cuenta, como con el operador `timeout` de Reactor.
+- **El circuit breaker** registra una llamada por intento cuando su stream termina, así que un fallo después de elementos es un fallo; `slowCallDuration` es el tiempo hasta el primer elemento. **El adaptive limit** ocupa un lugar mientras el stream corre y toma como muestra el tiempo hasta su primer elemento.
+- **El bulkhead** ocupa su lugar hasta que el stream termina o se cancela. **El rate limiter** toma un permiso por intento, no por elemento.
+- **Un fallback** devuelve un `Flux<T>`, o un valor `T` (un stream de ese único elemento), como método hermano o como [`FallbackHandler`](../policies/fallback.md).
+- **La demanda** se conserva: al intento siguiente se le pide todo lo que el suscriptor pidió, porque nada se emitió antes del primer elemento. Una petición no positiva se reporta y se ignora, como hacen los propios operadores de Reactor (Reactor le señala el error de la regla 3.9 a cualquier otro suscriptor); el `Flux` generado pasa todas las reglas del TCK de Reactive Streams.
+- **Cancelar la suscripción** cancela la llamada a través de cada política; en WebFlux, un cliente que se desconecta de un endpoint de server-sent events (`produces = MediaType.TEXT_EVENT_STREAM_VALUE`) que devuelve el `Flux` del bean hace esto, y el bulkhead libera su lugar.
+> [!MEASURED]
+> En AWS Graviton3, un stream de diez elementos a través de un método `Flux` con `@Timeout` cuesta 681 ns contra 28896 ns con el time limiter de resilience4j-reactor 2.4.0 (`flux.timeout`, un timer por elemento), y el stack de retry, breaker, timeout y bulkhead 789 ns contra 30583 ns; mil elementos con timeout tardan 45 µs contra 2.6 ms. Un bulkhead o un rate limiter solos quedan dentro del error de los de Resilience4j. Consulta [Rendimiento](../performance.md#reactor).
+
+- **No en métodos `Flux`:** `@Hedge` (mezclaría dos streams), los classifiers (un resultado para muchos elementos: usa `retryOn`/`abortOn` y `recordOn`/`ignoreOn`), y un `@PolicyOrder` que cambie el orden. Cada uno es [`R4C-ASY-004`](../errors.md#r4c-asy-004).
 
 ## Código que no puedes anotar
 
@@ -122,6 +171,18 @@ Mono<String> rates = webClientCall.transform(resilient);   // each attempt subsc
 ```
 
 Cada intento se vuelve a suscribir a la fuente, lo que vuelve a ejecutar una petición de `WebClient`. Una fuente que da el mismo resultado a cada suscriptor (`cache()`, una fuente hot) no se reintenta de forma útil; constrúyela por intento con `resilient.defer(() -> ...)`.
+
+`FluxPipelineOperator` hace lo mismo para un `Flux` (`bodyToFlux`), con las reglas de stream de [arriba](#flux); el valor del fallback del pipeline se convierte en un stream de ese único elemento, y un pipeline con hedge o classifier no puede proteger un `Flux` ([`R4C-RT-020`](../errors.md#r4c-rt-020)):
+
+<!-- snippet: reactor-flux-operator -->
+```java
+FluxPipelineOperator<String> resilient = FluxPipelineOperator.of(Pipeline.builder(registry, "quotes", String.class)
+        .retry(r -> r.maxAttempts(3).delay(Duration.ofMillis(50)))
+        .timeout(t -> t.timeout(Duration.ofSeconds(5)))
+        .build());
+
+Flux<String> quotes = webClientStream.transform(resilient);   // an attempt subscribes to webClientStream again
+```
 
 ## Testing
 
@@ -143,7 +204,7 @@ El reloj manual es el de la librería; `StepVerifier.withVirtualTime` mueve los 
 
 ## Límites
 
-- **`Flux` todavía no está soportado:** un método que lo devuelve es [`R4C-ASY-002`](../errors.md#r4c-asy-002). Devuelve `Mono<List<T>>` (`collectList()`) cuando los elementos caben en memoria.
-- **Exactamente `Mono`:** una subclase de él, `Mono<? super T>` o un `Mono` sin tipo no es un método `Mono` ([`R4C-ASY-001`](../errors.md#r4c-asy-001), o `R4C-ASY-002` para una subclase).
+- **Exactamente `Mono` o `Flux`:** una subclase de cualquiera de los dos, `Mono<? super T>` o un `Mono` sin tipo no es un método reactivo ([`R4C-ASY-001`](../errors.md#r4c-asy-001), o `R4C-ASY-002` para una subclase).
+- **Un método `Flux`** no tiene hedge, ni classifier, y usa el orden por defecto ([`R4C-ASY-004`](../errors.md#r4c-asy-004)), y su retry y su fallback actúan solo antes del primer elemento ([arriba](#flux)).
 - **Transacciones:** un `@Transactional` reactivo en un método `Mono` con retry o hedge de una clase anotada correría todos los intentos en una sola transacción, lo que Spring, Micronaut y Quarkus reportan al arrancar, como en los demás métodos ([`R4C-SPR-004`](../errors.md#r4c-spr-004)).
 - **Mutiny y RxJava** todavía no están soportados; convierte a un `CompletionStage` (`uni.subscribeAsCompletionStage()`).

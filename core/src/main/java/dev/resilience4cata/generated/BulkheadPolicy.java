@@ -506,8 +506,12 @@ public final class BulkheadPolicy implements BulkheadHandle {
     // One method with its own callback, as before downward cancellation: splitting the callback into a shared
     // helper (as runGranted uses) cost one more inlining level, and stacked async methods then allocated one
     // more object per call because escape analysis no longer removed this future (AsyncBenchmark.*Stack).
-    private <T> LinkedFuture<T> run(AsyncCall<T> call) {
+    private <T> CompletableFuture<T> run(AsyncCall<T> call) {
         CompletionStage<T> stage = AsyncSupport.call(call);
+        if (AsyncSupport.succeeded(stage)) { // done already: the slot is free at once
+            exit();
+            return AsyncSupport.copy(stage);
+        }
         LinkedFuture<T> result = new LinkedFuture<>(stage);
         stage.whenComplete((value, failure) -> {
             exit();

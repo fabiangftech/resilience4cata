@@ -66,6 +66,7 @@ public final class TimeoutPolicy {
     private final @Nullable Ticker manual;
     private final java.util.function.LongSupplier ticker;
     private final @Nullable EventSink<TimeoutEvent.TimedOut> timedOut;
+    private final PolicyEnvironment environment;
 
     /**
      * Creates a timeout policy that uses the shared watchdog.
@@ -107,6 +108,7 @@ public final class TimeoutPolicy {
     private TimeoutPolicy(String id, TimeoutConfig config, @Nullable Watchdog watchdog, @Nullable TimeoutTimer timer,
             @Nullable Ticker manual, PolicyEnvironment environment) {
         this.id = id;
+        this.environment = environment;
         this.ticker = environment.ticker;
         this.timedOut = environment.events.sink(TimeoutEvent.TimedOut.class, id);
         this.manual = manual;
@@ -327,6 +329,168 @@ public final class TimeoutPolicy {
         }
         stage.whenComplete(expiry);
         return expiry.result;
+    }
+
+    /**
+     * The asynchronous form for a streaming call (a method that returns a {@code Flux}): as
+     * {@link #executeAsync(AsyncCall)}, but the deadline restarts on every element of the call's stream.
+     * The call times out when nothing arrives for the timeout: no first element since the call started, no
+     * next element (or end) since the previous one. Time spent waiting for the subscriber's demand counts,
+     * as with Reactor's {@code timeout} operator.
+     *
+     * <p>An element costs one clock read and one plain write: it moves no timer. The first deadline is
+     * kept like {@link #executeAsync(AsyncCall)}'s; when it passes after an element arrived, the remaining
+     * time is waited on the library's precise timer (or the registry's ticker), once per timeout of
+     * activity at most.
+     *
+     * @param call the next layer
+     * @param elements the streaming call, told of this attempt's listener before {@code call} starts
+     * @param <T> the result type
+     * @return a future that completes with the call's outcome, or fails with {@link CallTimeoutException}
+     */
+    public <T> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
+        TimeoutTimer.Lane deadlines = lane;
+        Ticker time = manual;
+        if (deadlines == null && time == null) {
+            return executeAsync(call);
+        }
+        Idle<T> idle = new Idle<>(this, ticker.getAsLong());
+        elements.listen(idle, true);
+        CompletionStage<T> stage = AsyncSupport.call(call);
+        Class<?> type = stage.getClass();
+        if (type == CompletableFuture.class || type == LinkedFuture.class) {
+            CompletableFuture<T> future = (CompletableFuture<T>) stage;
+            Future.State state = future.state();
+            if (state == Future.State.SUCCESS) {
+                return CompletableFuture.completedFuture(future.resultNow());
+            }
+            if (state == Future.State.FAILED) {
+                return CompletableFuture.failedFuture(AsyncSupport.unwrap(future.exceptionNow()));
+            }
+        }
+        idle.stage = stage;
+        if (deadlines != null) {
+            deadlines.timer.schedule(idle, deadlines);
+        } else if (time != null) {
+            idle.pending(time.schedule(timeoutNanos, () -> {
+                if (idle.tryMove(TimerEntry.NEW, TimerEntry.FIRED)) {
+                    idle.run();
+                }
+            }));
+        }
+        stage.whenComplete(idle);
+        return idle.result;
+    }
+
+    /**
+     * The deadline of one attempt of a streaming call, restarted by its elements. Elements only record
+     * when they arrived; the deadline itself moves only when it passes: then, if an element arrived since,
+     * the rest of the time is waited again (a re-check), else the call times out.
+     */
+    private static final class Idle<T> extends TimerEntry
+            implements BiConsumer<T, Throwable>, LinkedFuture.OnCancel, ElementListener {
+
+        private static final VarHandle LAST;
+        private static final VarHandle PENDING;
+        private static final Object DONE = new Object();
+
+        static {
+            try {
+                MethodHandles.Lookup lookup = MethodHandles.lookup();
+                LAST = lookup.findVarHandle(Idle.class, "last", long.class);
+                PENDING = lookup.findVarHandle(Idle.class, "pending", Object.class);
+            } catch (ReflectiveOperationException e) {
+                throw new ExceptionInInitializerError(e);
+            }
+        }
+
+        private final TimeoutPolicy policy;
+        final LinkedFuture<T> result;
+        @Nullable CompletionStage<T> stage; // set before the deadline is scheduled, which publishes it
+
+        // java:S1845: the fields and their VarHandles share names, the usual VarHandle naming convention.
+        @SuppressWarnings({"unused", "java:S1845"}) // accessed through LAST
+        private volatile long last; // when the attempt started, then when its latest element arrived
+
+        @SuppressWarnings({"unused", "java:S1845", "java:S3077"}) // accessed through PENDING
+        private volatile @Nullable Object pending; // the scheduled re-check (a Future), or DONE
+
+        Idle(TimeoutPolicy policy, long start) {
+            this.policy = policy;
+            this.result = new LinkedFuture<>(this);
+            LAST.setOpaque(this, start);
+        }
+
+        /** An element arrived: one clock read and one plain write, read by the next check. */
+        @Override
+        public void element() {
+            LAST.setOpaque(this, policy.ticker.getAsLong());
+        }
+
+        /** The first deadline passed; runs on a new virtual thread (or the thread advancing the ticker). */
+        @Override
+        public void run() {
+            check();
+        }
+
+        private void check() {
+            long remaining = (long) LAST.getAcquire(this) + policy.timeoutNanos - policy.ticker.getAsLong();
+            if (remaining > 0) {
+                recheckIn(remaining);
+            } else if (result.fail(new CallTimeoutException(policy.id, policy.config.timeout(), null))) {
+                policy.publishTimedOut(); // only when the timeout won against the stage's completion
+                CompletionStage<T> attempt = stage;
+                if (attempt != null) {
+                    LinkedFuture.cancelInner(attempt);
+                }
+            }
+        }
+
+        private void recheckIn(long nanos) {
+            Object current = PENDING.getAcquire(this);
+            if (current == DONE) {
+                return;
+            }
+            Future<?> next = policy.environment.later(nanos, this::check);
+            if (next != null && !PENDING.compareAndSet(this, current, next)) {
+                next.cancel(false); // the stage completed meanwhile
+            }
+        }
+
+        void pending(Future<?> first) {
+            if (!PENDING.compareAndSet(this, null, first)) {
+                first.cancel(false);
+            }
+        }
+
+        private void stop() {
+            cancel();
+            Object scheduled = PENDING.getAndSet(this, DONE);
+            if (scheduled instanceof Future<?> future) {
+                future.cancel(false); // so that a manual ticker's pendingTasks() and the timer's queue stay exact
+            }
+        }
+
+        /** The stage completed. */
+        @Override
+        public void accept(@Nullable T value, @Nullable Throwable failure) {
+            stop();
+            if (failure == null) {
+                result.complete(value);
+            } else {
+                result.fail(AsyncSupport.unwrap(failure));
+            }
+        }
+
+        /** The caller cancelled the call's future: no deadline is needed any more, nor is the stage. */
+        @Override
+        public void cancelled() {
+            stop();
+            CompletionStage<T> attempt = stage;
+            if (attempt != null) {
+                LinkedFuture.cancelInner(attempt);
+            }
+        }
     }
 
     /**

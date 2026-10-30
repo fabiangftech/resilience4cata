@@ -56,6 +56,23 @@ final class AsyncSupport {
         return stage;
     }
 
+    /**
+     * True if {@code stage} already completed normally: exactly a {@code CompletableFuture}, or an inner policy's
+     * {@link LinkedFuture} (subclasses, such as minimal stages, may not support {@code state()}). A policy may then
+     * record the outcome at once and return {@link #copy}, with no link and no callback.
+     */
+    static boolean succeeded(CompletionStage<?> stage) {
+        Class<?> type = stage.getClass();
+        return (type == CompletableFuture.class || type == LinkedFuture.class)
+                && ((CompletableFuture<?>) stage).state() == java.util.concurrent.Future.State.SUCCESS;
+    }
+
+    /** A completed copy of a stage for which {@link #succeeded} holds: the caller never gets the inner future. */
+    @SuppressWarnings("unchecked")
+    static <T> CompletableFuture<T> copy(CompletionStage<T> stage) {
+        return CompletableFuture.completedFuture(((CompletableFuture<T>) stage).resultNow());
+    }
+
     /** Completes {@code result} the same way as {@code stage}, with the failure unwrapped. */
     static <T> void relay(CompletionStage<T> stage, LinkedFuture<T> result) {
         stage.whenComplete((value, failure) -> {

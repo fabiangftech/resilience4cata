@@ -196,6 +196,35 @@ public class StockReport {
   [`R4C-SPR-003`](../errors.md#r4c-spr-003). Un bean que ya es una clase generada (un método `@Bean` que devuelve
   él mismo `Resilient.of(...)`) se deja como está.
 
+## Beans reactivos :id=reactive
+
+Los beans cuyos métodos devuelven el `Mono` o el `Flux` de Reactor se protegen igual, tanto clases como interfaces anotadas, con `resilience4cata-reactor` en el classpath (no forma parte de `resilience4cata-all`: [instalación](../start/installation.md)). Cada suscripción es una llamada a través de las políticas; en un `Flux`, el retry y el fallback solo actúan antes del primer elemento, y `@Timeout` es el tiempo sin un elemento ([Project Reactor](reactor.md)).
+
+<!-- snippet: spring-reactive-bean -->
+```java
+@Retry(name = "ticks", maxAttempts = 3, delay = "5ms", backoff = Backoff.FIXED, jitter = Jitter.NONE)
+@Timeout("300ms")
+@Bulkhead(name = "ticks", maxConcurrent = 1)
+public Flux<String> ticks(String sku) {
+    return backend.ticks(sku);
+}
+```
+
+En WebFlux, devuelve el `Mono` o el `Flux` del bean desde el controller tal cual; un `Flux` se puede transmitir como server-sent events:
+
+<!-- snippet: spring-reactive-endpoint -->
+```java
+@GetMapping(value = "/ticks/{sku}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+Flux<String> ticks(@PathVariable String sku) {
+    return quotes.ticks(sku);   // the bean's Flux as it is: server-sent events
+}
+```
+
+- **El contexto de Reactor** que escribe un `WebFilter` (tracing, el `ReactiveSecurityContextHolder` de Spring Security, un request id) llega a cada intento y al fallback.
+- **Un fallo antes del primer elemento** pasa por tus `@ExceptionHandler` como cualquier otro (un `CallTimeoutException` mapeado a 504, por ejemplo). Después del primer elemento de un stream la respuesta ya empezó, así que un fallo termina el stream.
+- **Un cliente que se desconecta** cancela la llamada a través de cada política: se cancela el `Mono` o el `Flux` del delegado y el bulkhead libera su lugar.
+- **Un `@Transactional` reactivo** alrededor de un método `Mono` o `Flux` con retry o hedge de una clase anotada hace fallar el arranque, como en los demás métodos ([R4C-SPR-004](../errors.md#r4c-spr-004)).
+
 ## Configuración :id=configuration
 
 Las políticas leen las propiedades de la aplicación bajo `resilience4cata`, con las claves de la

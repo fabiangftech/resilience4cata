@@ -197,6 +197,35 @@ public class StockReport {
   [`R4C-SPR-003`](../errors.md#r4c-spr-003). A bean that already is a generated class (a `@Bean` method that
   returns `Resilient.of(...)` itself) is left as it is.
 
+## Reactive beans :id=reactive
+
+Beans whose methods return Reactor's `Mono` or `Flux` are protected the same way, annotated classes and interfaces alike, with `resilience4cata-reactor` on the class path (it is not part of `resilience4cata-all`: [installation](../start/installation.md)). Each subscription is one call through the policies; for a `Flux`, the retry and the fallback act before the first element only, and `@Timeout` is the time without an element ([Project Reactor](reactor.md)).
+
+<!-- snippet: spring-reactive-bean -->
+```java
+@Retry(name = "ticks", maxAttempts = 3, delay = "5ms", backoff = Backoff.FIXED, jitter = Jitter.NONE)
+@Timeout("300ms")
+@Bulkhead(name = "ticks", maxConcurrent = 1)
+public Flux<String> ticks(String sku) {
+    return backend.ticks(sku);
+}
+```
+
+In WebFlux, return the bean's `Mono` or `Flux` from the controller as it is; a `Flux` can be streamed as server-sent events:
+
+<!-- snippet: spring-reactive-endpoint -->
+```java
+@GetMapping(value = "/ticks/{sku}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+Flux<String> ticks(@PathVariable String sku) {
+    return quotes.ticks(sku);   // the bean's Flux as it is: server-sent events
+}
+```
+
+- **The Reactor context** that a `WebFilter` writes (tracing, Spring Security's `ReactiveSecurityContextHolder`, a request id) reaches every attempt and the fallback.
+- **A failure before the first element** goes through your `@ExceptionHandler`s like any other (a `CallTimeoutException` mapped to 504, say). After the first element of a stream the response has started, so a failure ends the stream instead.
+- **A client that disconnects** cancels the call through every policy: the delegate's `Mono` or `Flux` is cancelled and the bulkhead frees its slot.
+- **A reactive `@Transactional`** around a retried or hedged `Mono` or `Flux` method of an annotated class fails the startup, as for other methods ([R4C-SPR-004](../errors.md#r4c-spr-004)).
+
 ## Configuration :id=configuration
 
 The policies read the application's properties under `resilience4cata`, with the keys of the
