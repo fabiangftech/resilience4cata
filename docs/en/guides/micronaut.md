@@ -434,7 +434,7 @@ the configuration with `config.applyTo(builder)`.
 | Property | Default | Effect |
 |---|---|---|
 | `resilience4cata.micronaut.verify-instances` | `warn` (`fail` with eager singletons) | `fail`, `warn` or `off` for instance keys that match no instance at startup |
-| `resilience4cata.micronaut.exclude` | empty | Fully qualified class names of beans to leave alone (R4C-MN-004 and R4C-MN-005 are not checked) |
+| `resilience4cata.micronaut.exclude` | empty | Fully qualified class names of beans to leave alone: not wrapped, and R4C-MN-004 and R4C-MN-005 are not checked. Unlike Spring's and Quarkus's `exclude`, it cannot keep an annotated class from being replaced by its generated subclass when it is compiled with `-Ar4c.inject=micronaut` (Micronaut picks the bean definitions before it reads the configuration). To run a class without its policies in every framework, switch them off: `resilience4cata.instances.<id>.<policy>.enabled=false` |
 | `resilience4cata.micronaut.allow-retry-inside-transaction` | `false` | Allow `@Retry`/`@Hedge` on transactional methods of annotated classes (one transaction for every attempt) instead of failing with R4C-MN-005 |
 | `resilience4cata.micronaut.health.enabled` | `true` | The health indicator |
 | `resilience4cata.micronaut.health.down-when-open` | empty | Breaker ids (or `*`) that turn the health DOWN while open |

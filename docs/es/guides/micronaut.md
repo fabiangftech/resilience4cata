@@ -438,7 +438,7 @@ aplicar la configuración con `config.applyTo(builder)`.
 | Propiedad | Por defecto | Efecto |
 |---|---|---|
 | `resilience4cata.micronaut.verify-instances` | `warn` (`fail` con singletons anticipados) | `fail`, `warn` u `off` para claves de instancia que no corresponden a ninguna instancia al arrancar |
-| `resilience4cata.micronaut.exclude` | vacío | Nombres completos de clases de beans que se dejan en paz (no se revisan R4C-MN-004 ni R4C-MN-005) |
+| `resilience4cata.micronaut.exclude` | vacío | Nombres completos de clases de beans que se dejan en paz: no se envuelven, y no se revisan R4C-MN-004 ni R4C-MN-005. A diferencia del `exclude` de Spring y de Quarkus, no puede evitar que una clase anotada se reemplace por su subclase generada cuando se compila con `-Ar4c.inject=micronaut` (Micronaut elige las definiciones de beans antes de leer la configuración). Para correr una clase sin sus políticas en cualquier framework, apágalas: `resilience4cata.instances.<id>.<policy>.enabled=false` |
 | `resilience4cata.micronaut.allow-retry-inside-transaction` | `false` | Permite `@Retry`/`@Hedge` en métodos transaccionales de clases anotadas (una transacción para todos los intentos) en lugar de fallar con R4C-MN-005 |
 | `resilience4cata.micronaut.health.enabled` | `true` | El indicador de salud |
 | `resilience4cata.micronaut.health.down-when-open` | vacío | Ids de breakers (o `*`) que ponen la salud en DOWN mientras están abiertos |

@@ -1,4 +1,4 @@
-package dev.resilience4cata.spring;
+package dev.resilience4cata.spring.autoconfigure;
 
 import java.util.List;
 import org.jspecify.annotations.Nullable;

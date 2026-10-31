@@ -3,7 +3,7 @@ package dev.resilience4cata.spring.autoconfigure;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.config.ConfigException;
 import dev.resilience4cata.config.ResilienceConfig;
-import dev.resilience4cata.spring.ResilienceSpringProperties.VerifyInstances;
+import dev.resilience4cata.spring.autoconfigure.ResilienceSpringProperties.VerifyInstances;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.ObjectProvider;

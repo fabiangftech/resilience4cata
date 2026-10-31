@@ -5,6 +5,9 @@ plugins {
 
 description = 'Spring Boot 4 auto-configuration: the registry from application properties, generated classes as beans, metrics, health and an actuator endpoint.'
 
+// The API is dev.resilience4cata.spring only: the exported autoconfigure package holds Spring's own entry points.
+r4cApi.packages = ['dev.resilience4cata.spring']
+
 // The test libraries, shared by `test` and `minimumSpringBootTest`, which differ only in Boot's BOM.
 def springTestLibraries = [
         libs.spring.boot.autoconfigure,

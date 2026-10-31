@@ -33,7 +33,7 @@ public final class ResilienceEndpointAutoConfiguration {
     @Bean
     @ConditionalOnBean(ResilienceRegistry.class)
     @ConditionalOnMissingBean
-    public ResilienceEndpoint resilienceEndpoint(ResilienceRegistry registry) {
+    ResilienceEndpoint resilienceEndpoint(ResilienceRegistry registry) {
         return new ResilienceEndpoint(registry);
     }
 }

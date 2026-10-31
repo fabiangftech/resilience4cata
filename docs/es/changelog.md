@@ -24,6 +24,7 @@ Camino a 1.0: la API se está revisando antes de congelarla, así que esta versi
 - `OpenTelemetryMetrics.bindTo` se comporta como `MicrometerMetrics.bindTo`: vincular otra vez el mismo registry no hace nada (antes reportaba cada gauge dos veces), y tampoco vincular después de `close()` (antes lanzaba `IllegalStateException`).
 - `PipelineOperator` (para `Mono`) se renombra a `MonoPipelineOperator`, junto a `FluxPipelineOperator`.
 - **Los perfiles ya no ganan a fuentes más fuertes.** Una clave bajo un perfil activo sigue ganando sobre la misma clave sin perfil en la misma fuente, pero una variable de entorno o una propiedad del sistema ahora gana sobre una clave de perfil en un archivo, como en Spring Boot y Quarkus: la variable `R4C_…` de un operador ya no se ignora cuando un perfil pone la misma clave.
+- Spring Boot: la API Java es el paquete `dev.resilience4cata.spring` (`ResilienceRegistryCustomizer`, `ResilienceHealthIndicator`, `ResilienceEndpoint`). `ResilienceSpringProperties` se movió a `dev.resilience4cata.spring.autoconfigure`, y los métodos `@Bean` de las clases de auto-configuración ya no son públicos: ahí el contrato son los nombres de las clases de auto-configuración (para `exclude`), los nombres de los beans y los nombres de las propiedades `resilience4cata.spring.*`, que no cambian.
 
 ### Corregido
 
