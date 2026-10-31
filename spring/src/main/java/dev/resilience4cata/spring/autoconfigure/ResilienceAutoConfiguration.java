@@ -6,8 +6,7 @@ import dev.resilience4cata.config.ResilienceConfig;
 import dev.resilience4cata.event.EventListener;
 import dev.resilience4cata.event.ResilienceEvent;
 import dev.resilience4cata.spring.ResilienceRegistryCustomizer;
-import dev.resilience4cata.spring.ResilienceSpringProperties;
-import dev.resilience4cata.spring.ResilienceSpringProperties.VerifyInstances;
+import dev.resilience4cata.spring.autoconfigure.ResilienceSpringProperties.VerifyInstances;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -78,7 +77,7 @@ public final class ResilienceAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public ResilienceConfig resilienceConfig(ConfigurableEnvironment environment, ResourceLoader resourceLoader) {
+    ResilienceConfig resilienceConfig(ConfigurableEnvironment environment, ResourceLoader resourceLoader) {
         return SpringEnvironmentConfig.read(environment, resourceLoader.getClassLoader());
     }
 
@@ -93,7 +92,7 @@ public final class ResilienceAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public ResilienceRegistry resilienceRegistry(ResilienceConfig config,
+    ResilienceRegistry resilienceRegistry(ResilienceConfig config,
             ObjectProvider<ResilienceRegistryCustomizer> customizers, ObjectProvider<Ticker> ticker,
             ConfigurableListableBeanFactory beanFactory) {
         ResilienceRegistry.Builder builder = ResilienceRegistry.builder();

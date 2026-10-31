@@ -381,7 +381,7 @@ métricas); el bean `ResilienceConfig` sigue ahí para construirlo con `config.a
   breaker abierto es la aplicación protegiéndose de una dependencia que falla, no un motivo para sacarla del
   balanceo de carga. Lista los breakers que deben ponerla en DOWN en
   `quarkus.resilience4cata.health.down-when-open` (`*` para todos).
-- Todavía no hay tarjeta en la Dev UI ni endpoint: `registry.snapshot()` lo tiene todo, si quieres exponerlo.
+- No hay endpoint HTTP (en modo dev está la [tarjeta de la Dev UI](#dev-ui)): `registry.snapshot().toMap()` lo tiene todo, si quieres exponerlo.
 
 ## Dev UI :id=dev-ui
 
@@ -536,4 +536,4 @@ anotada, envoltorios de interfaces y de clientes REST, la comprobación de dispo
 - Con clases anotadas, los interceptores de CDI como `@Transactional` se ejecutan fuera de las políticas; un método
   transaccional reintentado o con hedge detiene la construcción ([`R4C-QK-002`](../errors.md#r4c-qk-002)) salvo
   que se permita.
-- Sin tarjeta en la Dev UI, sin endpoint, sin recarga en caliente de la configuración, sin métricas por llamada.
+- Sin endpoint HTTP (solo la [tarjeta de la Dev UI](#dev-ui) en modo dev), sin recarga en caliente de la configuración, sin métricas por llamada.

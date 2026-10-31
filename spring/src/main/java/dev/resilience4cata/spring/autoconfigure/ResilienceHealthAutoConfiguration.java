@@ -2,7 +2,6 @@ package dev.resilience4cata.spring.autoconfigure;
 
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.spring.ResilienceHealthIndicator;
-import dev.resilience4cata.spring.ResilienceSpringProperties;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -36,7 +35,7 @@ public final class ResilienceHealthAutoConfiguration {
     @Bean
     @ConditionalOnBean(ResilienceRegistry.class)
     @ConditionalOnMissingBean(name = "resilience4cataHealthIndicator")
-    public ResilienceHealthIndicator resilience4cataHealthIndicator(ResilienceRegistry registry,
+    ResilienceHealthIndicator resilience4cataHealthIndicator(ResilienceRegistry registry,
             ResilienceSpringProperties properties) {
         return new ResilienceHealthIndicator(registry, properties.health().downWhenOpen());
     }

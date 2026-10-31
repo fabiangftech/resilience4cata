@@ -372,7 +372,7 @@ A `Ticker` bean (the testkit's `ManualClock`) becomes the registry's clock. An a
   the state and failure rate of every circuit breaker. It stays **UP** with open breakers: an open breaker is the
   application protecting itself from a failing dependency, not a reason to take it out of load balancing. List the
   breakers that should turn it DOWN in `quarkus.resilience4cata.health.down-when-open` (`*` for all).
-- There is no Dev UI card or endpoint yet: `registry.snapshot()` has everything, if you want to expose it.
+- There is no HTTP endpoint (in dev mode there is the [Dev UI card](#dev-ui)): `registry.snapshot().toMap()` has everything, if you want to expose it.
 
 ## Dev UI :id=dev-ui
 
@@ -524,4 +524,4 @@ the readiness check, the metrics, and `Mono` and `Flux` methods served through `
   producer methods are not wrapped.
 - With annotated classes, CDI interceptors such as `@Transactional` run outside the policies; a retried or hedged
   transactional method fails the build ([`R4C-QK-002`](../errors.md#r4c-qk-002)) unless allowed.
-- No Dev UI card, no endpoint, no hot reload of the configuration, no per-call metrics.
+- No HTTP endpoint (only the dev-mode [Dev UI card](#dev-ui)), no hot reload of the configuration, no per-call metrics.

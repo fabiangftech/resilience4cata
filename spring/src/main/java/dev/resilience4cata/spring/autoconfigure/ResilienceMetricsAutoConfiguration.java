@@ -36,7 +36,7 @@ public final class ResilienceMetricsAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public MicrometerMetrics resilienceMicrometerMetrics(MeterRegistry meters) {
+    MicrometerMetrics resilienceMicrometerMetrics(MeterRegistry meters) {
         return MicrometerMetrics.create(meters);
     }
 
@@ -47,7 +47,7 @@ public final class ResilienceMetricsAutoConfiguration {
      * @return the customizer
      */
     @Bean
-    public ResilienceRegistryCustomizer resilienceMetricsCustomizer(MicrometerMetrics metrics) {
+    ResilienceRegistryCustomizer resilienceMetricsCustomizer(MicrometerMetrics metrics) {
         return metrics::register;
     }
 

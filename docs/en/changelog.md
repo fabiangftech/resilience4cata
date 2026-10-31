@@ -24,6 +24,7 @@ Toward 1.0: the API is being reviewed before it is frozen, so this release chang
 - `OpenTelemetryMetrics.bindTo` behaves as `MicrometerMetrics.bindTo`: binding the same registry again does nothing (it used to report every gauge twice), and so does binding after `close()` (it used to throw `IllegalStateException`).
 - `PipelineOperator` (for `Mono`) is renamed `MonoPipelineOperator`, next to `FluxPipelineOperator`.
 - **Profiles no longer beat stronger sources.** A key under an active profile still wins over the same key without a profile in the same source, but an environment variable or a system property now wins over a profile key in a file, as in Spring Boot and Quarkus: an operator's `R4C_…` variable is no longer ignored when a profile sets the same key.
+- Spring Boot: the Java API is the package `dev.resilience4cata.spring` (`ResilienceRegistryCustomizer`, `ResilienceHealthIndicator`, `ResilienceEndpoint`). `ResilienceSpringProperties` moved to `dev.resilience4cata.spring.autoconfigure`, and the `@Bean` methods of the auto-configuration classes are no longer public: the contract there is the auto-configuration class names (for `exclude`), the bean names and the `resilience4cata.spring.*` property names, which are unchanged.
 
 ### Fixed
 
