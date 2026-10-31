@@ -24,8 +24,8 @@ Add the extension and, as for any use of the annotations, the annotation process
 ```groovy
 dependencies {
     implementation enforcedPlatform("io.quarkus.platform:quarkus-bom:${quarkusPlatformVersion}")
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.11.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.11.0')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.12.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.12.0')
 
     implementation 'dev.resilience4cata:resilience4cata-quarkus'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
@@ -41,7 +41,7 @@ dependencies {
 ```kotlin
 dependencies {
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:${quarkusPlatformVersion}"))
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:0.11.0")
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:0.12.0")
     implementation(r4cBom)
     annotationProcessor(r4cBom)
 
@@ -73,7 +73,7 @@ dependencies {
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>0.11.0</version>
+    <version>0.12.0</version>
   </path>
   <!-- annotationProcessorPaths replaces discovery: list the other processors you use too -->
 </annotationProcessorPaths>
