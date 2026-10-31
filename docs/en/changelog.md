@@ -20,6 +20,15 @@ Toward 1.0: the API is being reviewed before it is frozen, so this release chang
 - `AdaptiveLimitEvent.LimitChanged.windowLatencyNanos` (a `long`) is now `windowLatency`, a `Duration` like every other duration in events.
 - `LimitExceededException` is renamed `AdaptiveLimitFullException`, which no longer reads like the rate limiter's `RateLimitExceededException`.
 - The four rejections (`CallNotPermittedException`, `BulkheadFullException`, `RateLimitExceededException`, `AdaptiveLimitFullException`) extend the new `CallRejectedException`, so one `catch` handles them all.
+- **The metrics' `instance` tag is now `name`**, in both `resilience4cata-micrometer` and `resilience4cata-opentelemetry`. Prometheus adds its own `instance` label (the target's host:port) to every series it scrapes and renamed ours to `exported_instance`; dashboards and alerts that filter by `instance` must use `name`. The names stay dotted (Micrometer's style) and the breaker's rates stay percentages, now documented as fixed ([Metric names](guides/observability.md#metric-names)).
+- `OpenTelemetryMetrics.bindTo` behaves as `MicrometerMetrics.bindTo`: binding the same registry again does nothing (it used to report every gauge twice), and so does binding after `close()` (it used to throw `IllegalStateException`).
+- `PipelineOperator` (for `Mono`) is renamed `MonoPipelineOperator`, next to `FluxPipelineOperator`.
+- **Profiles no longer beat stronger sources.** A key under an active profile still wins over the same key without a profile in the same source, but an environment variable or a system property now wins over a profile key in a file, as in Spring Boot and Quarkus: an operator's `R4C_…` variable is no longer ignored when a profile sets the same key.
+
+### Fixed
+
+- Spring Boot: keys starting with `r4c.` (the short prefix that the configuration reference documents, and that Micronaut and Quarkus read) were silently ignored; they are read like `resilience4cata.` keys. `r4c.spring.*` is skipped, like `resilience4cata.spring.*`.
+- The description of `r4c.hedge.failed` is "Calls through a hedge that failed": it counts every failed call through a hedge, whether a hedge started or not.
 
 ## [0.11.0] - 2026-10-30 :id=0.11.0
 

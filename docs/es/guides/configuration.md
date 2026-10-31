@@ -88,7 +88,7 @@ ResilienceConfig config = ResilienceConfig.builder()
 
 Los archivos usan la sintaxis `.properties` y se leen como UTF-8. No hay soporte de YAML ni recarga: la configuración se lee una sola vez.
 
-Cuando la misma clave llega desde varias fuentes, gana la más fuerte: **recursos del class path < archivos y `Properties` < variables de entorno < propiedades del sistema**. Entre dos fuentes del mismo tipo, gana la última agregada. Con `precedenceByOrder()`, gana la última agregada sea cual sea su tipo: la [integración con Spring Boot](spring.md) lo usa para mantener la precedencia de Spring. Una clave bajo un perfil activo gana sobre una clave sin perfil, sin importar sus fuentes.
+Cuando la misma clave llega desde varias fuentes, gana la más fuerte: **recursos del class path < archivos y `Properties` < variables de entorno < propiedades del sistema**. Entre dos fuentes del mismo tipo, gana la última agregada. Con `precedenceByOrder()`, gana la última agregada sea cual sea su tipo: la [integración con Spring Boot](spring.md) lo usa para mantener la precedencia de Spring. Dentro de una misma fuente, una clave bajo un perfil activo gana sobre la misma clave sin perfil; una fuente más fuerte sigue ganando, así que una variable de entorno o una propiedad del sistema que pone un operador gana sobre una clave de perfil en un archivo.
 
 <!-- snippet: configuration-sources -->
 ```java

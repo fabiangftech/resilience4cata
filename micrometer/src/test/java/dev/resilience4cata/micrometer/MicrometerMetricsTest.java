@@ -58,9 +58,9 @@ class MicrometerMetricsTest {
         })).isInstanceOf(IllegalStateException.class);
 
         assertThat(counters()).isEqualTo(Map.of(
-                "r4c.retry.retries{instance=payments}", 2.0,
-                "r4c.retry.gave.up{instance=payments,reason=max_attempts}", 1.0,
-                "r4c.retry.gave.up{instance=payments,reason=not_retryable}", 1.0));
+                "r4c.retry.retries{name=payments}", 2.0,
+                "r4c.retry.gave.up{name=payments,reason=max_attempts}", 1.0,
+                "r4c.retry.gave.up{name=payments,reason=not_retryable}", 1.0));
     }
 
     @Test
@@ -72,11 +72,11 @@ class MicrometerMetricsTest {
         CircuitBreakerHandle breaker = registry.circuitBreaker("inventory");
 
         assertThat(gauges("r4c.circuitbreaker.state")).isEqualTo(Map.of(
-                "r4c.circuitbreaker.state{instance=inventory,state=closed}", 1.0,
-                "r4c.circuitbreaker.state{instance=inventory,state=open}", 0.0,
-                "r4c.circuitbreaker.state{instance=inventory,state=half_open}", 0.0,
-                "r4c.circuitbreaker.state{instance=inventory,state=forced_open}", 0.0,
-                "r4c.circuitbreaker.state{instance=inventory,state=disabled}", 0.0));
+                "r4c.circuitbreaker.state{name=inventory,state=closed}", 1.0,
+                "r4c.circuitbreaker.state{name=inventory,state=open}", 0.0,
+                "r4c.circuitbreaker.state{name=inventory,state=half_open}", 0.0,
+                "r4c.circuitbreaker.state{name=inventory,state=forced_open}", 0.0,
+                "r4c.circuitbreaker.state{name=inventory,state=disabled}", 0.0));
         assertThat(gauge("r4c.circuitbreaker.failure.rate", "inventory").value()).isNaN();
         assertThat(gauge("r4c.circuitbreaker.failure.rate", "inventory").getId().getBaseUnit()).isEqualTo("percent");
         assertThat(gauge("r4c.circuitbreaker.slow.call.rate", "inventory").getId().getBaseUnit()).isEqualTo("percent");
@@ -96,9 +96,9 @@ class MicrometerMetricsTest {
         breaker.forceOpen();
 
         assertThat(counters()).isEqualTo(Map.of(
-                "r4c.circuitbreaker.transitions{from=closed,instance=inventory,to=open}", 1.0,
-                "r4c.circuitbreaker.transitions{from=open,instance=inventory,to=forced_open}", 1.0,
-                "r4c.calls.rejected{instance=inventory,kind=circuitbreaker}", 1.0));
+                "r4c.circuitbreaker.transitions{from=closed,name=inventory,to=open}", 1.0,
+                "r4c.circuitbreaker.transitions{from=open,name=inventory,to=forced_open}", 1.0,
+                "r4c.calls.rejected{kind=circuitbreaker,name=inventory}", 1.0));
         assertThat(gauge("r4c.circuitbreaker.state", "inventory", "state", "forced_open").value()).isEqualTo(1.0);
     }
 
@@ -143,8 +143,8 @@ class MicrometerMetricsTest {
         assertThat(gauge("r4c.adaptivelimit.concurrent.calls", "orders").value()).isEqualTo(0.0);
         assertThat(gauge("r4c.adaptivelimit.limit", "orders").value()).isEqualTo(2.0);
         assertThat(counters()).isEqualTo(Map.of(
-                "r4c.calls.rejected{instance=orders,kind=adaptivelimit}", 1.0,
-                "r4c.adaptivelimit.limit.changes{instance=orders}", 1.0));
+                "r4c.calls.rejected{kind=adaptivelimit,name=orders}", 1.0,
+                "r4c.adaptivelimit.limit.changes{name=orders}", 1.0));
     }
 
     @Test
@@ -178,8 +178,8 @@ class MicrometerMetricsTest {
         assertThat(gauge("r4c.ratelimiter.available.permits", "quotes").value()).isEqualTo(2.0);
 
         assertThat(counters()).isEqualTo(Map.of(
-                "r4c.calls.rejected{instance=reports,kind=bulkhead}", 1.0,
-                "r4c.calls.rejected{instance=quotes,kind=ratelimiter}", 1.0));
+                "r4c.calls.rejected{kind=bulkhead,name=reports}", 1.0,
+                "r4c.calls.rejected{kind=ratelimiter,name=quotes}", 1.0));
     }
 
     @Test
@@ -208,14 +208,14 @@ class MicrometerMetricsTest {
         assertThat(aborted).isCompletedExceptionally();
         assertThat(noBudget).isCompletedExceptionally();
         assertThat(counters()).isEqualTo(Map.of(
-                "r4c.hedge.hedged{instance=quotes,reason=delay}", 1.0,
-                "r4c.hedge.hedged{instance=quotes,reason=failure}", 2.0,
-                "r4c.hedge.won{instance=quotes}", 1.0,
-                "r4c.hedge.failed{instance=quotes}", 1.0,
-                "r4c.hedge.skipped{instance=strict,reason=aborted}", 1.0,
-                "r4c.hedge.failed{instance=strict}", 1.0,
-                "r4c.hedge.skipped{instance=rare,reason=budget_exhausted}", 1.0,
-                "r4c.hedge.failed{instance=rare}", 1.0));
+                "r4c.hedge.hedged{name=quotes,reason=delay}", 1.0,
+                "r4c.hedge.hedged{name=quotes,reason=failure}", 2.0,
+                "r4c.hedge.won{name=quotes}", 1.0,
+                "r4c.hedge.failed{name=quotes}", 1.0,
+                "r4c.hedge.skipped{name=strict,reason=aborted}", 1.0,
+                "r4c.hedge.failed{name=strict}", 1.0,
+                "r4c.hedge.skipped{name=rare,reason=budget_exhausted}", 1.0,
+                "r4c.hedge.failed{name=rare}", 1.0));
     }
 
     @Test
@@ -236,8 +236,8 @@ class MicrometerMetricsTest {
         })).isEqualTo("cached");
 
         assertThat(counters()).isEqualTo(Map.of(
-                "r4c.timeout.timed.out{instance=catalog}", 1.0,
-                "r4c.fallback.applied{instance=prices}", 1.0));
+                "r4c.timeout.timed.out{name=catalog}", 1.0,
+                "r4c.fallback.applied{name=prices}", 1.0));
     }
 
     @Test
@@ -283,12 +283,12 @@ class MicrometerMetricsTest {
             throw new IOException("down");
         })).isInstanceOf(IOException.class);
 
-        assertThat(meters.find("r4c.circuitbreaker.state").tag("instance", "a").gauges()).hasSize(5);
-        assertThat(meters.find("r4c.circuitbreaker.state").tag("instance", "b").gauges()).hasSize(5);
-        assertThat(other.find("r4c.circuitbreaker.state").tag("instance", "a").gauges()).hasSize(5);
-        assertThat(other.find("r4c.circuitbreaker.state").tag("instance", "b").gauges()).isEmpty();
-        assertThat(meters.get("r4c.retry.retries").tag("instance", "a").counter().count()).isEqualTo(1.0);
-        assertThat(other.get("r4c.retry.retries").tag("instance", "a").counter().count()).isEqualTo(1.0);
+        assertThat(meters.find("r4c.circuitbreaker.state").tag("name", "a").gauges()).hasSize(5);
+        assertThat(meters.find("r4c.circuitbreaker.state").tag("name", "b").gauges()).hasSize(5);
+        assertThat(other.find("r4c.circuitbreaker.state").tag("name", "a").gauges()).hasSize(5);
+        assertThat(other.find("r4c.circuitbreaker.state").tag("name", "b").gauges()).isEmpty();
+        assertThat(meters.get("r4c.retry.retries").tag("name", "a").counter().count()).isEqualTo(1.0);
+        assertThat(other.get("r4c.retry.retries").tag("name", "a").counter().count()).isEqualTo(1.0);
     }
 
     @Test
@@ -418,12 +418,12 @@ class MicrometerMetricsTest {
             }
         }
 
-        assertThat(concurrentMeters.get("r4c.retry.retries").tag("instance", "common").counter().count())
+        assertThat(concurrentMeters.get("r4c.retry.retries").tag("name", "common").counter().count())
                 .isEqualTo(threads * calls);
         assertThat(concurrentMeters.get("r4c.retry.gave.up").tag("reason", "max_attempts").counter().count())
                 .isEqualTo(threads * calls);
         for (int t = 0; t < threads; t++) {
-            assertThat(concurrentMeters.find("r4c.circuitbreaker.state").tag("instance", "own-" + t).gauges()).hasSize(5);
+            assertThat(concurrentMeters.find("r4c.circuitbreaker.state").tag("name", "own-" + t).gauges()).hasSize(5);
         }
     }
 
@@ -448,7 +448,7 @@ class MicrometerMetricsTest {
     }
 
     private Gauge gauge(String name, String instance, String... tags) {
-        return meters.get(name).tag("instance", instance).tags(tags).gauge();
+        return meters.get(name).tag("name", instance).tags(tags).gauge();
     }
 
     private List<String> meterNames() {

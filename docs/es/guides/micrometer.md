@@ -58,7 +58,7 @@ metrics.bindTo(registry); // gauges, for every breaker, bulkhead and rate limite
 - `register(builder)` agrega un listener de eventos al builder y devuelve el builder, para que sigas configurándolo (`.retry(…)`, `.listen(…)`, [configuración externa](configuration.md)) antes de `build()`. Tiene que ejecutarse antes de `build()`: los listeners quedan fijos cuando se construye el registry.
 - `bindTo(registry)` registra los gauges de las instancias que existen y de cada instancia que el registry cree después. Las instancias se crean al envolver un servicio (`Resilient.of`, `Resilient.create`) o al construir un `Pipeline`, así que puedes conectar justo después de `build()`, antes de envolver nada.
 
-Los servicios anotados y los [pipelines](pipeline.md) se reportan igual. El tag `instance` es el id de instancia: el `name` de la anotación, el id derivado `pkg.Type#method(java.lang.String)` cuando no hay nombre, o el id del pipeline.
+Los servicios anotados y los [pipelines](pipeline.md) se reportan igual. El tag `name` es el id de instancia: el `name` de la anotación, el id derivado `pkg.Type#method(java.lang.String)` cuando no hay nombre, o el id del pipeline.
 
 ## Métricas :id=metrics
 
@@ -66,26 +66,26 @@ Los nombres y tags son los de [Observabilidad](observability.md#metric-names); l
 
 | Meter | Tipo | Tags | En Prometheus |
 |---|---|---|---|
-| `r4c.calls.rejected` | counter | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `r4c_calls_rejected_total` |
-| `r4c.circuitbreaker.transitions` | counter | `instance`, `from`, `to` | `r4c_circuitbreaker_transitions_total` |
-| `r4c.retry.retries` | counter | `instance` | `r4c_retry_retries_total` |
-| `r4c.retry.gave.up` | counter | `instance`, `reason` | `r4c_retry_gave_up_total` |
-| `r4c.hedge.hedged` | counter | `instance`, `reason` | `r4c_hedge_hedged_total` |
-| `r4c.hedge.won` | counter | `instance` | `r4c_hedge_won_total` |
-| `r4c.hedge.skipped` | counter | `instance`, `reason` | `r4c_hedge_skipped_total` |
-| `r4c.hedge.failed` | counter | `instance` | `r4c_hedge_failed_total` |
-| `r4c.adaptivelimit.limit.changes` | counter | `instance` | `r4c_adaptivelimit_limit_changes_total` |
-| `r4c.timeout.timed.out` | counter | `instance` | `r4c_timeout_timed_out_total` |
-| `r4c.fallback.applied` | counter | `instance` | `r4c_fallback_applied_total` |
-| `r4c.circuitbreaker.state` | gauge | `instance`, `state` | `r4c_circuitbreaker_state` |
-| `r4c.circuitbreaker.failure.rate` | gauge, porcentaje | `instance` | `r4c_circuitbreaker_failure_rate_percent` |
-| `r4c.circuitbreaker.slow.call.rate` | gauge, porcentaje | `instance` | `r4c_circuitbreaker_slow_call_rate_percent` |
-| `r4c.bulkhead.concurrent.calls` | gauge | `instance` | `r4c_bulkhead_concurrent_calls` |
-| `r4c.bulkhead.waiting.calls` | gauge | `instance` | `r4c_bulkhead_waiting_calls` |
-| `r4c.bulkhead.max.concurrent` | gauge | `instance` | `r4c_bulkhead_max_concurrent` |
-| `r4c.ratelimiter.available.permits` | gauge | `instance` | `r4c_ratelimiter_available_permits` |
-| `r4c.adaptivelimit.limit` | gauge | `instance` | `r4c_adaptivelimit_limit` |
-| `r4c.adaptivelimit.concurrent.calls` | gauge | `instance` | `r4c_adaptivelimit_concurrent_calls` |
+| `r4c.calls.rejected` | counter | `name`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `r4c_calls_rejected_total` |
+| `r4c.circuitbreaker.transitions` | counter | `name`, `from`, `to` | `r4c_circuitbreaker_transitions_total` |
+| `r4c.retry.retries` | counter | `name` | `r4c_retry_retries_total` |
+| `r4c.retry.gave.up` | counter | `name`, `reason` | `r4c_retry_gave_up_total` |
+| `r4c.hedge.hedged` | counter | `name`, `reason` | `r4c_hedge_hedged_total` |
+| `r4c.hedge.won` | counter | `name` | `r4c_hedge_won_total` |
+| `r4c.hedge.skipped` | counter | `name`, `reason` | `r4c_hedge_skipped_total` |
+| `r4c.hedge.failed` | counter | `name` | `r4c_hedge_failed_total` |
+| `r4c.adaptivelimit.limit.changes` | counter | `name` | `r4c_adaptivelimit_limit_changes_total` |
+| `r4c.timeout.timed.out` | counter | `name` | `r4c_timeout_timed_out_total` |
+| `r4c.fallback.applied` | counter | `name` | `r4c_fallback_applied_total` |
+| `r4c.circuitbreaker.state` | gauge | `name`, `state` | `r4c_circuitbreaker_state` |
+| `r4c.circuitbreaker.failure.rate` | gauge, porcentaje | `name` | `r4c_circuitbreaker_failure_rate_percent` |
+| `r4c.circuitbreaker.slow.call.rate` | gauge, porcentaje | `name` | `r4c_circuitbreaker_slow_call_rate_percent` |
+| `r4c.bulkhead.concurrent.calls` | gauge | `name` | `r4c_bulkhead_concurrent_calls` |
+| `r4c.bulkhead.waiting.calls` | gauge | `name` | `r4c_bulkhead_waiting_calls` |
+| `r4c.bulkhead.max.concurrent` | gauge | `name` | `r4c_bulkhead_max_concurrent` |
+| `r4c.ratelimiter.available.permits` | gauge | `name` | `r4c_ratelimiter_available_permits` |
+| `r4c.adaptivelimit.limit` | gauge | `name` | `r4c_adaptivelimit_limit` |
+| `r4c.adaptivelimit.concurrent.calls` | gauge | `name` | `r4c_adaptivelimit_concurrent_calls` |
 
 Los valores de los tags van en minúsculas: estados `closed`, `open`, `half_open`, `forced_open`, `disabled`; motivos del retry `max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`; motivos del hedge `delay`, `failure` (`hedged`) y `budget_exhausted`, `rejected`, `aborted` (`skipped`) (un motivo agregado en una versión posterior aparece solo).
 
@@ -101,22 +101,22 @@ El `PaymentGateway` de estos ejemplos tiene `@Retry(maxAttempts = 3)`, `@Circuit
 
 <!-- snippet: micrometer-prometheus -->
 ```text
-r4c_bulkhead_concurrent_calls{instance="payments"} 0.0
-r4c_bulkhead_max_concurrent{instance="payments"} 10.0
-r4c_bulkhead_waiting_calls{instance="payments"} 0.0
-r4c_calls_rejected_total{instance="payments",kind="circuitbreaker"} 1.0
-r4c_circuitbreaker_failure_rate_percent{instance="payments"} NaN
-r4c_circuitbreaker_slow_call_rate_percent{instance="payments"} NaN
-r4c_circuitbreaker_state{instance="payments",state="closed"} 0.0
-r4c_circuitbreaker_state{instance="payments",state="disabled"} 0.0
-r4c_circuitbreaker_state{instance="payments",state="forced_open"} 0.0
-r4c_circuitbreaker_state{instance="payments",state="half_open"} 0.0
-r4c_circuitbreaker_state{instance="payments",state="open"} 1.0
-r4c_circuitbreaker_transitions_total{from="closed",instance="payments",to="open"} 1.0
-r4c_ratelimiter_available_permits{instance="payments"} 98.0
-r4c_retry_gave_up_total{instance="payments",reason="max_attempts"} 1.0
-r4c_retry_gave_up_total{instance="payments",reason="not_retryable"} 1.0
-r4c_retry_retries_total{instance="payments"} 3.0
+r4c_bulkhead_concurrent_calls{name="payments"} 0.0
+r4c_bulkhead_max_concurrent{name="payments"} 10.0
+r4c_bulkhead_waiting_calls{name="payments"} 0.0
+r4c_calls_rejected_total{kind="circuitbreaker",name="payments"} 1.0
+r4c_circuitbreaker_failure_rate_percent{name="payments"} NaN
+r4c_circuitbreaker_slow_call_rate_percent{name="payments"} NaN
+r4c_circuitbreaker_state{name="payments",state="closed"} 0.0
+r4c_circuitbreaker_state{name="payments",state="disabled"} 0.0
+r4c_circuitbreaker_state{name="payments",state="forced_open"} 0.0
+r4c_circuitbreaker_state{name="payments",state="half_open"} 0.0
+r4c_circuitbreaker_state{name="payments",state="open"} 1.0
+r4c_circuitbreaker_transitions_total{from="closed",name="payments",to="open"} 1.0
+r4c_ratelimiter_available_permits{name="payments"} 98.0
+r4c_retry_gave_up_total{name="payments",reason="max_attempts"} 1.0
+r4c_retry_gave_up_total{name="payments",reason="not_retryable"} 1.0
+r4c_retry_retries_total{name="payments"} 3.0
 ```
 
 La tasa de fallos es NaN porque el breaker está abierto. El rate limiter muestra 98 de 100 permisos: cuatro intentos tomaron uno cada uno, y las esperas entre reintentos devolvieron algunos (la prueba corre sobre el [reloj manual](testing.md), así que los números son exactos).
@@ -140,7 +140,7 @@ PromQL para los paneles que necesitan la mayoría de los servicios:
 
 ## Cardinalidad :id=cardinality
 
-Cada serie lleva `instance`, y sus otros tags tienen un conjunto fijo de valores, así que el número de series crece con el número de instancias, no con el tráfico:
+Cada serie lleva `name`, y sus otros tags tienen un conjunto fijo de valores, así que el número de series crece con el número de instancias, no con el tráfico:
 
 - un circuit breaker: 7 series de gauges, más hasta 25 series de `transitions` (en la práctica, las pocas transiciones que ocurren) y una de `rejected`;
 - un retry: una serie `retries` y una serie `gave.up` por cada motivo que ocurrió;

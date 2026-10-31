@@ -67,30 +67,30 @@ PaymentGateway payments = Resilient.of(PaymentGateway.class, delegate, registry)
 
 ## Metrics :id=metrics
 
-Every metric has an `instance` attribute: the policy instance id (the `name` in the annotation, the derived `pkg.Type#method(...)` id, or the pipeline id). Instance ids are fixed in your code, so the attribute is bounded. Attribute values are lowercase.
+Every metric has a `name` attribute: the policy instance id (the `name` in the annotation, the derived `pkg.Type#method(...)` id, or the pipeline id). Instance ids are fixed in your code, so the attribute is bounded. Attribute values are lowercase.
 
 | Name | OpenTelemetry instrument | Unit | Attributes | Source |
 |---|---|---|---|---|
-| `r4c.calls.rejected` | `LongCounter` | `{call}` | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CircuitBreakerEvent.CallNotPermitted`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
-| `r4c.circuitbreaker.transitions` | `LongCounter` | `{transition}` | `instance`, `from`, `to` (`closed`, `open`, `half_open`, `forced_open`, `disabled`) | `CircuitBreakerEvent.StateTransition` |
-| `r4c.retry.retries` | `LongCounter` | `{retry}` | `instance` | `RetryEvent.Retrying` |
-| `r4c.retry.gave.up` | `LongCounter` | `{call}` | `instance`, `reason` (`max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`) | `RetryEvent.GaveUp` |
-| `r4c.hedge.hedged` | `LongCounter` | `{attempt}` | `instance`, `reason` (`delay`, `failure`) | `HedgeEvent.Hedged` |
-| `r4c.hedge.won` | `LongCounter` | `{call}` | `instance` | `HedgeEvent.Won` |
-| `r4c.hedge.skipped` | `LongCounter` | `{attempt}` | `instance`, `reason` (`budget_exhausted`, `rejected`, `aborted`) | `HedgeEvent.Skipped` |
-| `r4c.hedge.failed` | `LongCounter` | `{call}` | `instance` | `HedgeEvent.Failed` |
-| `r4c.adaptivelimit.limit.changes` | `LongCounter` | `{window}` | `instance` | `AdaptiveLimitEvent.LimitChanged` |
-| `r4c.timeout.timed.out` | `LongCounter` | `{call}` | `instance` | `TimeoutEvent.TimedOut` |
-| `r4c.fallback.applied` | `LongCounter` | `{call}` | `instance` | `FallbackEvent.Applied` |
-| `r4c.circuitbreaker.state` | `ObservableLongGauge` | none | `instance`, `state`: 1 for the current state, 0 for the other four | snapshot `state` |
-| `r4c.circuitbreaker.failure.rate` | `ObservableDoubleGauge` | `%` | `instance` | snapshot `failureRate` |
-| `r4c.circuitbreaker.slow.call.rate` | `ObservableDoubleGauge` | `%` | `instance` | snapshot `slowCallRate` |
-| `r4c.bulkhead.concurrent.calls` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `concurrentCalls` |
-| `r4c.bulkhead.waiting.calls` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `waitingCalls` |
-| `r4c.bulkhead.max.concurrent` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `maxConcurrent` |
-| `r4c.ratelimiter.available.permits` | `ObservableLongGauge` | `{permit}` | `instance` | snapshot `availablePermits` |
-| `r4c.adaptivelimit.limit` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `limit` |
-| `r4c.adaptivelimit.concurrent.calls` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `concurrentCalls` |
+| `r4c.calls.rejected` | `LongCounter` | `{call}` | `name`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CircuitBreakerEvent.CallNotPermitted`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
+| `r4c.circuitbreaker.transitions` | `LongCounter` | `{transition}` | `name`, `from`, `to` (`closed`, `open`, `half_open`, `forced_open`, `disabled`) | `CircuitBreakerEvent.StateTransition` |
+| `r4c.retry.retries` | `LongCounter` | `{retry}` | `name` | `RetryEvent.Retrying` |
+| `r4c.retry.gave.up` | `LongCounter` | `{call}` | `name`, `reason` (`max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`) | `RetryEvent.GaveUp` |
+| `r4c.hedge.hedged` | `LongCounter` | `{attempt}` | `name`, `reason` (`delay`, `failure`) | `HedgeEvent.Hedged` |
+| `r4c.hedge.won` | `LongCounter` | `{call}` | `name` | `HedgeEvent.Won` |
+| `r4c.hedge.skipped` | `LongCounter` | `{attempt}` | `name`, `reason` (`budget_exhausted`, `rejected`, `aborted`) | `HedgeEvent.Skipped` |
+| `r4c.hedge.failed` | `LongCounter` | `{call}` | `name` | `HedgeEvent.Failed` |
+| `r4c.adaptivelimit.limit.changes` | `LongCounter` | `{window}` | `name` | `AdaptiveLimitEvent.LimitChanged` |
+| `r4c.timeout.timed.out` | `LongCounter` | `{call}` | `name` | `TimeoutEvent.TimedOut` |
+| `r4c.fallback.applied` | `LongCounter` | `{call}` | `name` | `FallbackEvent.Applied` |
+| `r4c.circuitbreaker.state` | `ObservableLongGauge` | none | `name`, `state`: 1 for the current state, 0 for the other four | snapshot `state` |
+| `r4c.circuitbreaker.failure.rate` | `ObservableDoubleGauge` | `%` | `name` | snapshot `failureRate` |
+| `r4c.circuitbreaker.slow.call.rate` | `ObservableDoubleGauge` | `%` | `name` | snapshot `slowCallRate` |
+| `r4c.bulkhead.concurrent.calls` | `ObservableLongGauge` | `{call}` | `name` | snapshot `concurrentCalls` |
+| `r4c.bulkhead.waiting.calls` | `ObservableLongGauge` | `{call}` | `name` | snapshot `waitingCalls` |
+| `r4c.bulkhead.max.concurrent` | `ObservableLongGauge` | `{call}` | `name` | snapshot `maxConcurrent` |
+| `r4c.ratelimiter.available.permits` | `ObservableLongGauge` | `{permit}` | `name` | snapshot `availablePermits` |
+| `r4c.adaptivelimit.limit` | `ObservableLongGauge` | `{call}` | `name` | snapshot `limit` |
+| `r4c.adaptivelimit.concurrent.calls` | `ObservableLongGauge` | `{call}` | `name` | snapshot `concurrentCalls` |
 
 - **Rates are percentages** (0 to 100) with unit `%`, as in the snapshot and the Micrometer module, not ratios (0 to 1) with unit `1`.
 - **A rate has no point until it means something.** The snapshot reports `-1` until the breaker's window holds `minimumCalls` calls (`halfOpenCalls` while half-open), while the breaker is open, forced open or disabled (there is no window), and, for `slow.call.rate`, when slow-call detection is off. OpenTelemetry points cannot be NaN, so the module records no point for that instance at that collection: the series has a gap.
@@ -128,15 +128,15 @@ OpenTelemetrySdk openTelemetry = OpenTelemetrySdk.builder()
 After a breaker opened, a scrape contains lines like these (from the test; abridged, `# HELP`/`# TYPE` lines and the `otel_scope_version` label left out):
 
 ```text
-r4c_retry_retries_total{instance="payments",otel_scope_name="dev.resilience4cata"} 3.0
-r4c_retry_gave_up_total{instance="payments",otel_scope_name="dev.resilience4cata",reason="max_attempts"} 1.0
-r4c_retry_gave_up_total{instance="payments",otel_scope_name="dev.resilience4cata",reason="not_retryable"} 1.0
-r4c_calls_rejected_total{instance="payments",kind="circuitbreaker",otel_scope_name="dev.resilience4cata"} 1.0
-r4c_circuitbreaker_transitions_total{from="closed",instance="payments",otel_scope_name="dev.resilience4cata",to="open"} 1.0
-r4c_circuitbreaker_state{instance="payments",otel_scope_name="dev.resilience4cata",state="closed"} 0.0
-r4c_circuitbreaker_state{instance="payments",otel_scope_name="dev.resilience4cata",state="open"} 1.0
-r4c_bulkhead_max_concurrent{instance="payments",otel_scope_name="dev.resilience4cata"} 10.0
-r4c_ratelimiter_available_permits{instance="payments",otel_scope_name="dev.resilience4cata"} 100.0
+r4c_retry_retries_total{name="payments",otel_scope_name="dev.resilience4cata"} 3.0
+r4c_retry_gave_up_total{name="payments",otel_scope_name="dev.resilience4cata",reason="max_attempts"} 1.0
+r4c_retry_gave_up_total{name="payments",otel_scope_name="dev.resilience4cata",reason="not_retryable"} 1.0
+r4c_calls_rejected_total{kind="circuitbreaker",name="payments",otel_scope_name="dev.resilience4cata"} 1.0
+r4c_circuitbreaker_transitions_total{from="closed",name="payments",otel_scope_name="dev.resilience4cata",to="open"} 1.0
+r4c_circuitbreaker_state{name="payments",otel_scope_name="dev.resilience4cata",state="closed"} 0.0
+r4c_circuitbreaker_state{name="payments",otel_scope_name="dev.resilience4cata",state="open"} 1.0
+r4c_bulkhead_max_concurrent{name="payments",otel_scope_name="dev.resilience4cata"} 10.0
+r4c_ratelimiter_available_permits{name="payments",otel_scope_name="dev.resilience4cata"} 100.0
 ```
 
 The exporter turns dots into underscores, adds `_total` to counters and `_percent` to the rates (`r4c_circuitbreaker_failure_rate_percent`), and drops the `{call}`-style units: the **names are the same as with Micrometer's Prometheus registry**, so the [PromQL panels](micrometer.md#grafana) of the observability guide work unchanged. The exporter adds `otel_scope_name` and `otel_scope_version` labels (`setOtelScopeLabelsEnabled(false)` removes them) and a `target_info` series.
@@ -170,9 +170,9 @@ The Micrometer module (`resilience4cata-micrometer`) implements the same specifi
 metrics.close(); // at shutdown: removes the gauge callbacks, and the counters stop counting
 ```
 
-`OpenTelemetryMetrics` is `AutoCloseable`. Closing removes the batch callback of every bound registry; the listener stays on the registry (listeners cannot be removed) but records nothing more. `close()` is idempotent, and `bindTo` throws `IllegalStateException` after it. Closing the SDK (`openTelemetry.close()`) is still your job.
+`OpenTelemetryMetrics` is `AutoCloseable`. Closing removes the batch callback of every bound registry; the listener stays on the registry (listeners cannot be removed) but records nothing more. `close()` is idempotent, and `bindTo` does nothing after it, as with Micrometer. Closing the SDK (`openTelemetry.close()`) is still your job.
 
-One `OpenTelemetryMetrics` can bind several registries, but if their instance ids overlap, the gauges report the same attribute sets twice: use one per registry, or distinct ids.
+Binding the same registry again does nothing. One `OpenTelemetryMetrics` can bind several registries, but if their instance ids overlap, the gauges report the same attribute sets twice: use one per registry, or distinct ids.
 
 ## Tracing :id=tracing
 

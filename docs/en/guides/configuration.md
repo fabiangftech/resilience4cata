@@ -88,7 +88,7 @@ ResilienceConfig config = ResilienceConfig.builder()
 
 Files use the `.properties` syntax, read as UTF-8. There is no YAML support and no reloading: the configuration is read once.
 
-When the same key comes from several sources, the stronger source wins: **class path resources < files and `Properties` < environment variables < system properties**. Between two sources of the same kind, the one added last wins. With `precedenceByOrder()`, the one added last wins whatever its kind: the [Spring Boot integration](spring.md) uses it to keep Spring's precedence. A key under an active profile beats a key without a profile, whatever their sources.
+When the same key comes from several sources, the stronger source wins: **class path resources < files and `Properties` < environment variables < system properties**. Between two sources of the same kind, the one added last wins. With `precedenceByOrder()`, the one added last wins whatever its kind: the [Spring Boot integration](spring.md) uses it to keep Spring's precedence. Within one source, a key under an active profile beats the same key without a profile; a stronger source still wins, so an environment variable or a system property set by an operator beats a profile key in a file.
 
 <!-- snippet: configuration-sources -->
 ```java

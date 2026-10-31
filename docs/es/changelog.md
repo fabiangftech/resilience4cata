@@ -20,6 +20,15 @@ Camino a 1.0: la API se está revisando antes de congelarla, así que esta versi
 - `AdaptiveLimitEvent.LimitChanged.windowLatencyNanos` (un `long`) ahora es `windowLatency`, un `Duration` como todas las demás duraciones de los eventos.
 - `LimitExceededException` se renombra a `AdaptiveLimitFullException`, que ya no se confunde con el `RateLimitExceededException` del rate limiter.
 - Los cuatro rechazos (`CallNotPermittedException`, `BulkheadFullException`, `RateLimitExceededException`, `AdaptiveLimitFullException`) extienden la nueva `CallRejectedException`, así que un solo `catch` los maneja todos.
+- **La etiqueta `instance` de las métricas ahora es `name`**, en `resilience4cata-micrometer` y en `resilience4cata-opentelemetry`. Prometheus agrega su propio label `instance` (host:puerto del target) a cada serie que recolecta y renombraba el nuestro a `exported_instance`; los dashboards y alertas que filtran por `instance` deben usar `name`. Los nombres siguen con puntos (el estilo de Micrometer) y las tasas del breaker siguen en porcentaje, ahora documentado como fijo ([Nombres de métricas](guides/observability.md#metric-names)).
+- `OpenTelemetryMetrics.bindTo` se comporta como `MicrometerMetrics.bindTo`: vincular otra vez el mismo registry no hace nada (antes reportaba cada gauge dos veces), y tampoco vincular después de `close()` (antes lanzaba `IllegalStateException`).
+- `PipelineOperator` (para `Mono`) se renombra a `MonoPipelineOperator`, junto a `FluxPipelineOperator`.
+- **Los perfiles ya no ganan a fuentes más fuertes.** Una clave bajo un perfil activo sigue ganando sobre la misma clave sin perfil en la misma fuente, pero una variable de entorno o una propiedad del sistema ahora gana sobre una clave de perfil en un archivo, como en Spring Boot y Quarkus: la variable `R4C_…` de un operador ya no se ignora cuando un perfil pone la misma clave.
+
+### Corregido
+
+- Spring Boot: las claves que empiezan con `r4c.` (el prefijo corto que documenta la referencia de configuración, y que leen Micronaut y Quarkus) se ignoraban en silencio; ahora se leen como las claves `resilience4cata.`. `r4c.spring.*` se salta, como `resilience4cata.spring.*`.
+- La descripción de `r4c.hedge.failed` es "Calls through a hedge that failed": cuenta cada llamada fallida a través de un hedge, se haya lanzado un hedge o no.
 
 ## [0.11.0] - 2026-10-30 :id=0.11.0
 

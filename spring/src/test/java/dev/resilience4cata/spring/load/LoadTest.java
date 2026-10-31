@@ -111,7 +111,7 @@ class LoadTest {
     }
 
     private double rejected(String kind, String instance) {
-        var counter = meters.find("r4c.calls.rejected").tags("kind", kind, "instance", instance).counter();
+        var counter = meters.find("r4c.calls.rejected").tags("kind", kind, "name", instance).counter();
         return counter == null ? 0 : counter.count();
     }
 
@@ -219,7 +219,7 @@ class LoadTest {
         assertThat(statuses).containsOnlyKeys(200).containsEntry(200, 200);
         assertThat(warehouse.calls).as("exactly two attempts per request").hasValue(400);
         assertThat(warehouse.attemptsPerId.values()).allSatisfy(attempts -> assertThat(attempts).hasValue(2));
-        assertThat(meters.find("r4c.retry.retries").tags("instance", "load-shipping").counter().count()).isEqualTo(200);
+        assertThat(meters.find("r4c.retry.retries").tags("name", "load-shipping").counter().count()).isEqualTo(200);
     }
 
     private static void awaitUntil(BooleanSupplier condition) throws InterruptedException {

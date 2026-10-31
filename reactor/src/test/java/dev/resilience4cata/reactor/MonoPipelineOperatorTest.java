@@ -26,8 +26,8 @@ import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
 
-/** {@link PipelineOperator}: a pipeline applied to a {@code Mono}, on a manual clock. */
-class PipelineOperatorTest {
+/** {@link MonoPipelineOperator}: a pipeline applied to a {@code Mono}, on a manual clock. */
+class MonoPipelineOperatorTest {
 
     private static final Duration VERIFY = Duration.ofSeconds(5);
 
@@ -52,7 +52,7 @@ class PipelineOperatorTest {
 
     @Test
     void transformResubscribesToTheSourceForEveryAttempt() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("transform")
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("transform")
                 .retry(r -> r.maxAttempts(3).delay(Duration.ofMillis(10)).backoff(Backoff.FIXED).jitter(Jitter.NONE)).build());
 
         Mono<String> mono = failing(2, "third").transform(operator);
@@ -68,7 +68,7 @@ class PipelineOperatorTest {
 
     @Test
     void deferBuildsTheCallAgainForEveryAttempt() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("defer")
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("defer")
                 .retry(r -> r.maxAttempts(2).delay(Duration.ofMillis(10)).backoff(Backoff.FIXED).jitter(Jitter.NONE)).build());
         AtomicInteger built = new AtomicInteger();
 
@@ -79,7 +79,7 @@ class PipelineOperatorTest {
 
     @Test
     void aSupplierThatThrowsOrReturnsNullIsAFailedAttempt() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("bad-supplier")
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("bad-supplier")
                 .retry(r -> r.maxAttempts(3).delay(Duration.ofMillis(10)).backoff(Backoff.FIXED).jitter(Jitter.NONE)).build());
         AtomicInteger built = new AtomicInteger();
 
@@ -97,7 +97,7 @@ class PipelineOperatorTest {
 
     @Test
     void theRetryGivesUpWithTheLastFailure() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("give-up")
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("give-up")
                 .retry(r -> r.maxAttempts(2).delay(Duration.ofMillis(10)).backoff(Backoff.FIXED).jitter(Jitter.NONE)).build());
 
         StepVerifier.create(failing(5, "never").transform(operator))
@@ -109,7 +109,7 @@ class PipelineOperatorTest {
 
     @Test
     void theFallbackGetsTheFailure() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("fallback")
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("fallback")
                 .retry(r -> r.maxAttempts(2).delay(Duration.ofMillis(10)).backoff(Backoff.FIXED).jitter(Jitter.NONE))
                 .fallback(failure -> "fallback for " + failure.getMessage())
                 .build());
@@ -124,16 +124,16 @@ class PipelineOperatorTest {
     void theRejectionsOfEveryPolicyAreEmittedAsErrors() {
         Pipeline<String> breaker = pipeline("open").circuitBreaker().build();
         registry.circuitBreaker("open").forceOpen();
-        StepVerifier.create(Mono.just("x").transform(PipelineOperator.of(breaker)))
+        StepVerifier.create(Mono.just("x").transform(MonoPipelineOperator.of(breaker)))
                 .expectError(CallNotPermittedException.class).verify(VERIFY);
 
-        PipelineOperator<String> bulkhead = PipelineOperator.of(pipeline("full").bulkhead(b -> b.maxConcurrent(1)).build());
+        MonoPipelineOperator<String> bulkhead = MonoPipelineOperator.of(pipeline("full").bulkhead(b -> b.maxConcurrent(1)).build());
         Disposable held = Mono.<String>never().transform(bulkhead).subscribe();
         StepVerifier.create(Mono.just("x").transform(bulkhead)).expectError(BulkheadFullException.class).verify(VERIFY);
         held.dispose();
         StepVerifier.create(Mono.just("x").transform(bulkhead)).expectNext("x").expectComplete().verify(VERIFY);
 
-        PipelineOperator<String> limiter = PipelineOperator.of(pipeline("limited")
+        MonoPipelineOperator<String> limiter = MonoPipelineOperator.of(pipeline("limited")
                 .rateLimiter(r -> r.permits(1).period(Duration.ofSeconds(1))).build());
         StepVerifier.create(Mono.just("x").transform(limiter)).expectNext("x").expectComplete().verify(VERIFY);
         StepVerifier.create(Mono.just("x").transform(limiter)).expectError(RateLimitExceededException.class).verify(VERIFY);
@@ -141,7 +141,7 @@ class PipelineOperatorTest {
 
     @Test
     void aTimeoutCancelsTheSource() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("timeout")
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("timeout")
                 .timeout(t -> t.timeout(Duration.ofMillis(200))).build());
         AtomicInteger cancelled = new AtomicInteger();
 
@@ -154,7 +154,7 @@ class PipelineOperatorTest {
 
     @Test
     void aTimeoutInsideTheRetryIsRetried() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("timeout-retry")
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("timeout-retry")
                 .retry(r -> r.maxAttempts(2).delay(Duration.ofMillis(10)).backoff(Backoff.FIXED).jitter(Jitter.NONE))
                 .timeout(t -> t.timeout(Duration.ofMillis(200)))
                 .build());
@@ -172,7 +172,7 @@ class PipelineOperatorTest {
 
     @Test
     void aHedgeSubscribesAgainAndCancelsTheLoser() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("hedge")
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("hedge")
                 .hedge(h -> h.maxAttempts(2).delay(Duration.ofMillis(50))).build());
         Sinks.One<String> slow = Sinks.one();
         Sinks.One<String> fast = Sinks.one();
@@ -191,7 +191,7 @@ class PipelineOperatorTest {
 
     @Test
     void theContextReachesTheSource() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("context").retry().build());
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("context").retry().build());
 
         Mono<String> mono = Mono.deferContextual(view -> Mono.just(view.<String>get("tenant"))).transform(operator);
         StepVerifier.create(mono.contextWrite(Context.of("tenant", "acme"))).expectNext("acme").expectComplete().verify(VERIFY);
@@ -199,7 +199,7 @@ class PipelineOperatorTest {
 
     @Test
     void cancellingTheSubscriptionCancelsTheSourceAndStopsTheRetry() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("cancel")
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("cancel")
                 .retry(r -> r.maxAttempts(3).delay(Duration.ofMillis(10)).backoff(Backoff.FIXED).jitter(Jitter.NONE))
                 .bulkhead(b -> b.maxConcurrent(1))
                 .build());
@@ -217,18 +217,18 @@ class PipelineOperatorTest {
 
     @Test
     void anEmptySourceIsAnEmptyResult() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("empty").retry().build());
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("empty").retry().build());
         StepVerifier.create(Mono.<String>empty().transform(operator)).expectComplete().verify(VERIFY);
     }
 
     @Test
     void anOperatorIsReusableAndRejectsNull() {
-        PipelineOperator<String> operator = PipelineOperator.of(pipeline("reuse").retry().build());
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(pipeline("reuse").retry().build());
         for (int i = 0; i < 3; i++) {
             StepVerifier.create(Mono.just("v" + i).transform(operator)).expectNext("v" + i).expectComplete().verify(VERIFY);
         }
-        assertThat(operator).hasToString("PipelineOperator[Pipeline[reuse, retry]]");
-        assertThatThrownBy(() -> PipelineOperator.of(null)).isInstanceOf(NullPointerException.class);
+        assertThat(operator).hasToString("MonoPipelineOperator[Pipeline[reuse, retry]]");
+        assertThatThrownBy(() -> MonoPipelineOperator.of(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> operator.apply(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> operator.defer(null)).isInstanceOf(NullPointerException.class);
     }

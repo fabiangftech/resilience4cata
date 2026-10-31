@@ -29,7 +29,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
 /**
- * Differential test: a {@code Mono} through {@link PipelineOperator} behaves exactly like a
+ * Differential test: a {@code Mono} through {@link MonoPipelineOperator} behaves exactly like a
  * {@code CompletableFuture} through {@link Pipeline#executeAsync}. Each seed builds a random pipeline
  * (retry or hedge, breaker, timeout, bulkhead, fallback) and a random script of attempt outcomes
  * (values, empty results, failures, slow and never-ending calls), runs several overlapping calls in two
@@ -172,7 +172,7 @@ class MonoEquivalenceTest {
         futures.clock.advanceUntilIdle();
 
         World monos = new World();
-        PipelineOperator<String> operator = PipelineOperator.of(shape.build(monos.registry));
+        MonoPipelineOperator<String> operator = MonoPipelineOperator.of(shape.build(monos.registry));
         for (int call = 0; call < CALLS; call++) {
             int c = call;
             AtomicInteger attempt = new AtomicInteger();

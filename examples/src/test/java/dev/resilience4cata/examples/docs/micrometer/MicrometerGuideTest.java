@@ -42,26 +42,26 @@ class MicrometerGuideTest {
 
         PaymentGateway payments = Resilient.of(PaymentGateway.class, delegate, registry);
 
-        assertThat(meterRegistry.get("r4c.circuitbreaker.state").tags("instance", "payments", "state", "closed").gauge()
+        assertThat(meterRegistry.get("r4c.circuitbreaker.state").tags("name", "payments", "state", "closed").gauge()
                 .value()).isEqualTo(1.0);
-        assertThat(meterRegistry.get("r4c.circuitbreaker.failure.rate").tag("instance", "payments").gauge().value()).isNaN();
+        assertThat(meterRegistry.get("r4c.circuitbreaker.failure.rate").tag("name", "payments").gauge().value()).isNaN();
         for (int i = 0; i < 2; i++) {
             assertThatThrownBy(() -> payments.charge("o-1")).isInstanceOf(RuntimeException.class);
         }
-        assertThat(meterRegistry.get("r4c.retry.retries").tag("instance", "payments").counter().count()).isEqualTo(3.0);
-        assertThat(meterRegistry.get("r4c.retry.gave.up").tags("instance", "payments", "reason", "max_attempts").counter()
+        assertThat(meterRegistry.get("r4c.retry.retries").tag("name", "payments").counter().count()).isEqualTo(3.0);
+        assertThat(meterRegistry.get("r4c.retry.gave.up").tags("name", "payments", "reason", "max_attempts").counter()
                 .count()).isEqualTo(1.0);
-        assertThat(meterRegistry.get("r4c.retry.gave.up").tags("instance", "payments", "reason", "not_retryable").counter()
+        assertThat(meterRegistry.get("r4c.retry.gave.up").tags("name", "payments", "reason", "not_retryable").counter()
                 .count()).isEqualTo(1.0);
-        assertThat(meterRegistry.get("r4c.circuitbreaker.transitions").tags("instance", "payments", "from", "closed", "to", "open")
+        assertThat(meterRegistry.get("r4c.circuitbreaker.transitions").tags("name", "payments", "from", "closed", "to", "open")
                 .counter().count()).isEqualTo(1.0);
-        assertThat(meterRegistry.get("r4c.calls.rejected").tags("instance", "payments", "kind", "circuitbreaker").counter()
+        assertThat(meterRegistry.get("r4c.calls.rejected").tags("name", "payments", "kind", "circuitbreaker").counter()
                 .count()).isEqualTo(1.0);
-        assertThat(meterRegistry.get("r4c.circuitbreaker.state").tags("instance", "payments", "state", "open").gauge()
+        assertThat(meterRegistry.get("r4c.circuitbreaker.state").tags("name", "payments", "state", "open").gauge()
                 .value()).isEqualTo(1.0);
-        assertThat(meterRegistry.get("r4c.bulkhead.max.concurrent").tag("instance", "payments").gauge().value()).isEqualTo(10.0);
+        assertThat(meterRegistry.get("r4c.bulkhead.max.concurrent").tag("name", "payments").gauge().value()).isEqualTo(10.0);
         assertThatThrownBy(() -> payments.charge("o-2")).isInstanceOf(CallNotPermittedException.class);
-        assertThat(meterRegistry.get("r4c.calls.rejected").tags("instance", "payments", "kind", "circuitbreaker").counter()
+        assertThat(meterRegistry.get("r4c.calls.rejected").tags("name", "payments", "kind", "circuitbreaker").counter()
                 .count()).isEqualTo(2.0);
 
         // tag::micrometer-close[]
@@ -85,8 +85,8 @@ class MicrometerGuideTest {
             throw new IOException("down");
         })).isEqualTo("unknown");
 
-        assertThat(meterRegistry.get("r4c.fallback.applied").tag("instance", "inventory").counter().count()).isEqualTo(1.0);
-        assertThat(meterRegistry.get("r4c.ratelimiter.available.permits").tag("instance", "inventory").gauge().value())
+        assertThat(meterRegistry.get("r4c.fallback.applied").tag("name", "inventory").counter().count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("r4c.ratelimiter.available.permits").tag("name", "inventory").gauge().value())
                 .isEqualTo(4.0);
     }
 

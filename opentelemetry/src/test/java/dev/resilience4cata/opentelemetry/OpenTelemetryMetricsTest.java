@@ -64,9 +64,9 @@ class OpenTelemetryMetricsTest {
                 .isInstanceOf(IllegalArgumentException.class);
 
         collect();
-        assertThat(counter("r4c.retry.retries", Attributes.of(key("instance"), "payments"))).isEqualTo(2);
-        assertThat(counter("r4c.retry.gave.up", attrs("instance", "payments", "reason", "max_attempts"))).isEqualTo(1);
-        assertThat(counter("r4c.retry.gave.up", attrs("instance", "payments", "reason", "not_retryable"))).isEqualTo(1);
+        assertThat(counter("r4c.retry.retries", Attributes.of(key("name"), "payments"))).isEqualTo(2);
+        assertThat(counter("r4c.retry.gave.up", attrs("name", "payments", "reason", "max_attempts"))).isEqualTo(1);
+        assertThat(counter("r4c.retry.gave.up", attrs("name", "payments", "reason", "not_retryable"))).isEqualTo(1);
         assertThat(metric("r4c.retry.retries").getUnit()).isEqualTo("{retry}");
         assertThat(metric("r4c.retry.retries").getLongSumData().isMonotonic()).isTrue();
     }
@@ -82,7 +82,7 @@ class OpenTelemetryMetricsTest {
         assertThatThrownBy(() -> pipeline.execute(() -> { throw new IllegalStateException(); }))
                 .isInstanceOf(IllegalStateException.class);
         collect();
-        assertThat(gauge("r4c.circuitbreaker.state", attrs("instance", "inventory", "state", "closed"))).contains(1.0);
+        assertThat(gauge("r4c.circuitbreaker.state", attrs("name", "inventory", "state", "closed"))).contains(1.0);
         // one call in a window of minimumCalls = 2: no rate yet (NaN is not a valid point)
         assertThat(gauge("r4c.circuitbreaker.failure.rate", instance("inventory"))).isEmpty();
         assertThat(gauge("r4c.circuitbreaker.slow.call.rate", instance("inventory"))).isEmpty();
@@ -95,22 +95,22 @@ class OpenTelemetryMetricsTest {
 
         collect();
         assertThat(gauges("r4c.circuitbreaker.state")).isEqualTo(Map.of(
-                "instance=inventory,state=closed", 0.0, "instance=inventory,state=open", 1.0,
-                "instance=inventory,state=half_open", 0.0, "instance=inventory,state=forced_open", 0.0,
-                "instance=inventory,state=disabled", 0.0));
+                "name=inventory,state=closed", 0.0, "name=inventory,state=open", 1.0,
+                "name=inventory,state=half_open", 0.0, "name=inventory,state=forced_open", 0.0,
+                "name=inventory,state=disabled", 0.0));
         // open: no window, so no rates
         assertThat(gauge("r4c.circuitbreaker.failure.rate", instance("inventory"))).isEmpty();
         assertThat(gauge("r4c.circuitbreaker.slow.call.rate", instance("inventory"))).isEmpty();
-        assertThat(counter("r4c.circuitbreaker.transitions", attrs("instance", "inventory", "from", "closed", "to", "open")))
+        assertThat(counter("r4c.circuitbreaker.transitions", attrs("name", "inventory", "from", "closed", "to", "open")))
                 .isEqualTo(1);
-        assertThat(counter("r4c.calls.rejected", attrs("instance", "inventory", "kind", "circuitbreaker"))).isEqualTo(1);
+        assertThat(counter("r4c.calls.rejected", attrs("name", "inventory", "kind", "circuitbreaker"))).isEqualTo(1);
 
         CircuitBreakerHandle breaker = registry.circuitBreaker("inventory");
         breaker.forceOpen();
         collect();
-        assertThat(gauge("r4c.circuitbreaker.state", attrs("instance", "inventory", "state", "forced_open"))).contains(1.0);
+        assertThat(gauge("r4c.circuitbreaker.state", attrs("name", "inventory", "state", "forced_open"))).contains(1.0);
         assertThat(counter("r4c.circuitbreaker.transitions",
-                attrs("instance", "inventory", "from", "open", "to", "forced_open"))).isEqualTo(1);
+                attrs("name", "inventory", "from", "open", "to", "forced_open"))).isEqualTo(1);
     }
 
     @Test
@@ -160,7 +160,7 @@ class OpenTelemetryMetricsTest {
         assertThat(gauge("r4c.bulkhead.waiting.calls", instance("reports"))).contains(0.0);
         assertThat(gauge("r4c.bulkhead.max.concurrent", instance("reports"))).contains(1.0);
         assertThat(metric("r4c.bulkhead.max.concurrent").getType()).isEqualTo(MetricDataType.LONG_GAUGE);
-        assertThat(counter("r4c.calls.rejected", attrs("instance", "reports", "kind", "bulkhead"))).isEqualTo(1);
+        assertThat(counter("r4c.calls.rejected", attrs("name", "reports", "kind", "bulkhead"))).isEqualTo(1);
     }
 
     @Test
@@ -187,8 +187,8 @@ class OpenTelemetryMetricsTest {
         assertThat(gauge("r4c.adaptivelimit.concurrent.calls", instance("orders"))).contains(0.0);
         assertThat(gauge("r4c.adaptivelimit.limit", instance("orders"))).contains(2.0);
         assertThat(metric("r4c.adaptivelimit.limit").getType()).isEqualTo(MetricDataType.LONG_GAUGE);
-        assertThat(counter("r4c.calls.rejected", attrs("instance", "orders", "kind", "adaptivelimit"))).isEqualTo(1);
-        assertThat(counter("r4c.adaptivelimit.limit.changes", attrs("instance", "orders"))).isEqualTo(1);
+        assertThat(counter("r4c.calls.rejected", attrs("name", "orders", "kind", "adaptivelimit"))).isEqualTo(1);
+        assertThat(counter("r4c.adaptivelimit.limit.changes", attrs("name", "orders"))).isEqualTo(1);
     }
 
     @Test
@@ -207,7 +207,7 @@ class OpenTelemetryMetricsTest {
 
         collect();
         assertThat(gauge("r4c.ratelimiter.available.permits", instance("quotes"))).contains(0.0);
-        assertThat(counter("r4c.calls.rejected", attrs("instance", "quotes", "kind", "ratelimiter"))).isEqualTo(1);
+        assertThat(counter("r4c.calls.rejected", attrs("name", "quotes", "kind", "ratelimiter"))).isEqualTo(1);
         assertThat(metric("r4c.ratelimiter.available.permits").getUnit()).isEqualTo("{permit}");
     }
 
@@ -235,12 +235,12 @@ class OpenTelemetryMetricsTest {
 
         assertThat(won).isCompletedWithValue("fast");
         collect();
-        assertThat(counter("r4c.hedge.hedged", attrs("instance", "quotes", "reason", "delay"))).isEqualTo(1);
-        assertThat(counter("r4c.hedge.hedged", attrs("instance", "quotes", "reason", "failure"))).isEqualTo(2);
+        assertThat(counter("r4c.hedge.hedged", attrs("name", "quotes", "reason", "delay"))).isEqualTo(1);
+        assertThat(counter("r4c.hedge.hedged", attrs("name", "quotes", "reason", "failure"))).isEqualTo(2);
         assertThat(counter("r4c.hedge.won", instance("quotes"))).isEqualTo(1);
         assertThat(counter("r4c.hedge.failed", instance("quotes"))).isEqualTo(1);
-        assertThat(counter("r4c.hedge.skipped", attrs("instance", "strict", "reason", "aborted"))).isEqualTo(1);
-        assertThat(counter("r4c.hedge.skipped", attrs("instance", "rare", "reason", "budget_exhausted"))).isEqualTo(1);
+        assertThat(counter("r4c.hedge.skipped", attrs("name", "strict", "reason", "aborted"))).isEqualTo(1);
+        assertThat(counter("r4c.hedge.skipped", attrs("name", "rare", "reason", "budget_exhausted"))).isEqualTo(1);
         assertThat(counter("r4c.hedge.failed", instance("rare"))).isEqualTo(1);
         assertThat(metric("r4c.hedge.hedged").getUnit()).isEqualTo("{attempt}");
         assertThat(metric("r4c.hedge.won").getUnit()).isEqualTo("{call}");
@@ -273,7 +273,7 @@ class OpenTelemetryMetricsTest {
         Pipeline.builder(registry, "later", String.class).circuitBreaker().build();
         collect();
         assertThat(gauge("r4c.bulkhead.max.concurrent", instance("late"))).contains(7.0);
-        assertThat(gauge("r4c.circuitbreaker.state", attrs("instance", "later", "state", "closed"))).contains(1.0);
+        assertThat(gauge("r4c.circuitbreaker.state", attrs("name", "later", "state", "closed"))).contains(1.0);
     }
 
     @Test
@@ -293,8 +293,10 @@ class OpenTelemetryMetricsTest {
         assertThatThrownBy(() -> pipeline.execute(() -> "rejected")).isInstanceOf(RateLimitExceededException.class);
         collect();
         assertThat(gauges("r4c.ratelimiter.available.permits")).isEmpty();
-        assertThat(counter("r4c.calls.rejected", attrs("instance", "orders", "kind", "ratelimiter"))).isEqualTo(1);
-        assertThatThrownBy(() -> metrics.bindTo(registry)).isInstanceOf(IllegalStateException.class);
+        assertThat(counter("r4c.calls.rejected", attrs("name", "orders", "kind", "ratelimiter"))).isEqualTo(1);
+        metrics.bindTo(registry); // does nothing once closed, as with Micrometer
+        collect();
+        assertThat(gauges("r4c.ratelimiter.available.permits")).isEmpty();
     }
 
     @Test
@@ -335,6 +337,23 @@ class OpenTelemetryMetricsTest {
             Class<?> returns = method.getReturnType();
             return returns.isInterface() ? throwingOn(failing, returns) : null;
         }));
+    }
+
+    /** As with Micrometer: binding a registry again adds nothing, and binding after close() does nothing. */
+    @Test
+    void bindingTheSameRegistryAgainOrAfterCloseDoesNothing() {
+        ResilienceRegistry registry = metrics.register(ResilienceTesting.registry(clock)).build();
+        Policies.bulkhead(registry, "Reports#render()", "reports", "", b -> b.maxConcurrent(3), false);
+        metrics.bindTo(registry);
+        metrics.bindTo(registry);
+        collect();
+        assertThat(metric("r4c.bulkhead.max.concurrent").getLongGaugeData().getPoints()).hasSize(1);
+
+        ResilienceRegistry other = ResilienceTesting.registry(clock).build();
+        metrics.close();
+        metrics.bindTo(other);
+        collect();
+        assertThat(collected).noneMatch(m -> m.getName().equals("r4c.bulkhead.max.concurrent"));
     }
 
     @Test
@@ -390,7 +409,7 @@ class OpenTelemetryMetricsTest {
     }
 
     private static Attributes instance(String id) {
-        return Attributes.of(key("instance"), id);
+        return Attributes.of(key("name"), id);
     }
 
     private static Attributes attrs(String... keyValues) {

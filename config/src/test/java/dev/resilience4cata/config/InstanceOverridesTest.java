@@ -168,7 +168,7 @@ class InstanceOverridesTest {
     }
 
     @Test
-    void activeProfilesOverrideInstanceKeys() {
+    void activeProfilesOverrideInstanceKeysOfTheSameSource() {
         ResilienceConfig.Builder builder = text("""
                 instances.p.retry.maxAttempts=2
                 profiles.test.instances.p.retry.maxAttempts=1
@@ -178,7 +178,12 @@ class InstanceOverridesTest {
         assertThat(retry(base, "A#m()", "p").maxAttempts()).isEqualTo(6);
         assertThat(Policies.rateLimiter(base, GET, "", "", null, false).config()).isEqualTo(RateLimiterConfig.DEFAULTS);
         ResilienceRegistry test = builder.profiles("test").build().toRegistry();
-        assertThat(retry(test, "A#m()", "p").maxAttempts()).isEqualTo(1);
+        assertThat(retry(test, "A#m()", "p").maxAttempts()).as("the environment variable still wins").isEqualTo(6);
+        ResilienceRegistry fileOnly = text("""
+                instances.p.retry.maxAttempts=2
+                profiles.test.instances.p.retry.maxAttempts=1
+                """).profiles("test").build().toRegistry();
+        assertThat(retry(fileOnly, "A#m()", "p").maxAttempts()).isEqualTo(1);
         assertThat(Policies.rateLimiter(test, GET, "", "", null, false).config().permits()).isEqualTo(1);
     }
 

@@ -419,7 +419,7 @@ Base: `9a26494` (0.10.0 plus docs). New: `resilience4cata-reactor` and the async
 | bulkhead | **144.1 / 621.7** | 157.5 / 683.7 | 200 | 200 |
 | rate limiter | **166.5 / 351.6** | 184.2 / 659.3 | 200 | 240 / 195 |
 | retry + breaker + timeout + bulkhead | **227.3 / 587.7** | 4337.8 / 5598.1 | 368 | 2624 |
-| same stack, `PipelineOperator` | 251.0 / 606.2 | (the same Resilience4j stack) | 448 | — |
+| same stack, `MonoPipelineOperator` | 251.0 / 606.2 | (the same Resilience4j stack) | 448 | — |
 | no policy, pending (`baselinePending`) | 152.7 / 154.3 | — | 168 | — |
 | timeout, pending | **441.0 / 560.5** | 3725.1 / 6332.8 | 480 | 1787 |
 | stack, pending | **703.1 / 935.5** | 4394.8 / 6513.9 | 912 | 2704 |

@@ -157,12 +157,16 @@ class ConfigurationTest {
     }
 
     @Test
-    void aProfileKeyBeatsAKeyFromAStrongerSource() {
+    void aStrongerSourceBeatsAProfileKeyOfAWeakerOne() {
         Properties file = new Properties();
+        file.setProperty("defaults.retry.maxAttempts", "4");
         file.setProperty("profiles.test.defaults.retry.maxAttempts", "2");
-        ResilienceConfig config = ResilienceConfig.builder().properties(file)
-                .environment(Map.of("R4C_DEFAULTS_RETRY_MAXATTEMPTS", "7")).profiles("test").build();
-        assertThat(config.toRegistry().retryConfig("default").maxAttempts()).isEqualTo(2);
+        ResilienceConfig.Builder builder = ResilienceConfig.builder().properties(file).profiles("test");
+        assertThat(builder.build().toRegistry().retryConfig("default").maxAttempts())
+                .as("within one source, the profile key wins").isEqualTo(2);
+        ResilienceConfig withVariable = builder.environment(Map.of("R4C_DEFAULTS_RETRY_MAXATTEMPTS", "7")).build();
+        assertThat(withVariable.toRegistry().retryConfig("default").maxAttempts())
+                .as("the operator's variable wins").isEqualTo(7);
     }
 
     @Test

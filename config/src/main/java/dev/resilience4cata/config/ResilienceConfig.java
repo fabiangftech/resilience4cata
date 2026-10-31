@@ -82,8 +82,9 @@ import org.jspecify.annotations.Nullable;
  * {@code instances.<id>.*}, which override the annotations so that operators can retune an instance
  * without recompiling. For one
  * key, sources rank: classpath resources &lt; files and {@code Properties} &lt; environment
- * variables &lt; system properties; among sources of the same kind, the one added last wins. A
- * profile key wins over a non-profile key whatever their sources. {@link Builder#precedenceByOrder()}
+ * variables &lt; system properties; among sources of the same kind, the one added last wins. Within one
+ * source, a key of an active profile wins over the same key without a profile; a stronger source wins
+ * even over a profile key of a weaker one. {@link Builder#precedenceByOrder()}
  * ranks sources by the order they were added instead, for frameworks with their own precedence.
  *
  * <h2>Validation</h2>
@@ -547,9 +548,17 @@ public final class ResilienceConfig {
                     : Objects.requireNonNullElseGet(Thread.currentThread().getContextClassLoader(),
                             ResilienceConfig.class::getClassLoader);
             Problems problems = new Problems();
-            Map<String, Setting> merged = merge(loader, problems);
+            List<Map<String, Setting>> bySource = read(loader, problems);
+            Map<String, Setting> merged = new LinkedHashMap<>();
+            bySource.forEach(merged::putAll);
             List<String> active = activeProfiles(merged, problems);
-            Map<String, Setting> effective = effective(merged, active);
+            warnAboutEmptyProfiles(merged, active);
+            // Source first, then profile: a stronger source wins even over a profile key of a weaker one (an
+            // environment variable beats a profile in a file), and within one source a profile key wins.
+            Map<String, Setting> effective = new LinkedHashMap<>();
+            for (Map<String, Setting> own : bySource) {
+                effective.putAll(effective(own, active));
+            }
 
             Map<PolicyType<?, ?>, Map<String, Setting>> defaults = new HashMap<>();
             Map<String, Map<PolicyType<?, ?>, Map<String, Setting>>> own = new HashMap<>();
@@ -583,15 +592,15 @@ public final class ResilienceConfig {
         }
 
         /**
-         * Reads every source, lowest priority first (or in the order added, with {@link #precedenceByOrder()}),
-         * so that later sources override earlier ones.
+         * Reads every source, lowest priority first (or in the order added, with {@link #precedenceByOrder()}): one
+         * map per source, so that later ones override earlier ones.
          */
-        private Map<String, Setting> merge(ClassLoader loader, Problems problems) {
+        private List<Map<String, Setting>> read(ClassLoader loader, Problems problems) {
             List<Sources.Source> ordered = new ArrayList<>(sources);
             if (!precedenceByOrder) {
                 ordered.sort(Comparator.comparingInt(Sources.Source::priority));
             }
-            Map<String, Setting> merged = new LinkedHashMap<>();
+            List<Map<String, Setting>> bySource = new ArrayList<>();
             for (Sources.Source source : ordered) {
                 Map<String, Setting> own = new LinkedHashMap<>();
                 for (Sources.Raw raw : source.read(loader, problems)) {
@@ -601,9 +610,9 @@ public final class ResilienceConfig {
                         problems.add(e);
                     }
                 }
-                merged.putAll(own);
+                bySource.add(own);
             }
-            return merged;
+            return bySource;
         }
 
         private static void read(Sources.Source source, Sources.Raw raw, Map<String, Setting> own, ClassLoader loader,
@@ -618,28 +627,31 @@ public final class ResilienceConfig {
             }
         }
 
-        /** The settings without a profile, overridden by those of each active profile in order. */
-        private static Map<String, Setting> effective(Map<String, Setting> merged, List<String> active) {
+        /** One source's settings without a profile, overridden by its settings of each active profile in order. */
+        private static Map<String, Setting> effective(Map<String, Setting> own, List<String> active) {
             Map<String, Setting> effective = new LinkedHashMap<>();
-            for (Setting s : merged.values()) {
+            for (Setting s : own.values()) {
                 if (s.key().profile() == null && s.key().section() != Key.Section.ACTIVE_PROFILES) {
                     effective.put(s.key().canonical(), s);
                 }
             }
             for (String profile : active) {
-                boolean found = false;
-                for (Setting s : merged.values()) {
+                for (Setting s : own.values()) {
                     if (profile.equals(s.key().profile())) {
-                        found = true;
                         effective.put(s.key().withoutProfile().canonical(), s);
                     }
                 }
-                if (!found) {
+            }
+            return effective;
+        }
+
+        private static void warnAboutEmptyProfiles(Map<String, Setting> merged, List<String> active) {
+            for (String profile : active) {
+                if (merged.values().stream().noneMatch(s -> profile.equals(s.key().profile()))) {
                     LOGGER.log(System.Logger.Level.WARNING, "resilience4cata profile ''{0}'' is active but no key"
                             + " sets anything for it (profiles.{0}.*)", profile);
                 }
             }
-            return effective;
         }
 
         /** Each named config with the settings it inherits through {@code extends} merged in. */

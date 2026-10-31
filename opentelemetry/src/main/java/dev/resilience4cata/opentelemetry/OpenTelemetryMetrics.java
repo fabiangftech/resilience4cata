@@ -30,10 +30,13 @@ import io.opentelemetry.api.metrics.ObservableLongMeasurement;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
@@ -113,7 +116,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     /** Gauge: calls inside the adaptive limit. */
     public static final String LIMIT_CONCURRENT_CALLS = "r4c.adaptivelimit.concurrent.calls";
 
-    static final AttributeKey<String> INSTANCE = AttributeKey.stringKey("instance");
+    static final AttributeKey<String> NAME = AttributeKey.stringKey("name");
     static final AttributeKey<String> KIND = AttributeKey.stringKey("kind");
     static final AttributeKey<String> FROM = AttributeKey.stringKey("from");
     static final AttributeKey<String> TO = AttributeKey.stringKey("to");
@@ -160,6 +163,8 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     private final ConcurrentHashMap<String, Attributes[]> stateAttributes = new ConcurrentHashMap<>();
 
     private final List<BatchCallback> callbacks = new ArrayList<>();
+    /** The registries bound so far, weakly: binding one does not keep it alive. Guarded by {@code callbacks}. */
+    private final Set<ResilienceRegistry> bound = Collections.newSetFromMap(new WeakHashMap<>());
     private volatile boolean closed;
 
     private OpenTelemetryMetrics(Meter meter) {
@@ -172,7 +177,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
         hedged = counter(HEDGED, ATTEMPT_UNIT, "Hedged attempts started, by reason");
         hedgeWon = counter(HEDGE_WON, CALL_UNIT, "Calls won by a hedged attempt rather than the first one");
         hedgeSkipped = counter(HEDGE_SKIPPED, ATTEMPT_UNIT, "Hedged attempts not started, by reason");
-        hedgeFailed = counter(HEDGE_FAILED, CALL_UNIT, "Hedged calls that failed");
+        hedgeFailed = counter(HEDGE_FAILED, CALL_UNIT, "Calls through a hedge that failed");
         limitChanges = counter(LIMIT_CHANGES, "{window}", "Windows after which an adaptive limit moved its limit");
         timedOut = counter(TIMED_OUT, CALL_UNIT, "Calls that timed out");
         fallbacks = counter(FALLBACK_APPLIED, CALL_UNIT, "Failures answered by a fallback");
@@ -219,14 +224,19 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     /**
      * Registers the gauges for a registry. They are read at each collection from
      * {@link ResilienceRegistry#snapshot()}, so policy instances created later are reported too: call it
-     * once, whenever convenient. Binding several registries whose instance ids overlap reports the same
-     * attribute sets twice; use one registry per {@code OpenTelemetryMetrics}.
+     * once, whenever convenient. Binding the same registry again does nothing, as with Micrometer; binding
+     * several registries whose instance ids overlap reports the same attribute sets twice, so use one registry
+     * per {@code OpenTelemetryMetrics}. Does nothing after {@link #close()}.
      *
      * @param registry the registry
-     * @throws IllegalStateException if these metrics are closed
      */
     public void bindTo(ResilienceRegistry registry) {
         Objects.requireNonNull(registry, "registry");
+        synchronized (callbacks) {
+            if (closed || bound.contains(registry)) {
+                return;
+            }
+        }
         ObservableLongMeasurement state = meter.gaugeBuilder(STATE).ofLongs()
                 .setDescription("1 for the circuit breaker's current state, 0 for the others").buildObserver();
         ObservableDoubleMeasurement failureRate = meter.gaugeBuilder(FAILURE_RATE).setUnit("%")
@@ -247,8 +257,8 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
                 limitConcurrent);
         Runnable observe = () -> gauges.observe(registry.snapshot());
         synchronized (callbacks) { // cold: once per bind, never on a call path
-            if (closed) {
-                throw new IllegalStateException("These OpenTelemetryMetrics are closed: create new ones to bind a registry.");
+            if (closed || !bound.add(registry)) {
+                return; // closed, or bound by another thread since the check above
             }
             callbacks.add(meter.batchCallback(observe, state, failureRate, slowCallRate, concurrent, waiting,
                     maxConcurrent, permits, limit, limitConcurrent));
@@ -335,7 +345,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
             return cached(stateAttributes, id, i -> {
                 Attributes[] all = new Attributes[STATES.length];
                 for (CircuitBreakerState breakerState : STATES) {
-                    all[breakerState.ordinal()] = Attributes.of(INSTANCE, i, STATE_KEY, lower(breakerState));
+                    all[breakerState.ordinal()] = Attributes.of(NAME, i, STATE_KEY, lower(breakerState));
                 }
                 return all;
             });
@@ -386,19 +396,19 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
         }
 
         private Attributes breakerRejection(String id) {
-            return cached(breakerRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "circuitbreaker"));
+            return cached(breakerRejections, id, i -> Attributes.of(NAME, i, KIND, "circuitbreaker"));
         }
 
         private Attributes limiterRejection(String id) {
-            return cached(limiterRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "ratelimiter"));
+            return cached(limiterRejections, id, i -> Attributes.of(NAME, i, KIND, "ratelimiter"));
         }
 
         private Attributes bulkheadRejection(String id) {
-            return cached(bulkheadRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "bulkhead"));
+            return cached(bulkheadRejections, id, i -> Attributes.of(NAME, i, KIND, "bulkhead"));
         }
 
         private Attributes adaptiveLimitRejection(String id) {
-            return cached(adaptiveLimitRejections, id, i -> Attributes.of(INSTANCE, i, KIND, "adaptivelimit"));
+            return cached(adaptiveLimitRejections, id, i -> Attributes.of(NAME, i, KIND, "adaptivelimit"));
         }
 
         private Attributes[] transitions(String id) {
@@ -407,7 +417,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
                 for (CircuitBreakerState from : STATES) {
                     for (CircuitBreakerState to : STATES) {
                         all[from.ordinal() * STATES.length + to.ordinal()] =
-                                Attributes.of(INSTANCE, i, FROM, lower(from), TO, lower(to));
+                                Attributes.of(NAME, i, FROM, lower(from), TO, lower(to));
                     }
                 }
                 return all;
@@ -418,7 +428,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
             return cached(hedgeReasonAttributes, id, i -> {
                 Attributes[] all = new Attributes[HEDGE_REASONS.length];
                 for (HedgeEvent.Reason reason : HEDGE_REASONS) {
-                    all[reason.ordinal()] = Attributes.of(INSTANCE, i, REASON, lower(reason));
+                    all[reason.ordinal()] = Attributes.of(NAME, i, REASON, lower(reason));
                 }
                 return all;
             });
@@ -428,7 +438,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
             return cached(skipReasonAttributes, id, i -> {
                 Attributes[] all = new Attributes[SKIP_REASONS.length];
                 for (HedgeEvent.SkipReason reason : SKIP_REASONS) {
-                    all[reason.ordinal()] = Attributes.of(INSTANCE, i, REASON, lower(reason));
+                    all[reason.ordinal()] = Attributes.of(NAME, i, REASON, lower(reason));
                 }
                 return all;
             });
@@ -438,7 +448,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
             return cached(reasonAttributes, id, i -> {
                 Attributes[] all = new Attributes[REASONS.length];
                 for (RetryEvent.Reason reason : REASONS) {
-                    all[reason.ordinal()] = Attributes.of(INSTANCE, i, REASON, lower(reason));
+                    all[reason.ordinal()] = Attributes.of(NAME, i, REASON, lower(reason));
                 }
                 return all;
             });
@@ -447,7 +457,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
 
     @SuppressWarnings("java:S3398") // shared by Gauges, the listener and the tests, so it stays here
     Attributes attributes(String id) {
-        return cached(instanceCache, id, i -> Attributes.of(INSTANCE, i));
+        return cached(instanceCache, id, i -> Attributes.of(NAME, i));
     }
 
 

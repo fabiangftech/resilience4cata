@@ -46,7 +46,7 @@ resilience4cata covers eight policies (retry, hedge, circuit breaker, rate limit
 | `IntervalFunction.ofExponentialBackoff(…)`, `ofExponentialRandomBackoff(…)` | `backoff`, `multiplier`, `maxDelay`, `jitter` |
 | `TimeLimiter` + an executor for blocking code | `@Timeout` on the caller's thread |
 | `resilience4j-hedge`: `Hedge.of(config).decorateCompletionStage(…)` | [`@Hedge`](../policies/hedge.md) on a method that returns a `CompletableFuture`, or `Pipeline…hedge(…)` with `executeAsync` ([mapping](#map-hedge)) |
-| `mono.transformDeferred(RetryOperator.of(retry))` and the other Reactor operators, on a `Mono` | a `Mono` method with the annotations, or `mono.transform(PipelineOperator.of(pipeline))` ([below](#reactor)) |
+| `mono.transformDeferred(RetryOperator.of(retry))` and the other Reactor operators, on a `Mono` | a `Mono` method with the annotations, or `mono.transform(MonoPipelineOperator.of(pipeline))` ([below](#reactor)) |
 | the same operators on a `Flux` | a `Flux` method with the annotations, or `flux.transform(FluxPipelineOperator.of(pipeline))` ([below](#reactor)) |
 | `ThreadPoolBulkhead`, `Cache`, RxJava/Kotlin operators | no equivalent |
 
@@ -296,12 +296,12 @@ Mono<Price> price = webClient.get().uri("/prices/{sku}", sku).retrieve().bodyToM
         .transformDeferred(RetryOperator.of(retry));
 ```
 
-becomes, with `resilience4cata-reactor`, a `Mono` method with the annotations (`@Retry`, `@CircuitBreaker`, `@Timeout` on `Mono<Price> price(String sku)`), or, for code you cannot annotate, one operator for the whole pipeline: `.transform(PipelineOperator.of(pipeline))`. See [Project Reactor](../guides/reactor.md).
+becomes, with `resilience4cata-reactor`, a `Mono` method with the annotations (`@Retry`, `@CircuitBreaker`, `@Timeout` on `Mono<Price> price(String sku)`), or, for code you cannot annotate, one operator for the whole pipeline: `.transform(MonoPipelineOperator.of(pipeline))`. See [Project Reactor](../guides/reactor.md).
 
 | resilience4j-reactor | resilience4cata-reactor |
 |---|---|
-| one operator per policy, nested by the order of `transformDeferred` | one annotation per policy, nested in the [default order](#order) or `@PolicyOrder`; one `PipelineOperator` for a pipeline |
-| the retry subscribes to the same `Mono` again | a `Mono` method is called again for each attempt (a new `Mono`); `PipelineOperator` subscribes to the same source again, `defer(...)` builds it again |
+| one operator per policy, nested by the order of `transformDeferred` | one annotation per policy, nested in the [default order](#order) or `@PolicyOrder`; one `MonoPipelineOperator` for a pipeline |
+| the retry subscribes to the same `Mono` again | a `Mono` method is called again for each attempt (a new `Mono`); `MonoPipelineOperator` subscribes to the same source again, `defer(...)` builds it again |
 | `TimeLimiterOperator`: `Mono.timeout` on Reactor's parallel scheduler, armed for every subscription | `@Timeout` on the library's timer, skipped for a value that is there at subscription |
 | on a `Flux`, the retry subscribes again after a failure, even when elements were emitted (they come again) | on a `Flux` method, the retry and the fallback act before the first element only; a later failure reaches the subscriber |
 | `TimeLimiterOperator` on a `Flux`: `flux.timeout`, a timer scheduled for every element | `@Timeout` restarted by every element without a timer per element (one clock read) |

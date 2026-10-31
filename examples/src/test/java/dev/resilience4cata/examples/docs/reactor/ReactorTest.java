@@ -7,7 +7,7 @@ import dev.resilience4cata.Pipeline;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
 import dev.resilience4cata.reactor.FluxPipelineOperator;
-import dev.resilience4cata.reactor.PipelineOperator;
+import dev.resilience4cata.reactor.MonoPipelineOperator;
 import dev.resilience4cata.testkit.ManualClock;
 import dev.resilience4cata.testkit.ResilienceTesting;
 import java.io.IOException;
@@ -64,7 +64,7 @@ class ReactorTest {
         Mono<String> webClientCall = Mono.defer(() -> calls.incrementAndGet() == 1
                 ? Mono.error(new IOException("first")) : Mono.just("rates"));
         // tag::reactor-operator[]
-        PipelineOperator<String> resilient = PipelineOperator.of(Pipeline.builder(registry, "rates", String.class)
+        MonoPipelineOperator<String> resilient = MonoPipelineOperator.of(Pipeline.builder(registry, "rates", String.class)
                 .retry(r -> r.maxAttempts(3).delay(Duration.ofMillis(50)))
                 .timeout(t -> t.timeout(Duration.ofSeconds(2)))
                 .build());
@@ -139,7 +139,7 @@ class ReactorTest {
     void aTimeoutWithoutFallbackFailsTheMono() {
         ManualClock clock = new ManualClock();
         ResilienceRegistry registry = ResilienceTesting.registry(clock).build();
-        PipelineOperator<String> timed = PipelineOperator.of(Pipeline.builder(registry, "timed", String.class)
+        MonoPipelineOperator<String> timed = MonoPipelineOperator.of(Pipeline.builder(registry, "timed", String.class)
                 .timeout(t -> t.timeout(Duration.ofSeconds(1))).build());
         StepVerifier.create(Mono.<String>never().transform(timed))
                 .then(() -> clock.advance(Duration.ofSeconds(1)))

@@ -67,6 +67,18 @@ class ConfigurationTest {
                 });
     }
 
+    /** As in the other integrations and in the config module: the short prefix works too; r4c.spring.* is skipped. */
+    @Test
+    void theShortR4cPrefixIsReadAsWell() {
+        runner.withSystemProperties("r4c.defaults.retry.max-attempts=7", "r4c.spring.anything=ignored")
+                .withPropertyValues("r4c.configs.external.circuit-breaker.minimum-calls=40")
+                .withUserConfiguration(ShippingService.class).run(context -> {
+                    ResilienceRegistry registry = context.getBean(ResilienceRegistry.class);
+                    assertThat(registry.retryConfig("").maxAttempts()).isEqualTo(7);
+                    assertThat(registry.circuitBreakerConfig("external").minimumCalls()).isEqualTo(40);
+                });
+    }
+
     @Test
     void springPrecedenceHoldsTestPropertiesOverSystemPropertiesOverVariablesOverFiles() {
         runner.withInitializer(new ConfigDataApplicationContextInitializer())

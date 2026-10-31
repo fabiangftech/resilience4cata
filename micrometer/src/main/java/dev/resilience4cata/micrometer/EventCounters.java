@@ -143,7 +143,7 @@ final class EventCounters implements EventListener<ResilienceEvent> {
     /** Cold: the first event of a counter. Two racing threads get the same counter from Micrometer. */
     private Counter create(ResilienceEvent event, int slot, String name, String... tags) {
         Counter counter = Counter.builder(name).description(DESCRIPTIONS.get(name))
-                .tag("instance", event.id()).tags(tags).register(meters);
+                .tag("name", event.id()).tags(tags).register(meters);
         instance(event.id()).counters.set(slot, counter);
         if (closed) { // close() ran meanwhile and may have missed this counter
             meters.remove(counter);
@@ -177,7 +177,7 @@ final class EventCounters implements EventListener<ResilienceEvent> {
             Map.entry("r4c.hedge.hedged", "Hedged attempts started, by reason"),
             Map.entry("r4c.hedge.won", "Calls won by a hedged attempt rather than the first one"),
             Map.entry("r4c.hedge.skipped", "Hedged attempts not started, by reason"),
-            Map.entry("r4c.hedge.failed", "Hedged calls that failed"),
+            Map.entry("r4c.hedge.failed", "Calls through a hedge that failed"),
             Map.entry("r4c.adaptivelimit.limit.changes", "Windows after which an adaptive limit moved its limit"),
             Map.entry("r4c.timeout.timed.out", "Calls that timed out"),
             Map.entry("r4c.fallback.applied", "Failures answered by a fallback"));
