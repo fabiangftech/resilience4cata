@@ -22,6 +22,7 @@ Each table lists the `defaults.<policy>.<attribute>` form. The same `<policy>.<a
 - Config and profile names are lowercase letters and digits separated by single hyphens (`slow-external`).
 - An instance id is case-sensitive. It must be in double quotes unless it is made only of letters, digits, `_` and `-`. A derived id is `<type>#<method>(<parameter types>)`, with fully qualified, erased parameter types separated by commas without spaces, for example `com.acme.CatalogClient#price(java.lang.String,int)`.
 - Every key may start with `r4c.` or `resilience4cata.`. In **system properties the prefix is required**; other system properties are ignored.
+- A key with the short prefix (`r4c.`, or `R4C_` in the environment) whose first segment is not `defaults`, `configs`, `instances` or `profiles`, nor close to one, belongs to another tool and is ignored: `-Dr4c.debug=true` or `R4C_TOKEN` do not stop the application. A key that looks like ours (`r4c.defualts.…`) is still an error ([R4C-CFG-001](../errors.md#r4c-cfg-001)), and so is any unknown key with the long prefix or none.
 - Some attributes exist only on annotations and have no key: `name`, `config`, `locked`, `classifier`, `onExhaustedResult`, and everything on `@Fallback`.
 
 ## Environment variables :id=environment-variables

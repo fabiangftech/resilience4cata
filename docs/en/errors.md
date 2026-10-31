@@ -2675,7 +2675,9 @@ code and names the key and its source (file and line, environment variable or sy
 ### R4C-CFG-001
 
 **Trigger:** an unknown, malformed or incomplete key: unknown policy or attribute, empty segment, a key that
-stops early. The message suggests the closest valid key.
+stops early. The message suggests the closest valid key. A key with the short prefix (`r4c.`, `R4C_`) whose
+first segment is not close to `defaults`, `configs`, `instances` or `profiles` is ignored instead, as another
+tool's ([Keys](reference/configuration.md#key-forms)).
 
 **Wrong:**
 

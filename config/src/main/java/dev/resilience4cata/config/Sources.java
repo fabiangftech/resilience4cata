@@ -30,6 +30,8 @@ final class Sources {
     static final String ENV_LONG_PREFIX = "RESILIENCE4CATA_";
     /** Prefixes of system properties read; optional in files. */
     static final List<String> PREFIXES = List.of("resilience4cata.", "r4c.");
+    /** The short prefix: keys written with it whose first segment is not ours are ignored. */
+    static final String SHORT_PREFIX = "r4c.";
 
     private static final String CANNOT_READ = "cannot read ";
 
@@ -212,6 +214,9 @@ final class Sources {
                     String rest;
                     if (name.startsWith(ENV_PREFIX)) {
                         rest = name.substring(ENV_PREFIX.length());
+                        if (Key.foreign(firstSegment(rest, '_'))) {
+                            return;
+                        }
                     } else if (name.startsWith(ENV_LONG_PREFIX)) {
                         rest = name.substring(ENV_LONG_PREFIX.length());
                     } else {
@@ -227,6 +232,16 @@ final class Sources {
                 return raws;
             }
         };
+    }
+
+    /** Whether a key written with the short system-property prefix is someone else's (see {@link Key#foreign}). */
+    static boolean foreign(String written) {
+        return written.startsWith(SHORT_PREFIX) && Key.foreign(firstSegment(written.substring(SHORT_PREFIX.length()), '.'));
+    }
+
+    private static String firstSegment(String rest, char separator) {
+        int end = rest.indexOf(separator);
+        return end < 0 ? rest : rest.substring(0, end);
     }
 
     static String stripPrefix(String key) {

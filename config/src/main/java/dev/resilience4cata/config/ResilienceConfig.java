@@ -478,7 +478,9 @@ public final class ResilienceConfig {
 
         /**
          * Adds the process environment ({@link System#getenv()}), read at {@link #build()} time.
-         * Only variables starting with {@code R4C_} or {@code RESILIENCE4CATA_} are read.
+         * Only variables starting with {@code R4C_} or {@code RESILIENCE4CATA_} are read; an {@code R4C_}
+         * variable whose first word is not {@code DEFAULTS}, {@code CONFIGS}, {@code INSTANCES} or
+         * {@code PROFILES}, nor close to one, belongs to another tool and is ignored.
          *
          * @return this builder
          */
@@ -501,7 +503,9 @@ public final class ResilienceConfig {
 
         /**
          * Adds the JVM system properties, read at {@link #build()} time. Only properties starting
-         * with {@code resilience4cata.} or {@code r4c.} are read.
+         * with {@code resilience4cata.} or {@code r4c.} are read; an {@code r4c.} key whose first segment
+         * is not {@code defaults}, {@code configs}, {@code instances} or {@code profiles}, nor close to
+         * one, belongs to another tool and is ignored, in every source.
          *
          * @return this builder
          */
@@ -604,6 +608,9 @@ public final class ResilienceConfig {
             for (Sources.Source source : ordered) {
                 Map<String, Setting> own = new LinkedHashMap<>();
                 for (Sources.Raw raw : source.read(loader, problems)) {
+                    if (Sources.foreign(raw.written())) {
+                        continue;
+                    }
                     try {
                         read(source, raw, own, loader, problems);
                     } catch (ProblemException e) {

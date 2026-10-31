@@ -22,6 +22,7 @@ Cada tabla muestra la forma `defaults.<policy>.<attribute>`. La misma parte `<po
 - Los nombres de configuraciones y perfiles son letras minúsculas y dígitos separados por guiones simples (`slow-external`).
 - Un id de instancia distingue mayúsculas. Va entre comillas dobles salvo que tenga solo letras, dígitos, `_` y `-`. Un id derivado es `<type>#<method>(<parameter types>)`, con los tipos de parámetro totalmente calificados y borrados (erasure), separados por comas sin espacios, por ejemplo `com.acme.CatalogClient#price(java.lang.String,int)`.
 - Toda clave puede empezar con `r4c.` o `resilience4cata.`. En las **propiedades del sistema el prefijo es obligatorio**; las demás propiedades del sistema se ignoran.
+- Una clave con el prefijo corto (`r4c.`, o `R4C_` en el entorno) cuyo primer segmento no es `defaults`, `configs`, `instances` ni `profiles`, ni se parece a uno, es de otra herramienta y se ignora: `-Dr4c.debug=true` o `R4C_TOKEN` no detienen la aplicación. Una clave que parece nuestra (`r4c.defualts.…`) sigue siendo un error ([R4C-CFG-001](../errors.md#r4c-cfg-001)), igual que cualquier clave desconocida con el prefijo largo o sin prefijo.
 - Algunos atributos existen solo en las anotaciones y no tienen clave: `name`, `config`, `locked`, `classifier`, `onExhaustedResult` y todo lo de `@Fallback`.
 
 ## Variables de entorno :id=environment-variables
