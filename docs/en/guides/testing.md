@@ -560,7 +560,7 @@ void eachRetryPublishesAnEvent() {
     RetryEvent.Retrying first = (RetryEvent.Retrying) events.get(0);
     assertThat(first.attempt()).isEqualTo(1);
     assertThat(first.delay()).isEqualTo(Duration.ofSeconds(1));
-    assertThat(first.instance()).isEqualTo(
+    assertThat(first.id()).isEqualTo(
             "dev.resilience4cata.examples.docs.testing.QuoteService#quote(java.lang.String)");
 }
 ```

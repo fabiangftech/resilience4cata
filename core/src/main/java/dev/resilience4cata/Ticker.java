@@ -19,6 +19,9 @@ import java.util.function.LongConsumer;
  * {@link #onAdvance(LongConsumer)}, that it has moved past their deadline.
  *
  * <p>Implementations must be thread-safe: policies call them from every thread that makes calls.
+ *
+ * <p>Methods added in later versions will be {@code default} methods, so an implementation (such as testkit's
+ * {@code ManualClock}) keeps compiling.
  */
 public interface Ticker {
 

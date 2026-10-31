@@ -56,7 +56,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p><b>Exceptions.</b> {@link #execute} declares the checked exception of the call, and throws the
  * call's own failure once retries give up, or the policies' unchecked rejections
- * ({@link CallNotPermittedException}, {@link RateLimitExceededException}, {@link LimitExceededException},
+ * ({@link CallNotPermittedException}, {@link RateLimitExceededException}, {@link AdaptiveLimitFullException},
  * {@link CallTimeoutException}, {@link BulkheadFullException}), or a {@link ResultRejectedException} for a result that the retry's
  * classifier rejected, with {@link Builder#onExhaustedResult onExhaustedResult(THROW)}. A fallback may return a result, rethrow the failure it was given, or
  * throw an unchecked exception; any other checked exception it throws is wrapped in an
@@ -155,7 +155,7 @@ public final class Pipeline<T> {
             throws Throwable {
         @Nullable CompletionStage<T> stage = handler.apply(context); // user code may return null
         if (stage == null) {
-            throw new NullPointerException("The asynchronous fallback of pipeline '" + context.instanceId()
+            throw new NullPointerException("The asynchronous fallback of pipeline '" + context.id()
                     + "' returned null instead of a CompletionStage");
         }
         try {
@@ -331,7 +331,10 @@ public final class Pipeline<T> {
         }
     }
 
-    /** The classifier (the retry's, or the breaker's) threw: the retries end with its exception, as in generated code. */
+    /**
+     * The classifier (the retry's, or the breaker's) threw: the retries end with its exception, as in generated
+     * code.
+     */
     private T classifierFailed(RetryPolicy retry, Throwable classifierFailure, int attempts) {
         retry.onClassifierFailure(attempts, classifierFailure);
         return giveUp(classifierFailure, attempts);

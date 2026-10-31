@@ -1,6 +1,9 @@
 package dev.resilience4cata;
 
-/** Information about the failed call, passed to a {@link FallbackHandler}. */
+/**
+ * Information about the failed call, passed to a {@link FallbackHandler}. Implemented by the library only, not
+ * meant to be implemented or mocked: methods may be added in minor versions.
+ */
 public interface FallbackContext {
 
     /** The failure that triggered the fallback, including rejections by a policy. */
@@ -30,5 +33,5 @@ public interface FallbackContext {
      * {@code com.acme.PaymentClient#charge(com.acme.Order)} or, for a nested interface,
      * {@code com.acme.Clients.Payments#charge(java.lang.String,int)}; for a {@link Pipeline}, the pipeline's id.
      */
-    String instanceId();
+    String id();
 }

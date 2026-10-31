@@ -172,7 +172,7 @@ class ConfigurationTest {
         runner.withBean(ResilienceRegistry.class, () -> own).withUserConfiguration(PaymentsGateway.class).run(context -> {
             assertThat(context.getBean(ResilienceRegistry.class)).isSameAs(own);
             assertThat(context.getBean(ResilienceConfig.class)).as("still available to build it").isNotNull();
-            assertThat(own.snapshot().circuitBreakers()).extracting(s -> s.instance()).containsExactly("payments");
+            assertThat(own.snapshot().circuitBreakers()).extracting(s -> s.id()).containsExactly("payments");
         });
     }
 
@@ -184,11 +184,11 @@ class ConfigurationTest {
     }
 
     static RetrySnapshot retry(ResilienceRegistry registry, String id) {
-        return registry.snapshot().retries().stream().filter(s -> s.instance().equals(id)).findFirst().orElseThrow();
+        return registry.snapshot().retries().stream().filter(s -> s.id().equals(id)).findFirst().orElseThrow();
     }
 
     static TimeoutSnapshot timeout(ResilienceRegistry registry, String id) {
-        return registry.snapshot().timeouts().stream().filter(s -> s.instance().equals(id)).findFirst().orElseThrow();
+        return registry.snapshot().timeouts().stream().filter(s -> s.id().equals(id)).findFirst().orElseThrow();
     }
 
     static <T extends Throwable> T cause(Throwable failure, Class<T> type) {

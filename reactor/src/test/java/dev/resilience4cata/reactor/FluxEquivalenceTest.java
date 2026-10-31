@@ -50,7 +50,7 @@ class FluxEquivalenceTest {
         assertThat(COVERAGE).as("seeds per situation").allSatisfy((situation, seeds) ->
                 assertThat(seeds).as(situation).isGreaterThanOrEqualTo(10));
         assertThat(COVERAGE.keySet()).containsExactlyInAnyOrder("cancelled attempt", "TimedOut", "CallNotPermitted",
-                "BulkheadFullException", "RateLimitExceededException", "LimitExceededException", "fallback", "Retrying",
+                "BulkheadFullException", "RateLimitExceededException", "AdaptiveLimitFullException", "fallback", "Retrying",
                 "GaveUp", "StateTransition", "slow call", "value:null");
     }
 
@@ -64,7 +64,7 @@ class FluxEquivalenceTest {
                 seen.add(event);
             }
         }
-        for (String result : List.of("BulkheadFullException", "RateLimitExceededException", "LimitExceededException",
+        for (String result : List.of("BulkheadFullException", "RateLimitExceededException", "AdaptiveLimitFullException",
                 "fallback", "value:null")) {
             if (Arrays.stream(world.results).anyMatch(r -> r.contains(result))) {
                 seen.add(result);

@@ -16,28 +16,28 @@ public final class ResultRejectedException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
-    private final String instanceId;
+    private final String id;
     private final transient @Nullable Object result;
     private final int attempts;
 
     /**
      * Creates the exception.
      *
-     * @param instanceId id of the retry policy
+     * @param id id of the retry policy
      * @param result the last result, which the classifier rejected; {@code null} for a {@code void} method
      * @param attempts number of attempts made, including the last one
      */
-    public ResultRejectedException(String instanceId, @Nullable Object result, int attempts) {
-        super("Retry '" + instanceId + "' gave up after " + attempts + (attempts == 1 ? " attempt" : " attempts")
+    public ResultRejectedException(String id, @Nullable Object result, int attempts) {
+        super("Retry '" + id + "' gave up after " + attempts + (attempts == 1 ? " attempt" : " attempts")
                 + ": the classifier rejected the last result", null, false, false);
-        this.instanceId = instanceId;
+        this.id = id;
         this.result = result;
         this.attempts = attempts;
     }
 
     /** Returns the id of the retry policy. */
-    public String instanceId() {
-        return instanceId;
+    public String id() {
+        return id;
     }
 
     /**

@@ -209,7 +209,7 @@ class FluxEquivalenceEndToEndTest {
         for (String expected : List.of("RetryAndTimeout error:CallTimeoutException",
                 "RetryBreakerFallback fallback CallNotPermittedException", "RetryBreakerFallback fallback IOException",
                 "SlowCalls error:CallNotPermittedException", "FallbackTimeoutBulkhead fallback BulkheadFullException",
-                "FallbackTimeoutBulkhead fallback CallTimeoutException", "LimitedRetry error:RateLimitExceededException", "Adaptive fallback LimitExceededException")) {
+                "FallbackTimeoutBulkhead fallback CallTimeoutException", "LimitedRetry error:RateLimitExceededException", "Adaptive fallback AdaptiveLimitFullException")) {
             assertThat(COVERAGE.getOrDefault(expected, 0)).as(expected).isGreaterThanOrEqualTo(3);
         }
     }

@@ -8,7 +8,7 @@ import dev.resilience4cata.BulkheadFullException;
 import dev.resilience4cata.BulkheadSnapshot;
 import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.CallTimeoutException;
-import dev.resilience4cata.LimitExceededException;
+import dev.resilience4cata.AdaptiveLimitFullException;
 import dev.resilience4cata.Pipeline;
 import dev.resilience4cata.RateLimitExceededException;
 import dev.resilience4cata.ResilienceRegistry;
@@ -75,7 +75,7 @@ class SoakTest {
     /** Failures the policies and the backend produce on purpose. */
     private static final Set<Class<? extends Throwable>> EXPECTED = Set.of(IOException.class,
             CallTimeoutException.class, CallNotPermittedException.class, BulkheadFullException.class,
-            RateLimitExceededException.class, LimitExceededException.class, CancellationException.class);
+            RateLimitExceededException.class, AdaptiveLimitFullException.class, CancellationException.class);
 
     private final Map<String, LongAdder> outcomes = new ConcurrentHashMap<>();
     private final List<Throwable> unexpected = new CopyOnWriteArrayList<>();
@@ -358,13 +358,13 @@ class SoakTest {
     private Set<String> instanceIds() {
         ResilienceSnapshot snapshot = registry.snapshot();
         Set<String> ids = new TreeSet<>();
-        snapshot.circuitBreakers().forEach(s -> ids.add(s.instance()));
-        snapshot.retries().forEach(s -> ids.add(s.instance()));
-        snapshot.rateLimiters().forEach(s -> ids.add(s.instance()));
-        snapshot.timeouts().forEach(s -> ids.add(s.instance()));
-        snapshot.bulkheads().forEach(s -> ids.add(s.instance()));
-        snapshot.hedges().forEach(s -> ids.add(s.instance()));
-        snapshot.adaptiveLimits().forEach(s -> ids.add(s.instance()));
+        snapshot.circuitBreakers().forEach(s -> ids.add(s.id()));
+        snapshot.retries().forEach(s -> ids.add(s.id()));
+        snapshot.rateLimiters().forEach(s -> ids.add(s.id()));
+        snapshot.timeouts().forEach(s -> ids.add(s.id()));
+        snapshot.bulkheads().forEach(s -> ids.add(s.id()));
+        snapshot.hedges().forEach(s -> ids.add(s.id()));
+        snapshot.adaptiveLimits().forEach(s -> ids.add(s.id()));
         return ids;
     }
 
@@ -392,7 +392,7 @@ class SoakTest {
 
     private boolean adaptiveLimitsAreEmpty() {
         for (AdaptiveLimitSnapshot limit : registry.snapshot().adaptiveLimits()) {
-            if (limit.inFlight() != 0) {
+            if (limit.concurrentCalls() != 0) {
                 return false;
             }
         }

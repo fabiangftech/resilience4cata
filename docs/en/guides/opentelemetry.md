@@ -90,7 +90,7 @@ Every metric has an `instance` attribute: the policy instance id (the `name` in 
 | `r4c.bulkhead.max.concurrent` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `maxConcurrent` |
 | `r4c.ratelimiter.available.permits` | `ObservableLongGauge` | `{permit}` | `instance` | snapshot `availablePermits` |
 | `r4c.adaptivelimit.limit` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `limit` |
-| `r4c.adaptivelimit.concurrent.calls` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `inFlight` |
+| `r4c.adaptivelimit.concurrent.calls` | `ObservableLongGauge` | `{call}` | `instance` | snapshot `concurrentCalls` |
 
 - **Rates are percentages** (0 to 100) with unit `%`, as in the snapshot and the Micrometer module, not ratios (0 to 1) with unit `1`.
 - **A rate has no point until it means something.** The snapshot reports `-1` until the breaker's window holds `minimumCalls` calls (`halfOpenCalls` while half-open), while the breaker is open, forced open or disabled (there is no window), and, for `slow.call.rate`, when slow-call detection is off. OpenTelemetry points cannot be NaN, so the module records no point for that instance at that collection: the series has a gap.

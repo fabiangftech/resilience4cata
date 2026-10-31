@@ -9,14 +9,14 @@ public sealed interface RetryEvent extends ResilienceEvent {
     /**
      * An attempt failed and will be retried after {@code delay}.
      *
-     * @param instance the retry's id
+     * @param id the retry's id
      * @param nanoTime when the attempt failed
      * @param attempt the number of the attempt that failed, starting at 1
      * @param delay the wait before the next attempt, jitter included
      * @param failure what the attempt threw, or {@code null} if it returned a result that the method's
      *     classifier rejected
      */
-    record Retrying(String instance, long nanoTime, int attempt, Duration delay, @Nullable Throwable failure)
+    record Retrying(String id, long nanoTime, int attempt, Duration delay, @Nullable Throwable failure)
             implements RetryEvent {
     }
 
@@ -24,7 +24,7 @@ public sealed interface RetryEvent extends ResilienceEvent {
      * An attempt failed and will not be retried: the failure reaches the caller (or the fallback). Not
      * published when the retry is disabled ({@code enabled = false}).
      *
-     * @param instance the retry's id
+     * @param id the retry's id
      * @param nanoTime when the last attempt failed
      * @param attempts number of attempts made, including the last one
      * @param reason why no further attempt is made
@@ -33,11 +33,14 @@ public sealed interface RetryEvent extends ResilienceEvent {
      *     method's classifier rejected (that result is then returned, or thrown inside a
      *     {@code ResultRejectedException} with {@code onExhaustedResult = THROW})
      */
-    record GaveUp(String instance, long nanoTime, int attempts, Reason reason, @Nullable Throwable failure)
+    record GaveUp(String id, long nanoTime, int attempts, Reason reason, @Nullable Throwable failure)
             implements RetryEvent {
     }
 
-    /** Why a retry gave up. */
+    /**
+     * Why a retry gave up. Constants may be added in minor versions: keep a {@code default} branch in a {@code
+     * switch} over it.
+     */
     enum Reason {
         /** {@code maxAttempts} attempts were made. */
         MAX_ATTEMPTS,

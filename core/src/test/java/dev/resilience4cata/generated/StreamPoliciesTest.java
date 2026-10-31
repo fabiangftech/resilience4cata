@@ -263,10 +263,10 @@ class StreamPoliciesTest {
         ticker.advance(SECOND * 3 / 10);
         stream.element();
         ticker.advance(5 * SECOND);
-        assertThat(policy.inFlight()).as("held while the stream runs").isOne();
+        assertThat(policy.concurrentCalls()).as("held while the stream runs").isOne();
         attempt.complete(null);
         assertThat(result).isCompleted();
-        assertThat(policy.inFlight()).isZero();
+        assertThat(policy.concurrentCalls()).isZero();
         assertThat(policy.snapshot().windowLatency()).isEqualTo(Duration.ofMillis(300));
     }
 
@@ -279,7 +279,7 @@ class StreamPoliciesTest {
         ticker.advance(2 * SECOND);
         attempt.completeExceptionally(new CallTimeoutException("t", Duration.ofSeconds(2), null));
         assertThat(result).isCompletedExceptionally();
-        assertThat(policy.inFlight()).isZero();
+        assertThat(policy.concurrentCalls()).isZero();
         assertThat(policy.snapshot().windowLatency()).isEqualTo(Duration.ofSeconds(2));
     }
 
@@ -290,7 +290,7 @@ class StreamPoliciesTest {
         CompletableFuture<Void> attempt = new CompletableFuture<>();
         policy.executeStreamAsync(() -> attempt, stream).cancel(true);
         assertThat(attempt).isCancelled();
-        assertThat(policy.inFlight()).isZero();
+        assertThat(policy.concurrentCalls()).isZero();
         ticker.advance(2 * SECOND);
         assertThat(policy.snapshot().windows()).isZero();
     }
@@ -305,7 +305,7 @@ class StreamPoliciesTest {
             assertThat(policy.executeStreamAsync(() -> CompletableFuture.completedFuture((Void) null), stream))
                     .isCompleted();
         }
-        assertThat(policy.inFlight()).isZero();
+        assertThat(policy.concurrentCalls()).isZero();
         ticker.advance(SECOND);
         policy.executeAsync(() -> CompletableFuture.completedFuture("v"));
         assertThat(policy.snapshot().windows()).as("the samples ended a window").isOne();

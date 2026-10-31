@@ -435,7 +435,7 @@ class HedgePolicyTest {
         assertThat(hedge.verdictForTest(new CallNotPermittedException("cb"))).isEqualTo(HedgePolicy.Verdict.REJECTED);
         assertThat(hedge.verdictForTest(new dev.resilience4cata.BulkheadFullException("b")))
                 .isEqualTo(HedgePolicy.Verdict.REJECTED);
-        assertThat(hedge.verdictForTest(new dev.resilience4cata.LimitExceededException("a")))
+        assertThat(hedge.verdictForTest(new dev.resilience4cata.AdaptiveLimitFullException("a")))
                 .as("a full adaptive limit stops the hedges too").isEqualTo(HedgePolicy.Verdict.REJECTED);
     }
 
@@ -506,7 +506,7 @@ class HedgePolicyTest {
         assertThat(second).isInstanceOf(HedgeCancelledException.class);
         assertThat(first.getStackTrace()).as("stackless").isEmpty();
         assertThat(first.getMessage()).contains("Hedge 'h' cancelled this attempt");
-        assertThat(((HedgeCancelledException) first).instanceId()).isEqualTo("h");
+        assertThat(((HedgeCancelledException) first).id()).isEqualTo("h");
     }
 
     // ---- helpers

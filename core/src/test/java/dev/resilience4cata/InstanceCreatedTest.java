@@ -19,7 +19,7 @@ class InstanceCreatedTest {
 
         Policies.circuitBreaker(registry, "A#m()", "", "", null, false);
         assertThat(seen).hasSize(1);
-        assertThat(seen.get(0).circuitBreakers()).extracting(CircuitBreakerSnapshot::instance).containsExactly("A#m()");
+        assertThat(seen.get(0).circuitBreakers()).extracting(CircuitBreakerSnapshot::id).containsExactly("A#m()");
         assertThat(Policies.circuitBreaker(registry, "A#m()", "", "", null, false)).isNotNull(); // existing: no run
         assertThat(seen).hasSize(1);
 

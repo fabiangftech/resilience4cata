@@ -90,7 +90,7 @@ class PipelineTest {
         assertThat(contexts).singleElement().satisfies(context -> {
             assertThat(context.attempts()).isEqualTo(3);
             assertThat(context.failure()).isSameAs(down);
-            assertThat(context.instanceId()).isEqualTo("fallback-retry");
+            assertThat(context.id()).isEqualTo("fallback-retry");
             assertThat(context.argumentCount()).isZero();
         });
     }
@@ -123,7 +123,7 @@ class PipelineTest {
         IOException failure = new IOException();
         assertThat(pipeline.execute(failing(new AtomicInteger(), 1, failure))).isEqualTo("fallback");
         assertThat(events).singleElement().satisfies(event -> {
-            assertThat(event.instance()).isEqualTo("fallback-events");
+            assertThat(event.id()).isEqualTo("fallback-events");
             assertThat(event.failure()).isSameAs(failure);
         });
     }
@@ -387,7 +387,7 @@ class PipelineTest {
 
         assertThat(measured.bytes()).as("bytes allocated by 100k calls (the measurement itself may allocate a little)")
                 .isLessThan(Allocations.LIMIT);
-        assertThat(registry.snapshot().retries()).filteredOn(r -> r.instance().equals("budget-allocation"))
+        assertThat(registry.snapshot().retries()).filteredOn(r -> r.id().equals("budget-allocation"))
                 .singleElement().satisfies(r -> assertThat(r.budget()).isNotNull()
                         .satisfies(b -> assertThat(b.calls()).isEqualTo(20_000 + 100_000L * measured.rounds())));
     }

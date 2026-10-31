@@ -12,25 +12,25 @@ public final class CallTimeoutException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
-    private final String instanceId;
+    private final String id;
     private final Duration timeout;
 
     /**
      * Creates the exception.
      *
-     * @param instanceId id of the timeout policy
+     * @param id id of the timeout policy
      * @param timeout the timeout that was exceeded
      * @param cause what the call threw after it was interrupted, or {@code null} if it returned
      */
-    public CallTimeoutException(String instanceId, Duration timeout, @Nullable Throwable cause) {
-        super("Call to '" + instanceId + "' timed out after " + timeout, cause, false, false);
-        this.instanceId = instanceId;
+    public CallTimeoutException(String id, Duration timeout, @Nullable Throwable cause) {
+        super("Call to '" + id + "' timed out after " + timeout, cause, false, false);
+        this.id = id;
         this.timeout = timeout;
     }
 
     /** Returns the id of the timeout policy. */
-    public String instanceId() {
-        return instanceId;
+    public String id() {
+        return id;
     }
 
     /** Returns the timeout that was exceeded. */

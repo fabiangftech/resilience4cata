@@ -70,11 +70,11 @@ public class ResilienceJsonRpcService {
     /**
      * Forces a circuit breaker open, as {@link CircuitBreakerHandle#forceOpen()} does.
      *
-     * @param instance the breaker's instance id
+     * @param id the breaker's instance id
      * @return the breaker's snapshot afterwards
      */
-    public Map<String, Object> forceOpen(String instance) {
-        CircuitBreakerHandle breaker = registry.circuitBreaker(instance);
+    public Map<String, Object> forceOpen(String id) {
+        CircuitBreakerHandle breaker = registry.circuitBreaker(id);
         breaker.forceOpen();
         return breaker(breaker.snapshot());
     }
@@ -82,11 +82,11 @@ public class ResilienceJsonRpcService {
     /**
      * Disables a circuit breaker (every call goes through), as {@link CircuitBreakerHandle#disable()} does.
      *
-     * @param instance the breaker's instance id
+     * @param id the breaker's instance id
      * @return the breaker's snapshot afterwards
      */
-    public Map<String, Object> disable(String instance) {
-        CircuitBreakerHandle breaker = registry.circuitBreaker(instance);
+    public Map<String, Object> disable(String id) {
+        CircuitBreakerHandle breaker = registry.circuitBreaker(id);
         breaker.disable();
         return breaker(breaker.snapshot());
     }
@@ -94,11 +94,11 @@ public class ResilienceJsonRpcService {
     /**
      * Resets a circuit breaker to closed with an empty window, as {@link CircuitBreakerHandle#reset()} does.
      *
-     * @param instance the breaker's instance id
+     * @param id the breaker's instance id
      * @return the breaker's snapshot afterwards
      */
-    public Map<String, Object> reset(String instance) {
-        CircuitBreakerHandle breaker = registry.circuitBreaker(instance);
+    public Map<String, Object> reset(String id) {
+        CircuitBreakerHandle breaker = registry.circuitBreaker(id);
         breaker.reset();
         return breaker(breaker.snapshot());
     }
@@ -113,7 +113,7 @@ public class ResilienceJsonRpcService {
 
     private static Map<String, Object> breaker(CircuitBreakerSnapshot s) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("instance", s.instance());
+        m.put("id", s.id());
         m.put("state", s.state().name());
         m.put("failureRate", rate(s.failureRate()));
         m.put("slowCallRate", rate(s.slowCallRate()));
@@ -125,7 +125,7 @@ public class ResilienceJsonRpcService {
 
     private static Map<String, Object> bulkhead(BulkheadSnapshot s) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("instance", s.instance());
+        m.put("id", s.id());
         m.put("concurrentCalls", s.concurrentCalls());
         m.put("maxConcurrent", s.maxConcurrent());
         m.put("waitingCalls", s.waitingCalls());
@@ -134,7 +134,7 @@ public class ResilienceJsonRpcService {
 
     private static Map<String, Object> rateLimiter(RateLimiterSnapshot s) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("instance", s.instance());
+        m.put("id", s.id());
         m.put("availablePermits", s.availablePermits());
         m.put("permits", s.permits());
         return m;
@@ -142,7 +142,7 @@ public class ResilienceJsonRpcService {
 
     private static Map<String, Object> retry(RetrySnapshot s) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("instance", s.instance());
+        m.put("id", s.id());
         m.put("maxAttempts", s.config().maxAttempts());
         RetrySnapshot.Budget budget = s.budget();
         m.put("budget", budget == null ? null : Map.of(
@@ -152,14 +152,14 @@ public class ResilienceJsonRpcService {
 
     private static Map<String, Object> timeout(TimeoutSnapshot s) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("instance", s.instance());
+        m.put("id", s.id());
         m.put("timeout", duration(s.config().timeout()));
         return m;
     }
 
     private static Map<String, Object> hedge(HedgeSnapshot s) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("instance", s.instance());
+        m.put("id", s.id());
         m.put("delay", duration(s.config().delay()));
         m.put("maxAttempts", s.config().maxAttempts());
         HedgeSnapshot.Budget budget = s.budget();
@@ -170,10 +170,10 @@ public class ResilienceJsonRpcService {
 
     private static Map<String, Object> adaptiveLimit(AdaptiveLimitSnapshot s) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("instance", s.instance());
+        m.put("id", s.id());
         m.put("algorithm", s.algorithm().name());
         m.put("limit", s.limit());
-        m.put("inFlight", s.inFlight());
+        m.put("concurrentCalls", s.concurrentCalls());
         m.put("minLimit", s.minLimit());
         m.put("maxLimit", s.maxLimit());
         m.put("windows", s.windows());

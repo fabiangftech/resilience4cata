@@ -7,11 +7,11 @@ import org.jspecify.annotations.Nullable;
  * current window are shown; how often hedges start and win is observable through
  * {@link dev.resilience4cata.event.HedgeEvent events}.
  *
- * @param instance the hedge's id
+ * @param id the hedge's id
  * @param config its resolved configuration
  * @param budget the hedge budget's current window; {@code null} without a budget ({@link HedgeConfig#hasBudget()})
  */
-public record HedgeSnapshot(String instance, HedgeConfig config, @Nullable Budget budget) {
+public record HedgeSnapshot(String id, HedgeConfig config, @Nullable Budget budget) {
 
     /**
      * The window of a hedge budget, read when the snapshot was taken. The three counts are read one after

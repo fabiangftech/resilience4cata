@@ -66,7 +66,7 @@ flowchart TD
     wait -- sí --> reserve["Reservar ese permiso,<br/>esperar hasta que llegue"] --> run
 ```
 
-- **Rechazo.** Con `maxWait = "0"` (por defecto), una llamada sin permiso disponible falla enseguida con `dev.resilience4cata.RateLimitExceededException` (una `RuntimeException` con `instanceId()`; una por limiter, sin stack trace). El método no se llama.
+- **Rechazo.** Con `maxWait = "0"` (por defecto), una llamada sin permiso disponible falla enseguida con `dev.resilience4cata.RateLimitExceededException` (una `RuntimeException` con `id()`; una por limiter, sin stack trace). El método no se llama.
 - **Espera.** Con `maxWait` > 0, una llamada cuyo permiso llega dentro de `maxWait` lo reserva y espera hasta que llegue su turno; una llamada que tendría que esperar más se rechaza enseguida, sin esperar nada. Cada llamada en espera conoce su turno, así que no compiten cuando llega.
 - **Las esperas sync** duermen en el thread de quien llama. Si el thread se interrumpe mientras espera, el permiso se devuelve, el flag de interrupción se activa de nuevo y la llamada se rechaza.
 - **Ráfagas.** Como los permisos sin usar se acumulan hasta una ráfaga completa, una ventana de un `period` puede ver hasta el doble de `permits` llamadas: una ráfaga completa y luego el ritmo constante. Es lo mismo que con los ciclos fijos de Resilience4j.
@@ -120,7 +120,7 @@ RateLimiterSnapshot snapshot = limiter.snapshot(); // instance, availablePermits
 | `id()` | El `name`, o el id derivado |
 | `config()` | La `RateLimiterConfig` resuelta |
 | `availablePermits()` | Llamadas que pasarían ahora mismo sin esperar, entre 0 y `permits`; una foto que las llamadas concurrentes cambian al instante |
-| `snapshot()` | Un `RateLimiterSnapshot(instance, availablePermits, permits)` |
+| `snapshot()` | Un `RateLimiterSnapshot(id, availablePermits, permits)` |
 
 El limiter existe una vez que su interfaz se envolvió o su pipeline se construyó; un id desconocido lanza [`R4C-REG-009`](../errors.md#r4c-reg-009). No hay `registry.rateLimiters()`: lístalos con `registry.snapshot().rateLimiters()`.
 
@@ -162,7 +162,7 @@ El id `"search"` es el id de instancia: `registry.rateLimiter("search")` devuelv
 
 | Evento | Cuándo | Campos |
 |---|---|---|
-| `RateLimiterEvent.Rejected` | Se rechazó una llamada (sin permiso dentro de `maxWait`, o una espera interrumpida) | `instance`, `nanoTime` |
+| `RateLimiterEvent.Rejected` | Se rechazó una llamada (sin permiso dentro de `maxWait`, o una espera interrumpida) | `id`, `nanoTime` |
 
 Las llamadas admitidas no publican nada. `registry.snapshot().rateLimiters()` lista un `RateLimiterSnapshot` por limiter. Ver [Observabilidad](../guides/observability.md).
 

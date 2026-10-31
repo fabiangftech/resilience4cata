@@ -106,7 +106,10 @@ abstract sealed class LimitAlgorithm {
         }
     }
 
-    /** Netflix's {@code AIMDLimit}: one more after a busy window without a drop, times {@code backoffRatio} after a drop. */
+    /**
+     * Netflix's {@code AIMDLimit}: one more after a busy window without a drop, times {@code backoffRatio} after a
+     * drop.
+     */
     static final class Aimd extends LimitAlgorithm {
 
         private final double backoffRatio;

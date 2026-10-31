@@ -35,7 +35,7 @@ class ConfigurationTest {
     }
 
     static Duration timeoutOf(ResilienceRegistry registry, String id) {
-        return registry.snapshot().timeouts().stream().filter(t -> t.instance().equals(id))
+        return registry.snapshot().timeouts().stream().filter(t -> t.id().equals(id))
                 .map(TimeoutSnapshot::config).findFirst().orElseThrow().timeout();
     }
 

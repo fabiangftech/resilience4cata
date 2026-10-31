@@ -302,27 +302,27 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
         void observe(ResilienceSnapshot snapshot) {
             snapshot.circuitBreakers().forEach(this::observe);
             for (BulkheadSnapshot bulkhead : snapshot.bulkheads()) {
-                Attributes instance = attributes(bulkhead.instance());
+                Attributes instance = attributes(bulkhead.id());
                 concurrent.record(bulkhead.concurrentCalls(), instance);
                 waiting.record(bulkhead.waitingCalls(), instance);
                 maxConcurrent.record(bulkhead.maxConcurrent(), instance);
             }
             for (RateLimiterSnapshot limiter : snapshot.rateLimiters()) {
-                permits.record(limiter.availablePermits(), attributes(limiter.instance()));
+                permits.record(limiter.availablePermits(), attributes(limiter.id()));
             }
             for (AdaptiveLimitSnapshot adaptive : snapshot.adaptiveLimits()) {
-                Attributes instance = attributes(adaptive.instance());
+                Attributes instance = attributes(adaptive.id());
                 limit.record(adaptive.limit(), instance);
-                limitConcurrent.record(adaptive.inFlight(), instance);
+                limitConcurrent.record(adaptive.concurrentCalls(), instance);
             }
         }
 
         private void observe(CircuitBreakerSnapshot breaker) {
-            Attributes[] states = states(breaker.instance());
+            Attributes[] states = states(breaker.id());
             for (CircuitBreakerState s : STATES) {
                 state.record(breaker.state() == s ? 1 : 0, states[s.ordinal()]);
             }
-            Attributes instance = attributes(breaker.instance());
+            Attributes instance = attributes(breaker.id());
             if (breaker.failureRate() >= 0) { // -1 until the window holds minimumCalls: no point (NaN is not valid)
                 failureRate.record(breaker.failureRate(), instance);
             }
@@ -365,7 +365,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
         }
 
         private void recordEvent(ResilienceEvent event) {
-            String id = event.instance();
+            String id = event.id();
             switch (event) {
                 case CircuitBreakerEvent.StateTransition t ->
                         transitionCounter.add(1, transitions(id)[t.from().ordinal() * STATES.length + t.to().ordinal()]);

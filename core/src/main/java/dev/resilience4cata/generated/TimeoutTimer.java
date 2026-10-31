@@ -90,7 +90,10 @@ final class TimeoutTimer {
         return new Lane(this, durationNanos);
     }
 
-    /** Fires {@code entry} on a new virtual thread once {@code lane}'s duration has passed, unless it is cancelled first. */
+    /**
+     * Fires {@code entry} on a new virtual thread once {@code lane}'s duration has passed, unless it is cancelled
+     * first.
+     */
     void schedule(TimerEntry entry, Lane lane) {
         if (lane.timer != this) {
             throw new IllegalArgumentException("The lane belongs to another timer");
@@ -322,7 +325,10 @@ final class TimeoutTimer {
         volatile @Nullable TimerEntry cancelled;
     }
 
-    /** Two lock-free stacks (many pushers, one taker). Superclass fields are laid out first, so the heads sit between two blocks of padding. */
+    /**
+     * Two lock-free stacks (many pushers, one taker). Superclass fields are laid out first, so the heads sit
+     * between two blocks of padding.
+     */
     @SuppressWarnings("unused")
     private static final class Stripe extends Heads {
         long q0;

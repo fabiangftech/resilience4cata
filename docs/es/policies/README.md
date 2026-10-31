@@ -9,11 +9,11 @@ resilience4cata tiene ocho políticas, una anotación cada una; ponlas en un mé
 | [Hedge](hedge.md) | `@Hedge` | Vuelve a lanzar la misma llamada mientras la primera va lenta, y se queda con el primer éxito (solo async y llamadas idempotentes) | — (relanza la última falla) |
 | [Circuit breaker](circuit-breaker.md) | `@CircuitBreaker` | Deja de llamar a una dependencia que falla una y otra vez, y luego la prueba | `CallNotPermittedException` |
 | [Rate limiter](rate-limiter.md) | `@RateLimiter` | Deja pasar como máximo N llamadas por período | `RateLimitExceededException` |
-| [Adaptive limit](adaptive-limit.md) | `@AdaptiveLimit` | Limita cuántas llamadas corren al mismo tiempo, con un límite que ajusta según su latencia | `LimitExceededException` |
+| [Adaptive limit](adaptive-limit.md) | `@AdaptiveLimit` | Limita cuántas llamadas corren al mismo tiempo, con un límite que ajusta según su latencia | `AdaptiveLimitFullException` |
 | [Timeout](timeout.md) | `@Timeout` | Interrumpe una llamada sync, o hace fallar una async, que tarda demasiado | `CallTimeoutException` |
 | [Bulkhead](bulkhead.md) | `@Bulkhead` | Limita cuántas llamadas corren al mismo tiempo | `BulkheadFullException` |
 
-Todas las políticas salvo Hedge funcionan con métodos sincrónicos y con métodos que devuelven `CompletionStage<T>` o `CompletableFuture<T>` (ver [Métodos async](../guides/async.md)); Hedge necesita un método asincrónico, y ocupa el lugar de Retry (las dos no se pueden combinar en un método). Las excepciones están en el paquete `dev.resilience4cata`, extienden `RuntimeException`, no tienen stack trace y llevan el `instanceId()` de la política.
+Todas las políticas salvo Hedge funcionan con métodos sincrónicos y con métodos que devuelven `CompletionStage<T>` o `CompletableFuture<T>` (ver [Métodos async](../guides/async.md)); Hedge necesita un método asincrónico, y ocupa el lugar de Retry (las dos no se pueden combinar en un método). Las excepciones están en el paquete `dev.resilience4cata`, extienden `RuntimeException`, no tienen stack trace y llevan el `id()` de la política. Los cuatro rechazos (`CallNotPermittedException`, `RateLimitExceededException`, `AdaptiveLimitFullException`, `BulkheadFullException`) comparten la superclase `CallRejectedException`: captúrala para responder igual a todos los rechazos, por ejemplo con `503 Service Unavailable`. Cada política lanza una única instancia compartida, así que no las compares por identidad.
 
 ## ¿Qué política necesito?
 
@@ -206,7 +206,7 @@ assertThat(clock.elapsed()).isZero();           // ...and the retry did not wait
 
 Un rechazo de una política interna es, por defecto, una `Exception` como cualquier otra para las capas que están afuera:
 
-- `RateLimitExceededException`, `LimitExceededException`, `CallTimeoutException` y `BulkheadFullException` las **reintenta** un `@Retry` externo (después de su espera) y las **registra como fallas** un `@CircuitBreaker` externo. Tu propio rate limiter, adaptive limit o bulkhead puede entonces abrir tu breaker. Ponlas en el `ignoreOn` del breaker o en el `abortOn` del retry cuando no es lo que quieres.
+- `RateLimitExceededException`, `AdaptiveLimitFullException`, `CallTimeoutException` y `BulkheadFullException` las **reintenta** un `@Retry` externo (después de su espera) y las **registra como fallas** un `@CircuitBreaker` externo. Tu propio rate limiter, adaptive limit o bulkhead puede entonces abrir tu breaker. Ponlas en el `ignoreOn` del breaker o en el `abortOn` del retry cuando no es lo que quieres.
 - Los `Error` no se reintentan ni se registran como fallas del breaker (`retryOn` y `recordOn` valen `Exception` por defecto), pero el `applyOn = Throwable` por defecto del fallback sí los atrapa, salvo que su parámetro de excepción sea más estrecho.
 
 ## Uso programático

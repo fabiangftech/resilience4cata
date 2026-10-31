@@ -6,24 +6,16 @@ package dev.resilience4cata;
  * stack trace, so a rejection costs almost nothing. If the caller is interrupted while waiting, the
  * interrupt flag is set again before this is thrown.
  */
-public final class RateLimitExceededException extends RuntimeException {
+public final class RateLimitExceededException extends CallRejectedException {
 
     private static final long serialVersionUID = 1L;
-
-    private final String instanceId;
 
     /**
      * Creates the exception for one rate limiter.
      *
-     * @param instanceId id of the rate limiter
+     * @param id id of the rate limiter
      */
-    public RateLimitExceededException(String instanceId) {
-        super("Rate limiter '" + instanceId + "' has no permit available", null, false, false);
-        this.instanceId = instanceId;
-    }
-
-    /** Returns the id of the rate limiter that rejected the call. */
-    public String instanceId() {
-        return instanceId;
+    public RateLimitExceededException(String id) {
+        super("Rate limiter '" + id + "' has no permit available", id);
     }
 }

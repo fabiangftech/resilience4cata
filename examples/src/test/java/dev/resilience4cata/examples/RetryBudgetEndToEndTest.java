@@ -52,7 +52,7 @@ class RetryBudgetEndToEndTest {
     }
 
     private RetrySnapshot.Budget budget(String instance) {
-        return registry.snapshot().retries().stream().filter(r -> r.instance().equals(instance)).findFirst()
+        return registry.snapshot().retries().stream().filter(r -> r.id().equals(instance)).findFirst()
                 .orElseThrow().budget();
     }
 
@@ -70,7 +70,7 @@ class RetryBudgetEndToEndTest {
         assertThat(reasons(RetryEvent.Reason.BUDGET_EXHAUSTED)).isEqualTo(50 - 2);
         assertThat(reasons(RetryEvent.Reason.MAX_ATTEMPTS)).isEqualTo(2);
         assertThat(gaveUp).filteredOn(e -> e.reason() == RetryEvent.Reason.BUDGET_EXHAUSTED)
-                .allSatisfy(e -> assertThat(e.instance()).isEqualTo("backend"));
+                .allSatisfy(e -> assertThat(e.id()).isEqualTo("backend"));
     }
 
     @Test

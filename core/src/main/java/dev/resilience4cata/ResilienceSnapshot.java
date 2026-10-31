@@ -123,10 +123,10 @@ public final class ResilienceSnapshot {
      */
     public ResilienceSnapshot only(String id) {
         Objects.requireNonNull(id, "id");
-        return new ResilienceSnapshot(only(circuitBreakers, id, CircuitBreakerSnapshot::instance),
-                only(retries, id, RetrySnapshot::instance), only(rateLimiters, id, RateLimiterSnapshot::instance),
-                only(timeouts, id, TimeoutSnapshot::instance), only(bulkheads, id, BulkheadSnapshot::instance),
-                only(hedges, id, HedgeSnapshot::instance), only(adaptiveLimits, id, AdaptiveLimitSnapshot::instance));
+        return new ResilienceSnapshot(only(circuitBreakers, id, CircuitBreakerSnapshot::id),
+                only(retries, id, RetrySnapshot::id), only(rateLimiters, id, RateLimiterSnapshot::id),
+                only(timeouts, id, TimeoutSnapshot::id), only(bulkheads, id, BulkheadSnapshot::id),
+                only(hedges, id, HedgeSnapshot::id), only(adaptiveLimits, id, AdaptiveLimitSnapshot::id));
     }
 
     private static <S> List<S> only(List<S> snapshots, String id, Function<S, String> idOf) {

@@ -66,7 +66,7 @@ flowchart TD
     wait -- yes --> reserve["Reserve that permit,<br/>wait until it is due"] --> run
 ```
 
-- **Rejection.** With `maxWait = "0"` (the default), a call with no permit available fails at once with `dev.resilience4cata.RateLimitExceededException` (a `RuntimeException` with `instanceId()`; one per limiter, no stack trace). The method is not called.
+- **Rejection.** With `maxWait = "0"` (the default), a call with no permit available fails at once with `dev.resilience4cata.RateLimitExceededException` (a `RuntimeException` with `id()`; one per limiter, no stack trace). The method is not called.
 - **Waiting.** With `maxWait` > 0, a call whose permit comes within `maxWait` reserves it and waits until it is due; a call that would have to wait longer is rejected at once, without waiting at all. Waiters know their slot, so they don't compete when it arrives.
 - **Sync waits** sleep on the caller's thread. If the thread is interrupted while waiting, the permit is given back, the interrupt flag is set again and the call is rejected.
 - **Bursts.** Because unused permits build up to a full burst, a window of one `period` can see up to twice `permits` calls: a full burst, then the steady rate. This is the same as Resilience4j's fixed cycles.
@@ -120,7 +120,7 @@ RateLimiterSnapshot snapshot = limiter.snapshot(); // instance, availablePermits
 | `id()` | The `name`, or the derived id |
 | `config()` | The resolved `RateLimiterConfig` |
 | `availablePermits()` | Calls that would pass right now without waiting, between 0 and `permits`; a snapshot that concurrent calls change at once |
-| `snapshot()` | A `RateLimiterSnapshot(instance, availablePermits, permits)` |
+| `snapshot()` | A `RateLimiterSnapshot(id, availablePermits, permits)` |
 
 The limiter exists once its interface has been wrapped or its pipeline built; an unknown id throws [`R4C-REG-009`](../errors.md#r4c-reg-009). There is no `registry.rateLimiters()`: list them with `registry.snapshot().rateLimiters()`.
 
@@ -162,7 +162,7 @@ The id `"search"` is the instance id: `registry.rateLimiter("search")` returns t
 
 | Event | When | Fields |
 |---|---|---|
-| `RateLimiterEvent.Rejected` | A call was rejected (no permit within `maxWait`, or an interrupted wait) | `instance`, `nanoTime` |
+| `RateLimiterEvent.Rejected` | A call was rejected (no permit within `maxWait`, or an interrupted wait) | `id`, `nanoTime` |
 
 Admitted calls publish nothing. `registry.snapshot().rateLimiters()` lists a `RateLimiterSnapshot` per limiter. See [Observability](../guides/observability.md).
 

@@ -33,7 +33,7 @@ class ConfigurationTest {
             assertThat(payments.config().maxAttempts()).as("instances.payments, over the annotation's 3").isEqualTo(5);
             assertThat(payments.config().retryOn()).as("a YAML list").containsExactly(IOException.class, IllegalStateException.class);
             TimeoutSnapshot track = registry.snapshot().timeouts().stream()
-                    .filter(t -> t.instance().endsWith("Shipping#track(java.lang.String)")).findFirst().orElseThrow();
+                    .filter(t -> t.id().endsWith("Shipping#track(java.lang.String)")).findFirst().orElseThrow();
             assertThat(track.config().timeout()).as("a quoted derived instance id").isEqualTo(Duration.ofSeconds(4));
             assertThat(context.getBean(ResilienceConfig.class).configNames()).containsExactly("external");
         }
@@ -124,6 +124,6 @@ class ConfigurationTest {
     }
 
     private static RetrySnapshot only(List<RetrySnapshot> retries, String instance) {
-        return retries.stream().filter(r -> r.instance().equals(instance)).findFirst().orElseThrow();
+        return retries.stream().filter(r -> r.id().equals(instance)).findFirst().orElseThrow();
     }
 }

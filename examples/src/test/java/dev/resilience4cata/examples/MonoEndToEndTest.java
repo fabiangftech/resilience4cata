@@ -6,7 +6,7 @@ import dev.resilience4cata.BulkheadFullException;
 import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.CallTimeoutException;
 import dev.resilience4cata.CircuitBreakerState;
-import dev.resilience4cata.LimitExceededException;
+import dev.resilience4cata.AdaptiveLimitFullException;
 import dev.resilience4cata.RateLimitExceededException;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
@@ -358,9 +358,9 @@ class MonoEndToEndTest {
     void aFullAdaptiveLimitRejects() {
         backend.script("adaptive", never());
         Disposable held = client.adaptive("a").subscribe();
-        StepVerifier.create(client.adaptive("b")).expectError(LimitExceededException.class).verify(VERIFY);
+        StepVerifier.create(client.adaptive("b")).expectError(AdaptiveLimitFullException.class).verify(VERIFY);
         held.dispose();
-        assertThat(registry.adaptiveLimit("mono-adaptive").inFlight()).isZero();
+        assertThat(registry.adaptiveLimit("mono-adaptive").concurrentCalls()).isZero();
     }
 
     // ---- hedge

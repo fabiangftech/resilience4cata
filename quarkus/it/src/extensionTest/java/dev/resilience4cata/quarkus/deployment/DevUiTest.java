@@ -41,19 +41,19 @@ class DevUiTest extends DevUIJsonRPCTest {
         assertThat(bulkhead.get("concurrentCalls").asInt()).isZero();
         assertThat(executeJsonRPCMethod("getInstanceCount").asText()).isEqualTo("2 instances");
 
-        assertThat(executeJsonRPCMethod("forceOpen", Map.of("instance", "devui")).get("state").asText())
+        assertThat(executeJsonRPCMethod("forceOpen", Map.of("id", "devui")).get("state").asText())
                 .isEqualTo("FORCED_OPEN");
         assertThat(find(executeJsonRPCMethod("getSnapshot").get("circuitBreakers"), "devui").get("state").asText())
                 .isEqualTo("FORCED_OPEN");
-        assertThat(executeJsonRPCMethod("disable", Map.of("instance", "devui")).get("state").asText())
+        assertThat(executeJsonRPCMethod("disable", Map.of("id", "devui")).get("state").asText())
                 .isEqualTo("DISABLED");
-        assertThat(executeJsonRPCMethod("reset", Map.of("instance", "devui")).get("state").asText())
+        assertThat(executeJsonRPCMethod("reset", Map.of("id", "devui")).get("state").asText())
                 .isEqualTo("CLOSED");
     }
 
     private static JsonNode find(JsonNode items, String instance) {
         for (JsonNode item : items) {
-            if (item.get("instance").asText().equals(instance)) {
+            if (item.get("id").asText().equals(instance)) {
                 return item;
             }
         }

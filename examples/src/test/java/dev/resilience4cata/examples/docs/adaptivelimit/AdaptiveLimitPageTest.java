@@ -7,7 +7,7 @@ import dev.resilience4cata.AdaptiveLimitConfig;
 import dev.resilience4cata.AdaptiveLimitHandle;
 import dev.resilience4cata.AdaptiveLimitSnapshot;
 import dev.resilience4cata.CallTimeoutException;
-import dev.resilience4cata.LimitExceededException;
+import dev.resilience4cata.AdaptiveLimitFullException;
 import dev.resilience4cata.Pipeline;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
@@ -58,7 +58,7 @@ class AdaptiveLimitPageTest {
         AdaptiveLimitHandle limit = registry.adaptiveLimit(SEARCH);
         assertThat(limit.config()).isEqualTo(AdaptiveLimitConfig.DEFAULTS);
         assertThat(limit.limit()).isEqualTo(20);
-        assertThat(limit.inFlight()).isZero();
+        assertThat(limit.concurrentCalls()).isZero();
     }
 
     @Test
@@ -78,9 +78,9 @@ class AdaptiveLimitPageTest {
         Thread holder = Thread.ofVirtual().start(() -> search.search("slow"));
         await(inside);
 
-        assertThatThrownBy(() -> search.search("fast")).isInstanceOf(LimitExceededException.class)
+        assertThatThrownBy(() -> search.search("fast")).isInstanceOf(AdaptiveLimitFullException.class)
                 .hasMessage("Adaptive limit '" + SEARCH + "' is full")
-                .satisfies(e -> assertThat(((LimitExceededException) e).instanceId()).isEqualTo(SEARCH));
+                .satisfies(e -> assertThat(((AdaptiveLimitFullException) e).id()).isEqualTo(SEARCH));
         assertThat(calls[0]).as("the method was not called").isEqualTo(1);
 
         release.countDown();
@@ -118,16 +118,16 @@ class AdaptiveLimitPageTest {
         CompletableFuture<String> a = orders.placeAsync("a");
         orders.placeAsync("b");
         assertThat(orders.placeAsync("c")).failsWithin(Duration.ZERO).withThrowableThat()
-                .withCauseInstanceOf(LimitExceededException.class);
+                .withCauseInstanceOf(AdaptiveLimitFullException.class);
         pending.get("a").complete("placed a");
         assertThat(a).isCompletedWithValue("placed a");
-        assertThat(registry.adaptiveLimit("orders-async").inFlight()).isEqualTo(1);
+        assertThat(registry.adaptiveLimit("orders-async").concurrentCalls()).isEqualTo(1);
 
         a.cancel(true); // already complete: nothing to cancel
         CompletableFuture<String> d = orders.placeAsync("d");
         d.cancel(true);
         assertThat(pending.get("d")).as("cancelling reaches the stage").isCancelled();
-        assertThat(registry.adaptiveLimit("orders-async").inFlight()).as("and frees its slot").isEqualTo(1);
+        assertThat(registry.adaptiveLimit("orders-async").concurrentCalls()).as("and frees its slot").isEqualTo(1);
     }
 
     @Test
@@ -165,8 +165,8 @@ class AdaptiveLimitPageTest {
         // tag::adaptive-limit-handle[]
         AdaptiveLimitHandle limit = registry.adaptiveLimit("orders");
         int current = limit.limit();                   // how many calls may run at once now
-        int running = limit.inFlight();                // calls inside right now
-        AdaptiveLimitSnapshot snapshot = limit.snapshot(); // limit, inFlight, bounds, windows, latencies
+        int running = limit.concurrentCalls();                // calls inside right now
+        AdaptiveLimitSnapshot snapshot = limit.snapshot(); // limit, concurrentCalls, bounds, windows, latencies
         // end::adaptive-limit-handle[]
         assertThat(current).isEqualTo(10);
         assertThat(running).isZero();
@@ -207,7 +207,7 @@ class AdaptiveLimitPageTest {
         CompletableFuture<String> a = orders.placeAsync("a");          // pending: holds a slot
         CompletableFuture<String> b = orders.placeAsync("b");          // pending: holds the other
         assertThat(orders.placeAsync("c")).failsWithin(Duration.ZERO)  // full: rejected at once
-                .withThrowableThat().withCauseInstanceOf(LimitExceededException.class);
+                .withThrowableThat().withCauseInstanceOf(AdaptiveLimitFullException.class);
 
         clock.advance(Duration.ofSeconds(1));                          // the calls took 1 s; the window is over
         pending.get("a").complete("placed a");                         // ends the window

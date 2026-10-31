@@ -115,7 +115,7 @@ class AdaptiveLimitRegistryAndPipelineTest {
         Policies.adaptiveLimit(registry, "A#a()", "", "", a -> a.initialLimit(7), false).acquire();
 
         List<AdaptiveLimitSnapshot> limits = registry.snapshot().adaptiveLimits();
-        assertThat(limits).extracting(AdaptiveLimitSnapshot::instance).containsExactly("A#a()", "B#b()");
+        assertThat(limits).extracting(AdaptiveLimitSnapshot::id).containsExactly("A#a()", "B#b()");
         assertThat(limits.get(0)).isEqualTo(new AdaptiveLimitSnapshot("A#a()", Algorithm.GRADIENT2, 7, 1, 1, 200, 0,
                 Duration.ZERO, Duration.ZERO));
         assertThat(registry.adaptiveLimit("A#a()").snapshot()).isEqualTo(limits.get(0));
@@ -142,14 +142,14 @@ class AdaptiveLimitRegistryAndPipelineTest {
             }
         });
         assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
-        assertThatThrownBy(() -> pipeline.execute(() -> "ok")).isInstanceOf(LimitExceededException.class);
+        assertThatThrownBy(() -> pipeline.execute(() -> "ok")).isInstanceOf(AdaptiveLimitFullException.class);
         release.countDown();
         holder.join();
-        assertThat(registry.adaptiveLimit("limited").inFlight()).isZero();
+        assertThat(registry.adaptiveLimit("limited").concurrentCalls()).isZero();
         assertThatThrownBy(() -> pipeline.execute(() -> {
             throw new IOException("boom");
         })).isInstanceOf(IOException.class);
-        assertThat(registry.adaptiveLimit("limited").inFlight()).isZero();
+        assertThat(registry.adaptiveLimit("limited").concurrentCalls()).isZero();
         assertThat(pipeline.toString()).contains("adaptiveLimit");
     }
 
@@ -163,10 +163,10 @@ class AdaptiveLimitRegistryAndPipelineTest {
         CompletableFuture<String> slow = new CompletableFuture<>();
         CompletableFuture<String> first = pipeline.executeAsync(() -> slow);
         assertThat(pipeline.executeAsync(() -> CompletableFuture.completedFuture("x")))
-                .failsWithin(Duration.ZERO).withThrowableThat().havingCause().isInstanceOf(LimitExceededException.class);
+                .failsWithin(Duration.ZERO).withThrowableThat().havingCause().isInstanceOf(AdaptiveLimitFullException.class);
         slow.complete("done");
         assertThat(first).isCompletedWithValue("done");
-        assertThat(registry.adaptiveLimit("async-limited").inFlight()).isZero();
+        assertThat(registry.adaptiveLimit("async-limited").concurrentCalls()).isZero();
     }
 
     @Test

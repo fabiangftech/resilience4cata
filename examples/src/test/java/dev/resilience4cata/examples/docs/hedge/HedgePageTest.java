@@ -163,7 +163,7 @@ class HedgePageTest {
         clock.advance(Duration.ofMillis(50));
         attempts.get(1).complete("hedged");
         assertThat(price).isCompletedWithValue("hedged");
-        assertThat(registry.snapshot().hedges()).extracting(HedgeSnapshot::instance).containsExactly("quotes");
+        assertThat(registry.snapshot().hedges()).extracting(HedgeSnapshot::id).containsExactly("quotes");
         assertThatThrownBy(() -> quote.execute(() -> "sync")).isInstanceOf(IllegalStateException.class)
                 .hasMessageStartingWith("[R4C-RT-018]");
     }

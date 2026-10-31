@@ -62,7 +62,7 @@ class BundlesTest {
         assertThat(http.cancelCalls).hasValue(1);
 
         String prefix = "dev.resilience4cata.examples.docs.bundles.ShippingClient#";
-        assertThat(registry.snapshot().timeouts()).extracting(TimeoutSnapshot::instance, t -> t.config().timeout())
+        assertThat(registry.snapshot().timeouts()).extracting(TimeoutSnapshot::id, t -> t.config().timeout())
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple(prefix + "cancel(java.lang.String)", Duration.ofSeconds(2)),
                         org.assertj.core.groups.Tuple.tuple(prefix + "track(java.lang.String)", Duration.ofSeconds(2)));
@@ -83,7 +83,7 @@ class BundlesTest {
         assertThat(retry.config().delay()).as("config = external, from RemoteCall").isEqualTo(Duration.ofMillis(7));
         assertThat(registry.snapshot().timeouts()).extracting(t -> t.config().timeout())
                 .containsExactly(Duration.ofSeconds(2));
-        assertThat(registry.snapshot().circuitBreakers()).extracting(c -> c.instance())
+        assertThat(registry.snapshot().circuitBreakers()).extracting(c -> c.id())
                 .containsExactly("dev.resilience4cata.examples.docs.bundles.CatalogClient#product(java.lang.String)");
     }
 
@@ -106,7 +106,7 @@ class BundlesTest {
         }, registry);
 
         String prefix = "dev.resilience4cata.examples.docs.bundles.LegacyCatalogClient#";
-        assertThat(registry.snapshot().retries()).extracting(RetrySnapshot::instance, r -> r.config().maxAttempts())
+        assertThat(registry.snapshot().retries()).extracting(RetrySnapshot::id, r -> r.config().maxAttempts())
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple(prefix + "category(java.lang.String)", 2),
                         org.assertj.core.groups.Tuple.tuple(prefix + "product(java.lang.String)", 5));
@@ -118,7 +118,7 @@ class BundlesTest {
         Resilient.of(ChildApi.class, id -> "x", registry);
 
         RetrySnapshot retry = registry.snapshot().retries().get(0);
-        assertThat(retry.instance()).isEqualTo("dev.resilience4cata.examples.docs.bundles.ChildApi#get(java.lang.String)");
+        assertThat(retry.id()).isEqualTo("dev.resilience4cata.examples.docs.bundles.ChildApi#get(java.lang.String)");
         assertThat(retry.config().maxAttempts()).isEqualTo(3);
         assertThat(retry.config().delay()).isEqualTo(Duration.ofMillis(1));
     }

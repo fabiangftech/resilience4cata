@@ -36,7 +36,7 @@ class FallbackPageTest {
         }, registry);
         assertThat(prices.price("sku-1")).isEqualTo(-1);
         assertThat(applied).hasSize(1);
-        assertThat(applied.getFirst().instance())
+        assertThat(applied.getFirst().id())
                 .isEqualTo("dev.resilience4cata.examples.docs.fallback.PriceApi#price(java.lang.String)");
     }
 
@@ -164,7 +164,7 @@ class FallbackPageTest {
         assertThat(context.failure()).isInstanceOf(IllegalStateException.class);
         assertThat(context.argumentCount()).isEqualTo(2);
         assertThat(context.argument(0, String.class)).isEqualTo("sku-1");
-        assertThat(context.instanceId())
+        assertThat(context.id())
                 .isEqualTo("dev.resilience4cata.examples.docs.fallback.RecordingQuoteApi#quote(java.lang.String,int)");
     }
 

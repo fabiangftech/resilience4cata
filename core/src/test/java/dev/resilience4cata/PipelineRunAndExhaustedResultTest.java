@@ -144,7 +144,7 @@ class PipelineRunAndExhaustedResultTest {
                 .isInstanceOfSatisfying(ResultRejectedException.class, e -> {
                     assertThat(e.result()).isEqualTo("busy");
                     assertThat(e.attempts()).isEqualTo(3);
-                    assertThat(e.instanceId()).isEqualTo("exhausted-throw");
+                    assertThat(e.id()).isEqualTo("exhausted-throw");
                 });
         assertThat(calls).hasValue(3);
         assertThat(pipeline.execute(() -> calls.incrementAndGet() < 5 ? "busy" : "ok"))
@@ -225,7 +225,7 @@ class PipelineRunAndExhaustedResultTest {
         assertThat(events).hasSize(2);
         assertThat(events.get(0)).isInstanceOf(RetryEvent.Retrying.class);
         assertThat(events.get(1)).isInstanceOfSatisfying(RetryEvent.GaveUp.class, gaveUp -> {
-            assertThat(gaveUp.instance()).isEqualTo("classifier-gave-up");
+            assertThat(gaveUp.id()).isEqualTo("classifier-gave-up");
             assertThat(gaveUp.attempts()).isEqualTo(2);
             assertThat(gaveUp.reason()).isEqualTo(RetryEvent.Reason.CLASSIFIER_FAILED);
             assertThat(gaveUp.failure()).isInstanceOf(IllegalArgumentException.class);

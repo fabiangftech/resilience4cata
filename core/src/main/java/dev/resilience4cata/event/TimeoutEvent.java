@@ -10,10 +10,10 @@ public sealed interface TimeoutEvent extends ResilienceEvent {
      * before {@code CallTimeoutException} is thrown; for an asynchronous call, on a library virtual
      * thread when the returned future fails.
      *
-     * @param instance the timeout's id
+     * @param id the timeout's id
      * @param nanoTime when the timeout was detected
      * @param timeout the configured timeout
      */
-    record TimedOut(String instance, long nanoTime, Duration timeout) implements TimeoutEvent {
+    record TimedOut(String id, long nanoTime, Duration timeout) implements TimeoutEvent {
     }
 }

@@ -169,7 +169,8 @@ public final class RateLimiterConfig implements PolicyConfig {
     /** The values, as {@code RateLimiterConfig[name=value, ...]}. */
     @Override
     public String toString() {
-        return "RateLimiterConfig[enabled=" + enabled + ", permits=" + permits + ", period=" + period + ", maxWait=" + maxWait + "]";
+        return "RateLimiterConfig[enabled=" + enabled + ", permits=" + permits + ", period=" + period
+                + ", maxWait=" + maxWait + "]";
     }
 
     /** The values in declaration order, for {@link ResilienceSnapshot#toMap()}. */

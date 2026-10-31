@@ -197,7 +197,7 @@ abstract class LoadScenarios {
         Map<Integer, Integer> recovered = fire(100, i -> "/stock/sku-" + i);
         assertThat(recovered).as("closed again").containsOnlyKeys(200);
         assertThat(registry.circuitBreaker("load-stock").state()).isEqualTo(CircuitBreakerState.CLOSED);
-        assertThat(registry.snapshot().circuitBreakers()).anySatisfy(b -> assertThat(b.instance()).isEqualTo("load-stock"));
+        assertThat(registry.snapshot().circuitBreakers()).anySatisfy(b -> assertThat(b.id()).isEqualTo("load-stock"));
     }
 
     @Test

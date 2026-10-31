@@ -61,7 +61,7 @@ Abridged: the real file uses fully qualified names.
 ```mermaid
 flowchart TD
     arrives["Call arrives"] --> free{"Fewer calls running<br/>than the current limit?"}
-    free -- no --> reject["LimitExceededException<br/>(method not called)"]
+    free -- no --> reject["AdaptiveLimitFullException<br/>(method not called)"]
     free -- yes --> run["Take a slot, note the time,<br/>run the method"]
     run --> outcome{"How did it end?"}
     outcome -- "returned" --> sample["Free the slot,<br/>add its latency to the window"]
@@ -73,7 +73,7 @@ flowchart TD
 ```
 
 - **Slots.** A call takes a slot before it runs and gives it back when it returns or throws. At most *the current limit* calls hold a slot at the same time. The limit starts at `initialLimit` and always stays between `minLimit` and `maxLimit`.
-- **Rejection.** A call that finds every slot taken fails at once with `dev.resilience4cata.LimitExceededException` (a `RuntimeException` with `instanceId()`; one per instance, no stack trace). The method is not called. There is no waiting: a full limit always rejects.
+- **Rejection.** A call that finds every slot taken fails at once with `dev.resilience4cata.AdaptiveLimitFullException` (a `RuntimeException` with `id()`; one per instance, no stack trace). The method is not called. There is no waiting: a full limit always rejects.
 - **Samples.** Each call that returns is a *sample*: its latency, from taking the slot to the end of the call. A failure listed in `dropOn` is a sample too, marked as a *drop*: the dependency is overloaded. Any other failure (a 404, a validation error) frees the slot and says nothing about load, so it is not a sample.
 - **Windows.** Samples are grouped in windows of at least `window` (1 s) and at least `minWindowSamples` calls (10). When a call completes after the window is over and the window has enough samples, that call's thread recomputes the limit from the window's average latency, the most calls it saw in flight, and whether any call was dropped. A window that is over with too few calls is extended by one more `window`, and keeps its samples: they count when it ends. So with little traffic the limit moves slowly (and is checked once per window, not on every call), and with none it does not move.
 - **Lower limit, calls in flight.** When the limit goes down below the calls already running, nothing is interrupted: new calls are rejected until enough of them end.
@@ -168,8 +168,8 @@ Without `name`, every method has its own limit, with the id `<interface>#<method
 ```java
 AdaptiveLimitHandle limit = registry.adaptiveLimit("orders");
 int current = limit.limit();                   // how many calls may run at once now
-int running = limit.inFlight();                // calls inside right now
-AdaptiveLimitSnapshot snapshot = limit.snapshot(); // limit, inFlight, bounds, windows, latencies
+int running = limit.concurrentCalls();                // calls inside right now
+AdaptiveLimitSnapshot snapshot = limit.snapshot(); // limit, concurrentCalls, bounds, windows, latencies
 ```
 
 | Method | What it does |
@@ -177,8 +177,8 @@ AdaptiveLimitSnapshot snapshot = limit.snapshot(); // limit, inFlight, bounds, w
 | `id()` | The `name`, or the derived id |
 | `config()` | The resolved `AdaptiveLimitConfig` |
 | `limit()` | The current limit |
-| `inFlight()` | Calls holding a slot right now |
-| `snapshot()` | An `AdaptiveLimitSnapshot(instance, algorithm, limit, inFlight, minLimit, maxLimit, windows, windowLatency, longTermLatency)`, plus `availableSlots()`. `windowLatency` is the last window's average; `longTermLatency` is Gradient2's long-term average (zero with AIMD) |
+| `concurrentCalls()` | Calls holding a slot right now |
+| `snapshot()` | An `AdaptiveLimitSnapshot(id, algorithm, limit, concurrentCalls, minLimit, maxLimit, windows, windowLatency, longTermLatency)`, plus `availableSlots()`. `windowLatency` is the last window's average; `longTermLatency` is Gradient2's long-term average (zero with AIMD) |
 
 The limit exists once its interface has been wrapped or its pipeline built; an unknown id throws [`R4C-REG-009`](../errors.md#r4c-reg-009). List them with `registry.snapshot().adaptiveLimits()`.
 
@@ -187,7 +187,7 @@ The limit exists once its interface has been wrapped or its pipeline built; an u
 The adaptive limit is inside the rate limiter and outside the timeout and the bulkhead:
 
 - **A `@Timeout` inside is the overload signal.** A call that times out fails with `CallTimeoutException`, which is in `dropOn` by default: the latency of that call (the timeout) goes into the window, and AIMD backs off. The same goes for a full `@Bulkhead` inside (`BulkheadFullException`).
-- **Outer policies see `LimitExceededException`.** It is an `Exception`: by default an outer `@Retry` retries it after its delay (add it to `abortOn` to fail fast) and an outer `@CircuitBreaker` records it as a failure (add it to `ignoreOn` if a full limit should not open the breaker). A `@Hedge` stops starting attempts when one is rejected by the limit, as for an open breaker or a full bulkhead.
+- **Outer policies see `AdaptiveLimitFullException`.** It is an `Exception`: by default an outer `@Retry` retries it after its delay (add it to `abortOn` to fail fast) and an outer `@CircuitBreaker` records it as a failure (add it to `ignoreOn` if a full limit should not open the breaker). A `@Hedge` stops starting attempts when one is rejected by the limit, as for an open breaker or a full bulkhead.
 - **Each attempt is measured on its own**: a retry's delay is outside the limit, and holds no slot.
 - **Rejected calls already took a rate-limiter permit**, since the rate limiter is outside.
 
@@ -221,8 +221,8 @@ The id `"search"` is the instance id: `registry.adaptiveLimit("search")` returns
 
 | Event | When | Fields |
 |---|---|---|
-| `AdaptiveLimitEvent.Rejected` | A call was rejected: the limit was full | `instance`, `nanoTime`, `limit` |
-| `AdaptiveLimitEvent.LimitChanged` | A window ended and the limit moved | `instance`, `nanoTime`, `from`, `to`, `windowLatencyNanos` |
+| `AdaptiveLimitEvent.Rejected` | A call was rejected: the limit was full | `id`, `nanoTime`, `limit` |
+| `AdaptiveLimitEvent.LimitChanged` | A window ended and the limit moved | `id`, `nanoTime`, `from`, `to`, `windowLatency` |
 
 Admitted calls publish nothing, and a window that keeps the limit publishes nothing. The metrics modules report rejections in `r4c.calls.rejected` with `kind = adaptivelimit`, the moves in `r4c.adaptivelimit.limit.changes`, and the gauges `r4c.adaptivelimit.limit` and `r4c.adaptivelimit.concurrent.calls`. See [Observability](../guides/observability.md#metric-names).
 
@@ -242,7 +242,7 @@ AdaptiveLimitHandle limit = registry.adaptiveLimit("orders-async");
 CompletableFuture<String> a = orders.placeAsync("a");          // pending: holds a slot
 CompletableFuture<String> b = orders.placeAsync("b");          // pending: holds the other
 assertThat(orders.placeAsync("c")).failsWithin(Duration.ZERO)  // full: rejected at once
-        .withThrowableThat().withCauseInstanceOf(LimitExceededException.class);
+        .withThrowableThat().withCauseInstanceOf(AdaptiveLimitFullException.class);
 
 clock.advance(Duration.ofSeconds(1));                          // the calls took 1 s; the window is over
 pending.get("a").complete("placed a");                         // ends the window

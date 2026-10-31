@@ -5,24 +5,16 @@ package dev.resilience4cata;
  * Each bulkhead reuses one preallocated instance without a stack trace, so a rejection costs almost
  * nothing. If the caller is interrupted while waiting, the interrupt flag is set again before this is thrown.
  */
-public final class BulkheadFullException extends RuntimeException {
+public final class BulkheadFullException extends CallRejectedException {
 
     private static final long serialVersionUID = 1L;
-
-    private final String instanceId;
 
     /**
      * Creates the exception for one bulkhead.
      *
-     * @param instanceId id of the bulkhead
+     * @param id id of the bulkhead
      */
-    public BulkheadFullException(String instanceId) {
-        super("Bulkhead '" + instanceId + "' is full", null, false, false);
-        this.instanceId = instanceId;
-    }
-
-    /** Returns the id of the bulkhead that rejected the call. */
-    public String instanceId() {
-        return instanceId;
+    public BulkheadFullException(String id) {
+        super("Bulkhead '" + id + "' is full", id);
     }
 }

@@ -95,7 +95,7 @@ stateDiagram-v2
 - **Forced open and disabled** are set by hand, through the [handle](#handle): `forceOpen()` rejects everything, `disable()` lets everything through and records nothing, both until `reset()`. `enabled = "false"` starts the breaker in `DISABLED`, and `reset()` then goes back to `DISABLED`.
 - A call's outcome is dropped if the breaker changed state while it ran, so a slow call that started while closed cannot decide a half-open probe.
 
-The rejection, `dev.resilience4cata.CallNotPermittedException`, is a `RuntimeException` with `instanceId()`. It is created once per breaker and has no stack trace, so a rejection costs nothing; its message names the breaker.
+The rejection, `dev.resilience4cata.CallNotPermittedException`, is a `RuntimeException` with `id()`. It is created once per breaker and has no stack trace, so a rejection costs nothing; its message names the breaker.
 
 ## Attributes
 
@@ -145,7 +145,7 @@ A breaker has state, so sharing matters. Without `name`, each method has its own
 CircuitBreakerHandle breaker = registry.circuitBreaker("payments");
 CircuitBreakerSnapshot snapshot = breaker.snapshot();
 System.out.printf("%s is %s, %d calls, failure rate %.0f%%%n",
-        snapshot.instance(), snapshot.state(), snapshot.bufferedCalls(), snapshot.failureRate());
+        snapshot.id(), snapshot.state(), snapshot.bufferedCalls(), snapshot.failureRate());
 
 breaker.forceOpen();   // maintenance window: every call is rejected
 breaker.disable();     // or let every call through, recording nothing
@@ -202,10 +202,10 @@ The id `"payments"` is the breaker's instance id: `registry.circuitBreaker("paym
 
 | Event | When | Fields |
 |---|---|---|
-| `CircuitBreakerEvent.StateTransition` | Every state change, published once, by the thread that made it | `instance`, `nanoTime`, `from`, `to` |
-| `CircuitBreakerEvent.CallNotPermitted` | A call was rejected (open, forced open, or no probes left) | `instance`, `nanoTime`, `state` |
+| `CircuitBreakerEvent.StateTransition` | Every state change, published once, by the thread that made it | `id`, `nanoTime`, `from`, `to` |
+| `CircuitBreakerEvent.CallNotPermitted` | A call was rejected (open, forced open, or no probes left) | `id`, `nanoTime`, `state` |
 
-`CircuitBreakerSnapshot(instance, state, failureRate, slowCallRate, bufferedCalls, failedCalls, slowCalls)`: rates are percentages, or `-1` until the window holds `minimumCalls` calls (the slow-call rate is also `-1` while detection is off). In half-open the counts are the probes'. See [Observability](../guides/observability.md).
+`CircuitBreakerSnapshot(id, state, failureRate, slowCallRate, bufferedCalls, failedCalls, slowCalls)`: rates are percentages, or `-1` until the window holds `minimumCalls` calls (the slow-call rate is also `-1` while detection is off). In half-open the counts are the probes'. See [Observability](../guides/observability.md).
 
 ## Testing it with `ManualClock`
 
@@ -240,7 +240,7 @@ On a [`ManualClock`](../guides/testing.md), `waitInOpen`, slow calls and time wi
 - A time window reads the clock on every call. A count window reads it only when slow-call detection is on.
 - With the defaults, the breaker needs 100 calls before it can open. For a low-traffic dependency, lower `minimumCalls` (and `windowSize`), or use a time window.
 - Thresholds are inclusive: 5 failures out of 10 opens a breaker with `failureRateThreshold = 50`.
-- `CallNotPermittedException` has no stack trace by design. Log the message or `instanceId()`.
+- `CallNotPermittedException` has no stack trace by design. Log the message or `id()`.
 - Related errors: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (duration syntax), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`windowSize`, `minimumCalls`, `halfOpenCalls` below 1), [`R4C-ATR-005`](../errors.md#r4c-atr-005) (rates outside (0, 100]), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` with `recordOn`), [`R4C-REG-004`](../errors.md#r4c-reg-004) (unknown `config`), [`R4C-REG-008`](../errors.md#r4c-reg-008) (shared `name`, different config), [`R4C-REG-009`](../errors.md#r4c-reg-009) (unknown id for `registry.circuitBreaker`).
 
 ## What it costs

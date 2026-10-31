@@ -105,7 +105,7 @@ It is **on by default** (10 % of the calls plus 1 hedge per second, over 10 s), 
 
 Every key also exists under `configs.<name>.hedge.…` and `instances.<id>.hedge.…`; see [Configuration](../guides/configuration.md). There is no classifier and no `maxDuration` yet: the per-attempt `@Timeout` and `maxAttempts × delay` bound a call.
 
-There is **no handle**: `registry` has no `hedge(id)`. `registry.snapshot().hedges()` lists a `HedgeSnapshot(instance, config, budget)` per instance (`budget` is `null` when `budgetPercent = 0`).
+There is **no handle**: `registry` has no `hedge(id)`. `registry.snapshot().hedges()` lists a `HedgeSnapshot(id, config, budget)` per instance (`budget` is `null` when `budgetPercent = 0`).
 
 ## With other policies
 
@@ -148,10 +148,10 @@ A pipeline with a hedge only works with `executeAsync`: `execute` throws [`R4C-R
 
 | Event | When | Fields |
 |---|---|---|
-| `HedgeEvent.Hedged` | Attempt 2 or later started | `instance`, `nanoTime`, `attempt`, `reason` (`DELAY` or `FAILURE`) |
-| `HedgeEvent.Won` | Attempt 2 or later succeeded first | `instance`, `nanoTime`, `attempt` |
-| `HedgeEvent.Skipped` | A hedge that could have started did not | `instance`, `nanoTime`, `attempt`, `reason` (`BUDGET_EXHAUSTED`, `REJECTED` or `ABORTED`) |
-| `HedgeEvent.Failed` | The call failed | `instance`, `nanoTime`, `attempts`, `failure` |
+| `HedgeEvent.Hedged` | Attempt 2 or later started | `id`, `nanoTime`, `attempt`, `reason` (`DELAY` or `FAILURE`) |
+| `HedgeEvent.Won` | Attempt 2 or later succeeded first | `id`, `nanoTime`, `attempt` |
+| `HedgeEvent.Skipped` | A hedge that could have started did not | `id`, `nanoTime`, `attempt`, `reason` (`BUDGET_EXHAUSTED`, `REJECTED` or `ABORTED`) |
+| `HedgeEvent.Failed` | The call failed | `id`, `nanoTime`, `attempts`, `failure` |
 
 A call whose first attempt wins publishes nothing, and there are no per-call counters: how often hedges start and win is visible through these events only. See [Observability](../guides/observability.md).
 

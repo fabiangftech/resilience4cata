@@ -47,7 +47,7 @@ class ObservabilityGuideTest {
         ResilienceRegistry registry = ResilienceRegistry.builder()
                 // one record type, on every instance
                 .listen(CircuitBreakerEvent.StateTransition.class,
-                        t -> log.add(t.instance() + ": " + t.from() + " -> " + t.to()))
+                        t -> log.add(t.id() + ": " + t.from() + " -> " + t.to()))
                 // every retry event (Retrying and GaveUp), on one instance only
                 .listen("payments", RetryEvent.class, e -> log.add(e.toString()))
                 // everything: keep a default branch, new policies add event types
@@ -67,7 +67,7 @@ class ObservabilityGuideTest {
 
         assertThat(log).contains("payments: CLOSED -> OPEN", "gave up after 3: MAX_ATTEMPTS",
                         "gave up after 2: NOT_RETRYABLE") // the open breaker's rejection is not retried
-                .anyMatch(line -> line.startsWith("Retrying[instance=payments, "));
+                .anyMatch(line -> line.startsWith("Retrying[id=payments, "));
     }
 
     @Test
@@ -83,15 +83,15 @@ class ObservabilityGuideTest {
         // tag::observability-snapshot[]
         ResilienceSnapshot snapshot = registry.snapshot(); // built when asked, never on the call path
         for (CircuitBreakerSnapshot b : snapshot.circuitBreakers()) {
-            lines.add(b.instance() + " " + b.state() + " failureRate=" + b.failureRate()
+            lines.add(b.id() + " " + b.state() + " failureRate=" + b.failureRate()
                     + " buffered=" + b.bufferedCalls() + " failed=" + b.failedCalls() + " slow=" + b.slowCalls());
         }
         for (BulkheadSnapshot b : snapshot.bulkheads()) {
-            lines.add(b.instance() + " in use " + b.concurrentCalls() + "/" + b.maxConcurrent()
+            lines.add(b.id() + " in use " + b.concurrentCalls() + "/" + b.maxConcurrent()
                     + ", waiting " + b.waitingCalls() + ", free " + b.availableSlots());
         }
         for (RateLimiterSnapshot r : snapshot.rateLimiters()) {
-            lines.add(r.instance() + " permits " + r.availablePermits() + "/" + r.permits());
+            lines.add(r.id() + " permits " + r.availablePermits() + "/" + r.permits());
         }
         // end::observability-snapshot[]
 
@@ -109,7 +109,7 @@ class ObservabilityGuideTest {
         // tag::observability-diy[]
         ResilienceRegistry registry = ResilienceRegistry.builder()
                 // counters: from events, on the thread that caused them
-                .listen(RetryEvent.Retrying.class, e -> retries.merge(e.instance(), 1L, Long::sum))
+                .listen(RetryEvent.Retrying.class, e -> retries.merge(e.id(), 1L, Long::sum))
                 .build();
         // gauges: one per instance, read at collection time; new instances are announced once each
         registry.onInstanceCreated(() -> {

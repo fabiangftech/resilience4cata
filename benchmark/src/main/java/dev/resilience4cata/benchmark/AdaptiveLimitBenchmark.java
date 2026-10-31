@@ -5,7 +5,7 @@ import com.netflix.concurrency.limits.Limiter;
 import com.netflix.concurrency.limits.limit.Gradient2Limit;
 import com.netflix.concurrency.limits.limit.WindowedLimit;
 import com.netflix.concurrency.limits.limiter.SimpleLimiter;
-import dev.resilience4cata.LimitExceededException;
+import dev.resilience4cata.AdaptiveLimitFullException;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
 import java.time.Duration;
@@ -107,7 +107,7 @@ public class AdaptiveLimitBenchmark {
     public String resilience4cataFull() {
         try {
             return resilience4cata.callFull();
-        } catch (LimitExceededException e) {
+        } catch (AdaptiveLimitFullException e) {
             return "rejected";
         }
     }

@@ -127,7 +127,7 @@ default Response unavailable(String orderId, ResultRejectedException rejected) {
 }
 ```
 
-`ResultRejectedException` carries `instanceId()`, `attempts()` and the last result, as `result()` (an `Object`) or `result(Class<R>)` (typed). `onExhaustedResult` needs a classifier ([`R4C-CLS-012`](../errors.md#r4c-cls-012)), is decided at compile time, and is not part of the retry's configuration: no config key can change it. `maxDuration` applies as usual: giving up because the budget ran out on a rejected result behaves the same way.
+`ResultRejectedException` carries `id()`, `attempts()` and the last result, as `result()` (an `Object`) or `result(Class<R>)` (typed). `onExhaustedResult` needs a classifier ([`R4C-CLS-012`](../errors.md#r4c-cls-012)), is decided at compile time, and is not part of the retry's configuration: no config key can change it. `maxDuration` applies as usual: giving up because the budget ran out on a rejected result behaves the same way.
 
 ## A classifier that throws
 

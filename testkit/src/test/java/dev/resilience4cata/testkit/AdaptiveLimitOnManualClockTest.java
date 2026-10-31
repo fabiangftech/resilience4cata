@@ -3,7 +3,7 @@ package dev.resilience4cata.testkit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.AdaptiveLimitHandle;
-import dev.resilience4cata.LimitExceededException;
+import dev.resilience4cata.AdaptiveLimitFullException;
 import dev.resilience4cata.Pipeline;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.event.AdaptiveLimitEvent;
@@ -47,7 +47,7 @@ class AdaptiveLimitOnManualClockTest {
         }
         assertThat(pipeline.executeAsync(() -> CompletableFuture.completedFuture("one too many")))
                 .as("the limit is full").failsWithin(Duration.ZERO).withThrowableThat().havingCause()
-                .isInstanceOf(LimitExceededException.class);
+                .isInstanceOf(AdaptiveLimitFullException.class);
         advanceTo(deadline);
         stages.forEach(stage -> stage.complete("ok"));
         assertThat(results).allMatch(r -> r.isDone() && !r.isCompletedExceptionally());
@@ -74,8 +74,8 @@ class AdaptiveLimitOnManualClockTest {
         }
         assertThat(limitAfter).as("shrinks once latency is ten times the long-term average").isLessThan(peak / 2);
         assertThat(limit.snapshot().windowLatency()).isEqualTo(Duration.ofMillis(200));
-        assertThat(limit.inFlight()).isZero();
-        assertThat(changes).isNotEmpty().allSatisfy(c -> assertThat(c.instance()).isEqualTo("search"));
+        assertThat(limit.concurrentCalls()).isZero();
+        assertThat(changes).isNotEmpty().allSatisfy(c -> assertThat(c.id()).isEqualTo("search"));
         assertThat(clock.pendingTasks()).as("nothing is scheduled").isZero();
     }
 

@@ -61,8 +61,8 @@ export class QwcResilience4cataPolicies extends LitElement {
             .catch(error => { this._error = error; });
     }
 
-    _act(method, instance) {
-        this.jsonRpc[method]({instance: instance}).then(() => this._refresh());
+    _act(method, id) {
+        this.jsonRpc[method]({id: id}).then(() => this._refresh());
     }
 
     render() {
@@ -76,43 +76,43 @@ export class QwcResilience4cataPolicies extends LitElement {
         return html`
             <span class="note">Instances appear once created (most on first use). Refreshed every 2 s.</span>
             ${this._section('Circuit breakers', s.circuitBreakers, [
-                ['Instance', b => html`<code>${b.instance}</code>`],
+                ['Instance', b => html`<code>${b.id}</code>`],
                 ['State', b => html`<span class="state-${b.state}">${b.state}</span>`],
                 ['Failure rate', b => this._percent(b.failureRate)],
                 ['Slow-call rate', b => this._percent(b.slowCallRate)],
                 ['Calls in window', b => html`${b.bufferedCalls} (${b.failedCalls} failed, ${b.slowCalls} slow)`],
                 ['Actions (dev mode)', b => html`
-                    <vaadin-button theme="small error" @click=${() => this._act('forceOpen', b.instance)}>Force open</vaadin-button>
-                    <vaadin-button theme="small" @click=${() => this._act('disable', b.instance)}>Disable</vaadin-button>
-                    <vaadin-button theme="small primary" @click=${() => this._act('reset', b.instance)}>Reset</vaadin-button>`]
+                    <vaadin-button theme="small error" @click=${() => this._act('forceOpen', b.id)}>Force open</vaadin-button>
+                    <vaadin-button theme="small" @click=${() => this._act('disable', b.id)}>Disable</vaadin-button>
+                    <vaadin-button theme="small primary" @click=${() => this._act('reset', b.id)}>Reset</vaadin-button>`]
             ])}
             ${this._section('Bulkheads', s.bulkheads, [
-                ['Instance', b => html`<code>${b.instance}</code>`],
+                ['Instance', b => html`<code>${b.id}</code>`],
                 ['Concurrent calls', b => html`${b.concurrentCalls} / ${b.maxConcurrent}`],
                 ['Waiting', b => html`${b.waitingCalls}`]
             ])}
             ${this._section('Rate limiters', s.rateLimiters, [
-                ['Instance', r => html`<code>${r.instance}</code>`],
+                ['Instance', r => html`<code>${r.id}</code>`],
                 ['Available permits', r => html`${r.availablePermits} / ${r.permits}`]
             ])}
             ${this._section('Adaptive limits', s.adaptiveLimits, [
-                ['Instance', a => html`<code>${a.instance}</code>`],
+                ['Instance', a => html`<code>${a.id}</code>`],
                 ['Algorithm', a => html`${a.algorithm}`],
                 ['Limit', a => html`${a.limit} (${a.minLimit}–${a.maxLimit})`],
-                ['In flight', a => html`${a.inFlight}`],
+                ['In flight', a => html`${a.concurrentCalls}`],
                 ['Last window latency', a => this._value(a.windowLatency)],
                 ['Long-term latency', a => this._value(a.longTermLatency)],
                 ['Windows', a => html`${a.windows}`]
             ])}
             ${this._section('Retries', s.retries, [
-                ['Instance', r => html`<code>${r.instance}</code>`],
+                ['Instance', r => html`<code>${r.id}</code>`],
                 ['Max attempts', r => html`${r.maxAttempts}`],
                 ['Budget', r => r.budget
                     ? html`${r.budget.retries} of ${r.budget.allowedRetries} retries allowed, ${r.budget.calls} calls`
                     : this._value(null)]
             ])}
             ${this._section('Hedges', s.hedges, [
-                ['Instance', h => html`<code>${h.instance}</code>`],
+                ['Instance', h => html`<code>${h.id}</code>`],
                 ['Delay', h => html`${h.delay}`],
                 ['Max attempts', h => html`${h.maxAttempts}`],
                 ['Budget', h => h.budget
@@ -120,7 +120,7 @@ export class QwcResilience4cataPolicies extends LitElement {
                     : this._value(null)]
             ])}
             ${this._section('Timeouts', s.timeouts, [
-                ['Instance', t => html`<code>${t.instance}</code>`],
+                ['Instance', t => html`<code>${t.id}</code>`],
                 ['Timeout', t => html`${t.timeout}`]
             ])}
             <span class="note">Docs: <a href="https://resilience4cata.dev/en/guides/quarkus#dev-ui" target="_blank">resilience4cata.dev</a></span>

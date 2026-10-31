@@ -70,7 +70,7 @@ flowchart TD
 ```
 
 - **Slots.** Una llamada toma un slot antes de correr y lo devuelve cuando retorna o lanza. Como máximo `maxConcurrent` llamadas tienen un slot al mismo tiempo.
-- **Rechazo.** Con `maxWait = "0"` (por defecto), una llamada que encuentra el bulkhead lleno falla enseguida con `dev.resilience4cata.BulkheadFullException` (una `RuntimeException` con `instanceId()`; una por bulkhead, sin stack trace). El método no se llama.
+- **Rechazo.** Con `maxWait = "0"` (por defecto), una llamada que encuentra el bulkhead lleno falla enseguida con `dev.resilience4cata.BulkheadFullException` (una `RuntimeException` con `id()`; una por bulkhead, sin stack trace). El método no se llama.
 - **Espera, sync.** Con `maxWait` > 0, el thread que llama se bloquea hasta que haya un slot libre o pase `maxWait`. En un virtual thread, bloquearse es barato y no fija (pin) un carrier. Si el thread que espera se interrumpe, la llamada se rechaza y el flag de interrupción se activa de nuevo. La espera no es por orden de llegada: una llamada nueva puede tomar un slot liberado antes que una que espera.
 - **Es un bulkhead de semáforo**: la llamada corre en el thread de quien llama. No hay bulkhead de pool de threads; con virtual threads rara vez hace falta.
 - **Desactivado** (`enabled = "false"`): todas las llamadas pasan.
@@ -118,7 +118,7 @@ BulkheadSnapshot snapshot = bulkhead.snapshot(); // instance, concurrentCalls, w
 | `config()` | La `BulkheadConfig` resuelta |
 | `concurrentCalls()` | Llamadas que tienen un slot ahora mismo |
 | `waitingCalls()` | Llamadas esperando un slot ahora mismo: llamadas async en cola por un slot liberado más threads sync bloqueados en el bulkhead. Siempre 0 cuando `maxWait` es 0. Una foto para monitoreo; puede estar desactualizada cuando la lees |
-| `snapshot()` | Un `BulkheadSnapshot(instance, concurrentCalls, waitingCalls, maxConcurrent)`, más `availableSlots()` |
+| `snapshot()` | Un `BulkheadSnapshot(id, concurrentCalls, waitingCalls, maxConcurrent)`, más `availableSlots()` |
 
 El bulkhead existe una vez que su interfaz se envolvió o su pipeline se construyó; un id desconocido lanza [`R4C-REG-009`](../errors.md#r4c-reg-009). No hay `registry.bulkheads()`: lístalos con `registry.snapshot().bulkheads()`.
 
@@ -160,7 +160,7 @@ El id `"renderer"` es el id de instancia: `registry.bulkhead("renderer")` lo dev
 
 | Evento | Cuándo | Campos |
 |---|---|---|
-| `BulkheadEvent.Rejected` | Se rechazó una llamada (lleno sin espera, pasó `maxWait`, o una espera interrumpida) | `instance`, `nanoTime`, `maxConcurrent` |
+| `BulkheadEvent.Rejected` | Se rechazó una llamada (lleno sin espera, pasó `maxWait`, o una espera interrumpida) | `id`, `nanoTime`, `maxConcurrent` |
 
 Las llamadas admitidas no publican nada. Ver [Observabilidad](../guides/observability.md).
 

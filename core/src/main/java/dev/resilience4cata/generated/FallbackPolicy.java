@@ -80,7 +80,7 @@ public final class FallbackPolicy {
     }
 
     /** Returns the method's id. */
-    public String instanceId() {
+    public String id() {
         return instanceId;
     }
 
@@ -161,7 +161,7 @@ public final class FallbackPolicy {
     }
 
     @SuppressWarnings("java:S6218") // one per failure, handed to a fallback; never compared or used as a key
-    private record Context(String instanceId, Throwable failure, int attempts, @Nullable Object[] arguments)
+    private record Context(String id, Throwable failure, int attempts, @Nullable Object[] arguments)
             implements FallbackContext {
 
         @Override
@@ -196,7 +196,7 @@ public final class FallbackPolicy {
 
         @Override
         public String toString() {
-            return "FallbackContext[" + instanceId + ", attempts=" + attempts + ", failure=" + failure + "]";
+            return "FallbackContext[" + id + ", attempts=" + attempts + ", failure=" + failure + "]";
         }
     }
 

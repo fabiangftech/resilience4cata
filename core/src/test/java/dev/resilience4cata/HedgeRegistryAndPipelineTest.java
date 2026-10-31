@@ -60,7 +60,7 @@ class HedgeRegistryAndPipelineTest {
         Policies.hedge(registry, "A#a()", "", "", null, false);
 
         List<HedgeSnapshot> hedges = registry.snapshot().hedges();
-        assertThat(hedges).extracting(HedgeSnapshot::instance).containsExactly("A#a()", "B#b()");
+        assertThat(hedges).extracting(HedgeSnapshot::id).containsExactly("A#a()", "B#b()");
         assertThat(hedges.get(0).budget()).isEqualTo(new HedgeSnapshot.Budget(0, 0, 10));
         assertThat(hedges.get(1).budget()).as("no budget").isNull();
         assertThat(created).as("instance creation is announced").hasValue(2);
@@ -83,7 +83,7 @@ class HedgeRegistryAndPipelineTest {
         assertThat(slow).isCancelled();
         assertThat(calls).hasValue(2);
         assertThat(pipeline).hasToString("Pipeline[quotes, hedge, circuitBreaker]");
-        assertThat(registry.snapshot().hedges()).extracting(HedgeSnapshot::instance).containsExactly("quotes");
+        assertThat(registry.snapshot().hedges()).extracting(HedgeSnapshot::id).containsExactly("quotes");
         assertThat(registry.circuitBreaker("quotes").snapshot().failedCalls()).as("the loser is not recorded").isZero();
     }
 

@@ -56,7 +56,7 @@ class ExhaustedResultAndClassifierFailureTest {
         assertThat(rejected.result()).isEqualTo(503);
         assertThat(rejected.result(Integer.class)).isEqualTo(503);
         assertThat(rejected.attempts()).isEqualTo(3);
-        assertThat(rejected.instanceId()).isEqualTo("retry");
+        assertThat(rejected.id()).isEqualTo("retry");
         assertThat(rejected).hasMessage("Retry 'retry' gave up after 3 attempts: the classifier rejected the last result");
         assertThat(rejected.getStackTrace()).isEmpty();
         assertThat(retry.rejected(null, 1)).hasMessageContaining("after 1 attempt:");

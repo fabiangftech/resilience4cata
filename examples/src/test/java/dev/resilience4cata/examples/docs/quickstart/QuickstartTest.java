@@ -68,7 +68,7 @@ class QuickstartTest {
         LongAdder retries = new LongAdder();
         ResilienceRegistry registry = ResilienceRegistry.builder()
                 .listen(CircuitBreakerEvent.StateTransition.class,
-                        t -> LOG.log(Level.WARNING, "{0}: {1} -> {2}", t.instance(), t.from(), t.to()))
+                        t -> LOG.log(Level.WARNING, "{0}: {1} -> {2}", t.id(), t.from(), t.to()))
                 .listen(RetryEvent.Retrying.class, e -> retries.increment())
                 .build();
         PriceClient prices = Resilient.of(PriceClient.class, new FlakyPriceClient(), registry);
@@ -81,7 +81,7 @@ class QuickstartTest {
         assertThat(breaker.state()).isEqualTo(CircuitBreakerState.CLOSED);
         assertThat(breaker.bufferedCalls()).isEqualTo(2);
         assertThat(breaker.failedCalls()).isEqualTo(1);
-        assertThat(all.circuitBreakers()).extracting(CircuitBreakerSnapshot::instance).containsExactly("prices");
+        assertThat(all.circuitBreakers()).extracting(CircuitBreakerSnapshot::id).containsExactly("prices");
     }
 
     @Test

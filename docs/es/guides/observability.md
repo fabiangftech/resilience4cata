@@ -12,9 +12,9 @@ resilience4cata te da dos piezas básicas:
 
 ## Eventos :id=events
 
-Cada evento implementa la interfaz sellada `dev.resilience4cata.event.ResilienceEvent`, con `instance()` (el id de la instancia: el `name`, el id derivado `pkg.Type#method(java.lang.String,int)` o un id de pipeline) y `nanoTime()` (una lectura del reloj del registry: `System.nanoTime()`, o el [reloj manual](testing.md) en los tests). Cada política tiene su propia interfaz sellada de records:
+Cada evento implementa la interfaz sellada `dev.resilience4cata.event.ResilienceEvent`, con `id()` (el id de la instancia: el `name`, el id derivado `pkg.Type#method(java.lang.String,int)` o un id de pipeline) y `nanoTime()` (una lectura del reloj del registry: `System.nanoTime()`, o el [reloj manual](testing.md) en los tests). Cada política tiene su propia interfaz sellada de records:
 
-| Política | Record del evento | Campos (después de `instance`, `nanoTime`) | Se publica cuando |
+| Política | Record del evento | Campos (después de `id`, `nanoTime`) | Se publica cuando |
 |---|---|---|---|
 | Circuit breaker | `CircuitBreakerEvent.StateTransition` | `CircuitBreakerState from`, `CircuitBreakerState to` | el estado cambia, exactamente una vez por cambio, incluidos `forceOpen()`, `disable()` y `reset()` |
 | Circuit breaker | `CircuitBreakerEvent.CallNotPermitted` | `CircuitBreakerState state` | una llamada es rechazada (`OPEN`, `FORCED_OPEN`, o `HALF_OPEN` con todas las pruebas tomadas) |
@@ -27,8 +27,8 @@ Cada evento implementa la interfaz sellada `dev.resilience4cata.event.Resilience
 | Rate limiter | `RateLimiterEvent.Rejected` | ninguno | una llamada es rechazada con `RateLimitExceededException` |
 | Timeout | `TimeoutEvent.TimedOut` | `Duration timeout` | una llamada excede su timeout |
 | Bulkhead | `BulkheadEvent.Rejected` | `int maxConcurrent` | una llamada es rechazada con `BulkheadFullException` |
-| Adaptive limit | `AdaptiveLimitEvent.Rejected` | `int limit` | una llamada es rechazada con `LimitExceededException` |
-| Adaptive limit | `AdaptiveLimitEvent.LimitChanged` | `int from`, `int to`, `long windowLatencyNanos` | terminó una ventana y el [adaptive limit](../policies/adaptive-limit.md) movió su límite |
+| Adaptive limit | `AdaptiveLimitEvent.Rejected` | `int limit` | una llamada es rechazada con `AdaptiveLimitFullException` |
+| Adaptive limit | `AdaptiveLimitEvent.LimitChanged` | `int from`, `int to`, `Duration windowLatency` | terminó una ventana y el [adaptive limit](../policies/adaptive-limit.md) movió su límite |
 | Fallback | `FallbackEvent.Applied` | `Throwable failure` | un fallback está por ejecutarse para `failure`; no se publica cuando la falla se relanza porque ningún fallback la recibe (`skipOn`, o ningún método hermano acepta su tipo) |
 
 Un retry con `enabled = false` no publica nada. Un primer fallo que no es reintentable publica `GaveUp` con `attempts = 1` y `NOT_RETRYABLE`.
@@ -42,7 +42,7 @@ Los listeners se registran en `ResilienceRegistry.Builder`, y solo ahí: quedan 
 ResilienceRegistry registry = ResilienceRegistry.builder()
         // one record type, on every instance
         .listen(CircuitBreakerEvent.StateTransition.class,
-                t -> log.add(t.instance() + ": " + t.from() + " -> " + t.to()))
+                t -> log.add(t.id() + ": " + t.from() + " -> " + t.to()))
         // every retry event (Retrying and GaveUp), on one instance only
         .listen("payments", RetryEvent.class, e -> log.add(e.toString()))
         // everything: keep a default branch, new policies add event types
@@ -77,27 +77,27 @@ Cada política resuelve sus listeners una sola vez, cuando se crea la instancia,
 ```java
 ResilienceSnapshot snapshot = registry.snapshot(); // built when asked, never on the call path
 for (CircuitBreakerSnapshot b : snapshot.circuitBreakers()) {
-    lines.add(b.instance() + " " + b.state() + " failureRate=" + b.failureRate()
+    lines.add(b.id() + " " + b.state() + " failureRate=" + b.failureRate()
             + " buffered=" + b.bufferedCalls() + " failed=" + b.failedCalls() + " slow=" + b.slowCalls());
 }
 for (BulkheadSnapshot b : snapshot.bulkheads()) {
-    lines.add(b.instance() + " in use " + b.concurrentCalls() + "/" + b.maxConcurrent()
+    lines.add(b.id() + " in use " + b.concurrentCalls() + "/" + b.maxConcurrent()
             + ", waiting " + b.waitingCalls() + ", free " + b.availableSlots());
 }
 for (RateLimiterSnapshot r : snapshot.rateLimiters()) {
-    lines.add(r.instance() + " permits " + r.availablePermits() + "/" + r.permits());
+    lines.add(r.id() + " permits " + r.availablePermits() + "/" + r.permits());
 }
 ```
 
 | Record | Campos |
 |---|---|
-| `CircuitBreakerSnapshot` | `instance`, `state`, `failureRate` y `slowCallRate` (porcentaje, o `-1` hasta que la ventana contenga `minimumCalls` llamadas, `halfOpenCalls` mientras está semiabierto; `slowCallRate` también es `-1` cuando la detección de llamadas lentas está desactivada), `bufferedCalls`, `failedCalls`, `slowCalls` (llamadas en la ventana actual: la ventana deslizante mientras está cerrado, las pruebas mientras está semiabierto, ninguna mientras está abierto, forzado a abierto o desactivado) |
-| `BulkheadSnapshot` | `instance`, `concurrentCalls`, `waitingCalls`, `maxConcurrent`, y el método `availableSlots()` |
-| `AdaptiveLimitSnapshot` | `instance`, `algorithm`, `limit`, `inFlight`, `minLimit`, `maxLimit`, `windows` (terminadas hasta ahora), `windowLatency` (el promedio de la última ventana), `longTermLatency` (el promedio de largo plazo de Gradient2), y el método `availableSlots()` |
-| `RateLimiterSnapshot` | `instance`, `availablePermits`, `permits` |
-| `RetrySnapshot` | `instance`, `config` (el `RetryConfig` resuelto) |
-| `HedgeSnapshot` | `instance`, `config` (el `HedgeConfig` resuelto), `budget` (`calls`, `hedges`, `allowedHedges` en la ventana del presupuesto; `null` sin presupuesto) |
-| `TimeoutSnapshot` | `instance`, `config` (el `TimeoutConfig` resuelto) |
+| `CircuitBreakerSnapshot` | `id`, `state`, `failureRate` y `slowCallRate` (porcentaje, o `-1` hasta que la ventana contenga `minimumCalls` llamadas, `halfOpenCalls` mientras está semiabierto; `slowCallRate` también es `-1` cuando la detección de llamadas lentas está desactivada), `bufferedCalls`, `failedCalls`, `slowCalls` (llamadas en la ventana actual: la ventana deslizante mientras está cerrado, las pruebas mientras está semiabierto, ninguna mientras está abierto, forzado a abierto o desactivado) |
+| `BulkheadSnapshot` | `id`, `concurrentCalls`, `waitingCalls`, `maxConcurrent`, y el método `availableSlots()` |
+| `AdaptiveLimitSnapshot` | `id`, `algorithm`, `limit`, `concurrentCalls`, `minLimit`, `maxLimit`, `windows` (terminadas hasta ahora), `windowLatency` (el promedio de la última ventana), `longTermLatency` (el promedio de largo plazo de Gradient2), y el método `availableSlots()` |
+| `RateLimiterSnapshot` | `id`, `availablePermits`, `permits` |
+| `RetrySnapshot` | `id`, `config` (el `RetryConfig` resuelto) |
+| `HedgeSnapshot` | `id`, `config` (el `HedgeConfig` resuelto), `budget` (`calls`, `hedges`, `allowedHedges` en la ventana del presupuesto; `null` sin presupuesto) |
+| `TimeoutSnapshot` | `id`, `config` (el `TimeoutConfig` resuelto) |
 
 `snapshot.only(id)` se queda con las instancias de un id (`isEmpty()` si no hay ninguna). `snapshot.toMap()`
 convierte el snapshot en mapas, listas, strings, números, booleanos y nulls, que cualquier codificador JSON escribe
@@ -117,7 +117,7 @@ Los handles leen una instancia en vivo, y el del breaker además puede cambiar s
 | `registry.circuitBreakers()` | todos los handles de breaker, ordenados por id |
 | `registry.rateLimiter(id)` | `RateLimiterHandle`: `id()`, `config()`, `availablePermits()`, `snapshot()` |
 | `registry.bulkhead(id)` | `BulkheadHandle`: `id()`, `config()`, `concurrentCalls()`, `waitingCalls()`, `snapshot()` |
-| `registry.adaptiveLimit(id)` | `AdaptiveLimitHandle`: `id()`, `config()`, `limit()`, `inFlight()`, `snapshot()` |
+| `registry.adaptiveLimit(id)` | `AdaptiveLimitHandle`: `id()`, `config()`, `limit()`, `concurrentCalls()`, `snapshot()` |
 
 Una instancia existe solo cuando su interfaz ya fue envuelta (`Resilient.of`, `Resilient.create`) o su `Pipeline` ya fue construido; antes de eso, o para un id que no existe, la búsqueda lanza `IllegalArgumentException` [R4C-REG-009](../errors.md#r4c-reg-009) con el id más cercano. Retry y timeout no tienen handle; su configuración está en el snapshot. No hay método de listado para bulkheads, rate limiters y adaptive limits: enuméralos a través de `registry.snapshot()`.
 
@@ -156,7 +156,7 @@ Un puente hacia otra librería hace lo mismo que el módulo de Micrometer, con t
 ```java
 ResilienceRegistry registry = ResilienceRegistry.builder()
         // counters: from events, on the thread that caused them
-        .listen(RetryEvent.Retrying.class, e -> retries.merge(e.instance(), 1L, Long::sum))
+        .listen(RetryEvent.Retrying.class, e -> retries.merge(e.id(), 1L, Long::sum))
         .build();
 // gauges: one per instance, read at collection time; new instances are announced once each
 registry.onInstanceCreated(() -> {
@@ -192,7 +192,7 @@ public final class BreakerTransitionLogger implements EventListener<CircuitBreak
     public void onEvent(CircuitBreakerEvent.StateTransition t) {
         boolean opened = t.to() == CircuitBreakerState.OPEN || t.to() == CircuitBreakerState.FORCED_OPEN;
         logger.log(opened ? Level.WARNING : Level.INFO, "Circuit breaker {0}: {1} -> {2}",
-                t.instance(), t.from(), t.to());
+                t.id(), t.from(), t.to());
     }
 }
 ```
@@ -223,7 +223,7 @@ public record ResilienceHealth(boolean healthy, List<String> openBreakers) {
     public static ResilienceHealth of(ResilienceRegistry registry) {
         List<String> open = registry.snapshot().circuitBreakers().stream()
                 .filter(b -> b.state() == CircuitBreakerState.OPEN || b.state() == CircuitBreakerState.FORCED_OPEN)
-                .map(CircuitBreakerSnapshot::instance)
+                .map(CircuitBreakerSnapshot::id)
                 .toList();
         return new ResilienceHealth(open.isEmpty(), open);
     }

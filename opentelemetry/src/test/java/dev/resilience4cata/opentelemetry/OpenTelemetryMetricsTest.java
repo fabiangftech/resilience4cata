@@ -175,7 +175,7 @@ class OpenTelemetryMetricsTest {
         String result = pipeline.execute(() -> {
             collect(); // inside the call: the only slot taken
             assertThatThrownBy(() -> pipeline.execute(() -> "nested"))
-                    .isInstanceOf(dev.resilience4cata.LimitExceededException.class);
+                    .isInstanceOf(dev.resilience4cata.AdaptiveLimitFullException.class);
             clock.advance(Duration.ofSeconds(1)); // the window ends when this call does: AIMD adds one
             return "done";
         });

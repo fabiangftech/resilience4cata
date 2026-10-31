@@ -201,7 +201,7 @@ class ClassifierFailureEndToEndTest {
         assertThat(breaker.bufferedCalls()).isEqualTo(1);
         assertThat(breaker.failedCalls()).isEqualTo(1);
         assertThat(events).singleElement().isInstanceOfSatisfying(RetryEvent.GaveUp.class, gaveUp -> {
-            assertThat(gaveUp.instance()).isEqualTo(retryId);
+            assertThat(gaveUp.id()).isEqualTo(retryId);
             assertThat(gaveUp.attempts()).isEqualTo(1);
             assertThat(gaveUp.reason()).isEqualTo(RetryEvent.Reason.CLASSIFIER_FAILED);
             assertThat(gaveUp.failure()).isSameAs(failure);

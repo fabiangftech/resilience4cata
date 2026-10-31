@@ -60,7 +60,7 @@ class FallbackEndToEndTest {
         assertThat(CatalogClient.CachedPrice.last.failure()).isInstanceOf(IOException.class).hasMessage("pricing service down");
         assertThat(CatalogClient.CachedPrice.last.argument(0, String.class)).isEqualTo("sku-1");
         assertThat(CatalogClient.CachedPrice.last.argumentCount()).isEqualTo(2);
-        assertThat(CatalogClient.CachedPrice.last.instanceId()).isEqualTo(PREFIX + "price(java.lang.String,int)");
+        assertThat(CatalogClient.CachedPrice.last.id()).isEqualTo(PREFIX + "price(java.lang.String,int)");
     }
 
     @Test

@@ -77,11 +77,11 @@ class EventEndToEndTest {
         assertThat(events).extracting(e -> e.getClass().getSimpleName())
                 .containsExactly("Retrying", "Retrying", "GaveUp", "Applied");
         assertThat(events.get(1)).isInstanceOfSatisfying(RetryEvent.Retrying.class, r -> {
-            assertThat(r.instance()).isEqualTo("orders");
+            assertThat(r.id()).isEqualTo("orders");
             assertThat(r.attempt()).isEqualTo(2);
         });
         assertThat(events.get(3)).isInstanceOfSatisfying(FallbackEvent.Applied.class, f -> {
-            assertThat(f.instance()).isEqualTo("dev.resilience4cata.examples.EventClient#order(java.lang.String)");
+            assertThat(f.id()).isEqualTo("dev.resilience4cata.examples.EventClient#order(java.lang.String)");
             assertThat(f.failure()).hasMessage("down");
         });
     }
@@ -136,7 +136,7 @@ class EventEndToEndTest {
         assertThat(events).singleElement().isInstanceOf(RateLimiterEvent.Rejected.class);
         ResilienceSnapshot snapshot = registry.snapshot();
         assertThat(snapshot.rateLimiters()).singleElement().satisfies(r -> assertThat(r.availablePermits()).isZero());
-        assertThat(snapshot.retries()).extracting(r -> r.instance()).containsExactly("orders");
+        assertThat(snapshot.retries()).extracting(r -> r.id()).containsExactly("orders");
         assertThat(snapshot.timeouts()).hasSize(1);
     }
 }

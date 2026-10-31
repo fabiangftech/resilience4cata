@@ -19,7 +19,7 @@ public final class BreakerTransitionLogger implements EventListener<CircuitBreak
     public void onEvent(CircuitBreakerEvent.StateTransition t) {
         boolean opened = t.to() == CircuitBreakerState.OPEN || t.to() == CircuitBreakerState.FORCED_OPEN;
         logger.log(opened ? Level.WARNING : Level.INFO, "Circuit breaker {0}: {1} -> {2}",
-                t.instance(), t.from(), t.to());
+                t.id(), t.from(), t.to());
     }
 }
 // end::observability-logging[]

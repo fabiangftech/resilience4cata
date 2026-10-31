@@ -70,7 +70,7 @@ flowchart TD
 ```
 
 - **Slots.** A call takes a slot before it runs and gives it back when it returns or throws. At most `maxConcurrent` calls hold a slot at the same time.
-- **Rejection.** With `maxWait = "0"` (the default), a call that finds the bulkhead full fails at once with `dev.resilience4cata.BulkheadFullException` (a `RuntimeException` with `instanceId()`; one per bulkhead, no stack trace). The method is not called.
+- **Rejection.** With `maxWait = "0"` (the default), a call that finds the bulkhead full fails at once with `dev.resilience4cata.BulkheadFullException` (a `RuntimeException` with `id()`; one per bulkhead, no stack trace). The method is not called.
 - **Waiting, sync.** With `maxWait` > 0, the calling thread blocks until a slot is free or `maxWait` passes. On a virtual thread, blocking is cheap and does not pin a carrier. If the waiting thread is interrupted, the call is rejected and the interrupt flag is set again. Waiting is not first-come, first-served: a new caller can take a freed slot ahead of a waiting one.
 - **This is a semaphore bulkhead**: the call runs on the caller's thread. There is no thread-pool bulkhead; with virtual threads you rarely need one.
 - **Disabled** (`enabled = "false"`): every call passes.
@@ -118,7 +118,7 @@ BulkheadSnapshot snapshot = bulkhead.snapshot(); // instance, concurrentCalls, w
 | `config()` | The resolved `BulkheadConfig` |
 | `concurrentCalls()` | Calls holding a slot right now |
 | `waitingCalls()` | Calls waiting for a slot right now: async calls queued for a released slot plus sync threads blocked on the bulkhead. Always 0 when `maxWait` is 0. A snapshot for monitoring; it may be stale by the time it is read |
-| `snapshot()` | A `BulkheadSnapshot(instance, concurrentCalls, waitingCalls, maxConcurrent)`, plus `availableSlots()` |
+| `snapshot()` | A `BulkheadSnapshot(id, concurrentCalls, waitingCalls, maxConcurrent)`, plus `availableSlots()` |
 
 The bulkhead exists once its interface has been wrapped or its pipeline built; an unknown id throws [`R4C-REG-009`](../errors.md#r4c-reg-009). There is no `registry.bulkheads()`: list them with `registry.snapshot().bulkheads()`.
 
@@ -160,7 +160,7 @@ The id `"renderer"` is the instance id: `registry.bulkhead("renderer")` returns 
 
 | Event | When | Fields |
 |---|---|---|
-| `BulkheadEvent.Rejected` | A call was rejected (full with no wait, `maxWait` passed, or an interrupted wait) | `instance`, `nanoTime`, `maxConcurrent` |
+| `BulkheadEvent.Rejected` | A call was rejected (full with no wait, `maxWait` passed, or an interrupted wait) | `id`, `nanoTime`, `maxConcurrent` |
 
 Admitted calls publish nothing. See [Observability](../guides/observability.md).
 

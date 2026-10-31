@@ -96,7 +96,7 @@ class BulkheadPageTest {
 
         assertThatThrownBy(() -> renderer.render("fast"))
                 .isInstanceOf(BulkheadFullException.class)
-                .satisfies(e -> assertThat(((BulkheadFullException) e).instanceId())
+                .satisfies(e -> assertThat(((BulkheadFullException) e).id())
                         .isEqualTo("dev.resilience4cata.examples.docs.bulkhead.ReportRenderer#render(java.lang.String)"));
         BulkheadHandle handle = real.bulkhead(
                 "dev.resilience4cata.examples.docs.bulkhead.ReportRenderer#render(java.lang.String)");

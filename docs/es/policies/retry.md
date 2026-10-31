@@ -154,7 +154,7 @@ Sin `name`, cada método tiene su propia política de retry, con el id `<interfa
 
 Sin [presupuesto de reintentos](#presupuesto-de-reintentos), un retry no guarda estado entre llamadas (el conteo de intentos vive en una variable local del método generado), así que compartirlo por `name` solo comparte su configuración. Con presupuesto, comparte también el presupuesto. Los métodos que comparten un `name` deben resolver la misma configuración, o envolverlos falla con [`R4C-REG-008`](../errors.md#r4c-reg-008).
 
-No hay handle para un retry: `registry` no tiene un método `retry(id)`. `registry.snapshot().retries()` lista cada uno como un `RetrySnapshot(instance, config, budget)`, con su configuración resuelta y, si tiene presupuesto de reintentos, la ventana actual del presupuesto (`null` si no).
+No hay handle para un retry: `registry` no tiene un método `retry(id)`. `registry.snapshot().retries()` lista cada uno como un `RetrySnapshot(id, config, budget)`, con su configuración resuelta y, si tiene presupuesto de reintentos, la ventana actual del presupuesto (`null` si no).
 
 ## Presupuesto de reintentos
 
@@ -253,8 +253,8 @@ El id del pipeline (`"inventory"`) es el id de la instancia. `retry()` usa los v
 
 | Evento | Cuándo | Campos |
 |---|---|---|
-| `RetryEvent.Retrying` | Un intento fallido se va a reintentar | `instance`, `nanoTime`, `attempt`, `delay`, `failure` (`null` para un resultado rechazado) |
-| `RetryEvent.GaveUp` | No quedan intentos | `instance`, `nanoTime`, `attempts`, `reason`, `failure` |
+| `RetryEvent.Retrying` | Un intento fallido se va a reintentar | `id`, `nanoTime`, `attempt`, `delay`, `failure` (`null` para un resultado rechazado) |
+| `RetryEvent.GaveUp` | No quedan intentos | `id`, `nanoTime`, `attempts`, `reason`, `failure` |
 
 `GaveUp.reason()` es `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (no está en `retryOn`, está en `abortOn`, o es un breaker abierto), `INTERRUPTED`, `CLASSIFIER_FAILED` o `BUDGET_EXHAUSTED` (el [presupuesto de reintentos](#presupuesto-de-reintentos) está agotado). Las llamadas exitosas no publican nada. Los listeners se registran en el builder del registry; ver [Observabilidad](../guides/observability.md).
 

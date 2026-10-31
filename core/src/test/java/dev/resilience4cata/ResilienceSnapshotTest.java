@@ -32,10 +32,10 @@ class ResilienceSnapshotTest {
         Policies.bulkhead(registry, "A#m()", "", "", b -> b.maxConcurrent(3), false);
 
         ResilienceSnapshot snapshot = registry.snapshot();
-        assertThat(snapshot.circuitBreakers()).extracting(CircuitBreakerSnapshot::instance).containsExactly("A#m()", "B#m()");
+        assertThat(snapshot.circuitBreakers()).extracting(CircuitBreakerSnapshot::id).containsExactly("A#m()", "B#m()");
         assertThat(snapshot.circuitBreakers().get(0).state()).isEqualTo(CircuitBreakerState.CLOSED);
         assertThat(snapshot.retries()).singleElement().satisfies(r -> {
-            assertThat(r.instance()).isEqualTo("A#m()");
+            assertThat(r.id()).isEqualTo("A#m()");
             assertThat(r.config().maxAttempts()).isEqualTo(5);
         });
         assertThat(snapshot.rateLimiters()).containsExactly(new RateLimiterSnapshot("limiter", 50, 50));
@@ -62,7 +62,7 @@ class ResilienceSnapshotTest {
         FallbackPolicy fallback = Policies.fallback(registry, "A#m()", List.of(Exception.class), List.of(), null);
         fallback.handles(new IOException());
 
-        assertThat(payments).extracting(CircuitBreakerEvent.StateTransition::instance).containsExactly("payments");
+        assertThat(payments).extracting(CircuitBreakerEvent.StateTransition::id).containsExactly("payments");
         assertThat(all).extracting(e -> e.getClass().getSimpleName()).containsExactly(
                 "StateTransition", "StateTransition", "GaveUp", "Applied");
         assertThat(all.get(2)).isInstanceOfSatisfying(RetryEvent.GaveUp.class,

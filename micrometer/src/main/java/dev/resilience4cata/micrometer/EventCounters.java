@@ -85,7 +85,7 @@ final class EventCounters implements EventListener<ResilienceEvent> {
 
     private void transition(CircuitBreakerEvent.StateTransition t) {
         int slot = TRANSITIONS + t.from().ordinal() * STATES.length + t.to().ordinal();
-        Counter counter = instance(t.instance()).counters.get(slot);
+        Counter counter = instance(t.id()).counters.get(slot);
         if (counter == null) {
             counter = create(t, slot, "r4c.circuitbreaker.transitions", "from", lower(t.from()), "to", lower(t.to()));
         }
@@ -94,7 +94,7 @@ final class EventCounters implements EventListener<ResilienceEvent> {
 
     private void gaveUp(RetryEvent.GaveUp g) {
         int slot = GAVE_UP + g.reason().ordinal();
-        Counter counter = instance(g.instance()).counters.get(slot);
+        Counter counter = instance(g.id()).counters.get(slot);
         if (counter == null) { // the lowercase tag value is computed only here, not per event
             counter = create(g, slot, "r4c.retry.gave.up", "reason", lower(g.reason()));
         }
@@ -103,7 +103,7 @@ final class EventCounters implements EventListener<ResilienceEvent> {
 
     private void hedged(HedgeEvent.Hedged h) {
         int slot = HEDGED + h.reason().ordinal();
-        Counter counter = instance(h.instance()).counters.get(slot);
+        Counter counter = instance(h.id()).counters.get(slot);
         if (counter == null) {
             counter = create(h, slot, "r4c.hedge.hedged", "reason", lower(h.reason()));
         }
@@ -112,7 +112,7 @@ final class EventCounters implements EventListener<ResilienceEvent> {
 
     private void skipped(HedgeEvent.Skipped k) {
         int slot = HEDGE_SKIPPED + k.reason().ordinal();
-        Counter counter = instance(k.instance()).counters.get(slot);
+        Counter counter = instance(k.id()).counters.get(slot);
         if (counter == null) {
             counter = create(k, slot, "r4c.hedge.skipped", "reason", lower(k.reason()));
         }
@@ -120,7 +120,7 @@ final class EventCounters implements EventListener<ResilienceEvent> {
     }
 
     private void count(ResilienceEvent event, int slot, String name) {
-        Counter counter = instance(event.instance()).counters.get(slot);
+        Counter counter = instance(event.id()).counters.get(slot);
         if (counter == null) {
             counter = create(event, slot, name);
         }
@@ -128,7 +128,7 @@ final class EventCounters implements EventListener<ResilienceEvent> {
     }
 
     private void count(ResilienceEvent event, int slot, String name, String key, String value) {
-        Counter counter = instance(event.instance()).counters.get(slot);
+        Counter counter = instance(event.id()).counters.get(slot);
         if (counter == null) {
             counter = create(event, slot, name, key, value);
         }
@@ -143,8 +143,8 @@ final class EventCounters implements EventListener<ResilienceEvent> {
     /** Cold: the first event of a counter. Two racing threads get the same counter from Micrometer. */
     private Counter create(ResilienceEvent event, int slot, String name, String... tags) {
         Counter counter = Counter.builder(name).description(DESCRIPTIONS.get(name))
-                .tag("instance", event.instance()).tags(tags).register(meters);
-        instance(event.instance()).counters.set(slot, counter);
+                .tag("instance", event.id()).tags(tags).register(meters);
+        instance(event.id()).counters.set(slot, counter);
         if (closed) { // close() ran meanwhile and may have missed this counter
             meters.remove(counter);
         }

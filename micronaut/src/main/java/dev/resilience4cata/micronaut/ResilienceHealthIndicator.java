@@ -80,8 +80,8 @@ public final class ResilienceHealthIndicator implements HealthIndicator {
             details.put("bufferedCalls", breaker.bufferedCalls());
             details.put("failedCalls", breaker.failedCalls());
             details.put("slowCalls", breaker.slowCalls());
-            breakers.put(breaker.instance(), details);
-            if (all || downWhenOpen.contains(breaker.instance())) {
+            breakers.put(breaker.id(), details);
+            if (all || downWhenOpen.contains(breaker.id())) {
                 CircuitBreakerState state = breaker.state();
                 if (state == CircuitBreakerState.OPEN || state == CircuitBreakerState.FORCED_OPEN) {
                     status = HealthStatus.DOWN;

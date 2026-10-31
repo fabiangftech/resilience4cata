@@ -1,6 +1,9 @@
 package dev.resilience4cata;
 
-/** Inspects one adaptive limit. Obtained from {@link ResilienceRegistry#adaptiveLimit(String)}. */
+/**
+ * Inspects one adaptive limit. Obtained from {@link ResilienceRegistry#adaptiveLimit(String)}. Implemented by the
+ * library only, not meant to be implemented or mocked: methods may be added in minor versions.
+ */
 public interface AdaptiveLimitHandle {
 
     /**
@@ -12,11 +15,14 @@ public interface AdaptiveLimitHandle {
     /** The configuration the adaptive limit was created from. */
     AdaptiveLimitConfig config();
 
-    /** The current limit: how many calls may run at the same time now, between {@code minLimit} and {@code maxLimit}. */
+    /**
+     * The current limit: how many calls may run at the same time now, between {@code minLimit} and {@code
+     * maxLimit}.
+     */
     int limit();
 
     /** Number of calls running inside the adaptive limit right now. */
-    int inFlight();
+    int concurrentCalls();
 
     /** Reads the current values into a record. */
     AdaptiveLimitSnapshot snapshot();

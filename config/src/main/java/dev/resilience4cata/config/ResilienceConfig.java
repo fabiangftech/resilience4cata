@@ -198,13 +198,13 @@ public final class ResilienceConfig {
         Objects.requireNonNull(registry, "registry");
         ResilienceSnapshot snapshot = registry.snapshot();
         Map<PolicyType<?, ?>, Set<String>> known = new LinkedHashMap<>();
-        known.put(PolicyType.RETRY, ids(snapshot.retries(), RetrySnapshot::instance));
-        known.put(PolicyType.HEDGE, ids(snapshot.hedges(), HedgeSnapshot::instance));
-        known.put(PolicyType.CIRCUIT_BREAKER, ids(snapshot.circuitBreakers(), CircuitBreakerSnapshot::instance));
-        known.put(PolicyType.RATE_LIMITER, ids(snapshot.rateLimiters(), RateLimiterSnapshot::instance));
-        known.put(PolicyType.TIMEOUT, ids(snapshot.timeouts(), TimeoutSnapshot::instance));
-        known.put(PolicyType.ADAPTIVE_LIMIT, ids(snapshot.adaptiveLimits(), AdaptiveLimitSnapshot::instance));
-        known.put(PolicyType.BULKHEAD, ids(snapshot.bulkheads(), BulkheadSnapshot::instance));
+        known.put(PolicyType.RETRY, ids(snapshot.retries(), RetrySnapshot::id));
+        known.put(PolicyType.HEDGE, ids(snapshot.hedges(), HedgeSnapshot::id));
+        known.put(PolicyType.CIRCUIT_BREAKER, ids(snapshot.circuitBreakers(), CircuitBreakerSnapshot::id));
+        known.put(PolicyType.RATE_LIMITER, ids(snapshot.rateLimiters(), RateLimiterSnapshot::id));
+        known.put(PolicyType.TIMEOUT, ids(snapshot.timeouts(), TimeoutSnapshot::id));
+        known.put(PolicyType.ADAPTIVE_LIMIT, ids(snapshot.adaptiveLimits(), AdaptiveLimitSnapshot::id));
+        known.put(PolicyType.BULKHEAD, ids(snapshot.bulkheads(), BulkheadSnapshot::id));
         Problems problems = new Problems();
         instances.forEach((id, policies) -> policies.forEach((policy, settings) -> {
             Set<String> ids = Objects.requireNonNull(known.get(policy));
@@ -235,7 +235,7 @@ public final class ResilienceConfig {
         for (LockedOverride locked : registry.lockedOverrides()) {
             PolicyType<?, ?> policy = PolicyType.find(locked.policy());
             Map<String, Setting> settings = policy == null ? null
-                    : instances.getOrDefault(locked.instance(), Map.of()).get(policy);
+                    : instances.getOrDefault(locked.id(), Map.of()).get(policy);
             if (settings == null) {
                 continue; // set in code (retryInstance(...) and friends): logged by the registry
             }
@@ -243,7 +243,7 @@ public final class ResilienceConfig {
                 if (policy.changes(locked.config(), setting)) {
                     problems.add(new ProblemException(ProblemException.LOCKED_INSTANCE, setting.origin() + " sets "
                             + setting.key().attribute() + " = " + setting.text() + " on " + policy.name + " instance '"
-                            + locked.instance() + "', but its annotation sets " + setting.key().attribute()
+                            + locked.id() + "', but its annotation sets " + setting.key().attribute()
                             + " and is locked (locked = true), so the override is ignored and the instance uses "
                             + locked.config() + ". Remove the key, or remove locked = true from the annotation."));
                 }

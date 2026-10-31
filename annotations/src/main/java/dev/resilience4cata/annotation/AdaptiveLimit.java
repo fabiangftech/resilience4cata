@@ -10,7 +10,7 @@ import java.lang.annotation.Target;
  * Limits how many calls run at the same time, like {@link Bulkhead}, with a limit that adjusts itself from
  * the latency of the calls: it grows while latency holds and shrinks when latency rises or calls are dropped
  * (a timeout, a full bulkhead inside). A full limit rejects the call at once with
- * {@code LimitExceededException}.
+ * {@code AdaptiveLimitFullException}.
  *
  * <p>The algorithms' own tuning (Gradient2's smoothing, tolerance, long window and queue size; AIMD's
  * backoff ratio) is set in a named configuration or in external configuration, not here.

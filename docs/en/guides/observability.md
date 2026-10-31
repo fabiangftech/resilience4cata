@@ -12,9 +12,9 @@ resilience4cata gives you two building blocks:
 
 ## Events :id=events
 
-Every event implements the sealed interface `dev.resilience4cata.event.ResilienceEvent`, with `instance()` (the instance id: the `name`, the derived `pkg.Type#method(java.lang.String,int)` id, or a pipeline id) and `nanoTime()` (a reading of the registry's clock: `System.nanoTime()`, or the [manual clock](testing.md) in tests). Each policy has its own sealed interface of records:
+Every event implements the sealed interface `dev.resilience4cata.event.ResilienceEvent`, with `id()` (the instance id: the `name`, the derived `pkg.Type#method(java.lang.String,int)` id, or a pipeline id) and `nanoTime()` (a reading of the registry's clock: `System.nanoTime()`, or the [manual clock](testing.md) in tests). Each policy has its own sealed interface of records:
 
-| Policy | Event record | Fields (after `instance`, `nanoTime`) | Published when |
+| Policy | Event record | Fields (after `id`, `nanoTime`) | Published when |
 |---|---|---|---|
 | Circuit breaker | `CircuitBreakerEvent.StateTransition` | `CircuitBreakerState from`, `CircuitBreakerState to` | the state changes, exactly once per change, including `forceOpen()`, `disable()` and `reset()` |
 | Circuit breaker | `CircuitBreakerEvent.CallNotPermitted` | `CircuitBreakerState state` | a call is rejected (`OPEN`, `FORCED_OPEN`, or `HALF_OPEN` with every probe taken) |
@@ -27,8 +27,8 @@ Every event implements the sealed interface `dev.resilience4cata.event.Resilienc
 | Rate limiter | `RateLimiterEvent.Rejected` | none | a call is rejected with `RateLimitExceededException` |
 | Timeout | `TimeoutEvent.TimedOut` | `Duration timeout` | a call times out |
 | Bulkhead | `BulkheadEvent.Rejected` | `int maxConcurrent` | a call is rejected with `BulkheadFullException` |
-| Adaptive limit | `AdaptiveLimitEvent.Rejected` | `int limit` | a call is rejected with `LimitExceededException` |
-| Adaptive limit | `AdaptiveLimitEvent.LimitChanged` | `int from`, `int to`, `long windowLatencyNanos` | a window ended and the [adaptive limit](../policies/adaptive-limit.md) moved its limit |
+| Adaptive limit | `AdaptiveLimitEvent.Rejected` | `int limit` | a call is rejected with `AdaptiveLimitFullException` |
+| Adaptive limit | `AdaptiveLimitEvent.LimitChanged` | `int from`, `int to`, `Duration windowLatency` | a window ended and the [adaptive limit](../policies/adaptive-limit.md) moved its limit |
 | Fallback | `FallbackEvent.Applied` | `Throwable failure` | a fallback is about to run for `failure`; not published when the failure is rethrown because no fallback takes it (`skipOn`, or no sibling method accepts its type) |
 
 A retry with `enabled = false` publishes nothing. A first failure that is not retryable publishes `GaveUp` with `attempts = 1` and `NOT_RETRYABLE`.
@@ -42,7 +42,7 @@ Listeners are registered on `ResilienceRegistry.Builder`, and only there: they a
 ResilienceRegistry registry = ResilienceRegistry.builder()
         // one record type, on every instance
         .listen(CircuitBreakerEvent.StateTransition.class,
-                t -> log.add(t.instance() + ": " + t.from() + " -> " + t.to()))
+                t -> log.add(t.id() + ": " + t.from() + " -> " + t.to()))
         // every retry event (Retrying and GaveUp), on one instance only
         .listen("payments", RetryEvent.class, e -> log.add(e.toString()))
         // everything: keep a default branch, new policies add event types
@@ -77,27 +77,27 @@ There are **no per-call counters** (no "successful calls" or latency totals) by 
 ```java
 ResilienceSnapshot snapshot = registry.snapshot(); // built when asked, never on the call path
 for (CircuitBreakerSnapshot b : snapshot.circuitBreakers()) {
-    lines.add(b.instance() + " " + b.state() + " failureRate=" + b.failureRate()
+    lines.add(b.id() + " " + b.state() + " failureRate=" + b.failureRate()
             + " buffered=" + b.bufferedCalls() + " failed=" + b.failedCalls() + " slow=" + b.slowCalls());
 }
 for (BulkheadSnapshot b : snapshot.bulkheads()) {
-    lines.add(b.instance() + " in use " + b.concurrentCalls() + "/" + b.maxConcurrent()
+    lines.add(b.id() + " in use " + b.concurrentCalls() + "/" + b.maxConcurrent()
             + ", waiting " + b.waitingCalls() + ", free " + b.availableSlots());
 }
 for (RateLimiterSnapshot r : snapshot.rateLimiters()) {
-    lines.add(r.instance() + " permits " + r.availablePermits() + "/" + r.permits());
+    lines.add(r.id() + " permits " + r.availablePermits() + "/" + r.permits());
 }
 ```
 
 | Record | Fields |
 |---|---|
-| `CircuitBreakerSnapshot` | `instance`, `state`, `failureRate` and `slowCallRate` (percent, or `-1` until the window holds `minimumCalls` calls, `halfOpenCalls` while half-open; `slowCallRate` is also `-1` when slow-call detection is off), `bufferedCalls`, `failedCalls`, `slowCalls` (calls in the current window: the sliding window while closed, the probes while half-open, none while open, forced open or disabled) |
-| `BulkheadSnapshot` | `instance`, `concurrentCalls`, `waitingCalls`, `maxConcurrent`, and the method `availableSlots()` |
-| `AdaptiveLimitSnapshot` | `instance`, `algorithm`, `limit`, `inFlight`, `minLimit`, `maxLimit`, `windows` (ended so far), `windowLatency` (the last window's average), `longTermLatency` (Gradient2's long-term average), and the method `availableSlots()` |
-| `RateLimiterSnapshot` | `instance`, `availablePermits`, `permits` |
-| `RetrySnapshot` | `instance`, `config` (the resolved `RetryConfig`) |
-| `HedgeSnapshot` | `instance`, `config` (the resolved `HedgeConfig`), `budget` (`calls`, `hedges`, `allowedHedges` in the budget's window; `null` without a budget) |
-| `TimeoutSnapshot` | `instance`, `config` (the resolved `TimeoutConfig`) |
+| `CircuitBreakerSnapshot` | `id`, `state`, `failureRate` and `slowCallRate` (percent, or `-1` until the window holds `minimumCalls` calls, `halfOpenCalls` while half-open; `slowCallRate` is also `-1` when slow-call detection is off), `bufferedCalls`, `failedCalls`, `slowCalls` (calls in the current window: the sliding window while closed, the probes while half-open, none while open, forced open or disabled) |
+| `BulkheadSnapshot` | `id`, `concurrentCalls`, `waitingCalls`, `maxConcurrent`, and the method `availableSlots()` |
+| `AdaptiveLimitSnapshot` | `id`, `algorithm`, `limit`, `concurrentCalls`, `minLimit`, `maxLimit`, `windows` (ended so far), `windowLatency` (the last window's average), `longTermLatency` (Gradient2's long-term average), and the method `availableSlots()` |
+| `RateLimiterSnapshot` | `id`, `availablePermits`, `permits` |
+| `RetrySnapshot` | `id`, `config` (the resolved `RetryConfig`) |
+| `HedgeSnapshot` | `id`, `config` (the resolved `HedgeConfig`), `budget` (`calls`, `hedges`, `allowedHedges` in the budget's window; `null` without a budget) |
+| `TimeoutSnapshot` | `id`, `config` (the resolved `TimeoutConfig`) |
 
 `snapshot.only(id)` keeps the instances with one id (`isEmpty()` when there is none). `snapshot.toMap()` turns the
 snapshot into maps, lists, strings, numbers, booleans and nulls, which any JSON encoder writes as they are: one key
@@ -116,7 +116,7 @@ Handles read one instance live, and the breaker's can also change its state:
 | `registry.circuitBreakers()` | every breaker handle, sorted by id |
 | `registry.rateLimiter(id)` | `RateLimiterHandle`: `id()`, `config()`, `availablePermits()`, `snapshot()` |
 | `registry.bulkhead(id)` | `BulkheadHandle`: `id()`, `config()`, `concurrentCalls()`, `waitingCalls()`, `snapshot()` |
-| `registry.adaptiveLimit(id)` | `AdaptiveLimitHandle`: `id()`, `config()`, `limit()`, `inFlight()`, `snapshot()` |
+| `registry.adaptiveLimit(id)` | `AdaptiveLimitHandle`: `id()`, `config()`, `limit()`, `concurrentCalls()`, `snapshot()` |
 
 An instance exists only once its interface has been wrapped (`Resilient.of`, `Resilient.create`) or its `Pipeline` built; before that, or for an id that does not exist, the lookup throws `IllegalArgumentException` [R4C-REG-009](../errors.md#r4c-reg-009) with the closest id. Retry and timeout have no handle; their configuration is in the snapshot. There is no list method for bulkheads, rate limiters and adaptive limits: enumerate them through `registry.snapshot()`.
 
@@ -155,7 +155,7 @@ A bridge to another library does what the Micrometer module does, with three pie
 ```java
 ResilienceRegistry registry = ResilienceRegistry.builder()
         // counters: from events, on the thread that caused them
-        .listen(RetryEvent.Retrying.class, e -> retries.merge(e.instance(), 1L, Long::sum))
+        .listen(RetryEvent.Retrying.class, e -> retries.merge(e.id(), 1L, Long::sum))
         .build();
 // gauges: one per instance, read at collection time; new instances are announced once each
 registry.onInstanceCreated(() -> {
@@ -191,7 +191,7 @@ public final class BreakerTransitionLogger implements EventListener<CircuitBreak
     public void onEvent(CircuitBreakerEvent.StateTransition t) {
         boolean opened = t.to() == CircuitBreakerState.OPEN || t.to() == CircuitBreakerState.FORCED_OPEN;
         logger.log(opened ? Level.WARNING : Level.INFO, "Circuit breaker {0}: {1} -> {2}",
-                t.instance(), t.from(), t.to());
+                t.id(), t.from(), t.to());
     }
 }
 ```
@@ -222,7 +222,7 @@ public record ResilienceHealth(boolean healthy, List<String> openBreakers) {
     public static ResilienceHealth of(ResilienceRegistry registry) {
         List<String> open = registry.snapshot().circuitBreakers().stream()
                 .filter(b -> b.state() == CircuitBreakerState.OPEN || b.state() == CircuitBreakerState.FORCED_OPEN)
-                .map(CircuitBreakerSnapshot::instance)
+                .map(CircuitBreakerSnapshot::id)
                 .toList();
         return new ResilienceHealth(open.isEmpty(), open);
     }
