@@ -2692,7 +2692,9 @@ sistema).
 ### R4C-CFG-001
 
 **Causa:** una clave desconocida, mal formada o incompleta: política o atributo desconocido, segmento vacío,
-una clave que se corta antes de tiempo. El mensaje sugiere la clave válida más parecida.
+una clave que se corta antes de tiempo. El mensaje sugiere la clave válida más parecida. Una clave con el
+prefijo corto (`r4c.`, `R4C_`) cuyo primer segmento no se parece a `defaults`, `configs`, `instances` ni
+`profiles` se ignora, porque es de otra herramienta ([Formas de clave](reference/configuration.md#key-forms)).
 
 **Incorrecto:**
 

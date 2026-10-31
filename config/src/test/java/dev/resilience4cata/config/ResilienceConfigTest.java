@@ -485,8 +485,50 @@ class ResilienceConfigTest {
         assertThat(e.problems().get(0))
                 .startsWith("[R4C-CFG-001] unknown environment variable 'R4C_CONFIGS_EXTERNAL_RETRY_MAXATEMPTS'")
                 .contains("Did you mean 'R4C_CONFIGS_EXTERNAL_RETRY_MAXATTEMPTS'?");
-        assertThat(failure(ResilienceConfig.builder().environment(Map.of("R4C_WHATEVER", "1"))).problems().get(0))
-                .contains("for example R4C_CONFIGS_EXTERNAL_RETRY_MAXATTEMPTS");
+        assertThat(failure(ResilienceConfig.builder().environment(Map.of("RESILIENCE4CATA_WHATEVER", "1")))
+                .problems().get(0)).contains("for example R4C_CONFIGS_EXTERNAL_RETRY_MAXATTEMPTS");
+    }
+
+    @Test
+    void shortPrefixedKeysOfOtherToolsAreIgnored() {
+        Properties system = new Properties();
+        system.setProperty("r4c.debug", "true");
+        system.setProperty("r4c.agent.port", "9000");
+        system.setProperty("r4c.defaults.retry.maxAttempts", "6");
+        ResilienceConfig config = ResilienceConfig.builder()
+                .environment(Map.of("R4C_TOKEN", "x", "R4C_", "y", "R4C_DEFAULTS_RETRY_DELAY", "1s"))
+                .systemProperties(system)
+                .properties("app", props("r4c.build.number", "12", "r4c.defaults.retry.multiplier", "3"))
+                .build();
+        RetryConfig retry = config.toRegistry().retryConfig("");
+        assertThat(retry.maxAttempts()).isEqualTo(6);
+        assertThat(retry.delay()).isEqualTo(Duration.ofSeconds(1));
+        assertThat(retry.multiplier()).isEqualTo(3.0);
+    }
+
+    private static Properties props(String... keysAndValues) {
+        Properties properties = new Properties();
+        for (int i = 0; i < keysAndValues.length; i += 2) {
+            properties.setProperty(keysAndValues[i], keysAndValues[i + 1]);
+        }
+        return properties;
+    }
+
+    @Test
+    void shortPrefixedKeysThatLookLikeOursStillFail() {
+        Properties system = new Properties();
+        system.setProperty("r4c.defualts.retry.maxAttempts", "6");
+        assertThat(failure(ResilienceConfig.builder().systemProperties(system)).problems().get(0))
+                .startsWith("[R4C-CFG-001] unknown key system property 'r4c.defualts.retry.maxAttempts'")
+                .contains("Did you mean 'r4c.defaults.retry.maxAttempts'?");
+        assertThat(failure(ResilienceConfig.builder().environment(Map.of("R4C_CONFIG_EXTERNAL_RETRY_DELAY", "1s")))
+                .problems().get(0)).startsWith("[R4C-CFG-001] unknown environment variable 'R4C_CONFIG_EXTERNAL");
+        Properties longPrefix = new Properties();
+        longPrefix.setProperty("resilience4cata.debug", "true");
+        assertThat(failure(ResilienceConfig.builder().systemProperties(longPrefix)).problems().get(0))
+                .startsWith("[R4C-CFG-001] unknown key system property 'resilience4cata.debug'");
+        assertThat(failure(ResilienceConfig.builder().properties("app", props("debug", "true"))).problems().get(0))
+                .startsWith("[R4C-CFG-001] unknown key 'debug'");
     }
 
     @Test
@@ -629,7 +671,7 @@ class ResilienceConfigTest {
                 defaults.retry.maxAttempts=x
                 defaults.retry.delai=1s
                 configs.Bad.retry.delay=1s
-                """).environment(Map.of("R4C_NOPE", "1")));
+                """).environment(Map.of("RESILIENCE4CATA_NOPE", "1")));
         assertThat(e.problems()).hasSize(4);
         assertThat(e.getMessage()).startsWith("Invalid resilience4cata configuration (4 problems):\n  [R4C-CFG-");
         assertThat(e).isInstanceOf(IllegalArgumentException.class);

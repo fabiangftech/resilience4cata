@@ -4,6 +4,12 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Unreleased] :id=unreleased
+
+### Cambiado
+
+- Una propiedad del sistema o variable de entorno con el prefijo corto (`r4c.`, `R4C_`) cuyo primer segmento no es uno de los nuestros (`defaults`, `configs`, `instances`, `profiles`) ni se parece a uno se ignora como de otra herramienta, en vez de detener la aplicación con [R4C-CFG-001](errors.md#r4c-cfg-001): un prefijo de tres letras se comparte con facilidad. Los errores de escritura en nuestras claves (`R4C_DEFUALTS_…`) y las claves desconocidas con el prefijo largo `resilience4cata.`/`RESILIENCE4CATA_` siguen fallando ([Formas de clave](reference/configuration.md#key-forms)).
+
 ## [0.12.0] - 2026-10-31 :id=0.12.0
 
 La revisión de la API antes de 1.0: esta versión cambia la API en muchos puntos, así que lee **Cambiado** antes de actualizar. El código generado por 0.11.0 o antes se debe compilar de nuevo con este procesador.
