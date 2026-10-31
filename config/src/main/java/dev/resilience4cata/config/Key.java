@@ -2,6 +2,7 @@ package dev.resilience4cata.config;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
@@ -66,6 +67,25 @@ record Key(@Nullable String profile, Section section, @Nullable String config, @
 
     Key withoutProfile() {
         return new Key(null, section, config, instance, policy, attribute);
+    }
+
+    /**
+     * Whether a key written with the short prefix ({@code r4c.} or {@code R4C_}) belongs to someone else:
+     * its first segment is none of ours and not close to one. Such keys are ignored, because a
+     * three-letter prefix may be used by other tools in the shared system properties and environment;
+     * a key that looks like ours is still checked, so typos keep failing. Keys with the long prefix,
+     * or none, are always ours.
+     *
+     * @param head the first segment after the prefix, in any case, with '_' or '-' between words
+     */
+    static boolean foreign(String head) {
+        String first = head.toLowerCase(Locale.ROOT);
+        for (String section : TOP_LEVEL) {
+            if (is(first, section)) {
+                return false;
+            }
+        }
+        return Suggestions.closest(first, TOP_LEVEL) == null;
     }
 
     /**
