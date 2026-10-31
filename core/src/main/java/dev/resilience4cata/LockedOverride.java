@@ -13,7 +13,7 @@ import java.util.Objects;
  * @param instance the instance id
  * @param config the configuration the instance uses, for example a {@link RetryConfig}
  */
-public record LockedOverride(String policy, String instance, Record config) {
+public record LockedOverride(String policy, String instance, PolicyConfig config) {
 
     /** Checks that no component is null. */
     public LockedOverride {

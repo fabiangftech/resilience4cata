@@ -7,40 +7,23 @@ import java.util.Objects;
 /**
  * Immutable retry configuration. Built with {@link #builder()} or {@link #toBuilder()}.
  *
- * @param enabled whether failed calls are retried at all
- * @param maxAttempts total attempts, including the first one; at least 1
- * @param delay delay before the first retry
- * @param backoff how the delay grows between attempts
- * @param multiplier growth factor for {@link Backoff#EXPONENTIAL}; at least 1
- * @param maxDelay upper bound for a single delay; at least {@code delay}
- * @param jitter randomisation applied to each delay
- * @param maxDuration time budget for the whole operation; {@link Duration#ZERO} means unlimited
- * @param retryOn exceptions that trigger a retry
- * @param abortOn exceptions that stop retrying; they win over {@code retryOn}. A
- *     {@link CallNotPermittedException} always stops retrying, whether listed or not
- * @param budgetPercent retry budget: retries allowed, in percent of the calls made in the last
- *     {@code budgetWindow}, on top of {@code budgetMinRetriesPerSecond}; finite, at least 0. Above 0 it turns
- *     the budget on; 0 (the default) means no budget
- * @param budgetMinRetriesPerSecond retry budget: retries allowed per second of {@code budgetWindow}
- *     whatever the traffic, so that rarely called methods can still retry; applies once
- *     {@code budgetPercent} turns the budget on; at least 0 (default 10)
- * @param budgetWindow retry budget: how far back calls and retries are counted; between 1 s and 1 h
  * @see #hasBudget()
  */
-public record RetryConfig(
-        boolean enabled,
-        int maxAttempts,
-        Duration delay,
-        Backoff backoff,
-        double multiplier,
-        Duration maxDelay,
-        Jitter jitter,
-        Duration maxDuration,
-        List<Class<? extends Throwable>> retryOn,
-        List<Class<? extends Throwable>> abortOn,
-        double budgetPercent,
-        int budgetMinRetriesPerSecond,
-        Duration budgetWindow) {
+public final class RetryConfig implements PolicyConfig {
+
+    private final boolean enabled;
+    private final int maxAttempts;
+    private final Duration delay;
+    private final Backoff backoff;
+    private final double multiplier;
+    private final Duration maxDelay;
+    private final Jitter jitter;
+    private final Duration maxDuration;
+    private final List<Class<? extends Throwable>> retryOn;
+    private final List<Class<? extends Throwable>> abortOn;
+    private final double budgetPercent;
+    private final int budgetMinRetriesPerSecond;
+    private final Duration budgetWindow;
 
     /** The longest {@code budgetWindow}. */
     private static final Duration MAX_BUDGET_WINDOW = Duration.ofHours(1);
@@ -56,27 +39,6 @@ public record RetryConfig(
             true, 3, Duration.ofMillis(200), Backoff.EXPONENTIAL, 2.0, Duration.ofSeconds(10),
             Jitter.FULL, Duration.ZERO, List.of(Exception.class), List.of(), 0.0, 10, Duration.ofSeconds(10));
 
-    /**
-     * Creates a configuration without a retry budget: the constructor of 0.2.0, kept so that code that
-     * calls it still compiles.
-     *
-     * @param enabled whether failed calls are retried at all
-     * @param maxAttempts total attempts, including the first one
-     * @param delay delay before the first retry
-     * @param backoff how the delay grows between attempts
-     * @param multiplier growth factor for {@link Backoff#EXPONENTIAL}
-     * @param maxDelay upper bound for a single delay
-     * @param jitter randomisation applied to each delay
-     * @param maxDuration time budget for the whole operation
-     * @param retryOn exceptions that trigger a retry
-     * @param abortOn exceptions that stop retrying
-     */
-    public RetryConfig(boolean enabled, int maxAttempts, Duration delay, Backoff backoff, double multiplier,
-            Duration maxDelay, Jitter jitter, Duration maxDuration, List<Class<? extends Throwable>> retryOn,
-            List<Class<? extends Throwable>> abortOn) {
-        this(enabled, maxAttempts, delay, backoff, multiplier, maxDelay, jitter, maxDuration, retryOn, abortOn,
-                0.0, 10, Duration.ofSeconds(10));
-    }
 
     /** How the delay grows between attempts. */
     public enum Backoff {
@@ -99,8 +61,20 @@ public record RetryConfig(
     /** The policy name in validation messages. */
     private static final String POLICY = "retry";
 
-    /** Validates every value and copies the exception lists. */
-    public RetryConfig {
+    /** Validates every value and copies the lists. */
+    private RetryConfig(boolean enabled,
+            int maxAttempts,
+            Duration delay,
+            Backoff backoff,
+            double multiplier,
+            Duration maxDelay,
+            Jitter jitter,
+            Duration maxDuration,
+            List<Class<? extends Throwable>> retryOn,
+            List<Class<? extends Throwable>> abortOn,
+            double budgetPercent,
+            int budgetMinRetriesPerSecond,
+            Duration budgetWindow) {
         Objects.requireNonNull(delay, "delay");
         Objects.requireNonNull(backoff, "backoff");
         Objects.requireNonNull(maxDelay, "maxDelay");
@@ -134,6 +108,19 @@ public record RetryConfig(
         if (budgetWindow.compareTo(Duration.ofSeconds(1)) < 0 || budgetWindow.compareTo(MAX_BUDGET_WINDOW) > 0) {
             throw ErrorCode.invalidValue(POLICY, "budgetWindow must be between 1s and 1h, was " + budgetWindow);
         }
+        this.enabled = enabled;
+        this.maxAttempts = maxAttempts;
+        this.delay = delay;
+        this.backoff = backoff;
+        this.multiplier = multiplier;
+        this.maxDelay = maxDelay;
+        this.jitter = jitter;
+        this.maxDuration = maxDuration;
+        this.retryOn = retryOn;
+        this.abortOn = abortOn;
+        this.budgetPercent = budgetPercent;
+        this.budgetMinRetriesPerSecond = budgetMinRetriesPerSecond;
+        this.budgetWindow = budgetWindow;
     }
 
     /**
@@ -285,5 +272,172 @@ public record RetryConfig(
             return new RetryConfig(enabled, maxAttempts, delay, backoff, multiplier, maxDelay, jitter,
                     maxDuration, retryOn, abortOn, budgetPercent, budgetMinRetriesPerSecond, budgetWindow);
         }
+    }
+
+    /**
+     * Whether failed calls are retried at all.
+     *
+     * @return the value
+     */
+    @Override
+    public boolean enabled() {
+        return enabled;
+    }
+
+    /**
+     * Total attempts, including the first one; at least 1.
+     *
+     * @return the value
+     */
+    public int maxAttempts() {
+        return maxAttempts;
+    }
+
+    /**
+     * Delay before the first retry.
+     *
+     * @return the value
+     */
+    public Duration delay() {
+        return delay;
+    }
+
+    /**
+     * How the delay grows between attempts.
+     *
+     * @return the value
+     */
+    public Backoff backoff() {
+        return backoff;
+    }
+
+    /**
+     * Growth factor for {@link Backoff#EXPONENTIAL}; at least 1.
+     *
+     * @return the value
+     */
+    public double multiplier() {
+        return multiplier;
+    }
+
+    /**
+     * Upper bound for a single delay; at least {@code delay}.
+     *
+     * @return the value
+     */
+    public Duration maxDelay() {
+        return maxDelay;
+    }
+
+    /**
+     * Randomisation applied to each delay.
+     *
+     * @return the value
+     */
+    public Jitter jitter() {
+        return jitter;
+    }
+
+    /**
+     * Time budget for the whole operation; {@link Duration#ZERO} means unlimited.
+     *
+     * @return the value
+     */
+    public Duration maxDuration() {
+        return maxDuration;
+    }
+
+    /**
+     * Exceptions that trigger a retry.
+     *
+     * @return the value
+     */
+    public List<Class<? extends Throwable>> retryOn() {
+        return retryOn;
+    }
+
+    /**
+     * Exceptions that stop retrying; they win over {@code retryOn}. A {@link CallNotPermittedException} always stops retrying, whether listed or not.
+     *
+     * @return the value
+     */
+    public List<Class<? extends Throwable>> abortOn() {
+        return abortOn;
+    }
+
+    /**
+     * Retry budget: retries allowed, in percent of the calls made in the last {@code budgetWindow}, on top of {@code budgetMinRetriesPerSecond}; finite, at least 0. Above 0 it turns the budget on; 0 (the default) means no budget.
+     *
+     * @return the value
+     */
+    public double budgetPercent() {
+        return budgetPercent;
+    }
+
+    /**
+     * Retry budget: retries allowed per second of {@code budgetWindow} whatever the traffic, so that rarely called methods can still retry; applies once {@code budgetPercent} turns the budget on; at least 0 (default 10).
+     *
+     * @return the value
+     */
+    public int budgetMinRetriesPerSecond() {
+        return budgetMinRetriesPerSecond;
+    }
+
+    /**
+     * Retry budget: how far back calls and retries are counted; between 1 s and 1 h.
+     *
+     * @return the value
+     */
+    public Duration budgetWindow() {
+        return budgetWindow;
+    }
+
+    /** Equal when every value is equal. */
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof RetryConfig other
+                && enabled == other.enabled
+                && maxAttempts == other.maxAttempts
+                && delay.equals(other.delay)
+                && backoff.equals(other.backoff)
+                && Double.compare(multiplier, other.multiplier) == 0
+                && maxDelay.equals(other.maxDelay)
+                && jitter.equals(other.jitter)
+                && maxDuration.equals(other.maxDuration)
+                && retryOn.equals(other.retryOn)
+                && abortOn.equals(other.abortOn)
+                && Double.compare(budgetPercent, other.budgetPercent) == 0
+                && budgetMinRetriesPerSecond == other.budgetMinRetriesPerSecond
+                && budgetWindow.equals(other.budgetWindow);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(enabled, maxAttempts, delay, backoff, multiplier, maxDelay, jitter, maxDuration, retryOn, abortOn, budgetPercent, budgetMinRetriesPerSecond, budgetWindow);
+    }
+
+    /** The values, as {@code RetryConfig[name=value, ...]}. */
+    @Override
+    public String toString() {
+        return "RetryConfig[enabled=" + enabled + ", maxAttempts=" + maxAttempts + ", delay=" + delay + ", backoff=" + backoff + ", multiplier=" + multiplier + ", maxDelay=" + maxDelay + ", jitter=" + jitter + ", maxDuration=" + maxDuration + ", retryOn=" + retryOn + ", abortOn=" + abortOn + ", budgetPercent=" + budgetPercent + ", budgetMinRetriesPerSecond=" + budgetMinRetriesPerSecond + ", budgetWindow=" + budgetWindow + "]";
+    }
+
+    /** The values in declaration order, for {@link ResilienceSnapshot#toMap()}. */
+    java.util.Map<String, Object> attributes() {
+        java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+        values.put("enabled", enabled);
+        values.put("maxAttempts", maxAttempts);
+        values.put("delay", delay);
+        values.put("backoff", backoff);
+        values.put("multiplier", multiplier);
+        values.put("maxDelay", maxDelay);
+        values.put("jitter", jitter);
+        values.put("maxDuration", maxDuration);
+        values.put("retryOn", retryOn);
+        values.put("abortOn", abortOn);
+        values.put("budgetPercent", budgetPercent);
+        values.put("budgetMinRetriesPerSecond", budgetMinRetriesPerSecond);
+        values.put("budgetWindow", budgetWindow);
+        return values;
     }
 }

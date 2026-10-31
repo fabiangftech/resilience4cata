@@ -342,7 +342,7 @@ listener); el bean `ResilienceConfig` sigue disponible para construirlo con `con
   Lista los breakers que deben ponerlo DOWN (UNKNOWN mientras están semiabiertos) en
   `resilience4cata.spring.health.down-when-open` (`*` para todos). No forma parte de los grupos liveness ni
   readiness salvo que lo añadas.
-- **Endpoint**: `GET /actuator/resilience4cata` devuelve `registry.snapshot()`, y
+- **Endpoint**: `GET /actuator/resilience4cata` devuelve `registry.snapshot()` como JSON ([su forma](observability.md#snapshots)), y
   `GET /actuator/resilience4cata/{instance}` las políticas de un id de instancia. Es de solo lectura y no guarda
   historial de eventos. Exponlo como cualquier endpoint: `management.endpoints.web.exposure.include=health,resilience4cata`.
 

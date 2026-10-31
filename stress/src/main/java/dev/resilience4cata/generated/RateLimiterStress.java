@@ -37,7 +37,7 @@ public final class RateLimiterStress {
     @State
     public static class BurstNeverExceeded {
         final RateLimiterPolicy limiter = new RateLimiterPolicy("stress",
-                new RateLimiterConfig(true, 2, Duration.ofSeconds(1), Duration.ZERO), () -> 0L, nanos -> {});
+                RateLimiterConfig.builder().permits(2).period(Duration.ofSeconds(1)).build(), () -> 0L, nanos -> {});
 
         int acquire() {
             return limiter.tryAcquire() ? 1 : 0;
@@ -85,7 +85,7 @@ public final class RateLimiterStress {
     public static class InterruptedWaitGivesPermitBack {
         volatile Thread interrupted;
         final RateLimiterPolicy limiter = new RateLimiterPolicy("stress",
-                new RateLimiterConfig(true, 1, Duration.ofSeconds(1), Duration.ofSeconds(1)), () -> 0L, nanos -> {
+                RateLimiterConfig.builder().permits(1).period(Duration.ofSeconds(1)).maxWait(Duration.ofSeconds(1)).build(), () -> 0L, nanos -> {
                     if (Thread.currentThread() == interrupted) {
                         throw new InterruptedException();
                     }
@@ -133,7 +133,7 @@ public final class RateLimiterStress {
     public static class GiveBackRacesReservation {
         volatile Thread interrupted;
         final RateLimiterPolicy limiter = new RateLimiterPolicy("stress",
-                new RateLimiterConfig(true, 1, Duration.ofSeconds(1), Duration.ofSeconds(2)), () -> 0L, nanos -> {
+                RateLimiterConfig.builder().permits(1).period(Duration.ofSeconds(1)).maxWait(Duration.ofSeconds(2)).build(), () -> 0L, nanos -> {
                     if (Thread.currentThread() == interrupted) {
                         throw new InterruptedException();
                     }

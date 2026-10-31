@@ -99,6 +99,14 @@ for (RateLimiterSnapshot r : snapshot.rateLimiters()) {
 | `HedgeSnapshot` | `instance`, `config` (el `HedgeConfig` resuelto), `budget` (`calls`, `hedges`, `allowedHedges` en la ventana del presupuesto; `null` sin presupuesto) |
 | `TimeoutSnapshot` | `instance`, `config` (el `TimeoutConfig` resuelto) |
 
+`snapshot.only(id)` se queda con las instancias de un id (`isEmpty()` si no hay ninguna). `snapshot.toMap()`
+convierte el snapshot en mapas, listas, strings, números, booleanos y nulls, que cualquier codificador JSON escribe
+tal cual: una clave por tipo de política, cada una con una lista de un mapa por instancia cuyas claves son los
+campos de arriba, en ese orden, con las configuraciones anidadas como mapas de sus atributos. Las duraciones son
+strings ISO-8601 (`PT0.2S`), los enums y las clases, sus nombres, y una tasa que no es un número finito es `null`.
+Los endpoints de Spring Boot y de Micronaut sirven exactamente esto; se pueden agregar claves en versiones menores,
+nunca quitar ni renombrar.
+
 ## Handles :id=handles
 
 Los handles leen una instancia en vivo, y el del breaker además puede cambiar su estado:

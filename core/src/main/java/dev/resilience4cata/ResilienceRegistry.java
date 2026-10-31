@@ -167,7 +167,7 @@ public final class ResilienceRegistry {
      * the instance's overrides; an override that this changes is recorded and logged once per instance.
      * Runs once per call site, when the instance is created.
      */
-    private <C extends Record, B> C resolve(C base, @Nullable Consumer<B> overrides, @Nullable Consumer<B> instance,
+    private <C extends PolicyConfig, B> C resolve(C base, @Nullable Consumer<B> overrides, @Nullable Consumer<B> instance,
             boolean locked, PolicyKind<C, B> policy, String key, String config) {
         if (overrides == null && instance == null) {
             return base;
@@ -216,7 +216,7 @@ public final class ResilienceRegistry {
     }
 
     /** Records that a locked instance ignored some of its per-instance overrides; logs it the first time. */
-    private void lockedOverride(String policy, String key, Record kept, @Nullable Record requested) {
+    private void lockedOverride(String policy, String key, PolicyConfig kept, @Nullable PolicyConfig requested) {
         LockedOverride override = new LockedOverride(policy, key, kept);
         if (lockedOverrides.putIfAbsent(policy + '\u0000' + key, override) == null) {
             LOGGER.log(System.Logger.Level.WARNING, () -> "resilience4cata: the " + policy + " instance '" + key

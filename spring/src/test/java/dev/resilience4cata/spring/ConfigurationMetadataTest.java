@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
-import java.lang.reflect.RecordComponent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -72,7 +71,7 @@ class ConfigurationMetadataTest {
         Class<?> policyType = Class.forName("dev.resilience4cata.config.PolicyType");
         for (Object policy : (List<?>) get(policyType, null, "ALL")) {
             String name = (String) get(policyType, policy, "name");
-            Record builtIn = (Record) get(policyType, policy, "builtIn");
+            Object builtIn = get(policyType, policy, "builtIn");
             String prefix = "resilience4cata.defaults." + kebab(name);
             groups.addObject().put("name", prefix).put("description", "Defaults of every " + words(name)
                     + ": each annotation and named config starts from them.");
@@ -95,7 +94,7 @@ class ConfigurationMetadataTest {
         return root;
     }
 
-    private static void property(ArrayNode properties, ArrayNode hints, String prefix, String policy, Record builtIn,
+    private static void property(ArrayNode properties, ArrayNode hints, String prefix, String policy, Object builtIn,
             Object attribute) throws ReflectiveOperationException {
         Class<?> type = attribute.getClass();
         String name = (String) get(type, attribute, "name");
@@ -156,13 +155,9 @@ class ConfigurationMetadataTest {
         return f.get(instance);
     }
 
-    private static Object component(Record record, String name) throws ReflectiveOperationException {
-        for (RecordComponent component : record.getClass().getRecordComponents()) {
-            if (component.getName().equals(name)) {
-                return component.getAccessor().invoke(record);
-            }
-        }
-        throw new AssertionError(record.getClass() + " has no component " + name);
+    /** The value of a config's accessor, for example {@code maxAttempts()}. */
+    private static Object component(Object config, String name) throws ReflectiveOperationException {
+        return config.getClass().getMethod(name).invoke(config);
     }
 
     /** In the config grammar: the largest unit that divides the duration. */

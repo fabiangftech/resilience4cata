@@ -428,7 +428,7 @@ aplicar la configuración con `config.applyTo(builder)`.
   sacarla del balanceo de carga. Lista los breakers que deben ponerlo en DOWN (UNKNOWN mientras están semiabiertos)
   en `resilience4cata.micronaut.health.down-when-open` (`*` para todos). No es `@Liveness` ni `@Readiness`, así
   que solo cuenta en `/health`.
-- **Endpoint**: `GET /resilience4cata` devuelve `registry.snapshot()` como JSON, y
+- **Endpoint**: `GET /resilience4cata` devuelve `registry.snapshot()` como JSON ([su forma](observability.md#snapshots)), y
   `GET /resilience4cata/{instance}` las políticas de un id de instancia. Es de solo lectura y no guarda historial
   de eventos. Como los endpoints del propio Micronaut, es sensible por defecto: configúralo con
   `endpoints.resilience4cata.enabled` y `endpoints.resilience4cata.sensitive`.
@@ -492,8 +492,7 @@ No hay nada que añadir para resilience4cata:
   `@ResilientBean`;
 - con `-Ar4c.inject=micronaut`, las propias definiciones de beans de Micronaut crean las subclases generadas, sin
   reflexión;
-- el endpoint lee los records de los snapshots mediante introspecciones de beans generadas al compilar el módulo,
-  no mediante reflexión.
+- el endpoint sirve `ResilienceSnapshot.toMap()`, que core construye sin reflexión.
 
 Durante el desarrollo del módulo se construyó y ejecutó a mano una imagen nativa de GraalVM 25 de una aplicación
 pequeña con una interfaz `@ResilientBean`, una clase anotada, configuración YAML, el endpoint y Micrometer; el CI

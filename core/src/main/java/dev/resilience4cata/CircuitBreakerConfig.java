@@ -6,35 +6,21 @@ import java.util.Objects;
 
 /**
  * Immutable circuit breaker configuration. Built with {@link #builder()} or {@link #toBuilder()}.
- *
- * @param enabled whether the breaker records calls and can open
- * @param windowType how the sliding window is measured
- * @param windowSize number of calls ({@link WindowType#COUNT}) or seconds ({@link WindowType#TIME}) in the window
- * @param minimumCalls calls needed before the rates are evaluated; capped at {@code windowSize} for a count window
- * @param failureRateThreshold failure rate, in percent, that opens the breaker
- * @param slowCallRateThreshold slow-call rate, in percent, that opens the breaker
- * @param slowCallDuration duration above which a call is slow; {@link Duration#ZERO} turns slow-call
- *     detection off, so calls are not timed at all
- * @param waitInOpen how long the breaker stays open before allowing probe calls
- * @param halfOpenCalls number of probe calls in the half-open state
- * @param maxWaitInHalfOpen how long the breaker may stay half-open before opening again if its probes
- *     have not completed; {@link Duration#ZERO} means no limit
- * @param recordOn exceptions recorded as failures; other exceptions count as successes
- * @param ignoreOn exceptions that count neither as success nor as failure; they win over {@code recordOn}
  */
-public record CircuitBreakerConfig(
-        boolean enabled,
-        WindowType windowType,
-        int windowSize,
-        int minimumCalls,
-        float failureRateThreshold,
-        float slowCallRateThreshold,
-        Duration slowCallDuration,
-        Duration waitInOpen,
-        int halfOpenCalls,
-        Duration maxWaitInHalfOpen,
-        List<Class<? extends Throwable>> recordOn,
-        List<Class<? extends Throwable>> ignoreOn) {
+public final class CircuitBreakerConfig implements PolicyConfig {
+
+    private final boolean enabled;
+    private final WindowType windowType;
+    private final int windowSize;
+    private final int minimumCalls;
+    private final float failureRateThreshold;
+    private final float slowCallRateThreshold;
+    private final Duration slowCallDuration;
+    private final Duration waitInOpen;
+    private final int halfOpenCalls;
+    private final Duration maxWaitInHalfOpen;
+    private final List<Class<? extends Throwable>> recordOn;
+    private final List<Class<? extends Throwable>> ignoreOn;
 
     /**
      * Built-in defaults, the same as Resilience4j's except that slow-call detection is off: a window
@@ -59,8 +45,19 @@ public record CircuitBreakerConfig(
     /** The policy name in validation messages. */
     private static final String POLICY = "circuitBreaker";
 
-    /** Validates every value and copies the exception lists. */
-    public CircuitBreakerConfig {
+    /** Validates every value and copies the lists. */
+    private CircuitBreakerConfig(boolean enabled,
+            WindowType windowType,
+            int windowSize,
+            int minimumCalls,
+            float failureRateThreshold,
+            float slowCallRateThreshold,
+            Duration slowCallDuration,
+            Duration waitInOpen,
+            int halfOpenCalls,
+            Duration maxWaitInHalfOpen,
+            List<Class<? extends Throwable>> recordOn,
+            List<Class<? extends Throwable>> ignoreOn) {
         Objects.requireNonNull(windowType, "windowType");
         Objects.requireNonNull(slowCallDuration, "slowCallDuration");
         Objects.requireNonNull(waitInOpen, "waitInOpen");
@@ -87,6 +84,18 @@ public record CircuitBreakerConfig(
         if (maxWaitInHalfOpen.isNegative()) {
             throw ErrorCode.invalidValue(POLICY, "maxWaitInHalfOpen must not be negative, was " + maxWaitInHalfOpen);
         }
+        this.enabled = enabled;
+        this.windowType = windowType;
+        this.windowSize = windowSize;
+        this.minimumCalls = minimumCalls;
+        this.failureRateThreshold = failureRateThreshold;
+        this.slowCallRateThreshold = slowCallRateThreshold;
+        this.slowCallDuration = slowCallDuration;
+        this.waitInOpen = waitInOpen;
+        this.halfOpenCalls = halfOpenCalls;
+        this.maxWaitInHalfOpen = maxWaitInHalfOpen;
+        this.recordOn = recordOn;
+        this.ignoreOn = ignoreOn;
     }
 
     private static void checkRate(String name, float rate) {
@@ -217,5 +226,161 @@ public record CircuitBreakerConfig(
             return new CircuitBreakerConfig(enabled, windowType, windowSize, minimumCalls, failureRateThreshold,
                     slowCallRateThreshold, slowCallDuration, waitInOpen, halfOpenCalls, maxWaitInHalfOpen, recordOn, ignoreOn);
         }
+    }
+
+    /**
+     * Whether the breaker records calls and can open.
+     *
+     * @return the value
+     */
+    @Override
+    public boolean enabled() {
+        return enabled;
+    }
+
+    /**
+     * How the sliding window is measured.
+     *
+     * @return the value
+     */
+    public WindowType windowType() {
+        return windowType;
+    }
+
+    /**
+     * Number of calls ({@link WindowType#COUNT}) or seconds ({@link WindowType#TIME}) in the window.
+     *
+     * @return the value
+     */
+    public int windowSize() {
+        return windowSize;
+    }
+
+    /**
+     * Calls needed before the rates are evaluated; capped at {@code windowSize} for a count window.
+     *
+     * @return the value
+     */
+    public int minimumCalls() {
+        return minimumCalls;
+    }
+
+    /**
+     * Failure rate, in percent, that opens the breaker.
+     *
+     * @return the value
+     */
+    public float failureRateThreshold() {
+        return failureRateThreshold;
+    }
+
+    /**
+     * Slow-call rate, in percent, that opens the breaker.
+     *
+     * @return the value
+     */
+    public float slowCallRateThreshold() {
+        return slowCallRateThreshold;
+    }
+
+    /**
+     * Duration above which a call is slow; {@link Duration#ZERO} turns slow-call detection off, so calls are not timed at all.
+     *
+     * @return the value
+     */
+    public Duration slowCallDuration() {
+        return slowCallDuration;
+    }
+
+    /**
+     * How long the breaker stays open before allowing probe calls.
+     *
+     * @return the value
+     */
+    public Duration waitInOpen() {
+        return waitInOpen;
+    }
+
+    /**
+     * Number of probe calls in the half-open state.
+     *
+     * @return the value
+     */
+    public int halfOpenCalls() {
+        return halfOpenCalls;
+    }
+
+    /**
+     * How long the breaker may stay half-open before opening again if its probes have not completed; {@link Duration#ZERO} means no limit.
+     *
+     * @return the value
+     */
+    public Duration maxWaitInHalfOpen() {
+        return maxWaitInHalfOpen;
+    }
+
+    /**
+     * Exceptions recorded as failures; other exceptions count as successes.
+     *
+     * @return the value
+     */
+    public List<Class<? extends Throwable>> recordOn() {
+        return recordOn;
+    }
+
+    /**
+     * Exceptions that count neither as success nor as failure; they win over {@code recordOn}.
+     *
+     * @return the value
+     */
+    public List<Class<? extends Throwable>> ignoreOn() {
+        return ignoreOn;
+    }
+
+    /** Equal when every value is equal. */
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof CircuitBreakerConfig other
+                && enabled == other.enabled
+                && windowType.equals(other.windowType)
+                && windowSize == other.windowSize
+                && minimumCalls == other.minimumCalls
+                && Float.compare(failureRateThreshold, other.failureRateThreshold) == 0
+                && Float.compare(slowCallRateThreshold, other.slowCallRateThreshold) == 0
+                && slowCallDuration.equals(other.slowCallDuration)
+                && waitInOpen.equals(other.waitInOpen)
+                && halfOpenCalls == other.halfOpenCalls
+                && maxWaitInHalfOpen.equals(other.maxWaitInHalfOpen)
+                && recordOn.equals(other.recordOn)
+                && ignoreOn.equals(other.ignoreOn);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(enabled, windowType, windowSize, minimumCalls, failureRateThreshold, slowCallRateThreshold, slowCallDuration, waitInOpen, halfOpenCalls, maxWaitInHalfOpen, recordOn, ignoreOn);
+    }
+
+    /** The values, as {@code CircuitBreakerConfig[name=value, ...]}. */
+    @Override
+    public String toString() {
+        return "CircuitBreakerConfig[enabled=" + enabled + ", windowType=" + windowType + ", windowSize=" + windowSize + ", minimumCalls=" + minimumCalls + ", failureRateThreshold=" + failureRateThreshold + ", slowCallRateThreshold=" + slowCallRateThreshold + ", slowCallDuration=" + slowCallDuration + ", waitInOpen=" + waitInOpen + ", halfOpenCalls=" + halfOpenCalls + ", maxWaitInHalfOpen=" + maxWaitInHalfOpen + ", recordOn=" + recordOn + ", ignoreOn=" + ignoreOn + "]";
+    }
+
+    /** The values in declaration order, for {@link ResilienceSnapshot#toMap()}. */
+    java.util.Map<String, Object> attributes() {
+        java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+        values.put("enabled", enabled);
+        values.put("windowType", windowType);
+        values.put("windowSize", windowSize);
+        values.put("minimumCalls", minimumCalls);
+        values.put("failureRateThreshold", failureRateThreshold);
+        values.put("slowCallRateThreshold", slowCallRateThreshold);
+        values.put("slowCallDuration", slowCallDuration);
+        values.put("waitInOpen", waitInOpen);
+        values.put("halfOpenCalls", halfOpenCalls);
+        values.put("maxWaitInHalfOpen", maxWaitInHalfOpen);
+        values.put("recordOn", recordOn);
+        values.put("ignoreOn", ignoreOn);
+        return values;
     }
 }

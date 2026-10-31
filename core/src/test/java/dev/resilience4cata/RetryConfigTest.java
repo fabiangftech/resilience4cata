@@ -41,13 +41,6 @@ class RetryConfigTest {
     }
 
     @Test
-    void theConstructorOf020HasNoBudget() {
-        RetryConfig d = RetryConfig.DEFAULTS;
-        assertThat(new RetryConfig(d.enabled(), d.maxAttempts(), d.delay(), d.backoff(), d.multiplier(), d.maxDelay(),
-                d.jitter(), d.maxDuration(), d.retryOn(), d.abortOn())).isEqualTo(d);
-    }
-
-    @Test
     void rejectsInvalidBudgets() {
         for (double percent : new double[] {-1, Double.NaN, Double.POSITIVE_INFINITY}) {
             assertThatIllegalArgumentException().isThrownBy(() -> RetryConfig.builder().budgetPercent(percent).build())

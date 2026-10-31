@@ -36,7 +36,7 @@ public final class TimeoutStress {
     private TimeoutStress() {}
 
     static TimeoutPolicy policy(Watchdog watchdog) {
-        return new TimeoutPolicy("stress", new TimeoutConfig(true, Duration.ofMillis(1)), watchdog);
+        return new TimeoutPolicy("stress", TimeoutConfig.builder().timeout(Duration.ofMillis(1)).build(), watchdog);
     }
 
     /** Ends a call normally: {@code 1} if it timed out, {@code 0} if not. */
@@ -174,7 +174,7 @@ public final class TimeoutStress {
     public static class ShorterNextTimeoutNeverEarly {
         static final long BETWEEN = 100_000_000L;
         final Watchdog watchdog = new Watchdog(0);
-        final TimeoutPolicy slow = new TimeoutPolicy("slow", new TimeoutConfig(true, Duration.ofSeconds(1)), watchdog);
+        final TimeoutPolicy slow = new TimeoutPolicy("slow", TimeoutConfig.builder().timeout(Duration.ofSeconds(1)).build(), watchdog);
         final TimeoutPolicy fast = policy(watchdog);
         volatile long firstStamp;
         volatile TimeoutPolicy.@Nullable Scope firstScope;

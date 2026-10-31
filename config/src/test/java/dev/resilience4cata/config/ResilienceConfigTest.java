@@ -87,11 +87,11 @@ class ResilienceConfigTest {
 
         assertExternalRetry(registry);
         assertExternalCircuitBreaker(registry);
-        assertThat(registry.timeoutConfig("external")).isEqualTo(new TimeoutConfig(false, Duration.ofSeconds(3)));
-        assertThat(registry.timeoutConfig("")).isEqualTo(new TimeoutConfig(false, TimeoutConfig.DEFAULTS.timeout()));
-        assertThat(registry.bulkheadConfig("external")).isEqualTo(new BulkheadConfig(true, 7, Duration.ofMillis(50)));
+        assertThat(registry.timeoutConfig("external")).isEqualTo(TimeoutConfig.builder().enabled(false).timeout(Duration.ofSeconds(3)).build());
+        assertThat(registry.timeoutConfig("")).isEqualTo(TimeoutConfig.builder().enabled(false).build());
+        assertThat(registry.bulkheadConfig("external")).isEqualTo(BulkheadConfig.builder().maxConcurrent(7).maxWait(Duration.ofMillis(50)).build());
         assertThat(registry.rateLimiterConfig("external"))
-                .isEqualTo(new RateLimiterConfig(true, 100, Duration.ofMinutes(1), Duration.ZERO));
+                .isEqualTo(RateLimiterConfig.builder().permits(100).period(Duration.ofMinutes(1)).build());
         assertThat(registry.bulkheadConfig("default")).isEqualTo(BulkheadConfig.DEFAULTS);
     }
 

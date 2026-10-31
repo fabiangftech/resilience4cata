@@ -58,7 +58,7 @@ class SpringBootAppTest {
     @Test
     void propertiesActuatorAndHealthAreWired() {
         assertThat(registry.circuitBreaker("payments").config().minimumCalls()).isEqualTo(10);
-        assertThat(endpoint.snapshot().circuitBreakers()).extracting(s -> s.instance()).contains("payments");
+        assertThat(ObservabilityTest.ids(endpoint.snapshot(), "circuitBreakers")).contains("payments");
         assertThat(health.health().getStatus().getCode()).isEqualTo("UP");
     }
 

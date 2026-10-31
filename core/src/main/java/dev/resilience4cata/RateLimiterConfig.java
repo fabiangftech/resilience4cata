@@ -11,13 +11,13 @@ import java.util.Objects;
  * after a quiet period up to {@code permits} calls pass at once. As with Resilience4j's fixed cycles,
  * a window of one {@code period} can therefore see up to twice {@code permits} calls: a full burst,
  * then the steady rate.
- *
- * @param enabled whether calls are limited at all
- * @param permits calls allowed per {@code period}, and the largest burst; at least 1
- * @param period length of the period; positive, and at least {@code permits} nanoseconds
- * @param maxWait how long a call may wait for a permit; {@link Duration#ZERO} rejects immediately
  */
-public record RateLimiterConfig(boolean enabled, int permits, Duration period, Duration maxWait) {
+public final class RateLimiterConfig implements PolicyConfig {
+
+    private final boolean enabled;
+    private final int permits;
+    private final Duration period;
+    private final Duration maxWait;
 
     /**
      * Built-in defaults: 50 calls per second, no waiting. Resilience4j also allows 50 per period, but
@@ -29,8 +29,11 @@ public record RateLimiterConfig(boolean enabled, int permits, Duration period, D
     /** The policy name in validation messages. */
     private static final String POLICY = "rateLimiter";
 
-    /** Validates the values. */
-    public RateLimiterConfig {
+    /** Validates every value. */
+    private RateLimiterConfig(boolean enabled,
+            int permits,
+            Duration period,
+            Duration maxWait) {
         Objects.requireNonNull(period, "period");
         Objects.requireNonNull(maxWait, "maxWait");
         if (permits < 1) {
@@ -46,6 +49,10 @@ public record RateLimiterConfig(boolean enabled, int permits, Duration period, D
         if (maxWait.isNegative()) {
             throw ErrorCode.invalidValue(POLICY, "maxWait must not be negative, was " + maxWait);
         }
+        this.enabled = enabled;
+        this.permits = permits;
+        this.period = period;
+        this.maxWait = maxWait;
     }
 
     /** Returns a builder that starts from {@link #DEFAULTS}. */
@@ -105,5 +112,73 @@ public record RateLimiterConfig(boolean enabled, int permits, Duration period, D
         public RateLimiterConfig build() {
             return new RateLimiterConfig(enabled, permits, period, maxWait);
         }
+    }
+
+    /**
+     * Whether calls are limited at all.
+     *
+     * @return the value
+     */
+    @Override
+    public boolean enabled() {
+        return enabled;
+    }
+
+    /**
+     * Calls allowed per {@code period}, and the largest burst; at least 1.
+     *
+     * @return the value
+     */
+    public int permits() {
+        return permits;
+    }
+
+    /**
+     * Length of the period; positive, and at least {@code permits} nanoseconds.
+     *
+     * @return the value
+     */
+    public Duration period() {
+        return period;
+    }
+
+    /**
+     * How long a call may wait for a permit; {@link Duration#ZERO} rejects immediately.
+     *
+     * @return the value
+     */
+    public Duration maxWait() {
+        return maxWait;
+    }
+
+    /** Equal when every value is equal. */
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof RateLimiterConfig other
+                && enabled == other.enabled
+                && permits == other.permits
+                && period.equals(other.period)
+                && maxWait.equals(other.maxWait);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(enabled, permits, period, maxWait);
+    }
+
+    /** The values, as {@code RateLimiterConfig[name=value, ...]}. */
+    @Override
+    public String toString() {
+        return "RateLimiterConfig[enabled=" + enabled + ", permits=" + permits + ", period=" + period + ", maxWait=" + maxWait + "]";
+    }
+
+    /** The values in declaration order, for {@link ResilienceSnapshot#toMap()}. */
+    java.util.Map<String, Object> attributes() {
+        java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+        values.put("enabled", enabled);
+        values.put("permits", permits);
+        values.put("period", period);
+        values.put("maxWait", maxWait);
+        return values;
     }
 }

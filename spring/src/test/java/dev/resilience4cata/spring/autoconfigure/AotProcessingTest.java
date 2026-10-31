@@ -2,7 +2,6 @@ package dev.resilience4cata.spring.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import dev.resilience4cata.ResilienceSnapshot;
 import dev.resilience4cata.spring.ResilienceEndpoint;
 import dev.resilience4cata.spring.fixtures.InventoryClient;
 import dev.resilience4cata.spring.fixtures.InventoryClientImpl;
@@ -12,7 +11,6 @@ import dev.resilience4cata.spring.fixtures.PricingService$Resilient;
 import dev.resilience4cata.testkit.ManualClock;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.aot.hint.predicate.RuntimeHintsPredicates;
 import org.springframework.aot.test.generate.TestGenerationContext;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.context.ApplicationContextInitializer;
@@ -45,9 +43,6 @@ class AotProcessingTest {
         ClassName initializer = new ApplicationContextAotGenerator().processAheadOfTime(source, generation);
         generation.writeGeneratedContent();
 
-        assertThat(RuntimeHintsPredicates.reflection().onType(ResilienceSnapshot.class))
-                .as("the endpoint's return type is registered for JSON").accepts(generation.getRuntimeHints());
-
         TestCompiler.forSystem().with(generation).compile(compiled -> {
             assertThat(compiled.getSourceFiles().stream().anyMatch(file ->
                     file.getContent().contains("new PricingService$Resilient(")))
@@ -73,7 +68,7 @@ class AotProcessingTest {
 
                 InventoryClient inventory = optimized.getBean(InventoryClient.class);
                 assertThat(inventory.getClass().getName()).endsWith("InventoryClient$Resilient");
-                assertThat(optimized.getBean(ResilienceEndpoint.class).snapshot().retries()).hasSize(2);
+                assertThat((java.util.List<?>) optimized.getBean(ResilienceEndpoint.class).snapshot().get("retries")).hasSize(2);
             }
         });
     }

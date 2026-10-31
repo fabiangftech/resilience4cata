@@ -1,6 +1,7 @@
 package dev.resilience4cata.micronaut;
 
 import dev.resilience4cata.ResilienceRegistry;
+import dev.resilience4cata.ResilienceSnapshot;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.management.endpoint.annotation.Endpoint;
 import io.micronaut.management.endpoint.annotation.Read;
@@ -32,13 +33,13 @@ public final class ResilienceEndpoint {
     }
 
     /**
-     * Returns the state of every policy instance.
+     * Returns the state of every policy instance, as {@link ResilienceSnapshot#toMap()}.
      *
      * @return the registry's snapshot, one list per policy kind
      */
     @Read
-    public Map<String, Object> snapshot() {
-        return Snapshots.of(registry.snapshot());
+    public Map<String, @Nullable Object> snapshot() {
+        return registry.snapshot().toMap();
     }
 
     /**
@@ -49,7 +50,8 @@ public final class ResilienceEndpoint {
      * @return the snapshot restricted to that id, or {@code null} (404) when no policy has it
      */
     @Read
-    public @Nullable Map<String, Object> instance(@Selector String instance) {
-        return Snapshots.only(registry.snapshot(), instance);
+    public @Nullable Map<String, @Nullable Object> instance(@Selector String instance) {
+        ResilienceSnapshot one = registry.snapshot().only(instance);
+        return one.isEmpty() ? null : one.toMap();
     }
 }

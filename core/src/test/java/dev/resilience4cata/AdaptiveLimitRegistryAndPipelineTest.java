@@ -120,8 +120,6 @@ class AdaptiveLimitRegistryAndPipelineTest {
                 Duration.ZERO, Duration.ZERO));
         assertThat(registry.adaptiveLimit("A#a()").snapshot()).isEqualTo(limits.get(0));
         assertThat(created).as("instance creation is announced").hasValue(2);
-        assertThat(new ResilienceSnapshot(List.of(), List.of(), List.of(), List.of(), List.of(), List.of()).adaptiveLimits())
-                .as("the 0.5.0 constructor").isEmpty();
     }
 
     @Test
