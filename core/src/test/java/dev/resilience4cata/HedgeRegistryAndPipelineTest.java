@@ -64,8 +64,6 @@ class HedgeRegistryAndPipelineTest {
         assertThat(hedges.get(0).budget()).isEqualTo(new HedgeSnapshot.Budget(0, 0, 10));
         assertThat(hedges.get(1).budget()).as("no budget").isNull();
         assertThat(created).as("instance creation is announced").hasValue(2);
-        assertThat(new ResilienceSnapshot(List.of(), List.of(), List.of(), List.of(), List.of()).hedges())
-                .as("the 0.3.0 constructor").isEmpty();
     }
 
     @Test

@@ -338,7 +338,7 @@ applied); the `ResilienceConfig` bean is still there to build it with `config.ap
   breakers that should turn it DOWN (UNKNOWN while half open) in
   `resilience4cata.spring.health.down-when-open` (`*` for all). It is not part of the liveness or readiness
   groups unless you add it.
-- **Endpoint**: `GET /actuator/resilience4cata` returns `registry.snapshot()`, and
+- **Endpoint**: `GET /actuator/resilience4cata` returns `registry.snapshot()` as JSON ([its shape](observability.md#snapshots)), and
   `GET /actuator/resilience4cata/{instance}` the policies of one instance id. It is read-only and keeps no event
   history. Expose it like any endpoint: `management.endpoints.web.exposure.include=health,resilience4cata`.
 

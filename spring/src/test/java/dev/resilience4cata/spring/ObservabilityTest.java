@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.CircuitBreakerState;
 import dev.resilience4cata.ResilienceRegistry;
-import dev.resilience4cata.ResilienceSnapshot;
 import dev.resilience4cata.micrometer.MicrometerMetrics;
 import dev.resilience4cata.spring.fixtures.PaymentsGateway;
 import dev.resilience4cata.spring.fixtures.ShippingService;
@@ -94,21 +93,21 @@ class ObservabilityTest {
         runner.withUserConfiguration(ShippingService.class)
                 .withPropertyValues("management.endpoints.web.exposure.include=resilience4cata").run(context -> {
                     ResilienceEndpoint endpoint = context.getBean(ResilienceEndpoint.class);
-                    ResilienceSnapshot all = endpoint.snapshot();
-                    assertThat(all.circuitBreakers()).extracting(s -> s.instance()).containsExactly("payments");
-                    assertThat(all.retries()).extracting(s -> s.instance()).containsExactly("shipping");
+                    Map<String, Object> all = endpoint.snapshot();
+                    assertThat(ids(all, "circuitBreakers")).containsExactly("payments");
+                    assertThat(ids(all, "retries")).containsExactly("shipping");
 
-                    ResilienceSnapshot one = endpoint.instance("payments");
+                    Map<String, Object> one = endpoint.instance("payments");
                     assertThat(one).isNotNull();
-                    assertThat(one.circuitBreakers()).hasSize(1);
-                    assertThat(one.retries()).isEmpty();
+                    assertThat(ids(one, "circuitBreakers")).hasSize(1);
+                    assertThat(ids(one, "retries")).isEmpty();
                     assertThat(endpoint.instance("nobody")).as("404").isNull();
 
                     dev.resilience4cata.ResilienceRegistry registry = context.getBean(dev.resilience4cata.ResilienceRegistry.class);
                     Policies.adaptiveLimit(registry, "Orders#place()", "orders", "", null, false);
                     Policies.hedge(registry, "Quotes#get()", "quotes", "", null, false);
-                    assertThat(endpoint.instance("orders")).isNotNull().satisfies(o -> assertThat(o.adaptiveLimits()).hasSize(1));
-                    assertThat(endpoint.instance("quotes")).isNotNull().satisfies(q -> assertThat(q.hedges()).hasSize(1));
+                    assertThat(endpoint.instance("orders")).isNotNull().satisfies(o -> assertThat(ids(o, "adaptiveLimits")).hasSize(1));
+                    assertThat(endpoint.instance("quotes")).isNotNull().satisfies(q -> assertThat(ids(q, "hedges")).hasSize(1));
 
                     String json = JsonMapper.builder().build().writeValueAsString(endpoint.snapshot());
                     assertThat(json).contains("\"instance\":\"payments\"", "\"state\":\"CLOSED\"", "\"maxAttempts\":3",
@@ -135,5 +134,11 @@ class ObservabilityTest {
                 // recorded
             }
         }
+    }
+
+    /** The instance ids of one policy kind in the endpoint's map. */
+    static java.util.List<Object> ids(Map<String, Object> snapshot, String kind) {
+        return ((java.util.List<?>) snapshot.get(kind)).stream().map(m -> ((Map<?, ?>) m).get("instance")).map(Object.class::cast)
+                .toList();
     }
 }

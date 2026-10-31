@@ -22,7 +22,7 @@ class ResilienceSnapshotTest {
     @Test
     void theSnapshotListsEveryInstanceSortedById() {
         ResilienceRegistry registry = ResilienceRegistry.builder().build();
-        assertThat(registry.snapshot()).isEqualTo(new ResilienceSnapshot(List.of(), List.of(), List.of(), List.of(), List.of()));
+        assertThat(registry.snapshot().isEmpty()).isTrue();
 
         Policies.circuitBreaker(registry, "B#m()", "", "", null, false);
         Policies.circuitBreaker(registry, "A#m()", "", "", null, false);

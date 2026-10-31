@@ -99,6 +99,13 @@ for (RateLimiterSnapshot r : snapshot.rateLimiters()) {
 | `HedgeSnapshot` | `instance`, `config` (the resolved `HedgeConfig`), `budget` (`calls`, `hedges`, `allowedHedges` in the budget's window; `null` without a budget) |
 | `TimeoutSnapshot` | `instance`, `config` (the resolved `TimeoutConfig`) |
 
+`snapshot.only(id)` keeps the instances with one id (`isEmpty()` when there is none). `snapshot.toMap()` turns the
+snapshot into maps, lists, strings, numbers, booleans and nulls, which any JSON encoder writes as they are: one key
+per policy kind, each a list of one map per instance whose keys are the fields above, in that order, with
+configurations nested as maps of their attributes. Durations are ISO-8601 strings (`PT0.2S`), enums and classes
+their names, and a rate that is not a finite number is `null`. The Spring Boot and Micronaut endpoints serve exactly
+this; keys may be added in minor versions, never removed or renamed.
+
 ## Handles :id=handles
 
 Handles read one instance live, and the breaker's can also change its state:

@@ -11,28 +11,18 @@ import java.util.Objects;
  * for {@code delay}, or at once when one fails with a failure listed in {@code hedgeOn}, and completes with
  * the first success. Only for idempotent calls.
  *
- * @param enabled whether calls are hedged at all; disabled, the call runs once
- * @param maxAttempts attempts in flight at most, including the first one; between 2 and 10
- * @param delay how long the latest attempt runs without a result before the next one starts; not negative,
- *     {@link Duration#ZERO} starts every attempt at once
- * @param hedgeOn failures after which the next attempt starts at once; a failure not listed ends the call
- * @param abortOn failures that end the call at once and cancel the other attempts; they win over {@code hedgeOn}
- * @param budgetPercent hedge budget: hedges allowed, in percent of the calls made in the last
- *     {@code budgetWindow}, on top of {@code budgetMinHedgesPerSecond}; finite, at least 0; 0 turns the budget off
- * @param budgetMinHedgesPerSecond hedge budget: hedges allowed per second of {@code budgetWindow} whatever
- *     the traffic; at least 0; applies once {@code budgetPercent} turns the budget on
- * @param budgetWindow hedge budget: how far back calls and hedges are counted; between 1 s and 1 h
  * @see #hasBudget()
  */
-public record HedgeConfig(
-        boolean enabled,
-        int maxAttempts,
-        Duration delay,
-        List<Class<? extends Throwable>> hedgeOn,
-        List<Class<? extends Throwable>> abortOn,
-        double budgetPercent,
-        int budgetMinHedgesPerSecond,
-        Duration budgetWindow) {
+public final class HedgeConfig implements PolicyConfig {
+
+    private final boolean enabled;
+    private final int maxAttempts;
+    private final Duration delay;
+    private final List<Class<? extends Throwable>> hedgeOn;
+    private final List<Class<? extends Throwable>> abortOn;
+    private final double budgetPercent;
+    private final int budgetMinHedgesPerSecond;
+    private final Duration budgetWindow;
 
     /** The fewest attempts: one hedge. */
     public static final int MIN_ATTEMPTS = 2;
@@ -51,8 +41,15 @@ public record HedgeConfig(
     /** The policy name in validation messages. */
     private static final String POLICY = "hedge";
 
-    /** Validates every value and copies the exception lists. */
-    public HedgeConfig {
+    /** Validates every value and copies the lists. */
+    private HedgeConfig(boolean enabled,
+            int maxAttempts,
+            Duration delay,
+            List<Class<? extends Throwable>> hedgeOn,
+            List<Class<? extends Throwable>> abortOn,
+            double budgetPercent,
+            int budgetMinHedgesPerSecond,
+            Duration budgetWindow) {
         Objects.requireNonNull(delay, "delay");
         Objects.requireNonNull(budgetWindow, "budgetWindow");
         hedgeOn = List.copyOf(hedgeOn);
@@ -74,6 +71,14 @@ public record HedgeConfig(
         if (budgetWindow.compareTo(Duration.ofSeconds(1)) < 0 || budgetWindow.compareTo(MAX_BUDGET_WINDOW) > 0) {
             throw ErrorCode.invalidValue(POLICY, "budgetWindow must be between 1s and 1h, was " + budgetWindow);
         }
+        this.enabled = enabled;
+        this.maxAttempts = maxAttempts;
+        this.delay = delay;
+        this.hedgeOn = hedgeOn;
+        this.abortOn = abortOn;
+        this.budgetPercent = budgetPercent;
+        this.budgetMinHedgesPerSecond = budgetMinHedgesPerSecond;
+        this.budgetWindow = budgetWindow;
     }
 
     /**
@@ -179,5 +184,117 @@ public record HedgeConfig(
             return new HedgeConfig(enabled, maxAttempts, delay, hedgeOn, abortOn, budgetPercent,
                     budgetMinHedgesPerSecond, budgetWindow);
         }
+    }
+
+    /**
+     * Whether calls are hedged at all; disabled, the call runs once.
+     *
+     * @return the value
+     */
+    @Override
+    public boolean enabled() {
+        return enabled;
+    }
+
+    /**
+     * Attempts in flight at most, including the first one; between 2 and 10.
+     *
+     * @return the value
+     */
+    public int maxAttempts() {
+        return maxAttempts;
+    }
+
+    /**
+     * How long the latest attempt runs without a result before the next one starts; not negative, {@link Duration#ZERO} starts every attempt at once.
+     *
+     * @return the value
+     */
+    public Duration delay() {
+        return delay;
+    }
+
+    /**
+     * Failures after which the next attempt starts at once; a failure not listed ends the call.
+     *
+     * @return the value
+     */
+    public List<Class<? extends Throwable>> hedgeOn() {
+        return hedgeOn;
+    }
+
+    /**
+     * Failures that end the call at once and cancel the other attempts; they win over {@code hedgeOn}.
+     *
+     * @return the value
+     */
+    public List<Class<? extends Throwable>> abortOn() {
+        return abortOn;
+    }
+
+    /**
+     * Hedge budget: hedges allowed, in percent of the calls made in the last {@code budgetWindow}, on top of {@code budgetMinHedgesPerSecond}; finite, at least 0; 0 turns the budget off.
+     *
+     * @return the value
+     */
+    public double budgetPercent() {
+        return budgetPercent;
+    }
+
+    /**
+     * Hedge budget: hedges allowed per second of {@code budgetWindow} whatever the traffic; at least 0; applies once {@code budgetPercent} turns the budget on.
+     *
+     * @return the value
+     */
+    public int budgetMinHedgesPerSecond() {
+        return budgetMinHedgesPerSecond;
+    }
+
+    /**
+     * Hedge budget: how far back calls and hedges are counted; between 1 s and 1 h.
+     *
+     * @return the value
+     */
+    public Duration budgetWindow() {
+        return budgetWindow;
+    }
+
+    /** Equal when every value is equal. */
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof HedgeConfig other
+                && enabled == other.enabled
+                && maxAttempts == other.maxAttempts
+                && delay.equals(other.delay)
+                && hedgeOn.equals(other.hedgeOn)
+                && abortOn.equals(other.abortOn)
+                && Double.compare(budgetPercent, other.budgetPercent) == 0
+                && budgetMinHedgesPerSecond == other.budgetMinHedgesPerSecond
+                && budgetWindow.equals(other.budgetWindow);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(enabled, maxAttempts, delay, hedgeOn, abortOn, budgetPercent, budgetMinHedgesPerSecond, budgetWindow);
+    }
+
+    /** The values, as {@code HedgeConfig[name=value, ...]}. */
+    @Override
+    public String toString() {
+        return "HedgeConfig[enabled=" + enabled + ", maxAttempts=" + maxAttempts + ", delay=" + delay + ", hedgeOn=" + hedgeOn + ", abortOn=" + abortOn + ", budgetPercent=" + budgetPercent + ", budgetMinHedgesPerSecond=" + budgetMinHedgesPerSecond + ", budgetWindow=" + budgetWindow + "]";
+    }
+
+    /** The values in declaration order, for {@link ResilienceSnapshot#toMap()}. */
+    java.util.Map<String, Object> attributes() {
+        java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+        values.put("enabled", enabled);
+        values.put("maxAttempts", maxAttempts);
+        values.put("delay", delay);
+        values.put("hedgeOn", hedgeOn);
+        values.put("abortOn", abortOn);
+        values.put("budgetPercent", budgetPercent);
+        values.put("budgetMinHedgesPerSecond", budgetMinHedgesPerSecond);
+        values.put("budgetWindow", budgetWindow);
+        return values;
     }
 }

@@ -25,7 +25,7 @@ public final class BulkheadStress {
     private BulkheadStress() {}
 
     static BulkheadPolicy bulkhead(int maxConcurrent) {
-        return new BulkheadPolicy("stress", new BulkheadConfig(true, maxConcurrent, Duration.ZERO));
+        return new BulkheadPolicy("stress", BulkheadConfig.builder().maxConcurrent(maxConcurrent).build());
     }
 
     static int enter(BulkheadPolicy bulkhead) {

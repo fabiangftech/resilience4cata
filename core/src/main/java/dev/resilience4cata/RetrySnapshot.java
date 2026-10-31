@@ -13,16 +13,6 @@ import org.jspecify.annotations.Nullable;
 public record RetrySnapshot(String instance, RetryConfig config, @Nullable Budget budget) {
 
     /**
-     * A snapshot without a retry budget: the constructor of 0.2.0, kept so that code that calls it still compiles.
-     *
-     * @param instance the retry's id
-     * @param config its resolved configuration
-     */
-    public RetrySnapshot(String instance, RetryConfig config) {
-        this(instance, config, null);
-    }
-
-    /**
      * The window of a retry budget, read when the snapshot was taken. The three counts are read one after
      * the other while calls go on, so they are approximate.
      *

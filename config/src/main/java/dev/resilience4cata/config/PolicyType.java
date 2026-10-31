@@ -1,5 +1,6 @@
 package dev.resilience4cata.config;
 
+import dev.resilience4cata.PolicyConfig;
 import dev.resilience4cata.AdaptiveLimitConfig;
 import dev.resilience4cata.BulkheadConfig;
 import dev.resilience4cata.CircuitBreakerConfig;
@@ -200,7 +201,7 @@ final class PolicyType<B, C> {
      * locked annotation kept from applying.
      */
     @SuppressWarnings("unchecked") // config comes from a LockedOverride of this policy
-    boolean changes(Record config, Setting setting) {
+    boolean changes(PolicyConfig config, Setting setting) {
         C current = (C) config;
         B builder = toBuilder.apply(current);
         Attribute<B> attribute = Objects.requireNonNull(attributes.get(setting.key().attribute()));

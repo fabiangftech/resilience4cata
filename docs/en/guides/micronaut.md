@@ -424,7 +424,7 @@ the configuration with `config.applyTo(builder)`.
   load balancing. List the breakers that should turn it DOWN (UNKNOWN while half open) in
   `resilience4cata.micronaut.health.down-when-open` (`*` for all). It is neither `@Liveness` nor `@Readiness`, so
   it counts only in `/health`.
-- **Endpoint**: `GET /resilience4cata` returns `registry.snapshot()` as JSON, and `GET /resilience4cata/{instance}`
+- **Endpoint**: `GET /resilience4cata` returns `registry.snapshot()` as JSON ([its shape](observability.md#snapshots)), and `GET /resilience4cata/{instance}`
   the policies of one instance id. It is read-only and keeps no event history. Like Micronaut's own endpoints it
   is sensitive by default: configure it with `endpoints.resilience4cata.enabled` and
   `endpoints.resilience4cata.sensitive`.
@@ -488,8 +488,7 @@ Nothing to add for resilience4cata:
   beans;
 - with `-Ar4c.inject=micronaut`, Micronaut's own bean definitions create the generated subclasses, without
   reflection;
-- the endpoint reads the snapshot records through bean introspections generated when the module was compiled, not
-  through reflection.
+- the endpoint serves `ResilienceSnapshot.toMap()`, which core builds without reflection.
 
 A GraalVM 25 native image of a small application with an `@ResilientBean` interface, an annotated class, YAML
 configuration, the endpoint and Micrometer was built and run by hand while developing the module; the project's CI

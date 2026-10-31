@@ -13,42 +13,23 @@ import java.util.concurrent.TimeoutException;
  * compares the window's average latency with what it has seen before and raises the limit while latency
  * holds, or lowers it when latency grows or calls are dropped ({@code dropOn}). The cap always stays
  * between {@code minLimit} and {@code maxLimit}.
- *
- * @param enabled whether calls are limited at all
- * @param algorithm how the limit is recomputed at the end of each window
- * @param initialLimit the limit before the first window ends; between {@code minLimit} and {@code maxLimit}
- * @param minLimit the lowest the limit goes; at least 1
- * @param maxLimit the highest the limit goes; at least {@code minLimit}
- * @param window how long a window lasts at least; between 10 ms and 1 h
- * @param minWindowSamples completed calls a window needs before it ends; a window that is over but has fewer
- *     is extended by one more {@code window} and keeps its calls, which count when it ends; at least 1
- * @param dropOn failures that mean the dependency is overloaded (a timeout, a full bulkhead): they count as
- *     a sample with a drop, which makes {@link Algorithm#AIMD} back off. Any other failure is ignored: the
- *     slot is freed and the call is not a sample
- * @param ignoreOn failures that are never samples, even if listed in {@code dropOn}; they win over it
- * @param smoothing {@link Algorithm#GRADIENT2}: how much of each new estimate is kept, above 0 and at most 1
- * @param rttTolerance {@link Algorithm#GRADIENT2}: how many times the long-term latency the window's latency
- *     may reach before the limit goes down; finite, at least 1
- * @param longWindow {@link Algorithm#GRADIENT2}: windows averaged into the long-term latency; at least 1
- * @param queueSize {@link Algorithm#GRADIENT2}: calls the limit leaves room for above the estimated
- *     concurrency, so that it can grow; at least 0
- * @param backoffRatio {@link Algorithm#AIMD}: what a drop multiplies the limit by; at least 0.5 and below 1
  */
-public record AdaptiveLimitConfig(
-        boolean enabled,
-        Algorithm algorithm,
-        int initialLimit,
-        int minLimit,
-        int maxLimit,
-        Duration window,
-        int minWindowSamples,
-        List<Class<? extends Throwable>> dropOn,
-        List<Class<? extends Throwable>> ignoreOn,
-        double smoothing,
-        double rttTolerance,
-        int longWindow,
-        int queueSize,
-        double backoffRatio) {
+public final class AdaptiveLimitConfig implements PolicyConfig {
+
+    private final boolean enabled;
+    private final Algorithm algorithm;
+    private final int initialLimit;
+    private final int minLimit;
+    private final int maxLimit;
+    private final Duration window;
+    private final int minWindowSamples;
+    private final List<Class<? extends Throwable>> dropOn;
+    private final List<Class<? extends Throwable>> ignoreOn;
+    private final double smoothing;
+    private final double rttTolerance;
+    private final int longWindow;
+    private final int queueSize;
+    private final double backoffRatio;
 
     /** How the limit is recomputed at the end of each window. */
     public enum Algorithm {
@@ -85,8 +66,21 @@ public record AdaptiveLimitConfig(
     /** The policy name in validation messages. */
     private static final String POLICY = "adaptiveLimit";
 
-    /** Validates every value and copies the exception lists. */
-    public AdaptiveLimitConfig {
+    /** Validates every value and copies the lists. */
+    private AdaptiveLimitConfig(boolean enabled,
+            Algorithm algorithm,
+            int initialLimit,
+            int minLimit,
+            int maxLimit,
+            Duration window,
+            int minWindowSamples,
+            List<Class<? extends Throwable>> dropOn,
+            List<Class<? extends Throwable>> ignoreOn,
+            double smoothing,
+            double rttTolerance,
+            int longWindow,
+            int queueSize,
+            double backoffRatio) {
         Objects.requireNonNull(algorithm, "algorithm");
         Objects.requireNonNull(window, "window");
         dropOn = List.copyOf(dropOn);
@@ -122,6 +116,20 @@ public record AdaptiveLimitConfig(
         if (!(backoffRatio >= 0.5 && backoffRatio < 1)) {
             throw ErrorCode.invalidValue(POLICY, "backoffRatio must be at least 0.5 and below 1, was " + backoffRatio);
         }
+        this.enabled = enabled;
+        this.algorithm = algorithm;
+        this.initialLimit = initialLimit;
+        this.minLimit = minLimit;
+        this.maxLimit = maxLimit;
+        this.window = window;
+        this.minWindowSamples = minWindowSamples;
+        this.dropOn = dropOn;
+        this.ignoreOn = ignoreOn;
+        this.smoothing = smoothing;
+        this.rttTolerance = rttTolerance;
+        this.longWindow = longWindow;
+        this.queueSize = queueSize;
+        this.backoffRatio = backoffRatio;
     }
 
     /** Returns a builder that starts from {@link #DEFAULTS}. */
@@ -262,5 +270,183 @@ public record AdaptiveLimitConfig(
             return new AdaptiveLimitConfig(enabled, algorithm, initialLimit, minLimit, maxLimit, window,
                     minWindowSamples, dropOn, ignoreOn, smoothing, rttTolerance, longWindow, queueSize, backoffRatio);
         }
+    }
+
+    /**
+     * Whether calls are limited at all.
+     *
+     * @return the value
+     */
+    @Override
+    public boolean enabled() {
+        return enabled;
+    }
+
+    /**
+     * How the limit is recomputed at the end of each window.
+     *
+     * @return the value
+     */
+    public Algorithm algorithm() {
+        return algorithm;
+    }
+
+    /**
+     * The limit before the first window ends; between {@code minLimit} and {@code maxLimit}.
+     *
+     * @return the value
+     */
+    public int initialLimit() {
+        return initialLimit;
+    }
+
+    /**
+     * The lowest the limit goes; at least 1.
+     *
+     * @return the value
+     */
+    public int minLimit() {
+        return minLimit;
+    }
+
+    /**
+     * The highest the limit goes; at least {@code minLimit}.
+     *
+     * @return the value
+     */
+    public int maxLimit() {
+        return maxLimit;
+    }
+
+    /**
+     * How long a window lasts at least; between 10 ms and 1 h.
+     *
+     * @return the value
+     */
+    public Duration window() {
+        return window;
+    }
+
+    /**
+     * Completed calls a window needs before it ends; a window that is over but has fewer is extended by one more {@code window} and keeps its calls, which count when it ends; at least 1.
+     *
+     * @return the value
+     */
+    public int minWindowSamples() {
+        return minWindowSamples;
+    }
+
+    /**
+     * Failures that mean the dependency is overloaded (a timeout, a full bulkhead): they count as a sample with a drop, which makes {@link Algorithm#AIMD} back off. Any other failure is ignored: the slot is freed and the call is not a sample.
+     *
+     * @return the value
+     */
+    public List<Class<? extends Throwable>> dropOn() {
+        return dropOn;
+    }
+
+    /**
+     * Failures that are never samples, even if listed in {@code dropOn}; they win over it.
+     *
+     * @return the value
+     */
+    public List<Class<? extends Throwable>> ignoreOn() {
+        return ignoreOn;
+    }
+
+    /**
+     * {@link Algorithm#GRADIENT2}: how much of each new estimate is kept, above 0 and at most 1.
+     *
+     * @return the value
+     */
+    public double smoothing() {
+        return smoothing;
+    }
+
+    /**
+     * {@link Algorithm#GRADIENT2}: how many times the long-term latency the window's latency may reach before the limit goes down; finite, at least 1.
+     *
+     * @return the value
+     */
+    public double rttTolerance() {
+        return rttTolerance;
+    }
+
+    /**
+     * {@link Algorithm#GRADIENT2}: windows averaged into the long-term latency; at least 1.
+     *
+     * @return the value
+     */
+    public int longWindow() {
+        return longWindow;
+    }
+
+    /**
+     * {@link Algorithm#GRADIENT2}: calls the limit leaves room for above the estimated concurrency, so that it can grow; at least 0.
+     *
+     * @return the value
+     */
+    public int queueSize() {
+        return queueSize;
+    }
+
+    /**
+     * {@link Algorithm#AIMD}: what a drop multiplies the limit by; at least 0.5 and below 1.
+     *
+     * @return the value
+     */
+    public double backoffRatio() {
+        return backoffRatio;
+    }
+
+    /** Equal when every value is equal. */
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof AdaptiveLimitConfig other
+                && enabled == other.enabled
+                && algorithm.equals(other.algorithm)
+                && initialLimit == other.initialLimit
+                && minLimit == other.minLimit
+                && maxLimit == other.maxLimit
+                && window.equals(other.window)
+                && minWindowSamples == other.minWindowSamples
+                && dropOn.equals(other.dropOn)
+                && ignoreOn.equals(other.ignoreOn)
+                && Double.compare(smoothing, other.smoothing) == 0
+                && Double.compare(rttTolerance, other.rttTolerance) == 0
+                && longWindow == other.longWindow
+                && queueSize == other.queueSize
+                && Double.compare(backoffRatio, other.backoffRatio) == 0;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(enabled, algorithm, initialLimit, minLimit, maxLimit, window, minWindowSamples, dropOn, ignoreOn, smoothing, rttTolerance, longWindow, queueSize, backoffRatio);
+    }
+
+    /** The values, as {@code AdaptiveLimitConfig[name=value, ...]}. */
+    @Override
+    public String toString() {
+        return "AdaptiveLimitConfig[enabled=" + enabled + ", algorithm=" + algorithm + ", initialLimit=" + initialLimit + ", minLimit=" + minLimit + ", maxLimit=" + maxLimit + ", window=" + window + ", minWindowSamples=" + minWindowSamples + ", dropOn=" + dropOn + ", ignoreOn=" + ignoreOn + ", smoothing=" + smoothing + ", rttTolerance=" + rttTolerance + ", longWindow=" + longWindow + ", queueSize=" + queueSize + ", backoffRatio=" + backoffRatio + "]";
+    }
+
+    /** The values in declaration order, for {@link ResilienceSnapshot#toMap()}. */
+    java.util.Map<String, Object> attributes() {
+        java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+        values.put("enabled", enabled);
+        values.put("algorithm", algorithm);
+        values.put("initialLimit", initialLimit);
+        values.put("minLimit", minLimit);
+        values.put("maxLimit", maxLimit);
+        values.put("window", window);
+        values.put("minWindowSamples", minWindowSamples);
+        values.put("dropOn", dropOn);
+        values.put("ignoreOn", ignoreOn);
+        values.put("smoothing", smoothing);
+        values.put("rttTolerance", rttTolerance);
+        values.put("longWindow", longWindow);
+        values.put("queueSize", queueSize);
+        values.put("backoffRatio", backoffRatio);
+        return values;
     }
 }
