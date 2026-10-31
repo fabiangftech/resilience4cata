@@ -27,6 +27,8 @@ def springTestLibraries = [
         libs.spring.boot.reactor.netty,
         libs.spring.boot.webmvc,
         libs.spring.boot.tomcat,
+        // DevToolsRestartTest: DevTools' RestartClassLoader, as a restart creates it.
+        libs.spring.boot.devtools,
         libs.aspectjweaver,
         libs.hibernate.validator,
         libs.tomcat.embed.el,

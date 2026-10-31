@@ -149,6 +149,7 @@ spring-boot-webflux = { module = "org.springframework.boot:spring-boot-webflux" 
 spring-boot-reactor-netty = { module = "org.springframework.boot:spring-boot-reactor-netty" }
 spring-boot-webmvc = { module = "org.springframework.boot:spring-boot-webmvc" }
 spring-boot-tomcat = { module = "org.springframework.boot:spring-boot-tomcat" }
+spring-boot-devtools = { module = "org.springframework.boot:spring-boot-devtools" }
 aspectjweaver = { module = "org.aspectj:aspectjweaver" }
 hibernate-validator = { module = "org.hibernate.validator:hibernate-validator" }
 tomcat-embed-el = { module = "org.apache.tomcat.embed:tomcat-embed-el" }
