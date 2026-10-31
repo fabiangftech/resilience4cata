@@ -4,9 +4,9 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
-## [Unreleased] :id=unreleased
+## [0.12.0] - 2026-10-31 :id=0.12.0
 
-Camino a 1.0: la API se está revisando antes de congelarla, así que esta versión la cambia en algunos puntos.
+La revisión de la API antes de 1.0: esta versión cambia la API en muchos puntos, así que lee **Cambiado** antes de actualizar. El código generado por 0.11.0 o antes se debe compilar de nuevo con este procesador.
 
 ### Cambiado
 
