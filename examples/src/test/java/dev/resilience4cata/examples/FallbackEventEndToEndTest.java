@@ -153,7 +153,7 @@ class FallbackEventEndToEndTest {
         assertThat(client.loadAsync("1", new IOException()).join()).isEqualTo("cached 1");
         assertThat(client.retriedAsync("2", new IOException()).join()).isEqualTo("cached 2");
         assertThat(client.handledAsync("3", state).join()).isEqualTo("fixed");
-        assertThat(applied).extracting(FallbackEvent.Applied::instance).containsExactly(
+        assertThat(applied).extracting(FallbackEvent.Applied::id).containsExactly(
                 PREFIX + "loadAsync(java.lang.String,java.lang.Throwable)",
                 PREFIX + "retriedAsync(java.lang.String,java.lang.Throwable)",
                 PREFIX + "handledAsync(java.lang.String,java.lang.Throwable)");
@@ -179,6 +179,6 @@ class FallbackEventEndToEndTest {
                 .isEqualTo("fallback");
         assertThat(pipeline.executeAsync(() -> CompletableFuture.<String>failedFuture(state)))
                 .failsWithin(java.time.Duration.ofSeconds(5));
-        assertThat(applied).extracting(FallbackEvent.Applied::instance).containsExactly("pipeline", "pipeline");
+        assertThat(applied).extracting(FallbackEvent.Applied::id).containsExactly("pipeline", "pipeline");
     }
 }

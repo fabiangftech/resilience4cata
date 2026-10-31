@@ -10,15 +10,15 @@ import java.util.Objects;
  *
  * @param policy the policy, as in configuration keys: {@code retry}, {@code hedge}, {@code circuitBreaker},
  *     {@code rateLimiter}, {@code adaptiveLimit}, {@code timeout} or {@code bulkhead}
- * @param instance the instance id
+ * @param id the instance id
  * @param config the configuration the instance uses, for example a {@link RetryConfig}
  */
-public record LockedOverride(String policy, String instance, PolicyConfig config) {
+public record LockedOverride(String policy, String id, PolicyConfig config) {
 
     /** Checks that no component is null. */
     public LockedOverride {
         Objects.requireNonNull(policy, "policy");
-        Objects.requireNonNull(instance, "instance");
+        Objects.requireNonNull(id, "id");
         Objects.requireNonNull(config, "config");
     }
 }

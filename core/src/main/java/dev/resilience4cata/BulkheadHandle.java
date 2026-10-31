@@ -1,6 +1,9 @@
 package dev.resilience4cata;
 
-/** Inspects one bulkhead. Obtained from {@link ResilienceRegistry#bulkhead(String)}. */
+/**
+ * Inspects one bulkhead. Obtained from {@link ResilienceRegistry#bulkhead(String)}. Implemented by the library
+ * only, not meant to be implemented or mocked: methods may be added in minor versions.
+ */
 public interface BulkheadHandle {
 
     /**

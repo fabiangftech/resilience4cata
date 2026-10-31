@@ -35,7 +35,7 @@ class SnapshotMapsTest {
         assertThat(limit.get("limit")).isEqualTo(12);
         assertThat(limit.get("windowLatency")).isEqualTo("PT0.04S");
         Map<?, ?> breaker = first(map, "circuitBreakers");
-        assertThat(keys(breaker)).containsExactly("instance", "state",
+        assertThat(keys(breaker)).containsExactly("id", "state",
                 "failureRate", "slowCallRate", "bufferedCalls", "failedCalls", "slowCalls");
         assertThat(breaker.get("state")).isEqualTo("OPEN");
         assertThat(breaker.get("slowCallRate")).as("NaN is not JSON").isNull();

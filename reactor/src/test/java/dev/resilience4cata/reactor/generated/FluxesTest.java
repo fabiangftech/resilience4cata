@@ -544,9 +544,9 @@ class FluxesTest {
         List<String> seen = new CopyOnWriteArrayList<>();
         flux.subscribe(seen::add);
         clock.advance(Duration.ofMillis(300));
-        assertThat(limit.inFlight()).isOne();
+        assertThat(limit.concurrentCalls()).isOne();
         clock.advance(Duration.ofMillis(3700));
-        assertThat(limit.inFlight()).isZero();
+        assertThat(limit.concurrentCalls()).isZero();
         assertThat(limit.snapshot().windowLatency()).isEqualTo(Duration.ofMillis(300));
     }
 

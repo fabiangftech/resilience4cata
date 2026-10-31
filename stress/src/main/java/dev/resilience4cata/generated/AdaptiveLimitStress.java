@@ -4,7 +4,7 @@ import static org.openjdk.jcstress.annotations.Expect.ACCEPTABLE;
 import static org.openjdk.jcstress.annotations.Expect.FORBIDDEN;
 
 import dev.resilience4cata.AdaptiveLimitConfig;
-import dev.resilience4cata.LimitExceededException;
+import dev.resilience4cata.AdaptiveLimitFullException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 import org.openjdk.jcstress.annotations.Actor;
@@ -39,7 +39,7 @@ public final class AdaptiveLimitStress {
         try {
             policy.acquire();
             return 1;
-        } catch (LimitExceededException e) {
+        } catch (AdaptiveLimitFullException e) {
             return 0;
         }
     }
@@ -65,7 +65,7 @@ public final class AdaptiveLimitStress {
 
         @Arbiter
         public void count(III_Result r) {
-            r.r3 = policy.inFlight();
+            r.r3 = policy.concurrentCalls();
         }
     }
 
@@ -85,7 +85,7 @@ public final class AdaptiveLimitStress {
             long start;
             try {
                 start = policy.acquire();
-            } catch (LimitExceededException e) {
+            } catch (AdaptiveLimitFullException e) {
                 return 0;
             }
             policy.onSuccess(start);
@@ -104,7 +104,7 @@ public final class AdaptiveLimitStress {
 
         @Arbiter
         public void count(III_Result r) {
-            r.r3 = policy.inFlight();
+            r.r3 = policy.concurrentCalls();
         }
     }
 
@@ -171,7 +171,7 @@ public final class AdaptiveLimitStress {
 
         @Arbiter
         public void count(II_Result r) {
-            r.r2 = policy.inFlight();
+            r.r2 = policy.concurrentCalls();
         }
     }
 }

@@ -6,24 +6,16 @@ package dev.resilience4cata;
  * preallocated instance without a stack trace, so a rejection costs almost nothing; the current limit is
  * in {@link AdaptiveLimitHandle#limit()} and in the {@code Rejected} event.
  */
-public final class LimitExceededException extends RuntimeException {
+public final class AdaptiveLimitFullException extends CallRejectedException {
 
     private static final long serialVersionUID = 1L;
-
-    private final String instanceId;
 
     /**
      * Creates the exception for one adaptive limit.
      *
-     * @param instanceId id of the adaptive limit
+     * @param id id of the adaptive limit
      */
-    public LimitExceededException(String instanceId) {
-        super("Adaptive limit '" + instanceId + "' is full", null, false, false);
-        this.instanceId = instanceId;
-    }
-
-    /** Returns the id of the adaptive limit that rejected the call. */
-    public String instanceId() {
-        return instanceId;
+    public AdaptiveLimitFullException(String id) {
+        super("Adaptive limit '" + id + "' is full", id);
     }
 }

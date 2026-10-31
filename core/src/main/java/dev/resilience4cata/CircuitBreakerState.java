@@ -1,6 +1,9 @@
 package dev.resilience4cata;
 
-/** State of a circuit breaker. */
+/**
+ * State of a circuit breaker. Constants may be added in minor versions: keep a {@code default} branch in a {@code
+ * switch} over it.
+ */
 public enum CircuitBreakerState {
     /** Calls go through, and their outcomes are recorded in the sliding window. */
     CLOSED,
@@ -8,7 +11,10 @@ public enum CircuitBreakerState {
     OPEN,
     /** A limited number of probe calls go through to decide whether to close or open again. */
     HALF_OPEN,
-    /** Set by {@link CircuitBreakerHandle#forceOpen()}: every call is rejected until {@link CircuitBreakerHandle#reset()}. */
+    /**
+     * Set by {@link CircuitBreakerHandle#forceOpen()}: every call is rejected until {@link
+     * CircuitBreakerHandle#reset()}.
+     */
     FORCED_OPEN,
     /**
      * Set by {@link CircuitBreakerHandle#disable()}, or by {@code enabled = false} in the configuration:

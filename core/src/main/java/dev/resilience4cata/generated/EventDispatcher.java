@@ -43,16 +43,16 @@ public final class EventDispatcher {
      * Returns the listeners for one event type of one policy instance.
      *
      * @param type the event record class the policy publishes
-     * @param instance the policy instance's id
+     * @param id the policy instance's id
      * @param <E> the event type
      * @return the sink, or {@code null} if nobody listens to that type on that instance
      */
     @SuppressWarnings("unchecked") // a listener of a supertype of E accepts E
-    public <E extends ResilienceEvent> @Nullable EventSink<E> sink(Class<E> type, String instance) {
+    public <E extends ResilienceEvent> @Nullable EventSink<E> sink(Class<E> type, String id) {
         List<EventListener<? super E>> matching = new ArrayList<>();
         for (Subscription subscription : subscriptions) {
             if (subscription.type().isAssignableFrom(type)
-                    && (subscription.instance() == null || subscription.instance().equals(instance))) {
+                    && (subscription.id() == null || subscription.id().equals(id))) {
                 matching.add((EventListener<? super E>) subscription.listener());
             }
         }
@@ -64,13 +64,13 @@ public final class EventDispatcher {
      *
      * @param type the event type it listens to: a record such as {@code CircuitBreakerEvent.StateTransition},
      *     a policy interface such as {@code RetryEvent}, or {@code ResilienceEvent} for everything
-     * @param instance the only instance it listens to, or {@code null} for every instance
+     * @param id the only instance it listens to, or {@code null} for every instance
      * @param listener the listener; it must accept {@code type}
      */
-    public record Subscription(Class<? extends ResilienceEvent> type, @Nullable String instance,
+    public record Subscription(Class<? extends ResilienceEvent> type, @Nullable String id,
             EventListener<?> listener) {
 
-        /** Checks that nothing is null except {@code instance}. */
+        /** Checks that nothing is null except {@code id}. */
         public Subscription {
             Objects.requireNonNull(type, "type");
             Objects.requireNonNull(listener, "listener");

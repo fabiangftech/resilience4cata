@@ -51,7 +51,7 @@ Rules that hold for every policy:
 
 - **A method that throws instead of returning a stage** is treated like a failed stage: the policies see the exception, and if nothing recovers, the returned future fails with it. A method that returns `null` instead of a stage fails with a `NullPointerException` the same way.
 - **Failures are unwrapped.** A stage that fails with `CompletionException` or `ExecutionException` is judged by its cause, so `retryOn`, `recordOn`, classifiers and fallback signatures see your exception (`IOException` in the example), not the wrapper.
-- **Rejections fail the future.** An open breaker, a full bulkhead, a full adaptive limit or an exhausted rate limiter fails the returned future with `CallNotPermittedException`, `BulkheadFullException`, `LimitExceededException` or `RateLimitExceededException`.
+- **Rejections fail the future.** An open breaker, a full bulkhead, a full adaptive limit or an exhausted rate limiter fails the returned future with `CallNotPermittedException`, `BulkheadFullException`, `AdaptiveLimitFullException` or `RateLimitExceededException`.
 - **Callbacks don't run on the timer.** Delayed retries, hedges, rate-limiter waits and timeouts fire on a library timer, which hands the work to a new virtual thread; so does a queued bulkhead call when it gets its slot. That thread has the caller's context class loader (the one of the thread that made the call) and no `ThreadLocal`s, MDC or inherited thread-local values: never those of another request. Pass what an attempt needs explicitly (for `Mono` and `Flux` methods, the Reactor context reaches every attempt).
 
 A timed-out call, from the same test:

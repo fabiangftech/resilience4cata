@@ -43,7 +43,7 @@ class FallbackPolicyTest {
 
         assertThat(context.failure()).isSameAs(failure);
         assertThat(context.attempts()).isEqualTo(3);
-        assertThat(context.instanceId()).isEqualTo("demo.Client#find(java.lang.String,int)");
+        assertThat(context.id()).isEqualTo("demo.Client#find(java.lang.String,int)");
         assertThat(context.argumentCount()).isEqualTo(3);
         assertThat(context.argument(0, String.class)).isEqualTo("a");
         assertThat(context.argument(1, int.class)).isEqualTo(7);

@@ -146,7 +146,7 @@ public interface QuoteApi {
         @Override
         public Long apply(FallbackContext context) {
             int quantity = context.argument(1, int.class);   // the call's arguments, by position
-            return 100L * quantity;                          // context.failure(), attempts(), instanceId()
+            return 100L * quantity;                          // context.failure(), attempts(), id()
         }
     }
 }
@@ -158,7 +158,7 @@ public interface QuoteApi {
 | `attempts()` | Intentos hechos, incluido el primero (1 sin `@Retry`) |
 | `argumentCount()` | Cantidad de argumentos de la llamada |
 | `argument(int index, Class<A> type)` | Un argumento, por posición empezando en cero (los primitivos, por su wrapper o su clase primitiva) |
-| `instanceId()` | El id del método, `<interfaz>#<método>(<tipos de parámetros>)` |
+| `id()` | El id del método, `<interfaz>#<método>(<tipos de parámetros>)` |
 
 La clase handler debe ser concreta, no genérica, de nivel superior o anidada `static`, accesible desde la clase generada, con un constructor sin argumentos; `T` debe ser asignable al tipo de retorno del método. Se crea una instancia del handler por método. Un handler no se puede usar en un método genérico cuyo tipo de retorno usa los parámetros de tipo del método, como `<T> T load(Class<T> type)`, porque un `FallbackHandler<X>` no puede servir para todo `T` sin un cast unchecked ([`R4C-FB-014`](../errors.md#r4c-fb-014)): usa ahí un método hermano genérico. Un handler sí sirve en `<T> String describe(T value)`, cuyo tipo de retorno no usa `T`.
 
@@ -225,7 +225,7 @@ long price = quote.execute(() -> backend.quote("sku-1", 3));
 
 | Evento | Cuándo | Campos |
 |---|---|---|
-| `FallbackEvent.Applied` | Un fallback está por ejecutarse: la falla pasó `applyOn`/`skipOn` y, con métodos hermanos, uno de ellos la recibe. Se publica una vez por llamada, también cuando el fallback luego lanza; nunca para una falla que se relanza | `instance`, `nanoTime`, `failure` |
+| `FallbackEvent.Applied` | Un fallback está por ejecutarse: la falla pasó `applyOn`/`skipOn` y, con métodos hermanos, uno de ellos la recibe. Se publica una vez por llamada, también cuando el fallback luego lanza; nunca para una falla que se relanza | `id`, `nanoTime`, `failure` |
 
 Ver [Observabilidad](../guides/observability.md).
 

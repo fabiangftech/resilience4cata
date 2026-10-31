@@ -115,7 +115,7 @@ class MonoConcurrencyTest {
         // A slot is freed just after the delegate's stream ends, on the thread that ends it: wait for the last ones.
         awaitUntil(() -> registry.bulkhead("cc-stack").concurrentCalls() == 0);
         assertThat(registry.bulkhead("cc-stack").waitingCalls()).isZero();
-        awaitUntil(() -> registry.adaptiveLimit("cc-stack").inFlight() == 0);
+        awaitUntil(() -> registry.adaptiveLimit("cc-stack").concurrentCalls() == 0);
     }
 
     @RepeatedTest(5)

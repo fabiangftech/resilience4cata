@@ -1,12 +1,9 @@
 package dev.resilience4cata.generated;
 
-import dev.resilience4cata.BulkheadFullException;
-import dev.resilience4cata.CallNotPermittedException;
+import dev.resilience4cata.CallRejectedException;
 import dev.resilience4cata.HedgeCancelledException;
 import dev.resilience4cata.HedgeConfig;
 import dev.resilience4cata.HedgeSnapshot;
-import dev.resilience4cata.LimitExceededException;
-import dev.resilience4cata.RateLimitExceededException;
 import dev.resilience4cata.Ticker;
 import dev.resilience4cata.event.HedgeEvent;
 import java.lang.invoke.MethodHandles;
@@ -80,7 +77,10 @@ public final class HedgePolicy {
     private final @Nullable RetryBudget budget;
     // One ClassValue per policy (see RetryPolicy): it returns the whole verdict.
     private final Classification verdicts;
-    /** The production timer's lane for {@code delay}; {@code null} when disabled, for {@code delay = 0}, or on a ticker. */
+    /**
+     * The production timer's lane for {@code delay}; {@code null} when disabled, for {@code delay = 0}, or on a
+     * ticker.
+     */
     private final TimeoutTimer.@Nullable Lane lane;
     private final PolicyEnvironment environment;
     private final LongSupplier ticker;
@@ -268,9 +268,7 @@ public final class HedgePolicy {
                     return Verdict.ABORT;
                 }
             }
-            if (CallNotPermittedException.class.isAssignableFrom(type) || BulkheadFullException.class.isAssignableFrom(type)
-                    || RateLimitExceededException.class.isAssignableFrom(type)
-                    || LimitExceededException.class.isAssignableFrom(type)) {
+            if (CallRejectedException.class.isAssignableFrom(type)) {
                 return Verdict.REJECTED;
             }
             for (Class<? extends Throwable> hedge : hedgeOn) {
@@ -465,7 +463,10 @@ public final class HedgePolicy {
             }
         }
 
-        /** The call failed with {@code cause} after {@code attempts} attempts: cancel the rest, then fail or fall back. */
+        /**
+         * The call failed with {@code cause} after {@code attempts} attempts: cancel the rest, then fail or fall
+         * back.
+         */
         private void finish(Throwable cause, int attempts) {
             cancelTimer();
             cancelOthers(-1);

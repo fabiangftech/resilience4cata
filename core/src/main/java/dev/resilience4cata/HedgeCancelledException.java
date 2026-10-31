@@ -14,26 +14,26 @@ public final class HedgeCancelledException extends CancellationException {
     private static final long serialVersionUID = 1L;
 
     /** The id of the hedge. */
-    private final String instanceId;
+    private final String id;
 
     /**
      * Creates the exception for one hedge.
      *
-     * @param instanceId id of the hedge
+     * @param id id of the hedge
      */
-    public HedgeCancelledException(String instanceId) {
+    public HedgeCancelledException(String id) {
         super(null);
-        this.instanceId = instanceId;
+        this.id = id;
     }
 
     /** Returns the id of the hedge that cancelled the attempt. */
-    public String instanceId() {
-        return instanceId;
+    public String id() {
+        return id;
     }
 
     @Override
     public String getMessage() {
-        return "Hedge '" + instanceId + "' cancelled this attempt: another attempt succeeded first, or the call ended";
+        return "Hedge '" + id + "' cancelled this attempt: another attempt succeeded first, or the call ended";
     }
 
     /** No stack trace: it marks a cancel, and is created only for attempts that lost. */

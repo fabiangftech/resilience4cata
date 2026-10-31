@@ -6,7 +6,7 @@ import dev.resilience4cata.BulkheadFullException;
 import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.CallTimeoutException;
 import dev.resilience4cata.CircuitBreakerState;
-import dev.resilience4cata.LimitExceededException;
+import dev.resilience4cata.AdaptiveLimitFullException;
 import dev.resilience4cata.RateLimitExceededException;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
@@ -354,9 +354,9 @@ class FluxEndToEndTest {
         backend.script("adaptive", onClock("a@100", ".@3000"));
         client.adaptive("x").subscribe();
         clock.advance(Duration.ofMillis(100));
-        StepVerifier.create(client.adaptive("y")).expectError(LimitExceededException.class).verify(VERIFY);
+        StepVerifier.create(client.adaptive("y")).expectError(AdaptiveLimitFullException.class).verify(VERIFY);
         clock.advance(Duration.ofMillis(2900));
-        assertThat(registry.adaptiveLimit("flux-adaptive").inFlight()).isZero();
+        assertThat(registry.adaptiveLimit("flux-adaptive").concurrentCalls()).isZero();
     }
 
     // ---- a stack, odd types, delegation, an annotated class

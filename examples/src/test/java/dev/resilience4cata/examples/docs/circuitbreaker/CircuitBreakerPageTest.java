@@ -125,7 +125,7 @@ class CircuitBreakerPageTest {
         CircuitBreakerHandle breaker = registry.circuitBreaker("payments");
         CircuitBreakerSnapshot snapshot = breaker.snapshot();
         System.out.printf("%s is %s, %d calls, failure rate %.0f%%%n",
-                snapshot.instance(), snapshot.state(), snapshot.bufferedCalls(), snapshot.failureRate());
+                snapshot.id(), snapshot.state(), snapshot.bufferedCalls(), snapshot.failureRate());
 
         breaker.forceOpen();   // maintenance window: every call is rejected
         breaker.disable();     // or let every call through, recording nothing

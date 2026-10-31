@@ -8,7 +8,7 @@ import dev.resilience4cata.AdaptiveLimitConfig.Algorithm;
 import dev.resilience4cata.AdaptiveLimitSnapshot;
 import dev.resilience4cata.BulkheadFullException;
 import dev.resilience4cata.CallTimeoutException;
-import dev.resilience4cata.LimitExceededException;
+import dev.resilience4cata.AdaptiveLimitFullException;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -48,14 +48,14 @@ class AdaptiveLimitPolicyTest {
         AdaptiveLimitPolicy policy = policy(AdaptiveLimitConfig.builder().initialLimit(2));
         long first = policy.acquire();
         policy.acquire();
-        assertThatThrownBy(policy::acquire).isSameAs(policy.rejection()).isInstanceOf(LimitExceededException.class)
+        assertThatThrownBy(policy::acquire).isSameAs(policy.rejection()).isInstanceOf(AdaptiveLimitFullException.class)
                 .hasMessage("Adaptive limit 'limit' is full").hasNoCause();
-        assertThat(policy.inFlight()).isEqualTo(2);
+        assertThat(policy.concurrentCalls()).isEqualTo(2);
 
         policy.onSuccess(first);
-        assertThat(policy.inFlight()).isEqualTo(1);
+        assertThat(policy.concurrentCalls()).isEqualTo(1);
         policy.acquire();
-        assertThat(policy.inFlight()).isEqualTo(2);
+        assertThat(policy.concurrentCalls()).isEqualTo(2);
     }
 
     @Test
@@ -66,9 +66,9 @@ class AdaptiveLimitPolicyTest {
         policy.onFailure(policy.acquire(), new CallTimeoutException("t", Duration.ofSeconds(1), null));
         policy.acquire();
         policy.release();
-        assertThat(policy.inFlight()).isZero();
+        assertThat(policy.concurrentCalls()).isZero();
         policy.acquire();
-        assertThat(policy.inFlight()).isEqualTo(1);
+        assertThat(policy.concurrentCalls()).isEqualTo(1);
     }
 
     @Test
@@ -79,7 +79,7 @@ class AdaptiveLimitPolicyTest {
         }
         now.addAndGet(10 * WINDOW);
         policy.onSuccess(0);
-        assertThat(policy.inFlight()).isZero();
+        assertThat(policy.concurrentCalls()).isZero();
         assertThat(policy.windowsForTest()).isZero();
     }
 
@@ -177,7 +177,7 @@ class AdaptiveLimitPolicyTest {
         assertThat(snapshot.windowLatency()).isEqualTo(Duration.ofMillis(10));
         assertThat(snapshot.longTermLatency().toNanos()).isCloseTo(10 * MS, org.assertj.core.data.Offset.offset(10L));
         assertThat(snapshot.algorithm()).isEqualTo(Algorithm.GRADIENT2);
-        assertThat(snapshot.inFlight()).isZero();
+        assertThat(snapshot.concurrentCalls()).isZero();
     }
 
     @Test
@@ -232,7 +232,7 @@ class AdaptiveLimitPolicyTest {
         assertThatThrownBy(policy::acquire).isSameAs(policy.rejection());
         policy.onSuccess(running.removeFirst());
         policy.acquire();
-        assertThat(policy.inFlight()).isEqualTo(9);
+        assertThat(policy.concurrentCalls()).isEqualTo(9);
     }
 
     @Test
@@ -255,7 +255,7 @@ class AdaptiveLimitPolicyTest {
         AdaptiveLimitPolicy policy = policy(AdaptiveLimitConfig.builder().initialLimit(1).minWindowSamples(1));
         CompletableFuture<String> stage = new CompletableFuture<>();
         CompletableFuture<String> result = policy.executeAsync(() -> stage);
-        assertThat(policy.inFlight()).isEqualTo(1);
+        assertThat(policy.concurrentCalls()).isEqualTo(1);
         assertThat(policy.executeAsync(() -> CompletableFuture.completedFuture("x")))
                 .isCompletedExceptionally().failsWithin(Duration.ZERO).withThrowableThat().havingCause()
                 .isSameAs(policy.rejection());
@@ -263,7 +263,7 @@ class AdaptiveLimitPolicyTest {
         now.set(deadline);
         stage.complete("done");
         assertThat(result).isCompletedWithValue("done");
-        assertThat(policy.inFlight()).isZero();
+        assertThat(policy.concurrentCalls()).isZero();
         assertThat(policy.windowsForTest()).as("the success was a sample").isEqualTo(1);
     }
 
@@ -276,13 +276,13 @@ class AdaptiveLimitPolicyTest {
         CompletableFuture<String> result = policy.executeAsync(() -> cancelled);
         result.cancel(true);
         assertThat(cancelled).isCancelled();
-        assertThat(policy.inFlight()).isZero();
+        assertThat(policy.concurrentCalls()).isZero();
         assertThat(policy.windowsForTest()).isZero();
 
         CompletableFuture<String> failed = policy.executeAsync(
                 () -> CompletableFuture.failedFuture(new CallTimeoutException("t", Duration.ofSeconds(1), null)));
         assertThat(failed).isCompletedExceptionally();
-        assertThat(policy.inFlight()).isZero();
+        assertThat(policy.concurrentCalls()).isZero();
         assertThat(policy.limit()).as("a drop").isEqualTo(9);
     }
 

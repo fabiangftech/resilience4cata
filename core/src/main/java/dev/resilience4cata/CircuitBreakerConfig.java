@@ -31,7 +31,10 @@ public final class CircuitBreakerConfig implements PolicyConfig {
             true, WindowType.COUNT, 100, 100, 50f, 100f, Duration.ZERO, Duration.ofSeconds(60), 10,
             Duration.ZERO, List.of(Exception.class), List.of());
 
-    /** How the sliding window is measured. */
+    /**
+     * How the sliding window is measured. Constants may be added in minor versions: keep a {@code default} branch
+     * in a {@code switch} over it.
+     */
     public enum WindowType {
         /** The last {@code windowSize} calls. */
         COUNT,
@@ -180,7 +183,10 @@ public final class CircuitBreakerConfig implements PolicyConfig {
             return this;
         }
 
-        /** @param slowCallDuration duration above which a call is slow; zero turns detection off @return this builder */
+        /**
+         * @param slowCallDuration duration above which a call is slow; zero turns detection off @return this
+         * builder
+         */
         public Builder slowCallDuration(Duration slowCallDuration) {
             this.slowCallDuration = Objects.requireNonNull(slowCallDuration, "slowCallDuration");
             return this;
@@ -284,7 +290,8 @@ public final class CircuitBreakerConfig implements PolicyConfig {
     }
 
     /**
-     * Duration above which a call is slow; {@link Duration#ZERO} turns slow-call detection off, so calls are not timed at all.
+     * Duration above which a call is slow; {@link Duration#ZERO} turns slow-call detection off, so calls are not timed
+     * at all.
      *
      * @return the value
      */
@@ -311,7 +318,8 @@ public final class CircuitBreakerConfig implements PolicyConfig {
     }
 
     /**
-     * How long the breaker may stay half-open before opening again if its probes have not completed; {@link Duration#ZERO} means no limit.
+     * How long the breaker may stay half-open before opening again if its probes have not completed; {@link
+     * Duration#ZERO} means no limit.
      *
      * @return the value
      */
@@ -357,13 +365,20 @@ public final class CircuitBreakerConfig implements PolicyConfig {
 
     @Override
     public int hashCode() {
-        return Objects.hash(enabled, windowType, windowSize, minimumCalls, failureRateThreshold, slowCallRateThreshold, slowCallDuration, waitInOpen, halfOpenCalls, maxWaitInHalfOpen, recordOn, ignoreOn);
+        return Objects.hash(enabled, windowType, windowSize, minimumCalls, failureRateThreshold,
+                slowCallRateThreshold, slowCallDuration, waitInOpen, halfOpenCalls, maxWaitInHalfOpen, recordOn,
+                ignoreOn);
     }
 
     /** The values, as {@code CircuitBreakerConfig[name=value, ...]}. */
     @Override
     public String toString() {
-        return "CircuitBreakerConfig[enabled=" + enabled + ", windowType=" + windowType + ", windowSize=" + windowSize + ", minimumCalls=" + minimumCalls + ", failureRateThreshold=" + failureRateThreshold + ", slowCallRateThreshold=" + slowCallRateThreshold + ", slowCallDuration=" + slowCallDuration + ", waitInOpen=" + waitInOpen + ", halfOpenCalls=" + halfOpenCalls + ", maxWaitInHalfOpen=" + maxWaitInHalfOpen + ", recordOn=" + recordOn + ", ignoreOn=" + ignoreOn + "]";
+        return "CircuitBreakerConfig[enabled=" + enabled + ", windowType=" + windowType + ", windowSize=" + windowSize
+                + ", minimumCalls=" + minimumCalls + ", failureRateThreshold=" + failureRateThreshold
+                + ", slowCallRateThreshold=" + slowCallRateThreshold + ", slowCallDuration=" + slowCallDuration
+                + ", waitInOpen=" + waitInOpen + ", halfOpenCalls=" + halfOpenCalls
+                + ", maxWaitInHalfOpen=" + maxWaitInHalfOpen + ", recordOn=" + recordOn
+                + ", ignoreOn=" + ignoreOn + "]";
     }
 
     /** The values in declaration order, for {@link ResilienceSnapshot#toMap()}. */

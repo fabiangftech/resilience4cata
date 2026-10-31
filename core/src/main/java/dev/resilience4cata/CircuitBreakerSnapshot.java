@@ -10,7 +10,7 @@ package dev.resilience4cata;
  * half open), the point from which the breaker itself evaluates them. The slow-call rate is also
  * {@code -1} when slow-call detection is off.
  *
- * @param instance the breaker's id
+ * @param id the breaker's id
  * @param state the state
  * @param failureRate percentage of failed calls, or {@code -1}
  * @param slowCallRate percentage of slow calls, or {@code -1}
@@ -18,6 +18,6 @@ package dev.resilience4cata;
  * @param failedCalls failed calls in the window, at most {@code bufferedCalls}
  * @param slowCalls slow calls in the window, at most {@code bufferedCalls}
  */
-public record CircuitBreakerSnapshot(String instance, CircuitBreakerState state, float failureRate,
+public record CircuitBreakerSnapshot(String id, CircuitBreakerState state, float failureRate,
         float slowCallRate, int bufferedCalls, int failedCalls, int slowCalls) {
 }

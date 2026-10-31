@@ -76,6 +76,6 @@ class HedgeOnManualClockTest {
         assertThat(bulkhead.concurrentCalls()).as("every slot is free").isZero();
         assertThat(breaker.snapshot().bufferedCalls()).as("only the winner is recorded").isOne();
         assertThat(breaker.snapshot().failedCalls()).isZero();
-        assertThat(registry.snapshot().hedges()).extracting(s -> s.instance()).containsExactly("quotes");
+        assertThat(registry.snapshot().hedges()).extracting(s -> s.id()).containsExactly("quotes");
     }
 }

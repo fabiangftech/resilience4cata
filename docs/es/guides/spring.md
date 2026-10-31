@@ -319,7 +319,7 @@ todos los eventos):
 ```java
 @Bean
 EventListener<CircuitBreakerEvent.StateTransition> breakerAlerts(Alerts alerts) {
-    return transition -> alerts.send(transition.instance() + " is now " + transition.to());
+    return transition -> alerts.send(transition.id() + " is now " + transition.to());
 }
 ```
 

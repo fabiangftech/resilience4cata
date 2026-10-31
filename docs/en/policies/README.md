@@ -9,11 +9,11 @@ resilience4cata has eight policies, one annotation each; put them on a method or
 | [Hedge](hedge.md) | `@Hedge` | Starts the same call again while the first is slow, and keeps the first success (async, idempotent calls only) | — (rethrows the last failure) |
 | [Circuit breaker](circuit-breaker.md) | `@CircuitBreaker` | Stops calling a dependency that keeps failing, then probes it | `CallNotPermittedException` |
 | [Rate limiter](rate-limiter.md) | `@RateLimiter` | Lets through at most N calls per period | `RateLimitExceededException` |
-| [Adaptive limit](adaptive-limit.md) | `@AdaptiveLimit` | Limits how many calls run at the same time, with a limit it adjusts from their latency | `LimitExceededException` |
+| [Adaptive limit](adaptive-limit.md) | `@AdaptiveLimit` | Limits how many calls run at the same time, with a limit it adjusts from their latency | `AdaptiveLimitFullException` |
 | [Timeout](timeout.md) | `@Timeout` | Interrupts a sync call, or fails an async one, that takes too long | `CallTimeoutException` |
 | [Bulkhead](bulkhead.md) | `@Bulkhead` | Limits how many calls run at the same time | `BulkheadFullException` |
 
-Every policy except Hedge works on synchronous methods and on methods that return `CompletionStage<T>` or `CompletableFuture<T>` (see [Async methods](../guides/async.md)); Hedge needs an asynchronous method, and takes Retry's place (the two cannot be combined on one method). The exceptions are in package `dev.resilience4cata`, extend `RuntimeException`, have no stack trace, and carry the policy's `instanceId()`.
+Every policy except Hedge works on synchronous methods and on methods that return `CompletionStage<T>` or `CompletableFuture<T>` (see [Async methods](../guides/async.md)); Hedge needs an asynchronous method, and takes Retry's place (the two cannot be combined on one method). The exceptions are in package `dev.resilience4cata`, extend `RuntimeException`, have no stack trace, and carry the policy's `id()`. The four rejections (`CallNotPermittedException`, `RateLimitExceededException`, `AdaptiveLimitFullException`, `BulkheadFullException`) share the superclass `CallRejectedException`: catch it to answer every rejection the same way, for example with `503 Service Unavailable`. Each policy throws one shared instance, so do not compare them by identity.
 
 ## Which policy do I need?
 
@@ -204,7 +204,7 @@ assertThat(clock.elapsed()).isZero();           // ...and the retry did not wait
 
 A rejection by an inner policy is an `Exception` like any other to the layers outside it, by default:
 
-- `RateLimitExceededException`, `LimitExceededException`, `CallTimeoutException` and `BulkheadFullException` are **retried** by an outer `@Retry` (after its delay) and **recorded as failures** by an outer `@CircuitBreaker`. Your own rate limiter, adaptive limit or bulkhead can therefore open your breaker. List them in the breaker's `ignoreOn` or the retry's `abortOn` when that is not what you want.
+- `RateLimitExceededException`, `AdaptiveLimitFullException`, `CallTimeoutException` and `BulkheadFullException` are **retried** by an outer `@Retry` (after its delay) and **recorded as failures** by an outer `@CircuitBreaker`. Your own rate limiter, adaptive limit or bulkhead can therefore open your breaker. List them in the breaker's `ignoreOn` or the retry's `abortOn` when that is not what you want.
 - `Error`s are neither retried nor recorded as breaker failures (`retryOn` and `recordOn` default to `Exception`), but the fallback's default `applyOn = Throwable` does catch them, unless its exception parameter is narrower.
 
 ## Programmatic use

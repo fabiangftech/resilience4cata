@@ -90,7 +90,7 @@ Cada métrica tiene un atributo `instance`: el id de la instancia de la polític
 | `r4c.bulkhead.max.concurrent` | `ObservableLongGauge` | `{call}` | `instance` | `maxConcurrent` del snapshot |
 | `r4c.ratelimiter.available.permits` | `ObservableLongGauge` | `{permit}` | `instance` | `availablePermits` del snapshot |
 | `r4c.adaptivelimit.limit` | `ObservableLongGauge` | `{call}` | `instance` | `limit` del snapshot |
-| `r4c.adaptivelimit.concurrent.calls` | `ObservableLongGauge` | `{call}` | `instance` | `inFlight` del snapshot |
+| `r4c.adaptivelimit.concurrent.calls` | `ObservableLongGauge` | `{call}` | `instance` | `concurrentCalls` del snapshot |
 
 - **Las tasas son porcentajes** (de 0 a 100) con unidad `%`, como en el snapshot y en el módulo de Micrometer, no proporciones (de 0 a 1) con unidad `1`.
 - **Una tasa no tiene punto hasta que significa algo.** El snapshot reporta `-1` hasta que la ventana del breaker contiene `minimumCalls` llamadas (`halfOpenCalls` mientras está semiabierto), mientras el breaker está abierto, forzado abierto o deshabilitado (no hay ventana) y, para `slow.call.rate`, cuando la detección de llamadas lentas está desactivada. Los puntos de OpenTelemetry no pueden ser NaN, así que el módulo no registra ningún punto para esa instancia en esa recolección: la serie tiene un hueco.

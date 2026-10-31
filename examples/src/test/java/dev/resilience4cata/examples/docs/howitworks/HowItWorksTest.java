@@ -45,11 +45,11 @@ class HowItWorksTest {
 
         assertThat(count).isEqualTo(7);
         assertThat(calls).hasValue(2);
-        assertThat(breaker.instance()).isEqualTo(ID);
+        assertThat(breaker.id()).isEqualTo(ID);
         assertThat(breaker.state()).isEqualTo(CircuitBreakerState.CLOSED);
         assertThat(breaker.bufferedCalls()).isEqualTo(2);
         assertThat(breaker.failedCalls()).isEqualTo(1);
-        assertThat(registry.snapshot().retries()).extracting(RetrySnapshot::instance).containsExactly(ID);
+        assertThat(registry.snapshot().retries()).extracting(RetrySnapshot::id).containsExactly(ID);
     }
 
     @Test

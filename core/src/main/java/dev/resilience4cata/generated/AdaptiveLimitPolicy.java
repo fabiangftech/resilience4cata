@@ -3,7 +3,7 @@ package dev.resilience4cata.generated;
 import dev.resilience4cata.AdaptiveLimitConfig;
 import dev.resilience4cata.AdaptiveLimitHandle;
 import dev.resilience4cata.AdaptiveLimitSnapshot;
-import dev.resilience4cata.LimitExceededException;
+import dev.resilience4cata.AdaptiveLimitFullException;
 import dev.resilience4cata.event.AdaptiveLimitEvent;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -19,7 +19,7 @@ import org.jspecify.annotations.Nullable;
  * moves the limit by itself from the latency of the calls (Netflix concurrency-limits style).
  *
  * <pre>{@code
- * long start = limit.acquire();          // throws the preallocated LimitExceededException when full
+ * long start = limit.acquire();          // throws the preallocated AdaptiveLimitFullException when full
  * T result;
  * try {
  *     result = delegate.call();
@@ -72,7 +72,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
     private final long windowNanos;
     private final int minWindowSamples;
     private final ClassValue<Boolean> drops;
-    private final LimitExceededException rejection;
+    private final AdaptiveLimitFullException rejection;
     private final PaddedCounter inFlight = new PaddedCounter();
     private final Window window;
     /** Padding, then one stripe per hash of the thread id, then padding. */
@@ -112,7 +112,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
         this.windowNanos = config.window().toNanos();
         this.minWindowSamples = config.minWindowSamples();
         this.drops = new Classification(config.dropOn(), config.ignoreOn());
-        this.rejection = new LimitExceededException(id);
+        this.rejection = new AdaptiveLimitFullException(id);
         this.window = new Window(config.initialLimit(), enabled ? ticker.getAsLong() + windowNanos : 0);
         this.cells = new long[(stripes + 2) * STRIDE];
         this.mask = stripes - 1;
@@ -137,19 +137,19 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
     }
 
     @Override
-    public int inFlight() {
+    public int concurrentCalls() {
         return inFlight.get();
     }
 
     @Override
     public AdaptiveLimitSnapshot snapshot() {
-        return new AdaptiveLimitSnapshot(id, config.algorithm(), limit(), Math.clamp(inFlight(), 0, config.maxLimit()),
+        return new AdaptiveLimitSnapshot(id, config.algorithm(), limit(), Math.clamp(concurrentCalls(), 0, config.maxLimit()),
                 config.minLimit(), config.maxLimit(), windows, Duration.ofNanos(windowLatency),
                 Duration.ofNanos((long) longTermLatency));
     }
 
     /** Returns the preallocated exception that {@link #acquire()} throws when the limit is full. */
-    public LimitExceededException rejection() {
+    public AdaptiveLimitFullException rejection() {
         return rejection;
     }
 
@@ -157,7 +157,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
      * Takes a slot.
      *
      * @return the time the call starts, to pass to {@link #onSuccess}, {@link #onFailure} (or {@link #release})
-     * @throws LimitExceededException if as many calls as the limit are already running: nothing was taken
+     * @throws AdaptiveLimitFullException if as many calls as the limit are already running: nothing was taken
      */
     public long acquire() {
         if (!enabled) {
@@ -170,7 +170,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
     }
 
     /** Publishes {@link AdaptiveLimitEvent.Rejected} if someone listens, and returns the rejection. */
-    private LimitExceededException rejected() {
+    private AdaptiveLimitFullException rejected() {
         EventSink<AdaptiveLimitEvent.Rejected> sink = rejected;
         if (sink != null) {
             sink.publish(new AdaptiveLimitEvent.Rejected(id, ticker.getAsLong(), window.limit()));
@@ -219,7 +219,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
      * @param call the next layer
      * @param elements the streaming call, told of this attempt's listener before {@code call} starts
      * @param <T> the result type
-     * @return a future that completes with the call's outcome, or fails with {@link LimitExceededException}
+     * @return a future that completes with the call's outcome, or fails with {@link AdaptiveLimitFullException}
      */
     public <T> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
         if (!enabled) {
@@ -228,7 +228,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
         long start;
         try {
             start = acquire();
-        } catch (LimitExceededException e) {
+        } catch (AdaptiveLimitFullException e) {
             return CompletableFuture.failedFuture(e);
         }
         FirstElement first = new FirstElement(ticker);
@@ -353,7 +353,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
     private void limitChanged(long end, int from, int to, long rtt) {
         EventSink<AdaptiveLimitEvent.LimitChanged> sink = changed;
         if (sink != null) {
-            sink.publish(new AdaptiveLimitEvent.LimitChanged(id, end, from, to, rtt));
+            sink.publish(new AdaptiveLimitEvent.LimitChanged(id, end, from, to, java.time.Duration.ofNanos(rtt)));
         }
     }
 
@@ -416,7 +416,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
         long start;
         try {
             start = acquire();
-        } catch (LimitExceededException e) {
+        } catch (AdaptiveLimitFullException e) {
             return CompletableFuture.failedFuture(e);
         }
         CompletionStage<T> stage = AsyncSupport.call(call);

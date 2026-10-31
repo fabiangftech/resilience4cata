@@ -110,8 +110,8 @@ class ObservabilityTest {
                     assertThat(endpoint.instance("quotes")).isNotNull().satisfies(q -> assertThat(ids(q, "hedges")).hasSize(1));
 
                     String json = JsonMapper.builder().build().writeValueAsString(endpoint.snapshot());
-                    assertThat(json).contains("\"instance\":\"payments\"", "\"state\":\"CLOSED\"", "\"maxAttempts\":3",
-                            "\"adaptiveLimits\":[{\"instance\":\"orders\",\"algorithm\":\"GRADIENT2\",\"limit\":20");
+                    assertThat(json).contains("\"id\":\"payments\"", "\"state\":\"CLOSED\"", "\"maxAttempts\":3",
+                            "\"adaptiveLimits\":[{\"id\":\"orders\",\"algorithm\":\"GRADIENT2\",\"limit\":20");
                 });
     }
 
@@ -138,7 +138,7 @@ class ObservabilityTest {
 
     /** The instance ids of one policy kind in the endpoint's map. */
     static java.util.List<Object> ids(Map<String, Object> snapshot, String kind) {
-        return ((java.util.List<?>) snapshot.get(kind)).stream().map(m -> ((Map<?, ?>) m).get("instance")).map(Object.class::cast)
+        return ((java.util.List<?>) snapshot.get(kind)).stream().map(m -> ((Map<?, ?>) m).get("id")).map(Object.class::cast)
                 .toList();
     }
 }

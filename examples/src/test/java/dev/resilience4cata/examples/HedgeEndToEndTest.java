@@ -125,6 +125,6 @@ class HedgeEndToEndTest {
         }, real);
 
         assertThat(service.read("k").toCompletableFuture().get(5, TimeUnit.SECONDS)).isEqualTo("value of k");
-        assertThat(real.snapshot().hedges()).extracting(s -> s.instance()).contains("reads");
+        assertThat(real.snapshot().hedges()).extracting(s -> s.id()).contains("reads");
     }
 }

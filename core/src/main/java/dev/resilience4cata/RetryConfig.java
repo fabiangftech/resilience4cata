@@ -32,7 +32,8 @@ public final class RetryConfig implements PolicyConfig {
      * Built-in defaults: 3 attempts, exponential backoff from 200 ms up to 10 s, full jitter, retry on
      * {@link Exception}, empty {@code abortOn}. Whatever the configuration, a call rejected by a circuit
      * breaker ({@link CallNotPermittedException}) is never retried: that abort is built in, not an entry
-     * of {@code abortOn}. No retry budget; once {@code budgetPercent} turns one on, its reserve is 10 retries per second (as
+     * of {@code abortOn}. No retry budget; once {@code budgetPercent} turns one on, its reserve is 10 retries per
+     * second (as
      * in Finagle's {@code RetryBudget}) over a 10 s {@code budgetWindow}.
      */
     public static final RetryConfig DEFAULTS = new RetryConfig(
@@ -40,7 +41,10 @@ public final class RetryConfig implements PolicyConfig {
             Jitter.FULL, Duration.ZERO, List.of(Exception.class), List.of(), 0.0, 10, Duration.ofSeconds(10));
 
 
-    /** How the delay grows between attempts. */
+    /**
+     * How the delay grows between attempts. Constants may be added in minor versions: keep a {@code default} branch
+     * in a {@code switch} over it.
+     */
     public enum Backoff {
         /** The same delay every time. */
         FIXED,
@@ -48,7 +52,10 @@ public final class RetryConfig implements PolicyConfig {
         EXPONENTIAL
     }
 
-    /** Randomisation applied to each delay, so that clients do not retry in lockstep. */
+    /**
+     * Randomisation applied to each delay, so that clients do not retry in lockstep. Constants may be added in
+     * minor versions: keep a {@code default} branch in a {@code switch} over it.
+     */
     public enum Jitter {
         /** No randomisation. */
         NONE,
@@ -357,7 +364,8 @@ public final class RetryConfig implements PolicyConfig {
     }
 
     /**
-     * Exceptions that stop retrying; they win over {@code retryOn}. A {@link CallNotPermittedException} always stops retrying, whether listed or not.
+     * Exceptions that stop retrying; they win over {@code retryOn}. A {@link CallNotPermittedException} always stops
+     * retrying, whether listed or not.
      *
      * @return the value
      */
@@ -366,7 +374,8 @@ public final class RetryConfig implements PolicyConfig {
     }
 
     /**
-     * Retry budget: retries allowed, in percent of the calls made in the last {@code budgetWindow}, on top of {@code budgetMinRetriesPerSecond}; finite, at least 0. Above 0 it turns the budget on; 0 (the default) means no budget.
+     * Retry budget: retries allowed, in percent of the calls made in the last {@code budgetWindow}, on top of {@code
+     * budgetMinRetriesPerSecond}; finite, at least 0. Above 0 it turns the budget on; 0 (the default) means no budget.
      *
      * @return the value
      */
@@ -375,7 +384,8 @@ public final class RetryConfig implements PolicyConfig {
     }
 
     /**
-     * Retry budget: retries allowed per second of {@code budgetWindow} whatever the traffic, so that rarely called methods can still retry; applies once {@code budgetPercent} turns the budget on; at least 0 (default 10).
+     * Retry budget: retries allowed per second of {@code budgetWindow} whatever the traffic, so that rarely called
+     * methods can still retry; applies once {@code budgetPercent} turns the budget on; at least 0 (default 10).
      *
      * @return the value
      */
@@ -413,13 +423,18 @@ public final class RetryConfig implements PolicyConfig {
 
     @Override
     public int hashCode() {
-        return Objects.hash(enabled, maxAttempts, delay, backoff, multiplier, maxDelay, jitter, maxDuration, retryOn, abortOn, budgetPercent, budgetMinRetriesPerSecond, budgetWindow);
+        return Objects.hash(enabled, maxAttempts, delay, backoff, multiplier, maxDelay, jitter, maxDuration, retryOn,
+                abortOn, budgetPercent, budgetMinRetriesPerSecond, budgetWindow);
     }
 
     /** The values, as {@code RetryConfig[name=value, ...]}. */
     @Override
     public String toString() {
-        return "RetryConfig[enabled=" + enabled + ", maxAttempts=" + maxAttempts + ", delay=" + delay + ", backoff=" + backoff + ", multiplier=" + multiplier + ", maxDelay=" + maxDelay + ", jitter=" + jitter + ", maxDuration=" + maxDuration + ", retryOn=" + retryOn + ", abortOn=" + abortOn + ", budgetPercent=" + budgetPercent + ", budgetMinRetriesPerSecond=" + budgetMinRetriesPerSecond + ", budgetWindow=" + budgetWindow + "]";
+        return "RetryConfig[enabled=" + enabled + ", maxAttempts=" + maxAttempts + ", delay=" + delay
+                + ", backoff=" + backoff + ", multiplier=" + multiplier + ", maxDelay=" + maxDelay
+                + ", jitter=" + jitter + ", maxDuration=" + maxDuration + ", retryOn=" + retryOn
+                + ", abortOn=" + abortOn + ", budgetPercent=" + budgetPercent
+                + ", budgetMinRetriesPerSecond=" + budgetMinRetriesPerSecond + ", budgetWindow=" + budgetWindow + "]";
     }
 
     /** The values in declaration order, for {@link ResilienceSnapshot#toMap()}. */

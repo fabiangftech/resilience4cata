@@ -68,7 +68,7 @@ class RateLimiterPageTest {
             try {
                 search.search("q");
             } catch (RateLimitExceededException expected) {
-                assertThat(expected.instanceId())
+                assertThat(expected.id())
                         .isEqualTo("dev.resilience4cata.examples.docs.ratelimiter.SearchApi#search(java.lang.String)");
             }
         }

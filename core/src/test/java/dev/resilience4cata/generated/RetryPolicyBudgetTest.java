@@ -72,7 +72,7 @@ class RetryPolicyBudgetTest {
             assertThat(e.reason()).isEqualTo(RetryEvent.Reason.BUDGET_EXHAUSTED);
             assertThat(e.attempts()).isEqualTo(4);
             assertThat(e.failure()).isSameAs(failure);
-            assertThat(e.instance()).isEqualTo("budgeted");
+            assertThat(e.id()).isEqualTo("budgeted");
         });
         assertThat(retry.budgetSnapshot()).isEqualTo(new RetrySnapshot.Budget(1, 3, 3));
     }

@@ -128,7 +128,7 @@ class FluxConcurrencyTest {
         assertThat(dropped).as("errors dropped by Reactor").isEmpty();
         awaitUntil(() -> registry.bulkhead("cf-stack").concurrentCalls() == 0);
         assertThat(registry.bulkhead("cf-stack").waitingCalls()).isZero();
-        awaitUntil(() -> registry.adaptiveLimit("cf-stack").inFlight() == 0);
+        awaitUntil(() -> registry.adaptiveLimit("cf-stack").concurrentCalls() == 0);
     }
 
     /**

@@ -95,7 +95,7 @@ stateDiagram-v2
 - **Forzado abierto y desactivado** se ponen a mano, con el [handle](#handle): `forceOpen()` rechaza todo, `disable()` deja pasar todo y no registra nada, ambos hasta `reset()`. `enabled = "false"` arranca el breaker en `DISABLED`, y `reset()` entonces vuelve a `DISABLED`.
 - El resultado de una llamada se descarta si el breaker cambió de estado mientras corría, así que una llamada lenta que empezó con el breaker cerrado no puede decidir una prueba de half-open.
 
-El rechazo, `dev.resilience4cata.CallNotPermittedException`, es una `RuntimeException` con `instanceId()`. Se crea una vez por breaker y no tiene stack trace, así que un rechazo no cuesta nada; su mensaje nombra al breaker.
+El rechazo, `dev.resilience4cata.CallNotPermittedException`, es una `RuntimeException` con `id()`. Se crea una vez por breaker y no tiene stack trace, así que un rechazo no cuesta nada; su mensaje nombra al breaker.
 
 ## Atributos
 
@@ -145,7 +145,7 @@ Un breaker tiene estado, así que compartirlo importa. Sin `name`, cada método 
 CircuitBreakerHandle breaker = registry.circuitBreaker("payments");
 CircuitBreakerSnapshot snapshot = breaker.snapshot();
 System.out.printf("%s is %s, %d calls, failure rate %.0f%%%n",
-        snapshot.instance(), snapshot.state(), snapshot.bufferedCalls(), snapshot.failureRate());
+        snapshot.id(), snapshot.state(), snapshot.bufferedCalls(), snapshot.failureRate());
 
 breaker.forceOpen();   // maintenance window: every call is rejected
 breaker.disable();     // or let every call through, recording nothing
@@ -202,10 +202,10 @@ El id `"payments"` es el id de instancia del breaker: `registry.circuitBreaker("
 
 | Evento | Cuándo | Campos |
 |---|---|---|
-| `CircuitBreakerEvent.StateTransition` | Cada cambio de estado, publicado una vez, por el thread que lo hizo | `instance`, `nanoTime`, `from`, `to` |
-| `CircuitBreakerEvent.CallNotPermitted` | Se rechazó una llamada (abierto, forzado abierto o sin pruebas disponibles) | `instance`, `nanoTime`, `state` |
+| `CircuitBreakerEvent.StateTransition` | Cada cambio de estado, publicado una vez, por el thread que lo hizo | `id`, `nanoTime`, `from`, `to` |
+| `CircuitBreakerEvent.CallNotPermitted` | Se rechazó una llamada (abierto, forzado abierto o sin pruebas disponibles) | `id`, `nanoTime`, `state` |
 
-`CircuitBreakerSnapshot(instance, state, failureRate, slowCallRate, bufferedCalls, failedCalls, slowCalls)`: las tasas son porcentajes, o `-1` hasta que la ventana tiene `minimumCalls` llamadas (la tasa de llamadas lentas también es `-1` mientras la detección está desactivada). En half-open, los conteos son los de las pruebas. Ver [Observabilidad](../guides/observability.md).
+`CircuitBreakerSnapshot(id, state, failureRate, slowCallRate, bufferedCalls, failedCalls, slowCalls)`: las tasas son porcentajes, o `-1` hasta que la ventana tiene `minimumCalls` llamadas (la tasa de llamadas lentas también es `-1` mientras la detección está desactivada). En half-open, los conteos son los de las pruebas. Ver [Observabilidad](../guides/observability.md).
 
 ## Probarlo con `ManualClock`
 
@@ -240,7 +240,7 @@ Con un [`ManualClock`](../guides/testing.md), `waitInOpen`, las llamadas lentas 
 - Una ventana por tiempo lee el reloj en cada llamada. Una ventana por conteo solo lo lee si la detección de llamadas lentas está activa.
 - Con los valores por defecto, el breaker necesita 100 llamadas antes de poder abrir. Para una dependencia de poco tráfico, baja `minimumCalls` (y `windowSize`), o usa una ventana por tiempo.
 - Los umbrales son inclusivos: 5 fallas de 10 abren un breaker con `failureRateThreshold = 50`.
-- `CallNotPermittedException` no tiene stack trace, a propósito. Registra en el log el mensaje o `instanceId()`.
+- `CallNotPermittedException` no tiene stack trace, a propósito. Registra en el log el mensaje o `id()`.
 - Errores relacionados: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (sintaxis de duración), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`windowSize`, `minimumCalls`, `halfOpenCalls` menores que 1), [`R4C-ATR-005`](../errors.md#r4c-atr-005) (tasas fuera de (0, 100]), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` junto con `recordOn`), [`R4C-REG-004`](../errors.md#r4c-reg-004) (`config` desconocida), [`R4C-REG-008`](../errors.md#r4c-reg-008) (`name` compartido con otra configuración), [`R4C-REG-009`](../errors.md#r4c-reg-009) (id desconocido en `registry.circuitBreaker`).
 
 ## Cuánto cuesta

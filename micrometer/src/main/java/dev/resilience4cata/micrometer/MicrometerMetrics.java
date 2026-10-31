@@ -171,18 +171,18 @@ public final class MicrometerMetrics implements AutoCloseable {
             }
             ResilienceSnapshot snapshot = registry.snapshot(); // the only list of bulkheads, rate limiters and adaptive limits
             for (BulkheadSnapshot bulkhead : snapshot.bulkheads()) {
-                if (bound.add("bulkhead " + bulkhead.instance())) {
-                    bindBulkhead(registry.bulkhead(bulkhead.instance()));
+                if (bound.add("bulkhead " + bulkhead.id())) {
+                    bindBulkhead(registry.bulkhead(bulkhead.id()));
                 }
             }
             for (RateLimiterSnapshot limiter : snapshot.rateLimiters()) {
-                if (bound.add("ratelimiter " + limiter.instance())) {
-                    bindRateLimiter(registry.rateLimiter(limiter.instance()));
+                if (bound.add("ratelimiter " + limiter.id())) {
+                    bindRateLimiter(registry.rateLimiter(limiter.id()));
                 }
             }
             for (AdaptiveLimitSnapshot limit : snapshot.adaptiveLimits()) {
-                if (bound.add("adaptivelimit " + limit.instance())) {
-                    bindAdaptiveLimit(registry.adaptiveLimit(limit.instance()));
+                if (bound.add("adaptivelimit " + limit.id())) {
+                    bindAdaptiveLimit(registry.adaptiveLimit(limit.id()));
                 }
             }
         } finally {
@@ -222,7 +222,7 @@ public final class MicrometerMetrics implements AutoCloseable {
         gauge("r4c.adaptivelimit.limit", "The adaptive limit's current limit",
                 limit.id(), limit, AdaptiveLimitHandle::limit, null);
         gauge("r4c.adaptivelimit.concurrent.calls", "Calls running in the adaptive limit",
-                limit.id(), limit, AdaptiveLimitHandle::inFlight, null);
+                limit.id(), limit, AdaptiveLimitHandle::concurrentCalls, null);
     }
 
     private <T> void gauge(String name, String description, String instance, T policy, ToDoubleFunction<T> value,

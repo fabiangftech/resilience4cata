@@ -44,7 +44,10 @@ final class BulkheadWaiters extends BulkheadWaitersCount {
         queue.offer(waiter);
     }
 
-    /** Removes and claims the oldest waiter that is still unclaimed and whose future is not done; {@code null} if none. */
+    /**
+     * Removes and claims the oldest waiter that is still unclaimed and whose future is not done; {@code null} if
+     * none.
+     */
     // java:S1452: waiters of every result type share one queue; the caller only hands the slot over.
     @SuppressWarnings("java:S1452")
     @Nullable Waiter<?> claimOldest() {

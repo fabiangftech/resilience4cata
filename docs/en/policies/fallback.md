@@ -146,7 +146,7 @@ public interface QuoteApi {
         @Override
         public Long apply(FallbackContext context) {
             int quantity = context.argument(1, int.class);   // the call's arguments, by position
-            return 100L * quantity;                          // context.failure(), attempts(), instanceId()
+            return 100L * quantity;                          // context.failure(), attempts(), id()
         }
     }
 }
@@ -158,7 +158,7 @@ public interface QuoteApi {
 | `attempts()` | Attempts made, the first one included (1 without `@Retry`) |
 | `argumentCount()` | Number of arguments of the call |
 | `argument(int index, Class<A> type)` | One argument, by zero-based position (primitives by their wrapper or primitive class) |
-| `instanceId()` | The method's id, `<interface>#<method>(<parameter types>)` |
+| `id()` | The method's id, `<interface>#<method>(<parameter types>)` |
 
 The handler class must be concrete, non-generic, top-level or `static` nested, accessible from the generated class, with a no-argument constructor; `T` must be assignable to the method's return type. One handler instance is created per method. A handler cannot be used on a generic method whose return type uses the method's type parameters, such as `<T> T load(Class<T> type)`, because one `FallbackHandler<X>` cannot fit every `T` without an unchecked cast ([`R4C-FB-014`](../errors.md#r4c-fb-014)): use a generic sibling method there. A handler is fine on `<T> String describe(T value)`, whose result type does not use `T`.
 
@@ -225,7 +225,7 @@ long price = quote.execute(() -> backend.quote("sku-1", 3));
 
 | Event | When | Fields |
 |---|---|---|
-| `FallbackEvent.Applied` | A fallback is about to run: the failure passed `applyOn`/`skipOn` and, with sibling methods, one of them takes it. Published once per call, also when the fallback then throws; never for a failure that is rethrown | `instance`, `nanoTime`, `failure` |
+| `FallbackEvent.Applied` | A fallback is about to run: the failure passed `applyOn`/`skipOn` and, with sibling methods, one of them takes it. Published once per call, also when the fallback then throws; never for a failure that is rethrown | `id`, `nanoTime`, `failure` |
 
 See [Observability](../guides/observability.md).
 

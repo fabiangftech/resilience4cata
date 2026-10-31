@@ -41,7 +41,7 @@ final class SnapshotMaps {
 
     private static Map<String, @Nullable Object> circuitBreaker(CircuitBreakerSnapshot s) {
         Map<String, @Nullable Object> map = new LinkedHashMap<>();
-        map.put("instance", s.instance());
+        map.put("id", s.id());
         map.put("state", s.state().name());
         map.put("failureRate", value(s.failureRate()));
         map.put("slowCallRate", value(s.slowCallRate()));
@@ -53,7 +53,7 @@ final class SnapshotMaps {
 
     private static Map<String, @Nullable Object> retry(RetrySnapshot s) {
         Map<String, @Nullable Object> map = new LinkedHashMap<>();
-        map.put("instance", s.instance());
+        map.put("id", s.id());
         map.put("config", config(s.config()));
         RetrySnapshot.Budget budget = s.budget();
         if (budget == null) {
@@ -70,7 +70,7 @@ final class SnapshotMaps {
 
     private static Map<String, @Nullable Object> rateLimiter(RateLimiterSnapshot s) {
         Map<String, @Nullable Object> map = new LinkedHashMap<>();
-        map.put("instance", s.instance());
+        map.put("id", s.id());
         map.put("availablePermits", s.availablePermits());
         map.put("permits", s.permits());
         return map;
@@ -78,14 +78,14 @@ final class SnapshotMaps {
 
     private static Map<String, @Nullable Object> timeout(TimeoutSnapshot s) {
         Map<String, @Nullable Object> map = new LinkedHashMap<>();
-        map.put("instance", s.instance());
+        map.put("id", s.id());
         map.put("config", config(s.config()));
         return map;
     }
 
     private static Map<String, @Nullable Object> bulkhead(BulkheadSnapshot s) {
         Map<String, @Nullable Object> map = new LinkedHashMap<>();
-        map.put("instance", s.instance());
+        map.put("id", s.id());
         map.put("concurrentCalls", s.concurrentCalls());
         map.put("waitingCalls", s.waitingCalls());
         map.put("maxConcurrent", s.maxConcurrent());
@@ -94,7 +94,7 @@ final class SnapshotMaps {
 
     private static Map<String, @Nullable Object> hedge(HedgeSnapshot s) {
         Map<String, @Nullable Object> map = new LinkedHashMap<>();
-        map.put("instance", s.instance());
+        map.put("id", s.id());
         map.put("config", config(s.config()));
         HedgeSnapshot.Budget budget = s.budget();
         if (budget == null) {
@@ -111,10 +111,10 @@ final class SnapshotMaps {
 
     private static Map<String, @Nullable Object> adaptiveLimit(AdaptiveLimitSnapshot s) {
         Map<String, @Nullable Object> map = new LinkedHashMap<>();
-        map.put("instance", s.instance());
+        map.put("id", s.id());
         map.put("algorithm", s.algorithm().name());
         map.put("limit", s.limit());
-        map.put("inFlight", s.inFlight());
+        map.put("concurrentCalls", s.concurrentCalls());
         map.put("minLimit", s.minLimit());
         map.put("maxLimit", s.maxLimit());
         map.put("windows", s.windows());

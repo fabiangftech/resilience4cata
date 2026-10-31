@@ -136,7 +136,7 @@ class RetryPageTest {
 
         // an annotation list replaces the default list
         RetrySnapshot snapshot = registry.snapshot().retries().getFirst();
-        assertThat(snapshot.instance())
+        assertThat(snapshot.id())
                 .isEqualTo("dev.resilience4cata.examples.docs.retry.DocumentStore#download(java.lang.String)");
         assertThat(snapshot.config().abortOn()).containsExactly(FileNotFoundException.class);
     }
@@ -192,7 +192,7 @@ class RetryPageTest {
                 .isEqualTo(new RetrySnapshot.Budget(100, 30, 30));   // calls, retries, allowed retries
         // end::retry-budget-testing[]
         assertThat(gaveUp).filteredOn(e -> e.reason() == RetryEvent.Reason.MAX_ATTEMPTS).hasSize(5);
-        assertThat(registry.snapshot().retries().getFirst().instance()).isEqualTo("catalog");
+        assertThat(registry.snapshot().retries().getFirst().id()).isEqualTo("catalog");
     }
 
     @Test

@@ -229,7 +229,7 @@ class MonoEquivalenceEndToEndTest {
                 "HedgeTimeoutBulkhead error:CallTimeoutException", "FallbackTimeoutBulkhead fallback BulkheadFullException",
                 "FallbackTimeoutBulkhead fallback CallTimeoutException", "TimeoutAroundRetry error:CallTimeoutException",
                 "Classified error:CallNotPermittedException", "LimitedRetry error:RateLimitExceededException",
-                "Adaptive fallback LimitExceededException")) {
+                "Adaptive fallback AdaptiveLimitFullException")) {
             assertThat(COVERAGE.getOrDefault(expected, 0)).as(expected).isGreaterThanOrEqualTo(3);
         }
     }

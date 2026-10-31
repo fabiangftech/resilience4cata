@@ -238,7 +238,7 @@ public final class ResilienceRegistry {
      */
     public List<LockedOverride> lockedOverrides() {
         return lockedOverrides.values().stream()
-                .sorted(Comparator.comparing(LockedOverride::policy).thenComparing(LockedOverride::instance))
+                .sorted(Comparator.comparing(LockedOverride::policy).thenComparing(LockedOverride::id))
                 .toList();
     }
 
@@ -704,17 +704,17 @@ public final class ResilienceRegistry {
      */
     public ResilienceSnapshot snapshot() {
         return new ResilienceSnapshot(
-                sorted(circuitBreakers, CircuitBreakerPolicy::snapshot, CircuitBreakerSnapshot::instance),
+                sorted(circuitBreakers, CircuitBreakerPolicy::snapshot, CircuitBreakerSnapshot::id),
                 sorted(retries, (String id, RetryPolicy retry) -> new RetrySnapshot(id, retry.config(),
                         retry.budgetSnapshot()),
-                        RetrySnapshot::instance),
-                sorted(rateLimiters, RateLimiterPolicy::snapshot, RateLimiterSnapshot::instance),
+                        RetrySnapshot::id),
+                sorted(rateLimiters, RateLimiterPolicy::snapshot, RateLimiterSnapshot::id),
                 sorted(timeouts, (String id, TimeoutPolicy timeout) -> new TimeoutSnapshot(id, timeout.config()),
-                        TimeoutSnapshot::instance),
-                sorted(bulkheads, BulkheadPolicy::snapshot, BulkheadSnapshot::instance),
+                        TimeoutSnapshot::id),
+                sorted(bulkheads, BulkheadPolicy::snapshot, BulkheadSnapshot::id),
                 sorted(hedges, (String id, HedgePolicy hedge) -> new HedgeSnapshot(id, hedge.config(),
-                        hedge.budgetSnapshot()), HedgeSnapshot::instance),
-                sorted(adaptiveLimits, AdaptiveLimitPolicy::snapshot, AdaptiveLimitSnapshot::instance));
+                        hedge.budgetSnapshot()), HedgeSnapshot::id),
+                sorted(adaptiveLimits, AdaptiveLimitPolicy::snapshot, AdaptiveLimitSnapshot::id));
     }
 
     private static <P, S> List<S> sorted(Map<String, P> policies, java.util.function.Function<P, S> snapshot,
@@ -774,7 +774,7 @@ public final class ResilienceRegistry {
          * thread that caused the event; see {@link EventListener}.
          *
          * <pre>{@code
-         * builder.listen(CircuitBreakerEvent.StateTransition.class, t -> alerts.send(t.instance() + " is " + t.to()))
+         * builder.listen(CircuitBreakerEvent.StateTransition.class, t -> alerts.send(t.id() + " is " + t.to()))
          *        .listen(RetryEvent.class, e -> log.debug("{}", e));
          * }</pre>
          *

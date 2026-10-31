@@ -31,7 +31,10 @@ public final class AdaptiveLimitConfig implements PolicyConfig {
     private final int queueSize;
     private final double backoffRatio;
 
-    /** How the limit is recomputed at the end of each window. */
+    /**
+     * How the limit is recomputed at the end of each window. Constants may be added in minor versions: keep a
+     * {@code default} branch in a {@code switch} over it.
+     */
     public enum Algorithm {
         /**
          * Compares the window's average latency with a long-term average (Netflix's {@code Gradient2Limit}):
@@ -236,7 +239,10 @@ public final class AdaptiveLimitConfig implements PolicyConfig {
             return this;
         }
 
-        /** @param rttTolerance Gradient2: latency growth tolerated before the limit goes down, at least 1 @return this builder */
+        /**
+         * @param rttTolerance Gradient2: latency growth tolerated before the limit goes down, at least 1 @return
+         * this builder
+         */
         public Builder rttTolerance(double rttTolerance) {
             this.rttTolerance = rttTolerance;
             return this;
@@ -328,7 +334,8 @@ public final class AdaptiveLimitConfig implements PolicyConfig {
     }
 
     /**
-     * Completed calls a window needs before it ends; a window that is over but has fewer is extended by one more {@code window} and keeps its calls, which count when it ends; at least 1.
+     * Completed calls a window needs before it ends; a window that is over but has fewer is extended by one more {@code
+     * window} and keeps its calls, which count when it ends; at least 1.
      *
      * @return the value
      */
@@ -337,7 +344,9 @@ public final class AdaptiveLimitConfig implements PolicyConfig {
     }
 
     /**
-     * Failures that mean the dependency is overloaded (a timeout, a full bulkhead): they count as a sample with a drop, which makes {@link Algorithm#AIMD} back off. Any other failure is ignored: the slot is freed and the call is not a sample.
+     * Failures that mean the dependency is overloaded (a timeout, a full bulkhead): they count as a sample with a drop,
+     * which makes {@link Algorithm#AIMD} back off. Any other failure is ignored: the slot is freed and the call is not
+     * a sample.
      *
      * @return the value
      */
@@ -364,7 +373,8 @@ public final class AdaptiveLimitConfig implements PolicyConfig {
     }
 
     /**
-     * {@link Algorithm#GRADIENT2}: how many times the long-term latency the window's latency may reach before the limit goes down; finite, at least 1.
+     * {@link Algorithm#GRADIENT2}: how many times the long-term latency the window's latency may reach before the limit
+     * goes down; finite, at least 1.
      *
      * @return the value
      */
@@ -382,7 +392,8 @@ public final class AdaptiveLimitConfig implements PolicyConfig {
     }
 
     /**
-     * {@link Algorithm#GRADIENT2}: calls the limit leaves room for above the estimated concurrency, so that it can grow; at least 0.
+     * {@link Algorithm#GRADIENT2}: calls the limit leaves room for above the estimated concurrency, so that it can
+     * grow; at least 0.
      *
      * @return the value
      */
@@ -421,13 +432,18 @@ public final class AdaptiveLimitConfig implements PolicyConfig {
 
     @Override
     public int hashCode() {
-        return Objects.hash(enabled, algorithm, initialLimit, minLimit, maxLimit, window, minWindowSamples, dropOn, ignoreOn, smoothing, rttTolerance, longWindow, queueSize, backoffRatio);
+        return Objects.hash(enabled, algorithm, initialLimit, minLimit, maxLimit, window, minWindowSamples, dropOn,
+                ignoreOn, smoothing, rttTolerance, longWindow, queueSize, backoffRatio);
     }
 
     /** The values, as {@code AdaptiveLimitConfig[name=value, ...]}. */
     @Override
     public String toString() {
-        return "AdaptiveLimitConfig[enabled=" + enabled + ", algorithm=" + algorithm + ", initialLimit=" + initialLimit + ", minLimit=" + minLimit + ", maxLimit=" + maxLimit + ", window=" + window + ", minWindowSamples=" + minWindowSamples + ", dropOn=" + dropOn + ", ignoreOn=" + ignoreOn + ", smoothing=" + smoothing + ", rttTolerance=" + rttTolerance + ", longWindow=" + longWindow + ", queueSize=" + queueSize + ", backoffRatio=" + backoffRatio + "]";
+        return "AdaptiveLimitConfig[enabled=" + enabled + ", algorithm=" + algorithm
+                + ", initialLimit=" + initialLimit + ", minLimit=" + minLimit + ", maxLimit=" + maxLimit
+                + ", window=" + window + ", minWindowSamples=" + minWindowSamples + ", dropOn=" + dropOn
+                + ", ignoreOn=" + ignoreOn + ", smoothing=" + smoothing + ", rttTolerance=" + rttTolerance
+                + ", longWindow=" + longWindow + ", queueSize=" + queueSize + ", backoffRatio=" + backoffRatio + "]";
     }
 
     /** The values in declaration order, for {@link ResilienceSnapshot#toMap()}. */

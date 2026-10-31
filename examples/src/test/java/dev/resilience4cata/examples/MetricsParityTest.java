@@ -117,7 +117,7 @@ class MetricsParityTest {
                         .minWindowSamples(1))
                 .build();
         adaptive.execute(() -> {
-            assertThatThrownBy(() -> adaptive.execute(() -> "nested")).isInstanceOf(dev.resilience4cata.LimitExceededException.class);
+            assertThatThrownBy(() -> adaptive.execute(() -> "nested")).isInstanceOf(dev.resilience4cata.AdaptiveLimitFullException.class);
             clock.advance(Duration.ofSeconds(1));
             return "o";
         });

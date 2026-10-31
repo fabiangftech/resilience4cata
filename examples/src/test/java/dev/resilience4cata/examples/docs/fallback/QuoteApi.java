@@ -16,7 +16,7 @@ public interface QuoteApi {
         @Override
         public Long apply(FallbackContext context) {
             int quantity = context.argument(1, int.class);   // the call's arguments, by position
-            return 100L * quantity;                          // context.failure(), attempts(), instanceId()
+            return 100L * quantity;                          // context.failure(), attempts(), id()
         }
     }
 }

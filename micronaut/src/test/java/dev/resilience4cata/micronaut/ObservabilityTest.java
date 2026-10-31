@@ -101,7 +101,7 @@ class ObservabilityTest {
             server.getApplicationContext().getBean(Shipping.class).track("p1");
 
             String all = client.toBlocking().retrieve("/resilience4cata");
-            assertThat(all).contains("\"circuitBreakers\"", "\"instance\":\"shipping-quotes\"", "\"state\":\"CLOSED\"",
+            assertThat(all).contains("\"circuitBreakers\"", "\"id\":\"shipping-quotes\"", "\"state\":\"CLOSED\"",
                     "\"timeouts\"", "\"timeout\":\"PT2S\"");
             String one = client.toBlocking().retrieve("/resilience4cata/shipping-quotes");
             assertThat(one).contains("shipping-quotes").doesNotContain("Shipping#track");

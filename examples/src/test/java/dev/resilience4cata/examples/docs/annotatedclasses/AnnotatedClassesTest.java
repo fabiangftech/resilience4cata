@@ -76,7 +76,7 @@ class AnnotatedClassesTest {
     void instanceIdsUseTheAnnotatedClass() {
         OrderService orders = Resilient.create(OrderService.class, registry);
         orders.price("1");
-        assertThat(registry.snapshot().retries()).extracting(r -> r.instance()).contains(
+        assertThat(registry.snapshot().retries()).extracting(r -> r.id()).contains(
                 "dev.resilience4cata.examples.docs.annotatedclasses.OrderService#status(java.lang.String)",
                 "dev.resilience4cata.examples.docs.annotatedclasses.OrderService#quote(java.lang.String)");
     }

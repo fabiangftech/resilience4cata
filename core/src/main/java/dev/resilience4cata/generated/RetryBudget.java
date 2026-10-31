@@ -151,7 +151,10 @@ final class RetryBudget {
         return false;
     }
 
-    /** Marks the tenths from {@code marks.bucket + 1} to {@code bucket} with the current counts. Rare: once per tenth. */
+    /**
+     * Marks the tenths from {@code marks.bucket + 1} to {@code bucket} with the current counts. Rare: once per
+     * tenth.
+     */
     private Marks advance(Marks marks, long bucket) {
         while (true) {
             long calls = sumCalls();

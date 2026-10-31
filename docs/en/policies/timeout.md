@@ -101,7 +101,7 @@ The timeout covers the stage, not the method call that returns it: a method that
 
 ### The exception
 
-`dev.resilience4cata.CallTimeoutException` is a `RuntimeException` with `instanceId()` and `timeout()` (the `Duration` that was exceeded). It has no stack trace; the message names the instance and the timeout.
+`dev.resilience4cata.CallTimeoutException` is a `RuntimeException` with `id()` and `timeout()` (the `Duration` that was exceeded). It has no stack trace; the message names the instance and the timeout.
 
 ## Attributes
 
@@ -114,7 +114,7 @@ The timeout covers the stage, not the method call that returns it: a method that
 
 `@Timeout` has **no `name`**: a timeout keeps no state worth sharing, so every annotated method gets its own policy, with the id `<interface>#<method>(<parameter types>)`. In external configuration the attribute is `value` (`configs.slow.timeout.value=10s`, `instances."com.acme.ReportApi#build(java.lang.String)".timeout.value=5s`); in code the builder method is `TimeoutConfig.Builder.timeout(Duration)`. See [Configuration](../guides/configuration.md).
 
-There is **no handle** either: `registry` has no `timeout(id)`. `registry.snapshot().timeouts()` lists a `TimeoutSnapshot(instance, config)` per method.
+There is **no handle** either: `registry` has no `timeout(id)`. `registry.snapshot().timeouts()` lists a `TimeoutSnapshot(id, config)` per method.
 
 ## With other policies
 
@@ -142,7 +142,7 @@ Here the timeout's id is the pipeline's id, `"reports"`. See [Pipeline API](../g
 
 | Event | When | Fields |
 |---|---|---|
-| `TimeoutEvent.TimedOut` | A call ran past its timeout | `instance`, `nanoTime`, `timeout` |
+| `TimeoutEvent.TimedOut` | A call ran past its timeout | `id`, `nanoTime`, `timeout` |
 
 Calls that finish in time publish nothing. See [Observability](../guides/observability.md).
 

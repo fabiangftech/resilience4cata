@@ -1,6 +1,9 @@
 package dev.resilience4cata;
 
-/** Inspects one rate limiter. Obtained from {@link ResilienceRegistry#rateLimiter(String)}. */
+/**
+ * Inspects one rate limiter. Obtained from {@link ResilienceRegistry#rateLimiter(String)}. Implemented by the
+ * library only, not meant to be implemented or mocked: methods may be added in minor versions.
+ */
 public interface RateLimiterHandle {
 
     /**

@@ -48,9 +48,9 @@ public class ResilienceHealthCheck implements HealthCheck {
         boolean all = downWhenOpen.contains("*");
         for (CircuitBreakerSnapshot breaker : registry.snapshot().circuitBreakers()) {
             CircuitBreakerState state = breaker.state();
-            response.withData(breaker.instance(), state.name());
-            response.withData(breaker.instance() + ".failureRate", String.valueOf(breaker.failureRate()));
-            if ((all || downWhenOpen.contains(breaker.instance()))
+            response.withData(breaker.id(), state.name());
+            response.withData(breaker.id() + ".failureRate", String.valueOf(breaker.failureRate()));
+            if ((all || downWhenOpen.contains(breaker.id()))
                     && (state == CircuitBreakerState.OPEN || state == CircuitBreakerState.FORCED_OPEN)) {
                 up = false;
             }

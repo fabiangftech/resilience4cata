@@ -58,7 +58,7 @@ class MicronautGuideTest {
     void anInterfaceBeanIsWrapped() {
         assertThat(report.line("sku")).isEqualTo("sku: 42");
         assertThat(registry.snapshot().timeouts()).anySatisfy(timeout -> {
-            assertThat(timeout.instance()).isEqualTo(StockClient.class.getName() + "#available(java.lang.String)");
+            assertThat(timeout.id()).isEqualTo(StockClient.class.getName() + "#available(java.lang.String)");
             assertThat(timeout.config().timeout()).as("instances.\"…\".timeout.value").isEqualTo(Duration.ofSeconds(3));
         });
     }
@@ -73,12 +73,12 @@ class MicronautGuideTest {
     void theYamlTheCustomizerAndTheListenerApply() {
         orders.find("1");
         assertThat(registry.snapshot().retries()).anySatisfy(retry -> {
-            assertThat(retry.instance()).isEqualTo(OrderService.class.getName() + "#find(java.lang.String)");
+            assertThat(retry.id()).isEqualTo(OrderService.class.getName() + "#find(java.lang.String)");
             assertThat(retry.config().delay()).as("the annotation's 100ms over defaults.retry.delay")
                     .isEqualTo(Duration.ofMillis(100));
         });
         Pipeline.builder(registry, "slow-probe").retry("slow").build(); // an instance of the named config "slow"
-        RetrySnapshot probe = registry.snapshot().retries().stream().filter(r -> r.instance().equals("slow-probe"))
+        RetrySnapshot probe = registry.snapshot().retries().stream().filter(r -> r.id().equals("slow-probe"))
                 .findFirst().orElseThrow();
         assertThat(probe.config().maxAttempts()).as("the customizer's").isEqualTo(5);
         assertThat(probe.config().delay()).as("configs.slow.retry.delay wins over the customizer")

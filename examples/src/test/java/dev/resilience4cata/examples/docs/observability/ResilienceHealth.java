@@ -12,7 +12,7 @@ public record ResilienceHealth(boolean healthy, List<String> openBreakers) {
     public static ResilienceHealth of(ResilienceRegistry registry) {
         List<String> open = registry.snapshot().circuitBreakers().stream()
                 .filter(b -> b.state() == CircuitBreakerState.OPEN || b.state() == CircuitBreakerState.FORCED_OPEN)
-                .map(CircuitBreakerSnapshot::instance)
+                .map(CircuitBreakerSnapshot::id)
                 .toList();
         return new ResilienceHealth(open.isEmpty(), open);
     }

@@ -135,7 +135,7 @@ class MicrometerMetricsTest {
         String inside = limited.execute(() -> {
             assertThat(gauge("r4c.adaptivelimit.concurrent.calls", "orders").value()).isEqualTo(1.0);
             assertThatThrownBy(() -> limited.execute(() -> "nested"))
-                    .isInstanceOf(dev.resilience4cata.LimitExceededException.class);
+                    .isInstanceOf(dev.resilience4cata.AdaptiveLimitFullException.class);
             clock.advance(Duration.ofSeconds(1)); // the window ends when this call does: AIMD adds one
             return "done";
         });

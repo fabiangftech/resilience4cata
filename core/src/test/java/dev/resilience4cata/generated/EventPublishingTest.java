@@ -8,7 +8,7 @@ import dev.resilience4cata.BulkheadConfig;
 import dev.resilience4cata.CallTimeoutException;
 import dev.resilience4cata.CircuitBreakerConfig;
 import dev.resilience4cata.CircuitBreakerState;
-import dev.resilience4cata.LimitExceededException;
+import dev.resilience4cata.AdaptiveLimitFullException;
 import dev.resilience4cata.RateLimiterConfig;
 import dev.resilience4cata.RetryConfig;
 import dev.resilience4cata.TimeoutConfig;
@@ -126,7 +126,7 @@ class EventPublishingTest {
         cb.forceOpen();
         assertThat(events).isEmpty();
         new CircuitBreakerPolicy("other", cb.config(), environment).forceOpen();
-        assertThat(events).extracting(ResilienceEvent::instance).containsExactly("other");
+        assertThat(events).extracting(ResilienceEvent::id).containsExactly("other");
     }
 
     @Test
@@ -208,7 +208,7 @@ class EventPublishingTest {
         try {
             adaptive.acquire();
             return 0;
-        } catch (LimitExceededException e) {
+        } catch (AdaptiveLimitFullException e) {
             return 1;
         }
     }
@@ -227,7 +227,7 @@ class EventPublishingTest {
 
         assertThat(events).containsExactly(
                 new AdaptiveLimitEvent.Rejected("a", 1_000 * MS, 1),
-                new AdaptiveLimitEvent.LimitChanged("a", 1_010 * MS, 1, 2, 10 * MS));
+                new AdaptiveLimitEvent.LimitChanged("a", 1_010 * MS, 1, 2, java.time.Duration.ofNanos(10 * MS)));
     }
 
     // Retry
@@ -332,7 +332,7 @@ class EventPublishingTest {
         assertThat(waiting.tryEnter()).as("sync wait times out").isFalse();
         CompletableFuture<Integer> queued = waiting.executeAsync(() -> CompletableFuture.completedFuture(1));
         assertThatThrownBy(() -> queued.get(5, TimeUnit.SECONDS)).hasCauseInstanceOf(dev.resilience4cata.BulkheadFullException.class);
-        assertThat(events).extracting(ResilienceEvent::instance).containsExactly("w", "w");
+        assertThat(events).extracting(ResilienceEvent::id).containsExactly("w", "w");
 
         events.clear();
         Thread.currentThread().interrupt();

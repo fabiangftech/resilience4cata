@@ -10,10 +10,10 @@ public sealed interface FallbackEvent extends ResilienceEvent {
      * fallback itself throws. A failure that is rethrown (because of {@code skipOn}, or because no
      * sibling method accepts its type) publishes nothing.
      *
-     * @param instance the method's id, {@code <interface>#<method>(<parameter types>)}
+     * @param id the method's id, {@code <interface>#<method>(<parameter types>)}
      * @param nanoTime when the fallback was chosen
      * @param failure the failure being handled
      */
-    record Applied(String instance, long nanoTime, Throwable failure) implements FallbackEvent {
+    record Applied(String id, long nanoTime, Throwable failure) implements FallbackEvent {
     }
 }

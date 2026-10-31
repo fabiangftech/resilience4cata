@@ -21,7 +21,10 @@ public interface Classifier<T> {
      */
     Outcome classify(@Nullable T result, @Nullable Throwable failure);
 
-    /** How a policy counts a call. */
+    /**
+     * How a policy counts a call. Constants may be added in minor versions: keep a {@code default} branch in a
+     * {@code switch} over it.
+     */
     enum Outcome {
         /** Counts as a success. */
         SUCCESS,

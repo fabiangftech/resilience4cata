@@ -154,7 +154,7 @@ Without `name`, every method gets its own retry policy, with the id `<interface>
 
 Without a [retry budget](#retry-budget), a retry keeps no state between calls (the attempt count lives in a local variable of the generated method), so sharing one by `name` only shares its configuration. With a budget, it also shares the budget. Methods that share a `name` must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008).
 
-There is no handle for a retry: `registry` has no `retry(id)` method. `registry.snapshot().retries()` lists each one as a `RetrySnapshot(instance, config, budget)`, with its resolved configuration and, if it has a retry budget, the budget's current window (`null` otherwise).
+There is no handle for a retry: `registry` has no `retry(id)` method. `registry.snapshot().retries()` lists each one as a `RetrySnapshot(id, config, budget)`, with its resolved configuration and, if it has a retry budget, the budget's current window (`null` otherwise).
 
 ## Retry budget
 
@@ -253,8 +253,8 @@ The pipeline's id (`"inventory"`) is the instance id. `retry()` uses the default
 
 | Event | When | Fields |
 |---|---|---|
-| `RetryEvent.Retrying` | A failed attempt will be retried | `instance`, `nanoTime`, `attempt`, `delay`, `failure` (`null` for a rejected result) |
-| `RetryEvent.GaveUp` | No more attempts | `instance`, `nanoTime`, `attempts`, `reason`, `failure` |
+| `RetryEvent.Retrying` | A failed attempt will be retried | `id`, `nanoTime`, `attempt`, `delay`, `failure` (`null` for a rejected result) |
+| `RetryEvent.GaveUp` | No more attempts | `id`, `nanoTime`, `attempts`, `reason`, `failure` |
 
 `GaveUp.reason()` is `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (not in `retryOn`, in `abortOn`, or an open breaker), `INTERRUPTED`, `CLASSIFIER_FAILED` or `BUDGET_EXHAUSTED` (the [retry budget](#retry-budget) is used up). Successful calls publish nothing. Listeners are registered on the registry builder; see [Observability](../guides/observability.md).
 

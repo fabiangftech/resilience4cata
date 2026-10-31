@@ -74,7 +74,7 @@ class ExhaustedResultEndToEndTest {
         assertThatThrownBy(() -> client.get("/a")).isInstanceOfSatisfying(ResultRejectedException.class, e -> {
             assertThat(e.result()).isEqualTo(new Reply(503, "busy 3"));
             assertThat(e.attempts()).isEqualTo(3);
-            assertThat(e.instanceId()).isEqualTo("dev.resilience4cata.examples.ExhaustedResultClient#get(java.lang.String)");
+            assertThat(e.id()).isEqualTo("dev.resilience4cata.examples.ExhaustedResultClient#get(java.lang.String)");
         });
         assertThat(calls).hasValue(3);
         assertThat(events).last().isInstanceOfSatisfying(RetryEvent.GaveUp.class,

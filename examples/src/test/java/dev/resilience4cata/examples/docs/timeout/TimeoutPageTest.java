@@ -93,7 +93,7 @@ class TimeoutPageTest {
     void eachCallSiteHasItsOwnPolicyWithTheDerivedId() {
         Resilient.of(ReportApi.class, id -> "r", registry);
         TimeoutSnapshot snapshot = registry.snapshot().timeouts().getFirst();
-        assertThat(snapshot.instance())
+        assertThat(snapshot.id())
                 .isEqualTo("dev.resilience4cata.examples.docs.timeout.ReportApi#build(java.lang.String)");
         assertThat(snapshot.config().timeout()).isEqualTo(Duration.ofSeconds(2));
     }
@@ -134,6 +134,6 @@ class TimeoutPageTest {
         String report = build.execute(() -> backend.build("r-1"));
         // end::timeout-pipeline[]
         assertThat(report).isEqualTo("report r-1 #1");
-        assertThat(registry.snapshot().timeouts()).extracting(TimeoutSnapshot::instance).containsExactly("reports");
+        assertThat(registry.snapshot().timeouts()).extracting(TimeoutSnapshot::id).containsExactly("reports");
     }
 }

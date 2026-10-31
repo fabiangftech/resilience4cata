@@ -201,6 +201,6 @@ class VirtualThreadsEndToEndTest {
         assertThat(attempts.values()).allSatisfy(a -> assertThat(a).hasValue(2));
         assertThat(maxInside.get()).isLessThanOrEqualTo(16);
         assertThat(registry.bulkhead("vt-stack").concurrentCalls()).isZero();
-        assertThat(registry.adaptiveLimit("vt-stack").inFlight()).isZero();
+        assertThat(registry.adaptiveLimit("vt-stack").concurrentCalls()).isZero();
     }
 }

@@ -105,7 +105,7 @@ Está **activo por defecto** (10 % de las llamadas más 1 hedge por segundo, en 
 
 Cada clave existe también bajo `configs.<name>.hedge.…` e `instances.<id>.hedge.…`; ver [Configuración](../guides/configuration.md). Todavía no hay clasificador ni `maxDuration`: el `@Timeout` por intento y `maxAttempts × delay` acotan una llamada.
 
-**No hay handle**: `registry` no tiene `hedge(id)`. `registry.snapshot().hedges()` lista un `HedgeSnapshot(instance, config, budget)` por instancia (`budget` es `null` con `budgetPercent = 0`).
+**No hay handle**: `registry` no tiene `hedge(id)`. `registry.snapshot().hedges()` lista un `HedgeSnapshot(id, config, budget)` por instancia (`budget` es `null` con `budgetPercent = 0`).
 
 ## Con otras políticas
 
@@ -148,10 +148,10 @@ Un pipeline con hedge solo funciona con `executeAsync`: `execute` lanza [`R4C-RT
 
 | Evento | Cuándo | Campos |
 |---|---|---|
-| `HedgeEvent.Hedged` | Empezó el intento 2 o posterior | `instance`, `nanoTime`, `attempt`, `reason` (`DELAY` o `FAILURE`) |
-| `HedgeEvent.Won` | El intento 2 o posterior tuvo éxito primero | `instance`, `nanoTime`, `attempt` |
-| `HedgeEvent.Skipped` | Un hedge que podía empezar no empezó | `instance`, `nanoTime`, `attempt`, `reason` (`BUDGET_EXHAUSTED`, `REJECTED` o `ABORTED`) |
-| `HedgeEvent.Failed` | La llamada falló | `instance`, `nanoTime`, `attempts`, `failure` |
+| `HedgeEvent.Hedged` | Empezó el intento 2 o posterior | `id`, `nanoTime`, `attempt`, `reason` (`DELAY` o `FAILURE`) |
+| `HedgeEvent.Won` | El intento 2 o posterior tuvo éxito primero | `id`, `nanoTime`, `attempt` |
+| `HedgeEvent.Skipped` | Un hedge que podía empezar no empezó | `id`, `nanoTime`, `attempt`, `reason` (`BUDGET_EXHAUSTED`, `REJECTED` o `ABORTED`) |
+| `HedgeEvent.Failed` | La llamada falló | `id`, `nanoTime`, `attempts`, `failure` |
 
 Una llamada cuyo primer intento gana no publica nada, y no hay contadores por llamada: cuántas veces empiezan y ganan los hedges solo se ve a través de estos eventos. Ver [Observabilidad](../guides/observability.md).
 

@@ -82,7 +82,7 @@ CircuitBreakerHandle breaker = registry.circuitBreaker("search");   // the pipel
 breaker.forceOpen();                                                // every call is now rejected
 ```
 
-Así, `registry.circuitBreaker(id)`, `rateLimiter(id)` y `bulkhead(id)` las encuentran, los eventos llevan el id como `instance()`, y la configuración externa las ajusta con `instances.<id>.*`. Los pipelines construidos con el mismo id comparten sus instancias, y también las anotaciones cuyo `name` es ese id; todos deben resolver a la misma configuración, o `build()` falla con [`R4C-REG-008`](../errors.md#r4c-reg-008).
+Así, `registry.circuitBreaker(id)`, `rateLimiter(id)` y `bulkhead(id)` las encuentran, los eventos llevan el id como `id()`, y la configuración externa las ajusta con `instances.<id>.*`. Los pipelines construidos con el mismo id comparten sus instancias, y también las anotaciones cuyo `name` es ese id; todos deben resolver a la misma configuración, o `build()` falla con [`R4C-REG-008`](../errors.md#r4c-reg-008).
 
 Un fallback cuya función lanza una excepción checked que la llamada no declara llega a quien llama envuelto en `UndeclaredThrowableException`.
 

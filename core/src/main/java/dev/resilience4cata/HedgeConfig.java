@@ -134,7 +134,10 @@ public final class HedgeConfig implements PolicyConfig {
             return this;
         }
 
-        /** @param delay time without a result before the next attempt starts; zero starts all at once @return this builder */
+        /**
+         * @param delay time without a result before the next attempt starts; zero starts all at once @return this
+         * builder
+         */
         public Builder delay(Duration delay) {
             this.delay = Objects.requireNonNull(delay, "delay");
             return this;
@@ -162,7 +165,10 @@ public final class HedgeConfig implements PolicyConfig {
             return this;
         }
 
-        /** @param budgetMinHedgesPerSecond hedges allowed per second of {@code budgetWindow} whatever the traffic @return this builder */
+        /**
+         * @param budgetMinHedgesPerSecond hedges allowed per second of {@code budgetWindow} whatever the traffic
+         * @return this builder
+         */
         public Builder budgetMinHedgesPerSecond(int budgetMinHedgesPerSecond) {
             this.budgetMinHedgesPerSecond = budgetMinHedgesPerSecond;
             return this;
@@ -206,7 +212,8 @@ public final class HedgeConfig implements PolicyConfig {
     }
 
     /**
-     * How long the latest attempt runs without a result before the next one starts; not negative, {@link Duration#ZERO} starts every attempt at once.
+     * How long the latest attempt runs without a result before the next one starts; not negative, {@link Duration#ZERO}
+     * starts every attempt at once.
      *
      * @return the value
      */
@@ -233,7 +240,8 @@ public final class HedgeConfig implements PolicyConfig {
     }
 
     /**
-     * Hedge budget: hedges allowed, in percent of the calls made in the last {@code budgetWindow}, on top of {@code budgetMinHedgesPerSecond}; finite, at least 0; 0 turns the budget off.
+     * Hedge budget: hedges allowed, in percent of the calls made in the last {@code budgetWindow}, on top of {@code
+     * budgetMinHedgesPerSecond}; finite, at least 0; 0 turns the budget off.
      *
      * @return the value
      */
@@ -242,7 +250,8 @@ public final class HedgeConfig implements PolicyConfig {
     }
 
     /**
-     * Hedge budget: hedges allowed per second of {@code budgetWindow} whatever the traffic; at least 0; applies once {@code budgetPercent} turns the budget on.
+     * Hedge budget: hedges allowed per second of {@code budgetWindow} whatever the traffic; at least 0; applies once
+     * {@code budgetPercent} turns the budget on.
      *
      * @return the value
      */
@@ -275,13 +284,16 @@ public final class HedgeConfig implements PolicyConfig {
 
     @Override
     public int hashCode() {
-        return Objects.hash(enabled, maxAttempts, delay, hedgeOn, abortOn, budgetPercent, budgetMinHedgesPerSecond, budgetWindow);
+        return Objects.hash(enabled, maxAttempts, delay, hedgeOn, abortOn, budgetPercent, budgetMinHedgesPerSecond,
+                budgetWindow);
     }
 
     /** The values, as {@code HedgeConfig[name=value, ...]}. */
     @Override
     public String toString() {
-        return "HedgeConfig[enabled=" + enabled + ", maxAttempts=" + maxAttempts + ", delay=" + delay + ", hedgeOn=" + hedgeOn + ", abortOn=" + abortOn + ", budgetPercent=" + budgetPercent + ", budgetMinHedgesPerSecond=" + budgetMinHedgesPerSecond + ", budgetWindow=" + budgetWindow + "]";
+        return "HedgeConfig[enabled=" + enabled + ", maxAttempts=" + maxAttempts + ", delay=" + delay
+                + ", hedgeOn=" + hedgeOn + ", abortOn=" + abortOn + ", budgetPercent=" + budgetPercent
+                + ", budgetMinHedgesPerSecond=" + budgetMinHedgesPerSecond + ", budgetWindow=" + budgetWindow + "]";
     }
 
     /** The values in declaration order, for {@link ResilienceSnapshot#toMap()}. */
