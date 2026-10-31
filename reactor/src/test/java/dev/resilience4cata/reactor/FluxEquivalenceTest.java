@@ -28,7 +28,7 @@ import reactor.core.publisher.Sinks;
 
 /**
  * Differential test: a {@code Flux} of at most one element through {@link FluxPipelineOperator} behaves
- * exactly like the same {@code Mono} through {@link PipelineOperator}. With one element that arrives
+ * exactly like the same {@code Mono} through {@link MonoPipelineOperator}. With one element that arrives
  * together with the end, the stream rules (retry and fallback before the first element only, a timeout
  * restarted by every element, slow calls and latency measured to the first element) say the same as the
  * {@code Mono} ones, so any difference is a bug in the stream machinery. Each seed builds a random
@@ -172,7 +172,7 @@ class FluxEquivalenceTest {
         }
 
         World monos = new World();
-        PipelineOperator<String> monoOperator = PipelineOperator.of(shape.build(monos.registry));
+        MonoPipelineOperator<String> monoOperator = MonoPipelineOperator.of(shape.build(monos.registry));
         for (int call = 0; call < CALLS; call++) {
             int c = call;
             AtomicInteger attempt = new AtomicInteger();

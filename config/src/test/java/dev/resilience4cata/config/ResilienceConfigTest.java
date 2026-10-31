@@ -314,12 +314,23 @@ class ResilienceConfigTest {
     }
 
     @Test
-    void profileKeyFromAFileBeatsBaseKeyFromTheEnvironment() {
+    void anEnvironmentVariableBeatsAProfileKeyFromAFile() {
         ResilienceRegistry registry = text("""
                 profiles.active=test
                 profiles.test.configs.external.retry.maxAttempts=1
                 """).environment(Map.of("R4C_CONFIGS_EXTERNAL_RETRY_MAXATTEMPTS", "7")).build().toRegistry();
+        assertThat(registry.retryConfig("external").maxAttempts()).as("the operator's variable wins").isEqualTo(7);
+    }
+
+    @Test
+    void withinOneSourceAProfileKeyBeatsTheKeyWithoutAProfile() {
+        ResilienceRegistry registry = text("""
+                profiles.active=test
+                configs.external.retry.maxAttempts=4
+                profiles.test.configs.external.retry.maxAttempts=1
+                """).environment(Map.of("R4C_CONFIGS_EXTERNAL_RETRY_DELAY", "1s")).build().toRegistry();
         assertThat(registry.retryConfig("external").maxAttempts()).isEqualTo(1);
+        assertThat(registry.retryConfig("external").delay()).hasSeconds(1);
     }
 
     @Test
@@ -690,12 +701,12 @@ class ResilienceConfigTest {
     }
 
     @Test
-    void precedenceByOrderStillLetsProfilesWin() {
+    void precedenceByOrderRanksSourcesBeforeProfiles() {
         ResilienceConfig config = ResilienceConfig.builder().precedenceByOrder()
                 .properties("low", Map.of("profiles.test.defaults.retry.maxAttempts", "5", "profiles.active", "test"),
                         key -> null)
                 .properties("high", Map.of("defaults.retry.maxAttempts", "9"), key -> null).build();
 
-        assertThat(config.toRegistry().retryConfig("").maxAttempts()).isEqualTo(5);
+        assertThat(config.toRegistry().retryConfig("").maxAttempts()).as("the later source wins").isEqualTo(9);
     }
 }

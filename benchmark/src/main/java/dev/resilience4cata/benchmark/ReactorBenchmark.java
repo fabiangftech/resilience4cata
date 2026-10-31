@@ -3,7 +3,7 @@ package dev.resilience4cata.benchmark;
 import dev.resilience4cata.Pipeline;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
-import dev.resilience4cata.reactor.PipelineOperator;
+import dev.resilience4cata.reactor.MonoPipelineOperator;
 import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.bulkhead.BulkheadConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -47,7 +47,7 @@ import reactor.core.publisher.Sinks;
  * concurrent calls for the bulkhead, one billion permits per second for the rate limiter. {@code *Stack}
  * nests retry, circuit breaker, timeout and bulkhead in the same order in both libraries (Resilience4j:
  * the bulkhead operator applied first, the retry last). resilience4cata is measured as generated code
- * ({@link ReactorService}) and as a {@link Pipeline} applied with {@link PipelineOperator}.
+ * ({@link ReactorService}) and as a {@link Pipeline} applied with {@link MonoPipelineOperator}.
  *
  * <p>Two kinds of source: {@code Mono.just} (the value is there at subscription: a cache, a fallback),
  * and {@code *Pending}, a {@code Sinks.One} that the benchmark fills right after subscribing, so that
@@ -68,7 +68,7 @@ public class ReactorBenchmark {
     private static final Mono<String> VALUE = Mono.just("ok");
 
     private ReactorService resilience4cata;
-    private PipelineOperator<String> pipelineStack;
+    private MonoPipelineOperator<String> pipelineStack;
     private UnaryOperator<Publisher<String>> circuitBreaker;
     private UnaryOperator<Publisher<String>> retry;
     private UnaryOperator<Publisher<String>> timeout;
@@ -84,7 +84,7 @@ public class ReactorBenchmark {
     public void setup() {
         ResilienceRegistry registry = ResilienceRegistry.builder().build();
         resilience4cata = Resilient.of(ReactorService.class, new ReactorService.Impl(), registry);
-        pipelineStack = PipelineOperator.of(Pipeline.builder(registry, "pipeline-stack", String.class)
+        pipelineStack = MonoPipelineOperator.of(Pipeline.builder(registry, "pipeline-stack", String.class)
                 .retry(r -> r.maxAttempts(3))
                 .circuitBreaker()
                 .timeout(t -> t.timeout(Duration.ofSeconds(1)))

@@ -12,7 +12,7 @@ import reactor.core.publisher.Mono;
  * {@code WebClient} call:
  *
  * <pre>{@code
- * PipelineOperator<Price> resilient = PipelineOperator.of(pipeline);   // once, like the pipeline
+ * MonoPipelineOperator<Price> resilient = MonoPipelineOperator.of(pipeline);   // once, like the pipeline
  *
  * Mono<Price> price = webClient.get().uri("/prices/{sku}", sku)
  *         .retrieve().bodyToMono(Price.class)
@@ -30,11 +30,11 @@ import reactor.core.publisher.Mono;
  *
  * @param <T> the value type
  */
-public final class PipelineOperator<T> implements UnaryOperator<Mono<T>> {
+public final class MonoPipelineOperator<T> implements UnaryOperator<Mono<T>> {
 
     private final Pipeline<T> pipeline;
 
-    private PipelineOperator(Pipeline<T> pipeline) {
+    private MonoPipelineOperator(Pipeline<T> pipeline) {
         this.pipeline = pipeline;
     }
 
@@ -45,8 +45,8 @@ public final class PipelineOperator<T> implements UnaryOperator<Mono<T>> {
      * @param <T> the value type
      * @return an operator for {@code Mono.transform}
      */
-    public static <T> PipelineOperator<T> of(Pipeline<T> pipeline) {
-        return new PipelineOperator<>(Objects.requireNonNull(pipeline, "pipeline"));
+    public static <T> MonoPipelineOperator<T> of(Pipeline<T> pipeline) {
+        return new MonoPipelineOperator<>(Objects.requireNonNull(pipeline, "pipeline"));
     }
 
     /**
@@ -77,6 +77,6 @@ public final class PipelineOperator<T> implements UnaryOperator<Mono<T>> {
 
     @Override
     public String toString() {
-        return "PipelineOperator[" + pipeline + "]";
+        return "MonoPipelineOperator[" + pipeline + "]";
     }
 }

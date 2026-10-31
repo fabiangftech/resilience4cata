@@ -158,11 +158,11 @@ StepVerifier.create(committed.prices("sku-1"))
 
 ## Código que no puedes anotar
 
-`PipelineOperator` aplica un [pipeline](pipeline.md) a un `Mono`, para una llamada de `WebClient` o un cliente de terceros:
+`MonoPipelineOperator` aplica un [pipeline](pipeline.md) a un `Mono`, para una llamada de `WebClient` o un cliente de terceros:
 
 <!-- snippet: reactor-operator -->
 ```java
-PipelineOperator<String> resilient = PipelineOperator.of(Pipeline.builder(registry, "rates", String.class)
+MonoPipelineOperator<String> resilient = MonoPipelineOperator.of(Pipeline.builder(registry, "rates", String.class)
         .retry(r -> r.maxAttempts(3).delay(Duration.ofMillis(50)))
         .timeout(t -> t.timeout(Duration.ofSeconds(2)))
         .build());

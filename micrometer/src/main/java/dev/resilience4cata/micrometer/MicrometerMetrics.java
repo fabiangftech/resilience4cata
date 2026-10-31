@@ -229,7 +229,7 @@ public final class MicrometerMetrics implements AutoCloseable {
             @Nullable String unit, String... tags) {
         // Weak reference to the policy (Micrometer's default): meters never keep the registry alive.
         gauges.add(Gauge.builder(name, policy, value).description(description).baseUnit(unit)
-                .tag("instance", instance).tags(tags).register(meters));
+                .tag("name", instance).tags(tags).register(meters));
     }
 
     /** The snapshot reports -1 until the window holds minimumCalls calls: no value yet. */

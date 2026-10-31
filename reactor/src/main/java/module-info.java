@@ -1,6 +1,6 @@
 /**
- * Project Reactor support for resilience4cata: annotated methods that return a {@code Mono}, and
- * {@link dev.resilience4cata.reactor.PipelineOperator} and {@link dev.resilience4cata.reactor.FluxPipelineOperator}.
+ * Project Reactor support for resilience4cata: annotated methods that return a {@code Mono} or a {@code Flux}, and
+ * {@link dev.resilience4cata.reactor.MonoPipelineOperator} and {@link dev.resilience4cata.reactor.FluxPipelineOperator}.
  * Depends on {@code core} and {@code reactor-core} only.
  */
 // reactor-core 3.6 and reactive-streams are automatic modules (newer reactor-core versions have a module-info).

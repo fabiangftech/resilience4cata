@@ -126,26 +126,26 @@ The [Micrometer module](micrometer.md) (`resilience4cata-micrometer`) turns the 
 
 ### Metric names :id=metric-names
 
-Names are lowercase and dotted, as Micrometer recommends (Prometheus shows them as `r4c_retry_retries_total` and so on); every meter has an `instance` tag (the instance id: instance ids are fixed in your code, so the tag is bounded) and at most one or two more tags with a fixed set of values. Tag values are lowercase.
+Names are lowercase and dotted, as Micrometer recommends (Prometheus shows them as `r4c_retry_retries_total` and so on); every meter has a `name` tag (the instance id: instance ids are fixed in your code, so the tag is bounded) and at most one or two more tags with a fixed set of values. Tag values are lowercase. The tag is not called `instance` because Prometheus adds its own `instance` label (the target's host:port) to every series it scrapes, and would rename ours to `exported_instance`. Two format decisions, fixed from 1.0: names follow Micrometer's (and Resilience4j's) dotted style in both modules, not the `_` inside a segment of OpenTelemetry's semantic conventions, and the circuit breaker's rates are percentages from 0 to 100, like `failureRateThreshold`.
 
 | Meter | Type | Tags | Source |
 |---|---|---|---|
-| `r4c.calls.rejected` | counter | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CallNotPermitted`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
-| `r4c.circuitbreaker.transitions` | counter | `instance`, `from`, `to` (lowercase states) | `StateTransition` |
-| `r4c.retry.retries` | counter | `instance` | `Retrying` |
-| `r4c.retry.gave.up` | counter | `instance`, `reason` (lowercase `Reason`) | `GaveUp` |
-| `r4c.hedge.hedged` | counter | `instance`, `reason` = `delay` \| `failure` | `Hedged` |
-| `r4c.hedge.won` | counter | `instance` | `Won` |
-| `r4c.hedge.skipped` | counter | `instance`, `reason` = `budget_exhausted` \| `rejected` \| `aborted` | `Skipped` |
-| `r4c.hedge.failed` | counter | `instance` | `Failed` |
-| `r4c.adaptivelimit.limit.changes` | counter | `instance` | `LimitChanged` |
-| `r4c.timeout.timed.out` | counter | `instance` | `TimedOut` |
-| `r4c.fallback.applied` | counter | `instance` | `Applied` |
-| `r4c.circuitbreaker.state` | gauge | `instance`, `state`: 1 for the current state, 0 for the others | `state()` |
-| `r4c.circuitbreaker.failure.rate`, `r4c.circuitbreaker.slow.call.rate` | gauge (percent) | `instance` | `snapshot()`; NaN until the window holds `minimumCalls` calls |
-| `r4c.bulkhead.concurrent.calls`, `r4c.bulkhead.waiting.calls`, `r4c.bulkhead.max.concurrent` | gauge | `instance` | `BulkheadHandle` |
-| `r4c.ratelimiter.available.permits` | gauge | `instance` | `RateLimiterHandle` |
-| `r4c.adaptivelimit.limit`, `r4c.adaptivelimit.concurrent.calls` | gauge | `instance` | `AdaptiveLimitHandle` |
+| `r4c.calls.rejected` | counter | `name`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CallNotPermitted`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
+| `r4c.circuitbreaker.transitions` | counter | `name`, `from`, `to` (lowercase states) | `StateTransition` |
+| `r4c.retry.retries` | counter | `name` | `Retrying` |
+| `r4c.retry.gave.up` | counter | `name`, `reason` (lowercase `Reason`) | `GaveUp` |
+| `r4c.hedge.hedged` | counter | `name`, `reason` = `delay` \| `failure` | `Hedged` |
+| `r4c.hedge.won` | counter | `name` | `Won` |
+| `r4c.hedge.skipped` | counter | `name`, `reason` = `budget_exhausted` \| `rejected` \| `aborted` | `Skipped` |
+| `r4c.hedge.failed` | counter | `name` | `Failed` |
+| `r4c.adaptivelimit.limit.changes` | counter | `name` | `LimitChanged` |
+| `r4c.timeout.timed.out` | counter | `name` | `TimedOut` |
+| `r4c.fallback.applied` | counter | `name` | `Applied` |
+| `r4c.circuitbreaker.state` | gauge | `name`, `state`: 1 for the current state, 0 for the others | `state()` |
+| `r4c.circuitbreaker.failure.rate`, `r4c.circuitbreaker.slow.call.rate` | gauge (percent) | `name` | `snapshot()`; NaN until the window holds `minimumCalls` calls |
+| `r4c.bulkhead.concurrent.calls`, `r4c.bulkhead.waiting.calls`, `r4c.bulkhead.max.concurrent` | gauge | `name` | `BulkheadHandle` |
+| `r4c.ratelimiter.available.permits` | gauge | `name` | `RateLimiterHandle` |
+| `r4c.adaptivelimit.limit`, `r4c.adaptivelimit.concurrent.calls` | gauge | `name` | `AdaptiveLimitHandle` |
 
 ### Another metrics library :id=diy
 

@@ -52,7 +52,7 @@ Combinations are checked too: `maxDelay` must not be shorter than `delay`, and a
 
 ## Sources and precedence :id=precedence
 
-`ResilienceConfig.load()` reads, lowest first: the classpath resource `resilience4cata.properties` (optional), environment variables, system properties. With `ResilienceConfig.builder()` you choose the sources; for one key they rank classpath resources < files and `Properties` < environment variables < system properties, and among sources of the same kind the one added last wins. A key under an active profile wins over the same key without a profile, whatever their sources.
+`ResilienceConfig.load()` reads, lowest first: the classpath resource `resilience4cata.properties` (optional), environment variables, system properties. With `ResilienceConfig.builder()` you choose the sources; for one key they rank classpath resources < files and `Properties` < environment variables < system properties, and among sources of the same kind the one added last wins. Within one source, a key under an active profile wins over the same key without a profile; a stronger source wins even over a profile key of a weaker one.
 
 Values then combine, lowest first:
 

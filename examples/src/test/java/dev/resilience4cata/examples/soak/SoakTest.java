@@ -350,7 +350,7 @@ class SoakTest {
         // rise; what must hold is that every meter belongs to an instance, whose number is fixed, and its other tags
         // are enum values: then the meters are bounded.
         Set<String> ids = instanceIds();
-        List<String> strays = meters.getMeters().stream().map(meter -> meter.getId().getTag("instance"))
+        List<String> strays = meters.getMeters().stream().map(meter -> meter.getId().getTag("name"))
                 .filter(id -> id != null && !ids.contains(id)).distinct().limit(5).toList();
         check(checks, "every meter belongs to a registry instance", strays.isEmpty(), strays.toString());
     }

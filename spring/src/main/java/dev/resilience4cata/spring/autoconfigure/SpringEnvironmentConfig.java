@@ -18,7 +18,8 @@ import org.springframework.core.env.PropertySource;
 import org.springframework.core.env.SystemEnvironmentPropertySource;
 
 /**
- * Reads the {@code resilience4cata.*} keys of a Spring {@code Environment} into a {@link ResilienceConfig}.
+ * Reads the {@code resilience4cata.*} and {@code r4c.*} keys of a Spring {@code Environment} into a
+ * {@link ResilienceConfig}, like the other integrations.
  *
  * <p>Every property source is one source of the config, added lowest precedence first with
  * {@link ResilienceConfig.Builder#precedenceByOrder()}, so Spring's precedence holds (command line and test
@@ -28,12 +29,13 @@ import org.springframework.core.env.SystemEnvironmentPropertySource;
  * ({@code instances[com.acme.Api#get(java.lang.String)]}) becomes a quoted segment, and list elements
  * ({@code retry-on[0]}, {@code retry-on[1]}) one comma-separated value. Values are placeholder-resolved.
  * The environment variables source is read with the config's own {@code R4C_}/{@code RESILIENCE4CATA_}
- * grammar. Keys under {@code resilience4cata.spring} are the integration's switches and are skipped.
+ * grammar. Keys under {@code resilience4cata.spring} (and {@code r4c.spring}) are the integration's switches and are
+ * skipped.
  */
 final class SpringEnvironmentConfig {
 
-    static final String PREFIX = "resilience4cata.";
-    private static final String SPRING_PREFIX = "resilience4cata.spring";
+    private static final List<String> PREFIXES = List.of("resilience4cata.", "r4c.");
+    private static final List<String> SPRING_PREFIXES = List.of("resilience4cata.spring", "r4c.spring");
     private static final List<String> SPRING_VARIABLES = List.of("R4C_SPRING_", "RESILIENCE4CATA_SPRING_");
     private static final List<String> VARIABLE_PREFIXES = List.of("R4C_", "RESILIENCE4CATA_");
 
@@ -85,8 +87,7 @@ final class SpringEnvironmentConfig {
         Map<String, String> origins = new HashMap<>();
         Map<String, TreeMap<Integer, String>> lists = new LinkedHashMap<>();
         for (String name : source.getPropertyNames()) {
-            if (!name.startsWith(PREFIX) || name.equals(SPRING_PREFIX) || name.startsWith(SPRING_PREFIX + ".")
-                    || name.startsWith(SPRING_PREFIX + "[")) {
+            if (PREFIXES.stream().noneMatch(name::startsWith) || isSwitch(name)) {
                 continue;
             }
             Object raw = source.getProperty(name);
@@ -106,6 +107,15 @@ final class SpringEnvironmentConfig {
         if (!values.isEmpty()) {
             builder.properties(source.getName(), values, origins::get);
         }
+    }
+
+    private static boolean isSwitch(String name) {
+        for (String prefix : SPRING_PREFIXES) {
+            if (name.equals(prefix) || name.startsWith(prefix + ".") || name.startsWith(prefix + "[")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String origin(PropertySource<?> source, String name) {

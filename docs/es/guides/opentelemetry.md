@@ -67,30 +67,30 @@ PaymentGateway payments = Resilient.of(PaymentGateway.class, delegate, registry)
 
 ## Métricas :id=metrics
 
-Cada métrica tiene un atributo `instance`: el id de la instancia de la política (el `name` de la anotación, el id derivado `pkg.Type#method(...)` o el id del pipeline). Los ids de instancia están fijos en tu código, así que el atributo es acotado. Los valores de los atributos van en minúsculas.
+Cada métrica tiene un atributo `name`: el id de la instancia de la política (el `name` de la anotación, el id derivado `pkg.Type#method(...)` o el id del pipeline). Los ids de instancia están fijos en tu código, así que el atributo es acotado. Los valores de los atributos van en minúsculas.
 
 | Nombre | Instrumento de OpenTelemetry | Unidad | Atributos | Origen |
 |---|---|---|---|---|
-| `r4c.calls.rejected` | `LongCounter` | `{call}` | `instance`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CircuitBreakerEvent.CallNotPermitted`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
-| `r4c.circuitbreaker.transitions` | `LongCounter` | `{transition}` | `instance`, `from`, `to` (`closed`, `open`, `half_open`, `forced_open`, `disabled`) | `CircuitBreakerEvent.StateTransition` |
-| `r4c.retry.retries` | `LongCounter` | `{retry}` | `instance` | `RetryEvent.Retrying` |
-| `r4c.retry.gave.up` | `LongCounter` | `{call}` | `instance`, `reason` (`max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`) | `RetryEvent.GaveUp` |
-| `r4c.hedge.hedged` | `LongCounter` | `{attempt}` | `instance`, `reason` (`delay`, `failure`) | `HedgeEvent.Hedged` |
-| `r4c.hedge.won` | `LongCounter` | `{call}` | `instance` | `HedgeEvent.Won` |
-| `r4c.hedge.skipped` | `LongCounter` | `{attempt}` | `instance`, `reason` (`budget_exhausted`, `rejected`, `aborted`) | `HedgeEvent.Skipped` |
-| `r4c.hedge.failed` | `LongCounter` | `{call}` | `instance` | `HedgeEvent.Failed` |
-| `r4c.adaptivelimit.limit.changes` | `LongCounter` | `{window}` | `instance` | `AdaptiveLimitEvent.LimitChanged` |
-| `r4c.timeout.timed.out` | `LongCounter` | `{call}` | `instance` | `TimeoutEvent.TimedOut` |
-| `r4c.fallback.applied` | `LongCounter` | `{call}` | `instance` | `FallbackEvent.Applied` |
-| `r4c.circuitbreaker.state` | `ObservableLongGauge` | ninguna | `instance`, `state`: 1 para el estado actual, 0 para los otros cuatro | `state` del snapshot |
-| `r4c.circuitbreaker.failure.rate` | `ObservableDoubleGauge` | `%` | `instance` | `failureRate` del snapshot |
-| `r4c.circuitbreaker.slow.call.rate` | `ObservableDoubleGauge` | `%` | `instance` | `slowCallRate` del snapshot |
-| `r4c.bulkhead.concurrent.calls` | `ObservableLongGauge` | `{call}` | `instance` | `concurrentCalls` del snapshot |
-| `r4c.bulkhead.waiting.calls` | `ObservableLongGauge` | `{call}` | `instance` | `waitingCalls` del snapshot |
-| `r4c.bulkhead.max.concurrent` | `ObservableLongGauge` | `{call}` | `instance` | `maxConcurrent` del snapshot |
-| `r4c.ratelimiter.available.permits` | `ObservableLongGauge` | `{permit}` | `instance` | `availablePermits` del snapshot |
-| `r4c.adaptivelimit.limit` | `ObservableLongGauge` | `{call}` | `instance` | `limit` del snapshot |
-| `r4c.adaptivelimit.concurrent.calls` | `ObservableLongGauge` | `{call}` | `instance` | `concurrentCalls` del snapshot |
+| `r4c.calls.rejected` | `LongCounter` | `{call}` | `name`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CircuitBreakerEvent.CallNotPermitted`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
+| `r4c.circuitbreaker.transitions` | `LongCounter` | `{transition}` | `name`, `from`, `to` (`closed`, `open`, `half_open`, `forced_open`, `disabled`) | `CircuitBreakerEvent.StateTransition` |
+| `r4c.retry.retries` | `LongCounter` | `{retry}` | `name` | `RetryEvent.Retrying` |
+| `r4c.retry.gave.up` | `LongCounter` | `{call}` | `name`, `reason` (`max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`) | `RetryEvent.GaveUp` |
+| `r4c.hedge.hedged` | `LongCounter` | `{attempt}` | `name`, `reason` (`delay`, `failure`) | `HedgeEvent.Hedged` |
+| `r4c.hedge.won` | `LongCounter` | `{call}` | `name` | `HedgeEvent.Won` |
+| `r4c.hedge.skipped` | `LongCounter` | `{attempt}` | `name`, `reason` (`budget_exhausted`, `rejected`, `aborted`) | `HedgeEvent.Skipped` |
+| `r4c.hedge.failed` | `LongCounter` | `{call}` | `name` | `HedgeEvent.Failed` |
+| `r4c.adaptivelimit.limit.changes` | `LongCounter` | `{window}` | `name` | `AdaptiveLimitEvent.LimitChanged` |
+| `r4c.timeout.timed.out` | `LongCounter` | `{call}` | `name` | `TimeoutEvent.TimedOut` |
+| `r4c.fallback.applied` | `LongCounter` | `{call}` | `name` | `FallbackEvent.Applied` |
+| `r4c.circuitbreaker.state` | `ObservableLongGauge` | ninguna | `name`, `state`: 1 para el estado actual, 0 para los otros cuatro | `state` del snapshot |
+| `r4c.circuitbreaker.failure.rate` | `ObservableDoubleGauge` | `%` | `name` | `failureRate` del snapshot |
+| `r4c.circuitbreaker.slow.call.rate` | `ObservableDoubleGauge` | `%` | `name` | `slowCallRate` del snapshot |
+| `r4c.bulkhead.concurrent.calls` | `ObservableLongGauge` | `{call}` | `name` | `concurrentCalls` del snapshot |
+| `r4c.bulkhead.waiting.calls` | `ObservableLongGauge` | `{call}` | `name` | `waitingCalls` del snapshot |
+| `r4c.bulkhead.max.concurrent` | `ObservableLongGauge` | `{call}` | `name` | `maxConcurrent` del snapshot |
+| `r4c.ratelimiter.available.permits` | `ObservableLongGauge` | `{permit}` | `name` | `availablePermits` del snapshot |
+| `r4c.adaptivelimit.limit` | `ObservableLongGauge` | `{call}` | `name` | `limit` del snapshot |
+| `r4c.adaptivelimit.concurrent.calls` | `ObservableLongGauge` | `{call}` | `name` | `concurrentCalls` del snapshot |
 
 - **Las tasas son porcentajes** (de 0 a 100) con unidad `%`, como en el snapshot y en el módulo de Micrometer, no proporciones (de 0 a 1) con unidad `1`.
 - **Una tasa no tiene punto hasta que significa algo.** El snapshot reporta `-1` hasta que la ventana del breaker contiene `minimumCalls` llamadas (`halfOpenCalls` mientras está semiabierto), mientras el breaker está abierto, forzado abierto o deshabilitado (no hay ventana) y, para `slow.call.rate`, cuando la detección de llamadas lentas está desactivada. Los puntos de OpenTelemetry no pueden ser NaN, así que el módulo no registra ningún punto para esa instancia en esa recolección: la serie tiene un hueco.
@@ -128,15 +128,15 @@ OpenTelemetrySdk openTelemetry = OpenTelemetrySdk.builder()
 Después de que un breaker se abrió, un scrape contiene líneas como estas (de la prueba; abreviado, sin las líneas `# HELP`/`# TYPE` ni la etiqueta `otel_scope_version`):
 
 ```text
-r4c_retry_retries_total{instance="payments",otel_scope_name="dev.resilience4cata"} 3.0
-r4c_retry_gave_up_total{instance="payments",otel_scope_name="dev.resilience4cata",reason="max_attempts"} 1.0
-r4c_retry_gave_up_total{instance="payments",otel_scope_name="dev.resilience4cata",reason="not_retryable"} 1.0
-r4c_calls_rejected_total{instance="payments",kind="circuitbreaker",otel_scope_name="dev.resilience4cata"} 1.0
-r4c_circuitbreaker_transitions_total{from="closed",instance="payments",otel_scope_name="dev.resilience4cata",to="open"} 1.0
-r4c_circuitbreaker_state{instance="payments",otel_scope_name="dev.resilience4cata",state="closed"} 0.0
-r4c_circuitbreaker_state{instance="payments",otel_scope_name="dev.resilience4cata",state="open"} 1.0
-r4c_bulkhead_max_concurrent{instance="payments",otel_scope_name="dev.resilience4cata"} 10.0
-r4c_ratelimiter_available_permits{instance="payments",otel_scope_name="dev.resilience4cata"} 100.0
+r4c_retry_retries_total{name="payments",otel_scope_name="dev.resilience4cata"} 3.0
+r4c_retry_gave_up_total{name="payments",otel_scope_name="dev.resilience4cata",reason="max_attempts"} 1.0
+r4c_retry_gave_up_total{name="payments",otel_scope_name="dev.resilience4cata",reason="not_retryable"} 1.0
+r4c_calls_rejected_total{kind="circuitbreaker",name="payments",otel_scope_name="dev.resilience4cata"} 1.0
+r4c_circuitbreaker_transitions_total{from="closed",name="payments",otel_scope_name="dev.resilience4cata",to="open"} 1.0
+r4c_circuitbreaker_state{name="payments",otel_scope_name="dev.resilience4cata",state="closed"} 0.0
+r4c_circuitbreaker_state{name="payments",otel_scope_name="dev.resilience4cata",state="open"} 1.0
+r4c_bulkhead_max_concurrent{name="payments",otel_scope_name="dev.resilience4cata"} 10.0
+r4c_ratelimiter_available_permits{name="payments",otel_scope_name="dev.resilience4cata"} 100.0
 ```
 
 El exportador convierte los puntos en guiones bajos, agrega `_total` a los contadores y `_percent` a las tasas (`r4c_circuitbreaker_failure_rate_percent`), y descarta las unidades del estilo `{call}`: los **nombres son los mismos que con el registry de Prometheus de Micrometer**, así que los [paneles PromQL](micrometer.md#grafana) de la guía de observabilidad funcionan sin cambios. El exportador agrega las etiquetas `otel_scope_name` y `otel_scope_version` (`setOtelScopeLabelsEnabled(false)` las quita) y una serie `target_info`.
@@ -170,9 +170,9 @@ El módulo de Micrometer (`resilience4cata-micrometer`) implementa la misma espe
 metrics.close(); // at shutdown: removes the gauge callbacks, and the counters stop counting
 ```
 
-`OpenTelemetryMetrics` es `AutoCloseable`. Cerrarlo quita el batch callback de cada registry vinculado; el listener sigue en el registry (los listeners no se pueden quitar) pero ya no registra nada. `close()` es idempotente, y `bindTo` lanza `IllegalStateException` después de cerrar. Cerrar el SDK (`openTelemetry.close()`) sigue siendo tarea tuya.
+`OpenTelemetryMetrics` es `AutoCloseable`. Cerrarlo quita el batch callback de cada registry vinculado; el listener sigue en el registry (los listeners no se pueden quitar) pero ya no registra nada. `close()` es idempotente, y `bindTo` no hace nada después de cerrar, como en Micrometer. Cerrar el SDK (`openTelemetry.close()`) sigue siendo tarea tuya.
 
-Un mismo `OpenTelemetryMetrics` puede vincular varios registries, pero si sus ids de instancia se solapan, los gauges reportan dos veces los mismos conjuntos de atributos: usa uno por registry, o ids distintos.
+Vincular otra vez el mismo registry no hace nada. Un mismo `OpenTelemetryMetrics` puede vincular varios registries, pero si sus ids de instancia se solapan, los gauges reportan dos veces los mismos conjuntos de atributos: usa uno por registry, o ids distintos.
 
 ## Tracing :id=tracing
 

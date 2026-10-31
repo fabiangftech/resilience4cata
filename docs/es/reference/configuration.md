@@ -52,7 +52,7 @@ También se validan las combinaciones: `maxDelay` no puede ser menor que `delay`
 
 ## Fuentes y precedencia :id=precedence
 
-`ResilienceConfig.load()` lee, de menor a mayor: el recurso de classpath `resilience4cata.properties` (opcional), las variables de entorno y las propiedades del sistema. Con `ResilienceConfig.builder()` eliges las fuentes; para una misma clave el orden es recursos de classpath < archivos y `Properties` < variables de entorno < propiedades del sistema, y entre fuentes del mismo tipo gana la última agregada. Una clave dentro de un perfil activo gana a la misma clave sin perfil, vengan de donde vengan.
+`ResilienceConfig.load()` lee, de menor a mayor: el recurso de classpath `resilience4cata.properties` (opcional), las variables de entorno y las propiedades del sistema. Con `ResilienceConfig.builder()` eliges las fuentes; para una misma clave el orden es recursos de classpath < archivos y `Properties` < variables de entorno < propiedades del sistema, y entre fuentes del mismo tipo gana la última agregada. Dentro de una misma fuente, una clave de un perfil activo gana a la misma clave sin perfil; una fuente más fuerte gana incluso sobre una clave de perfil de una más débil.
 
 Después los valores se combinan, de menor a mayor:
 

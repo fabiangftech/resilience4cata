@@ -28,11 +28,11 @@ class ObservabilityTest {
             assertThat(context.containsBean(MicrometerMetrics.class)).isTrue();
             MeterRegistry meters = context.getBean(MeterRegistry.class);
             Shipping shipping = context.getBean(Shipping.class);
-            assertThat(meters.find("r4c.circuitbreaker.state").tag("instance", "shipping-quotes").tag("state", "closed")
+            assertThat(meters.find("r4c.circuitbreaker.state").tag("name", "shipping-quotes").tag("state", "closed")
                     .gauge().value()).as("gauge bound when the instance is created").isEqualTo(1.0);
 
             failTwice(context);
-            assertThat(meters.find("r4c.circuitbreaker.transitions").tag("instance", "shipping-quotes").tag("to", "open")
+            assertThat(meters.find("r4c.circuitbreaker.transitions").tag("name", "shipping-quotes").tag("to", "open")
                     .counter().count()).as("counter fed by the registry's events").isEqualTo(1.0);
             assertThat(shipping).isNotNull();
         }

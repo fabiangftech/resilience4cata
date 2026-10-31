@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 /** The code of {@code docs/en/guides/opentelemetry.md}, run against generated code and a real SDK. */
 class OpenTelemetryGuideTest {
 
-    private static final AttributeKey<String> INSTANCE = AttributeKey.stringKey("instance");
+    private static final AttributeKey<String> INSTANCE = AttributeKey.stringKey("name");
 
     private final AtomicBoolean down = new AtomicBoolean(true);
     private final PaymentGateway delegate = order -> {
@@ -59,11 +59,11 @@ class OpenTelemetryGuideTest {
 
             Collection<MetricData> data = reader.collectAllMetrics();
             assertThat(sum(data, "r4c.retry.retries", Attributes.of(INSTANCE, "payments"))).isEqualTo(3);
-            assertThat(sum(data, "r4c.retry.gave.up", Attributes.builder().put("instance", "payments")
+            assertThat(sum(data, "r4c.retry.gave.up", Attributes.builder().put("name", "payments")
                     .put("reason", "max_attempts").build())).isEqualTo(1);
-            assertThat(sum(data, "r4c.calls.rejected", Attributes.builder().put("instance", "payments")
+            assertThat(sum(data, "r4c.calls.rejected", Attributes.builder().put("name", "payments")
                     .put("kind", "circuitbreaker").build())).isEqualTo(2); // the retry's 2nd call and o-2
-            assertThat(sum(data, "r4c.circuitbreaker.transitions", Attributes.builder().put("instance", "payments")
+            assertThat(sum(data, "r4c.circuitbreaker.transitions", Attributes.builder().put("name", "payments")
                     .put("from", "closed").put("to", "open").build())).isEqualTo(1);
             assertThat(data).extracting(MetricData::getName).contains("r4c.circuitbreaker.state",
                     "r4c.bulkhead.concurrent.calls", "r4c.bulkhead.waiting.calls", "r4c.bulkhead.max.concurrent",
@@ -98,14 +98,14 @@ class OpenTelemetryGuideTest {
             String scrape = scrape(port);
 
             assertThat(scrape).contains(
-                    "r4c_retry_retries_total{instance=\"payments\",otel_scope_name=\"dev.resilience4cata\"",
-                    "r4c_retry_gave_up_total{instance=\"payments\",otel_scope_name=\"dev.resilience4cata\"",
-                    "r4c_calls_rejected_total{instance=\"payments\",kind=\"circuitbreaker\"",
-                    "r4c_circuitbreaker_transitions_total{from=\"closed\",instance=\"payments\"",
-                    "r4c_circuitbreaker_state{instance=\"payments\"",
-                    "r4c_bulkhead_max_concurrent{instance=\"payments\"",
-                    "r4c_ratelimiter_available_permits{instance=\"payments\"");
-            assertThat(scrape).containsPattern("r4c_circuitbreaker_state\\{instance=\"payments\",[^}]*state=\"open\"} 1");
+                    "r4c_retry_retries_total{name=\"payments\",otel_scope_name=\"dev.resilience4cata\"",
+                    "r4c_retry_gave_up_total{name=\"payments\",otel_scope_name=\"dev.resilience4cata\"",
+                    "r4c_calls_rejected_total{kind=\"circuitbreaker\",name=\"payments\"",
+                    "r4c_circuitbreaker_transitions_total{from=\"closed\",name=\"payments\"",
+                    "r4c_circuitbreaker_state{name=\"payments\"",
+                    "r4c_bulkhead_max_concurrent{name=\"payments\"",
+                    "r4c_ratelimiter_available_permits{name=\"payments\"");
+            assertThat(scrape).containsPattern("r4c_circuitbreaker_state\\{name=\"payments\",[^}]*state=\"open\"} 1");
             assertThat(scrape).doesNotContain("r4c_circuitbreaker_failure_rate"); // open: no window, no point
 
             registry.circuitBreaker("payments").reset();
@@ -113,7 +113,7 @@ class OpenTelemetryGuideTest {
             for (int i = 0; i < 4; i++) {
                 payments.charge("o-" + i);
             }
-            assertThat(scrape(port)).containsPattern("r4c_circuitbreaker_failure_rate_percent\\{instance=\"payments\",[^}]*} 0");
+            assertThat(scrape(port)).containsPattern("r4c_circuitbreaker_failure_rate_percent\\{name=\"payments\",[^}]*} 0");
         }
     }
 
