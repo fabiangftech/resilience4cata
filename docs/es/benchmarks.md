@@ -481,3 +481,27 @@ Un stage que ya está completo cuando la llamada vuelve (un valor en caché, `Mo
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos en tres forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) y falla si el fork que menos asigna llega a su presupuesto + 1 B/op, o si un benchmark falta en los resultados. Tres forks porque C2 decide una vez por JVM si elimina un objeto (scalar replacement): un fork mantiene los mismos bytes en todas sus iteraciones, y el siguiente puede asignar uno o dos objetos más. En el runner de CI (x86), 21 ejecuciones del gate con un fork midieron `FluxBenchmark.resilience4cataPipelineStack` en 696, 728, 752 y 776 B y `resilience4cataTimeout` entre 384 y 440 B, así que el gate fallaba de vez en cuando en cambios que no asignan nada; un calentamiento más largo llevó todos los forks al valor más alto (Apple M1). Una allocation nueva en el código aparece en todos los forks, así que el fork más bajo la sigue detectando. La tabla muestra los bytes de cada fork. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.
 
 Presupuestos: 0 B/op en todo camino sincrónico de éxito y de rechazo (retry, circuit breaker por cantidad/tiempo/abierto, rate limiter libre/agotado, bulkhead libre/lleno/con espera, timeout, classifiers, código generado y `Pipeline`, incluidos `run` y una lambda que captura, subclase y wrapper). Los caminos async asignan sus futures: 48 B para el retry; desde 0.11.0, 24 B (una copia completada) para el circuit breaker, el bulkhead, el rate limiter, el adaptive limit y el timeout sobre un stage ya completado ([arriba](#flux-and-done-stages)), y 152 B para el stack de cuatro políticas (200 B antes) y 200 B para un timeout sobre un stage pendiente (medido 191–192 B; el trabajo compartido del thread del timer varía unos pocos bytes, y 8 B de margen siguen siendo menos que un objeto por llamada). Medido en local con JDK 21 (Apple M1), 2026-10-24. `CircuitBreakerBenchmark.*Open` (breaker forzado a abierto, todas las llamadas rechazadas) se agregó para el gate; ahí Resilience4j usa `writableStackTraceEnabled(false)`, para que la comparación sea justa.
+
+## Prueba de carga larga
+
+Una fuga de unos pocos bytes por llamada, o de un objeto por cada hilo que alguna vez hizo una llamada, no se ve en una prueba de segundos. `./gradlew :examples:soakTest -Psoak.duration=2h` (por defecto 2 minutos) corre todas las políticas, sincrónicas, async, `Mono` y `Flux`, más un `Pipeline`, con relojes reales. La carga viene de hilos de plataforma y de hilos virtuales nuevos. Los backends responden, fallan, responden tarde o no responden nunca, y un segundo de cada cuatro es una tormenta de fallas, así que los breakers se abren y se cierran todo el tiempo. Algunos llamadores cancelan. El heap está fijo en 512 MB, y unas 60 veces durante la corrida la prueba mide:
+
+- el heap después de un GC completo;
+- los hilos de la librería;
+- los hilos para los que el watchdog de timeouts guarda scopes;
+- las tareas de timers;
+- los meters y las instancias del registry.
+
+Falla si:
+
+- el heap más bajo después de GC en el último cuarto de la corrida queda más de 16 MB (`-Psoak.heapBudgetMb`) sobre el más bajo entre el 20% y el 45%;
+- después del calentamiento aparece un hilo de la librería o una instancia del registry, o hay un meter que no pertenece a ninguna instancia;
+- cuando termina la carga queda una llamada, una tarea de timer, un slot de bulkhead o de adaptive limit, o el scope del watchdog de un hilo muerto;
+- hay una falla inesperada o Reactor descarta un error. Un caso se cuenta pero se permite: que el propio operador `timeout` del llamador descarte un error que compitió con su cancelación, algo que las reglas de Reactive Streams permiten.
+
+El informe queda en `examples/build/soak/report.md`, con un volcado de heap si el heap creció. El workflow `soak` corre la prueba cada semana durante 2 horas en JDK 21 y 25, o a mano con la duración que se elija, y copia el informe al resumen del job.
+
+La prueba se verificó por mutación, en local con JDK 21 (Apple M1, 8 CPUs), el 2026-10-31:
+
+- Con un watchdog que nunca olvida los hilos muertos, la prueba falló al minuto: falló el control del watchdog (89.576 hilos registrados) y también el del heap (22,7 → 46,5 MB).
+- Guardando todas las tareas async con demora, el control del heap falló a los dos minutos (50,8 → 158,0 MB).

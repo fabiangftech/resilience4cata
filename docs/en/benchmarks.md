@@ -481,3 +481,27 @@ A stage that is already complete when the call returns (a cached value, `Mono.ju
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings in three forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) and fails if the fork that allocates least reaches its budget + 1 B/op, or if a benchmark is missing from the results. Three forks because C2 decides once per JVM whether it scalar-replaces an object: a fork keeps the same bytes in every iteration, and the next one can allocate an object or two more. On the CI runner (x86), 21 runs of the one-fork gate measured `FluxBenchmark.resilience4cataPipelineStack` at 696, 728, 752 and 776 B and `resilience4cataTimeout` at 384 to 440 B, so the gate failed now and then on changes that allocate nothing; a longer warm-up put every fork on the higher value instead (Apple M1). An allocation the code starts making shows in every fork, so the lowest fork still catches it. The table shows every fork's bytes. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.
 
 Budgets: 0 B/op for every sync success and rejection path (retry, circuit breaker count/time/open, rate limiter free/exhausted, bulkhead free/full/waiting, timeout, classifiers, generated code and `Pipeline` including `run` and a capturing lambda, subclass and wrapper). Async paths allocate their futures: 48 B for the retry; since 0.11.0, 24 B (a completed copy) for the circuit breaker, bulkhead, rate limiter, adaptive limit and timeout on a completed stage ([above](#flux-and-done-stages)), and 152 B for the four-policy stack (200 B before); and 200 B for a timeout on a pending stage (measured 191–192 B; the timer thread's shared work varies by a few bytes, and 8 B of slack is still less than one object per call). Measured locally on JDK 21 (Apple M1), 2026-10-24. `CircuitBreakerBenchmark.*Open` (breaker forced open, every call rejected) was added for the gate; Resilience4j gets `writableStackTraceEnabled(false)` there, for fairness.
+
+## Soak test
+
+A leak of a few bytes per call, or of one object per thread that ever made a call, does not show in a test that runs for seconds. `./gradlew :examples:soakTest -Psoak.duration=2h` (default 2 minutes) runs every policy, sync, async, `Mono` and `Flux`, plus a `Pipeline`, on real clocks. The load comes from platform threads and from new virtual threads. The backends answer, fail, answer too late or never answer, and one second in four is a storm of failures, so the breakers open and close all along. Some callers cancel. The heap is fixed at 512 MB, and about 60 times during the run the test samples:
+
+- the heap after a full GC;
+- the library's threads;
+- the threads the timeout watchdog keeps scopes for;
+- the timer tasks;
+- the meters and the registry instances.
+
+It fails if:
+
+- the lowest heap after GC in the last quarter of the run is more than 16 MB (`-Psoak.heapBudgetMb`) above the lowest one between 20% and 45% of it;
+- a library thread or a registry instance appears after the warm-up, or a meter belongs to no instance;
+- once the load stops, a call, a timer task, a bulkhead or adaptive-limit slot, or the watchdog scope of a dead thread is left;
+- a failure is unexpected, or Reactor drops an error. One case is counted but allowed: the caller's own `timeout` operator dropping an error that raced its cancel, which the Reactive Streams rules allow.
+
+The report goes to `examples/build/soak/report.md`, with a heap dump when the heap grew. The `soak` workflow runs the test weekly for 2 hours on JDK 21 and 25, or by hand with a chosen duration, and copies the report into the job summary.
+
+The test was checked by mutation, locally on JDK 21 (Apple M1, 8 CPUs), 2026-10-31:
+
+- With a watchdog that never forgets dead threads, the test failed after one minute: the watchdog check failed (89,576 threads registered), and so did the heap check (22.7 → 46.5 MB).
+- When every delayed async task was kept, the heap check failed after two minutes (50.8 → 158.0 MB).

@@ -71,3 +71,37 @@ def blockHoundTest = tasks.register('blockHoundTest', Test) {
 tasks.named('check') {
     dependsOn blockHoundTest
 }
+
+// SoakTest: every policy under load for a long time, looking for what grows (heap, threads, timers, meters).
+// Not in `check`: ./gradlew :examples:soakTest -Psoak.duration=2h (default 2m; CI: soak.yml, weekly).
+tasks.named('test') {
+    exclude '**/soak/**'
+}
+
+def soakDuration = providers.gradleProperty('soak.duration').orElse('2m')
+def soakHeapBudget = providers.gradleProperty('soak.heapBudgetMb').orElse('16')
+
+tasks.register('soakTest', Test) {
+    description = 'Runs every policy under load for -Psoak.duration (default 2m) and checks that nothing grows.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    include '**/soak/SoakTest.class'
+    // A fixed heap: a leak ends in an OutOfMemoryError, at the latest, and the numbers compare between runs.
+    minHeapSize = '512m'
+    maxHeapSize = '512m'
+    def reportDir = layout.buildDirectory.dir('soak')
+    inputs.property('duration', soakDuration)
+    inputs.property('heapBudgetMb', soakHeapBudget)
+    outputs.dir(reportDir).withPropertyName('report')
+    // every run is a measurement: never up to date, never from the cache
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    systemProperty 'test.soak.duration', soakDuration.get()
+    systemProperty 'test.soak.heapBudgetMb', soakHeapBudget.get()
+    systemProperty 'test.soak.reportDir', reportDir.get().asFile.absolutePath
+    testLogging {
+        showStandardStreams = true
+    }
+}
