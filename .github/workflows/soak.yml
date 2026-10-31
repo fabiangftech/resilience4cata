@@ -1,0 +1,76 @@
+# A long run of every policy under load (examples' SoakTest), looking for what grows: the heap after a full GC, the
+# library's threads, the timeout watchdog's per-thread scopes, timer queues, meters and registry instances.
+# Locally: ./gradlew :examples:soakTest -Psoak.duration=2h   (default 2m)
+#
+# Weekly and by hand, not on PRs: a leak of a few bytes per call needs hours to show. The report (checks, outcomes,
+# samples) goes to the job summary, and with a heap dump when the heap grew to the artifact.
+name: soak
+
+on:
+  schedule:
+    - cron: '23 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'How long the load runs (90s, 30m, 2h, max 5h)'
+        default: '2h'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  soak:
+    name: soak (JDK ${{ matrix.java }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [21, 25]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # JDK 21 is the compile toolchain; the matrix JDK, listed last, runs the test (-PtestJdk).
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            ${{ matrix.java == 21 && '25' || '21' }}
+            ${{ matrix.java }}
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Soak test
+        env:
+          DURATION: ${{ inputs.duration || '2h' }}
+          JAVA: ${{ matrix.java }}
+        run: >-
+          ./gradlew :examples:soakTest -Psoak.duration="$DURATION" -PtestJdk="$JAVA"
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+      - name: Report
+        if: always()
+        run: |
+          if [ -f examples/build/soak/report.md ]; then
+            cat examples/build/soak/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: soak-jdk${{ matrix.java }}
+          path: |
+            examples/build/soak/
+            examples/build/reports/tests/soakTest/
+          if-no-files-found: ignore
+          retention-days: 14
