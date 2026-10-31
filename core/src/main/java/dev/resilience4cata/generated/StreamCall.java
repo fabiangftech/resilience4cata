@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
  *
  * @param <T> the element type
  */
+@dev.resilience4cata.annotation.Internal
 public interface StreamCall<T> {
 
     /**

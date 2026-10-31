@@ -25,7 +25,8 @@ public final class BulkheadStress {
     private BulkheadStress() {}
 
     static BulkheadPolicy bulkhead(int maxConcurrent) {
-        return new BulkheadPolicy("stress", BulkheadConfig.builder().maxConcurrent(maxConcurrent).build());
+        return new BulkheadPolicy("stress", BulkheadConfig.builder().maxConcurrent(maxConcurrent).build(),
+                dev.resilience4cata.generated.PolicyEnvironment.DEFAULT);
     }
 
     static int enter(BulkheadPolicy bulkhead) {

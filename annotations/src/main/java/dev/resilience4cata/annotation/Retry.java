@@ -105,6 +105,9 @@ public @interface Retry {
      */
     String budgetWindow() default "";
 
-    /** Tri-state switch: {@code ""}, {@code "true"} or {@code "false"}. */
-    String enabled() default "";
+    /**
+     * Whether the policy acts at all; {@code false} lets every call through. Not set means inherit (the built-in
+     * default is {@code true}).
+     */
+    boolean enabled() default true;
 }

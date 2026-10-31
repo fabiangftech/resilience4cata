@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
  * schedules through that ticker, and has its own watchdog driven by the ticker's advances: synchronous
  * timeouts fire as soon as the ticker reports a time past their deadline, with no slack.
  */
+@dev.resilience4cata.annotation.Internal
 public final class PolicyEnvironment {
 
     private static final LongSupplier SYSTEM_TICKER = System::nanoTime;

@@ -171,14 +171,12 @@ class HedgeProcessorTest {
                     CompletableFuture<String> soon();
                     @Hedge(budgetPercent = -1.5, budgetMinHedgesPerSecond = -3, budgetWindow = "100ms")
                     CompletableFuture<String> budget();
-                    @Hedge(enabled = "yes")
-                    CompletableFuture<String> enabled();
                 }
                 """);
 
         assertThat(result.success()).isFalse();
         assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-ATR-008", "R4C-ATR-008", "R4C-ATR-001",
-                "R4C-ATR-007", "R4C-ATR-007", "R4C-ATR-007", "R4C-ATR-006");
+                "R4C-ATR-007", "R4C-ATR-007", "R4C-ATR-007");
         assertThat(result.errors())
                 .anySatisfy(e -> assertThat(e).contains("@Hedge.maxAttempts must be between 2 and 10, was 1"))
                 .anySatisfy(e -> assertThat(e).contains("@Hedge.maxAttempts must be between 2 and 10, was 11"))

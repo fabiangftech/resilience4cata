@@ -54,6 +54,8 @@ dependencies {
     api libs.micronaut.inject.minimum
     // Optional integrations, each behind @Requires(classes = ...): the application brings them if it wants them.
     compileOnly project(':micrometer')
+    // @Internal only (CLASS retention), read by the API compatibility check.
+    compileOnly project(':annotations')
     compileOnly libs.micronaut.management.minimum
     // Micronaut's bean definitions for this module's beans.
     annotationProcessor libs.micronaut.inject.java.minimum

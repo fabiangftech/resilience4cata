@@ -73,7 +73,7 @@ flowchart TD
 - **Rechazo.** Con `maxWait = "0"` (por defecto), una llamada que encuentra el bulkhead lleno falla enseguida con `dev.resilience4cata.BulkheadFullException` (una `RuntimeException` con `id()`; una por bulkhead, sin stack trace). El método no se llama.
 - **Espera, sync.** Con `maxWait` > 0, el thread que llama se bloquea hasta que haya un slot libre o pase `maxWait`. En un virtual thread, bloquearse es barato y no fija (pin) un carrier. Si el thread que espera se interrumpe, la llamada se rechaza y el flag de interrupción se activa de nuevo. La espera no es por orden de llegada: una llamada nueva puede tomar un slot liberado antes que una que espera.
 - **Es un bulkhead de semáforo**: la llamada corre en el thread de quien llama. No hay bulkhead de pool de threads; con virtual threads rara vez hace falta.
-- **Desactivado** (`enabled = "false"`): todas las llamadas pasan.
+- **Desactivado** (`enabled = false`): todas las llamadas pasan.
 
 ## Atributos
 
@@ -84,7 +84,7 @@ flowchart TD
 | `name` | `String` | un bulkhead por método | solo anotación | Id de la instancia; los métodos con el mismo `name` comparten un bulkhead y sus slots. |
 | `config` | `String` | `default` | solo anotación | Configuración con nombre de la que partir. |
 | `locked` | `boolean` | `false` | solo anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
-| `enabled` | `String` | `"true"` | `defaults.bulkhead.enabled` | `""` (heredar), `"true"` o `"false"`. |
+| `enabled` | `boolean` | `true` | `defaults.bulkhead.enabled` | `false` deja pasar todas las llamadas; sin escribirlo, se hereda. |
 
 Los valores por defecto son los de Resilience4j. Las claves también existen bajo `configs.<name>.` e `instances.<id>.`; ver [Configuración](../guides/configuration.md).
 

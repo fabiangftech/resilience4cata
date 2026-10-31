@@ -74,7 +74,7 @@ public final class TimeoutPolicy {
      * @param id the policy's id, used in the exception message
      * @param config the configuration
      */
-    public TimeoutPolicy(String id, TimeoutConfig config) {
+    TimeoutPolicy(String id, TimeoutConfig config) {
         this(id, config, config.enabled() ? Watchdog.shared() : null);
     }
 
@@ -85,6 +85,7 @@ public final class TimeoutPolicy {
      * @param config the configuration
      * @param environment the watchdog and timer to use
      */
+    @dev.resilience4cata.annotation.Internal
     public TimeoutPolicy(String id, TimeoutConfig config, PolicyEnvironment environment) {
         this(id, config, config.enabled() ? environment.watchdog() : null,
                 config.enabled() ? environment.timeoutTimer() : null, config.enabled() ? environment.manual : null,
@@ -123,6 +124,7 @@ public final class TimeoutPolicy {
     }
 
     /** Returns the configuration this policy was created from. */
+    @dev.resilience4cata.annotation.Internal
     public TimeoutConfig config() {
         return config;
     }

@@ -96,6 +96,7 @@ public final class HedgePolicy {
      * @param config the configuration
      * @param environment the clock and timers to use, and the listeners
      */
+    @dev.resilience4cata.annotation.Internal
     public HedgePolicy(String id, HedgeConfig config, PolicyEnvironment environment) {
         this(id, config, environment, environment.timeoutTimer());
     }
@@ -120,11 +121,13 @@ public final class HedgePolicy {
     }
 
     /** Returns the configuration this policy was created from. */
+    @dev.resilience4cata.annotation.Internal
     public HedgeConfig config() {
         return config;
     }
 
     /** The budget's current window, for snapshots; {@code null} without a budget. Off the call path. */
+    @dev.resilience4cata.annotation.Internal
     public HedgeSnapshot.@Nullable Budget budgetSnapshot() {
         RetryBudget hedgeBudget = this.budget;
         return hedgeBudget != null ? hedgeBudget.hedgeSnapshot(ticker.getAsLong()) : null;

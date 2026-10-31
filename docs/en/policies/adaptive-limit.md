@@ -77,7 +77,7 @@ flowchart TD
 - **Samples.** Each call that returns is a *sample*: its latency, from taking the slot to the end of the call. A failure listed in `dropOn` is a sample too, marked as a *drop*: the dependency is overloaded. Any other failure (a 404, a validation error) frees the slot and says nothing about load, so it is not a sample.
 - **Windows.** Samples are grouped in windows of at least `window` (1 s) and at least `minWindowSamples` calls (10). When a call completes after the window is over and the window has enough samples, that call's thread recomputes the limit from the window's average latency, the most calls it saw in flight, and whether any call was dropped. A window that is over with too few calls is extended by one more `window`, and keeps its samples: they count when it ends. So with little traffic the limit moves slowly (and is checked once per window, not on every call), and with none it does not move.
 - **Lower limit, calls in flight.** When the limit goes down below the calls already running, nothing is interrupted: new calls are rejected until enough of them end.
-- **Disabled** (`enabled = "false"`): every call passes and nothing is measured.
+- **Disabled** (`enabled = false`): every call passes and nothing is measured.
 
 ## The algorithms
 
@@ -108,7 +108,7 @@ String cancel(String order);
 | `name` | `String` | one limit per method | annotation only | Instance id; methods with the same `name` share one limit and its slots. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
 | `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
-| `enabled` | `String` | `"true"` | `defaults.adaptiveLimit.enabled` | `""` (inherit), `"true"` or `"false"`. |
+| `enabled` | `boolean` | `true` | `defaults.adaptiveLimit.enabled` | `false` lets every call through; not set inherits. |
 
 <!-- snippet: adaptive-limit-tuned -->
 ```java

@@ -32,7 +32,7 @@ class AdaptiveLimitProcessorTest {
                             window = "500ms", dropOn = java.io.IOException.class, ignoreOn = java.io.FileNotFoundException.class)
                     @Timeout("2s") @Bulkhead(maxConcurrent = 60)
                     String order(String id) throws java.io.IOException;
-                    @AdaptiveLimit(name = "shared", enabled = "false")
+                    @AdaptiveLimit(name = "shared", enabled = false)
                     void cancel(String id);
                 }
                 """);

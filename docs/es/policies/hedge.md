@@ -77,7 +77,7 @@ sequenceDiagram
 - **Perdedores.** Cuando la llamada tiene su resultado, el stage de cada otro intento se completa con `HedgeCancelledException`, una `CancellationException` (así que informa `isCancelled()`), una instancia nueva por cada intento perdedor, sin stack trace (`handle`/`whenComplete` sobre el stage la ven tal cual; desde JDK 23, `join()` lanza una `CancellationException` nueva con ella como causa). Las políticas dentro del intento la toman como una cancelación: un circuit breaker no registra nada (devuelve un permiso half-open), un bulkhead libera el slot, un timeout cancela su plazo, y un `CompletableFuture` devuelto por tu método queda cancelado. Un resultado tardío de un perdedor se descarta: no completa nada ni publica nada.
 - **Cancelar** el future que recibiste cancela todos los intentos en vuelo y la espera pendiente ([cancelación](../guides/async.md#cancelación)).
 - **Camino rápido.** Un primer intento cuyo stage ya está completo con éxito cuando tu método retorna (un acierto de caché) no necesita timer ni hedge.
-- **Desactivado** (`enabled = "false"`): un intento, como si no hubiera anotación (el fallback se ejecuta igual si falla).
+- **Desactivado** (`enabled = false`): un intento, como si no hubiera anotación (el fallback se ejecuta igual si falla).
 
 ### El presupuesto de hedge
 
@@ -101,7 +101,7 @@ Está **activo por defecto** (10 % de las llamadas más 1 hedge por segundo, en 
 | `name` | `String` | una instancia por método | solo en la anotación | Id de instancia; los métodos con el mismo `name` comparten un hedge, y con él su presupuesto. |
 | `config` | `String` | `default` | solo en la anotación | Configuración con nombre de la que partir. |
 | `locked` | `boolean` | `false` | solo en la anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
-| `enabled` | `String` | `"true"` | `defaults.hedge.enabled` | `""` (heredar), `"true"` o `"false"`. |
+| `enabled` | `boolean` | `true` | `defaults.hedge.enabled` | `false` deja pasar todas las llamadas; sin escribirlo, se hereda. |
 
 Cada clave existe también bajo `configs.<name>.hedge.…` e `instances.<id>.hedge.…`; ver [Configuración](../guides/configuration.md). Todavía no hay clasificador ni `maxDuration`: el `@Timeout` por intento y `maxAttempts × delay` acotan una llamada.
 

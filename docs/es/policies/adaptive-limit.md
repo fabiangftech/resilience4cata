@@ -77,7 +77,7 @@ flowchart TD
 - **Muestras.** Cada llamada que retorna es una *muestra*: su latencia, desde que toma el lugar hasta que termina. Un fallo de `dropOn` también es una muestra, marcada como *descarte*: la dependencia está sobrecargada. Cualquier otro fallo (un 404, un error de validación) libera el lugar y no dice nada de la carga, así que no es una muestra.
 - **Ventanas.** Las muestras se agrupan en ventanas de al menos `window` (1 s) y al menos `minWindowSamples` llamadas (10). Cuando una llamada termina después de que la ventana terminó y la ventana tiene suficientes muestras, el hilo de esa llamada recalcula el límite a partir de la latencia promedio de la ventana, la mayor cantidad de llamadas en vuelo que vio y si hubo algún descarte. Una ventana que terminó con pocas llamadas se extiende una `window` más, y conserva sus muestras: cuentan cuando termine. Así, con poco tráfico el límite se mueve despacio (y se revisa una vez por ventana, no en cada llamada), y sin tráfico no se mueve.
 - **Límite más bajo, llamadas en vuelo.** Cuando el límite baja por debajo de las llamadas que ya corren, no se interrumpe nada: las llamadas nuevas se rechazan hasta que terminen suficientes.
-- **Desactivado** (`enabled = "false"`): pasan todas las llamadas y no se mide nada.
+- **Desactivado** (`enabled = false`): pasan todas las llamadas y no se mide nada.
 
 ## Los algoritmos
 
@@ -108,7 +108,7 @@ String cancel(String order);
 | `name` | `String` | un límite por método | solo en la anotación | Id de instancia; los métodos con el mismo `name` comparten un límite y sus lugares. |
 | `config` | `String` | `default` | solo en la anotación | Configuración con nombre de la que partir. |
 | `locked` | `boolean` | `false` | solo en la anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
-| `enabled` | `String` | `"true"` | `defaults.adaptiveLimit.enabled` | `""` (heredar), `"true"` o `"false"`. |
+| `enabled` | `boolean` | `true` | `defaults.adaptiveLimit.enabled` | `false` deja pasar todas las llamadas; sin escribirlo, se hereda. |
 
 <!-- snippet: adaptive-limit-tuned -->
 ```java

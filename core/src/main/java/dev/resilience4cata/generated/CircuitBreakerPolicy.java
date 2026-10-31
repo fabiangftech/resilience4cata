@@ -103,7 +103,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @param id the breaker's id, used in the rejection message
      * @param config the configuration
      */
-    public CircuitBreakerPolicy(String id, CircuitBreakerConfig config) {
+    CircuitBreakerPolicy(String id, CircuitBreakerConfig config) {
         this(id, config, PolicyEnvironment.DEFAULT);
     }
 
@@ -119,6 +119,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @param environment the clock to use
      */
     @SuppressWarnings("java:S2637") // phase is set, last: initialPhase reads the fields set before it
+    @dev.resilience4cata.annotation.Internal
     public CircuitBreakerPolicy(String id, CircuitBreakerConfig config, PolicyEnvironment environment) {
         this.id = id;
         this.config = config;

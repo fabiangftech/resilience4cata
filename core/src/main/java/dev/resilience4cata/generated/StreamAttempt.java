@@ -7,6 +7,7 @@ import java.util.concurrent.CompletionStage;
  * to, and its subscription to the source. Created by {@link StreamCall#attempt} for that attempt only, so a
  * layer that starts late (a bulkhead hand-off after a timeout) subscribes as the attempt it belonged to.
  */
+@dev.resilience4cata.annotation.Internal
 public interface StreamAttempt extends Elements {
 
     /**

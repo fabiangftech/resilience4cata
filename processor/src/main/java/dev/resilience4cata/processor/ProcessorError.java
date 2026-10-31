@@ -23,7 +23,8 @@ enum ProcessorError {
     COUNT_BELOW_ONE("R4C-ATR-003", "count must be at least 1"),
     INVALID_MULTIPLIER("R4C-ATR-004", "multiplier must be a finite number >= 1"),
     INVALID_PERCENTAGE("R4C-ATR-005", "rate threshold must be a percentage > 0 and <= 100"),
-    INVALID_ENABLED("R4C-ATR-006", "enabled must be \"\", \"true\" or \"false\""),
+    /** Retired: {@code enabled} is a {@code boolean} since 0.12.0, so the compiler checks it. */
+    INVALID_ENABLED("R4C-ATR-006", "retired: enabled was a string"),
     INVALID_BUDGET("R4C-ATR-007", "retry or hedge budget value out of range"),
     HEDGE_ATTEMPTS("R4C-ATR-008", "hedge maxAttempts must be between 2 and 10"),
     ADAPTIVE_LIMIT_RANGE("R4C-ATR-009", "adaptive limit bounds out of order, or window outside 10ms to 1h"),

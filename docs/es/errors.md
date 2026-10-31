@@ -257,7 +257,7 @@ public interface PriceClient {
 }
 ```
 
-**Corrección:** pon una duración positiva. Para desactivar la política, usa `enabled = "false"` (o la
+**Corrección:** pon una duración positiva. Para desactivar la política, usa `enabled = false` (o la
 configuración).
 
 ```java
@@ -366,33 +366,8 @@ public interface PriceClient {
 
 ### R4C-ATR-006
 
-**Causa:** `enabled` no es `""` (sin definir), `"true"` ni `"false"`.
-
-**Incorrecto:**
-
-```java
-package com.acme;
-
-import dev.resilience4cata.annotation.Retry;
-
-public interface PriceClient {
-    @Retry(enabled = "yes")
-    String price(String sku);
-}
-```
-
-**Corrección:** usa `"true"` o `"false"`, u omítelo.
-
-```java
-package com.acme;
-
-import dev.resilience4cata.annotation.Retry;
-
-public interface PriceClient {
-    @Retry(enabled = "false")
-    String price(String sku);
-}
-```
+**Causa:** retirado; ya no se reporta. `enabled` era un string (`""`, `"true"` o `"false"`); desde 0.12.0 es un
+`boolean` (`enabled = false`), que revisa el compilador.
 
 ### R4C-ATR-007
 

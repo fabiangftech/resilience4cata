@@ -95,7 +95,7 @@ flowchart TD
 - **Time budget.** With `maxDuration`, the retry gives up instead of waiting when the next attempt would start after the budget (time since the first attempt + the next delay > `maxDuration`). It never cuts an attempt short: for that, add [`@Timeout`](timeout.md), which applies per attempt.
 - **When it gives up**, the last failure is rethrown as is: checked exceptions keep their type, and the stack trace is the one of the last attempt. With `@Fallback` on the same method, the fallback runs instead, once, with the number of attempts made.
 - **Interrupts.** A sync retry sleeps on the caller's thread. If that thread is interrupted, the retry stops at once and rethrows the last failure, with the interrupt flag set again. A failure that is an `InterruptedException` is not retried either.
-- **Disabled** (`enabled = "false"`, or `defaults.retry.enabled=false`): one attempt, as if there were no annotation.
+- **Disabled** (`enabled = false`, or `defaults.retry.enabled=false`): one attempt, as if there were no annotation.
 
 ## Attributes
 
@@ -118,7 +118,7 @@ flowchart TD
 | `name` | `String` | one instance per method | annotation only | Instance id; methods with the same `name` share one retry policy. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
 | `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
-| `enabled` | `String` | `"true"` | `defaults.retry.enabled` | `""` (inherit), `"true"` or `"false"`. |
+| `enabled` | `boolean` | `true` | `defaults.retry.enabled` | `false` lets every call through; not set inherits. |
 
 - Durations are strings: `"250ms"`, `"2s"`, `"1m"`, `"PT2S"`, or `"0"`. They are checked when you compile.
 - An attribute you do not set keeps the value of the named config, then of the defaults. Every key also exists under `configs.<name>.retry.…` and `instances.<id>.retry.…`; see [Configuration](../guides/configuration.md).

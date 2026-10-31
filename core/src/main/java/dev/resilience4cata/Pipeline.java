@@ -589,6 +589,7 @@ public final class Pipeline<T> {
      *     element and nothing recovers it)
      * @throws IllegalStateException if the pipeline has a hedge or a classifier, which streams do not support
      */
+    @dev.resilience4cata.annotation.Internal
     public CompletableFuture<Void> executeStreamAsync(StreamCall<T> call) {
         Objects.requireNonNull(call, "call");
         if (hedge != null || retryClassifier != null || circuitBreakerClassifier != null) {

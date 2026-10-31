@@ -71,7 +71,7 @@ flowchart TD
 - **Sync waits** sleep on the caller's thread. If the thread is interrupted while waiting, the permit is given back, the interrupt flag is set again and the call is rejected.
 - **Bursts.** Because unused permits build up to a full burst, a window of one `period` can see up to twice `permits` calls: a full burst, then the steady rate. This is the same as Resilience4j's fixed cycles.
 - There is no background thread refilling permits: each call computes its own from the clock.
-- **Disabled** (`enabled = "false"`): every call passes.
+- **Disabled** (`enabled = false`): every call passes.
 
 Under the hood this is GCRA, the meter form of a token bucket: the whole state is one number, the time at which the next permit is due, moved forward by `period / permits` per call.
 
@@ -85,7 +85,7 @@ Under the hood this is GCRA, the meter form of a token bucket: the whole state i
 | `name` | `String` | one limiter per method | annotation only | Instance id; methods with the same `name` share one limiter and its permits. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
 | `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
-| `enabled` | `String` | `"true"` | `defaults.rateLimiter.enabled` | `""` (inherit), `"true"` or `"false"`. |
+| `enabled` | `boolean` | `true` | `defaults.rateLimiter.enabled` | `false` lets every call through; not set inherits. |
 
 The defaults differ from Resilience4j's (50 permits per 500 ns, 5 s wait): waiting is opt-in here, as in the bulkhead. Keys exist under `configs.<name>.` and `instances.<id>.` too; see [Configuration](../guides/configuration.md).
 
