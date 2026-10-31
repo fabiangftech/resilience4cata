@@ -22,7 +22,7 @@ Para empezar bastan dos líneas: `resilience4cata-all` y el procesador de anotac
 | `resilience4cata-testkit` | Opcional. `ManualClock` y `ResilienceTesting` para tests deterministas ([guía de tests](../guides/testing.md)). No depende de JUnit | `testImplementation` / `test` |
 | `resilience4cata-junit` | Opcional, desde 0.3.0. Extensión de JUnit Jupiter (`@ResilienceTest`): un `ManualClock` nuevo y un registry sobre él para cada test, como parámetros ([guía de tests](../guides/testing.md#junit)). Trae testkit; necesita JUnit 5.10 o posterior, JUnit 6 incluido | `testImplementation` / `test` |
 
-`core` y `processor` deben tener la misma versión; el BOM se encarga de eso.
+`core` debe ser al menos tan nuevo como `processor` (misma versión mayor); el BOM los mantiene en una misma versión.
 
 ## La forma corta
 
@@ -69,7 +69,7 @@ dependencies {
 
 <!-- tabs:end -->
 
-Escribe la misma versión en las dos líneas: `core` y `processor` deben coincidir. Las anotaciones quedan también en el class path de ejecución; son un jar pequeño que nada lee en ejecución. Para dejarlas solo en compilación, o para no incluir `config`, agrega los módulos uno por uno como se explica abajo.
+Escribe la misma versión en las dos líneas: `core` debe ser al menos tan nuevo como `processor`, y lo más simple es que coincidan. Las anotaciones quedan también en el class path de ejecución; son un jar pequeño que nada lee en ejecución. Para dejarlas solo en compilación, o para no incluir `config`, agrega los módulos uno por uno como se explica abajo.
 
 ## Módulo por módulo
 

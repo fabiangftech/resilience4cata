@@ -41,7 +41,7 @@ class AdaptiveLimitProcessorTest {
         String generated = result.generatedSource("demo.OrderApi$Resilient");
         assertThat(generated)
                 .contains("private final dev.resilience4cata.generated.AdaptiveLimitPolicy adaptiveLimit0;")
-                .contains("this.adaptiveLimit0 = registry.adaptiveLimitPolicy(\"demo.OrderApi#order(java.lang.String)\", \"\", \"\", r4c$b -> {")
+                .contains("this.adaptiveLimit0 = dev.resilience4cata.generated.Policies.adaptiveLimit(registry, \"demo.OrderApi#order(java.lang.String)\", \"\", \"\", r4c$b -> {")
                 .contains("r4c$b.algorithm(dev.resilience4cata.AdaptiveLimitConfig.Algorithm.AIMD);")
                 .contains("r4c$b.initialLimit(10);")
                 .contains("r4c$b.minLimit(2);")
@@ -49,7 +49,7 @@ class AdaptiveLimitProcessorTest {
                 .contains("r4c$b.window(java.time.Duration.ofNanos(500000000L));")
                 .contains("r4c$b.dropOn(java.util.List.of(java.io.IOException.class));")
                 .contains("r4c$b.ignoreOn(java.util.List.of(java.io.FileNotFoundException.class));")
-                .contains("this.adaptiveLimit1 = registry.adaptiveLimitPolicy(\"demo.OrderApi#cancel(java.lang.String)\", \"shared\", \"\", r4c$b -> {")
+                .contains("this.adaptiveLimit1 = dev.resilience4cata.generated.Policies.adaptiveLimit(registry, \"demo.OrderApi#cancel(java.lang.String)\", \"shared\", \"\", r4c$b -> {")
                 .contains("r4c$b.enabled(false);");
         assertThat(flat(generated))
                 .contains(flat("""
@@ -106,7 +106,7 @@ class AdaptiveLimitProcessorTest {
 
         assertThat(result.errors()).isEmpty();
         assertThat(result.generatedSource("demo.AsyncApi$Resilient"))
-                .contains("this.adaptiveLimit0 = registry.adaptiveLimitPolicy(\"demo.AsyncApi#fetch(java.lang.String)\", \"\", \"\", null);")
+                .contains("this.adaptiveLimit0 = dev.resilience4cata.generated.Policies.adaptiveLimit(registry, \"demo.AsyncApi#fetch(java.lang.String)\", \"\", \"\", null, false);")
                 .contains("return this.circuitBreaker0.executeAsync(() -> this.adaptiveLimit0.executeAsync(() -> "
                         + "this.timeout0.executeAsync(() -> this.delegate.fetch(p0))));");
     }

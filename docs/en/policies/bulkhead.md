@@ -33,9 +33,9 @@ public final class ReportRenderer$Resilient implements ReportRenderer {
     // …
     public ReportRenderer$Resilient(ReportRenderer delegate, dev.resilience4cata.ResilienceRegistry registry) {
         // …
-        this.bulkhead0 = registry.bulkheadPolicy("dev.resilience4cata.examples.docs.bulkhead.ReportRenderer#render(java.lang.String)", "", "", r4c$b -> {
+        this.bulkhead0 = dev.resilience4cata.generated.Policies.bulkhead(registry, "dev.resilience4cata.examples.docs.bulkhead.ReportRenderer#render(java.lang.String)", "", "", r4c$b -> {
             r4c$b.maxConcurrent(10);
-        });
+        }, false);
     }
 
     @Override

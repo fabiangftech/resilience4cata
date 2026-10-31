@@ -812,11 +812,11 @@ class ResilienceProcessorTest {
 
         assertThat(result.errors()).isEmpty();
         assertThat(result.generatedSource("demo.Client$Resilient"))
-                .contains("this.fallback0 = registry.fallbackPolicy(\"demo.Client#find(java.lang.String)\","
+                .contains("this.fallback0 = dev.resilience4cata.generated.Policies.fallback(registry, \"demo.Client#find(java.lang.String)\","
                         + " java.util.List.of(java.lang.Throwable.class), java.util.List.of(),"
                         + " java.util.List.of(java.lang.IllegalStateException.class, java.io.IOException.class));")
-                .contains("this.fallback1 = registry.fallbackPolicy(\"demo.Client#other(java.lang.String)\","
-                        + " java.util.List.of(java.lang.Throwable.class), java.util.List.of());");
+                .contains("this.fallback1 = dev.resilience4cata.generated.Policies.fallback(registry, \"demo.Client#other(java.lang.String)\","
+                        + " java.util.List.of(java.lang.Throwable.class), java.util.List.of(), null);");
     }
 
     @Test

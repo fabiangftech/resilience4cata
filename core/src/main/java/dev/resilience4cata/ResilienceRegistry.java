@@ -10,6 +10,7 @@ import dev.resilience4cata.generated.PolicyEnvironment;
 import dev.resilience4cata.generated.RateLimiterPolicy;
 import dev.resilience4cata.generated.RetryPolicy;
 import dev.resilience4cata.generated.TimeoutPolicy;
+import dev.resilience4cata.internal.RegistryAccess;
 import dev.resilience4cata.event.EventListener;
 import dev.resilience4cata.event.ResilienceEvent;
 import java.util.ArrayList;
@@ -43,6 +44,10 @@ import org.jspecify.annotations.Nullable;
 // instances, so it knows every policy type by design; its builder and records are already split out.
 @SuppressWarnings("java:S6539")
 public final class ResilienceRegistry {
+
+    static {
+        RegistryAccess.install(new Access());
+    }
 
     private static final String DEFAULT = "default";
     private static final String RETRY_NAME = "retry";
@@ -351,25 +356,10 @@ public final class ResilienceRegistry {
         return found;
     }
 
-    /**
-     * Returns the retry policy for one call site, creating it on first use. Used by generated code;
-     * not intended to be called directly.
-     *
-     * @param instanceId derived id of the call site, used when {@code name} is empty
-     * @param name explicit instance name from the annotation, or {@code ""}
-     * @param config named configuration to start from, or {@code ""}
-     * @param overrides values set in the annotations, or {@code null}
-     * @return the policy
-     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
-     */
-    public RetryPolicy retryPolicy(String instanceId, String name, String config,
-            @Nullable Consumer<RetryConfig.Builder> overrides) {
-        return retryPolicy(instanceId, name, config, overrides, false);
-    }
 
     /**
-     * Returns the retry policy for one call site, creating it on first use. Used by generated code;
-     * not intended to be called directly.
+     * Returns the retry policy for one call site, creating it on first use. Used by {@link Pipeline} and,
+     * through {@link dev.resilience4cata.generated.Policies}, by generated code.
      *
      * @param instanceId derived id of the call site, used when {@code name} is empty
      * @param name explicit instance name from the annotation, or {@code ""}
@@ -380,7 +370,7 @@ public final class ResilienceRegistry {
      * @return the policy
      * @throws IllegalStateException if two call sites share a name but resolve to different configurations
      */
-    public RetryPolicy retryPolicy(String instanceId, String name, String config,
+    RetryPolicy retryPolicy(String instanceId, String name, String config,
             @Nullable Consumer<RetryConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
         RetryConfig resolved = resolve(retryConfig(config), overrides, instances.retry().get(key), locked, RETRY_KIND, key, config);
@@ -391,26 +381,10 @@ public final class ResilienceRegistry {
         return policy;
     }
 
-    /**
-     * Returns the hedge policy for one call site, creating it on first use. Used by generated code;
-     * not intended to be called directly. Call sites with the same {@code name} share the instance, and so
-     * its hedge budget.
-     *
-     * @param instanceId derived id of the call site, used when {@code name} is empty
-     * @param name explicit instance name from the annotation, or {@code ""}
-     * @param config named configuration to start from, or {@code ""}
-     * @param overrides values set in the annotations, or {@code null}
-     * @return the policy
-     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
-     */
-    public HedgePolicy hedgePolicy(String instanceId, String name, String config,
-            @Nullable Consumer<HedgeConfig.Builder> overrides) {
-        return hedgePolicy(instanceId, name, config, overrides, false);
-    }
 
     /**
-     * Returns the hedge policy for one call site, creating it on first use. Used by generated code;
-     * not intended to be called directly. Call sites with the same {@code name} share the instance, and so
+     * Returns the hedge policy for one call site, creating it on first use. Used by {@link Pipeline} and,
+     * through {@link dev.resilience4cata.generated.Policies}, by generated code. Call sites with the same {@code name} share the instance, and so
      * its hedge budget.
      *
      * @param instanceId derived id of the call site, used when {@code name} is empty
@@ -422,7 +396,7 @@ public final class ResilienceRegistry {
      * @return the policy
      * @throws IllegalStateException if two call sites share a name but resolve to different configurations
      */
-    public HedgePolicy hedgePolicy(String instanceId, String name, String config,
+    HedgePolicy hedgePolicy(String instanceId, String name, String config,
             @Nullable Consumer<HedgeConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
         HedgeConfig resolved = resolve(hedgeConfig(config), overrides, instances.hedge().get(key), locked, HEDGE_KIND, key, config);
@@ -434,24 +408,8 @@ public final class ResilienceRegistry {
     }
 
     /**
-     * Returns the circuit breaker for one call site, creating it on first use. Used by generated
-     * code; not intended to be called directly.
-     *
-     * @param instanceId derived id of the call site, used when {@code name} is empty
-     * @param name explicit instance name from the annotation, or {@code ""}
-     * @param config named configuration to start from, or {@code ""}
-     * @param overrides values set in the annotations, or {@code null}
-     * @return the circuit breaker
-     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
-     */
-    public CircuitBreakerPolicy circuitBreakerPolicy(String instanceId, String name, String config,
-            @Nullable Consumer<CircuitBreakerConfig.Builder> overrides) {
-        return circuitBreakerPolicy(instanceId, name, config, overrides, false);
-    }
-
-    /**
-     * Returns the circuit breaker for one call site, creating it on first use. Used by generated
-     * code; not intended to be called directly.
+     * Returns the circuit breaker for one call site, creating it on first use. Used by {@link Pipeline}
+     * and, through {@link dev.resilience4cata.generated.Policies}, by generated code.
      *
      * @param instanceId derived id of the call site, used when {@code name} is empty
      * @param name explicit instance name from the annotation, or {@code ""}
@@ -462,7 +420,7 @@ public final class ResilienceRegistry {
      * @return the circuit breaker
      * @throws IllegalStateException if two call sites share a name but resolve to different configurations
      */
-    public CircuitBreakerPolicy circuitBreakerPolicy(String instanceId, String name, String config,
+    CircuitBreakerPolicy circuitBreakerPolicy(String instanceId, String name, String config,
             @Nullable Consumer<CircuitBreakerConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
         CircuitBreakerConfig resolved = resolve(circuitBreakerConfig(config), overrides, instances.circuitBreaker().get(key), locked, CIRCUIT_BREAKER_KIND, key, config);
@@ -473,25 +431,10 @@ public final class ResilienceRegistry {
         return policy;
     }
 
-    /**
-     * Returns the rate limiter for one call site, creating it on first use. Used by generated code;
-     * not intended to be called directly.
-     *
-     * @param instanceId derived id of the call site, used when {@code name} is empty
-     * @param name explicit instance name from the annotation, or {@code ""}
-     * @param config named configuration to start from, or {@code ""}
-     * @param overrides values set in the annotations, or {@code null}
-     * @return the rate limiter
-     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
-     */
-    public RateLimiterPolicy rateLimiterPolicy(String instanceId, String name, String config,
-            @Nullable Consumer<RateLimiterConfig.Builder> overrides) {
-        return rateLimiterPolicy(instanceId, name, config, overrides, false);
-    }
 
     /**
-     * Returns the rate limiter for one call site, creating it on first use. Used by generated code;
-     * not intended to be called directly.
+     * Returns the rate limiter for one call site, creating it on first use. Used by {@link Pipeline} and,
+     * through {@link dev.resilience4cata.generated.Policies}, by generated code.
      *
      * @param instanceId derived id of the call site, used when {@code name} is empty
      * @param name explicit instance name from the annotation, or {@code ""}
@@ -502,7 +445,7 @@ public final class ResilienceRegistry {
      * @return the rate limiter
      * @throws IllegalStateException if two call sites share a name but resolve to different configurations
      */
-    public RateLimiterPolicy rateLimiterPolicy(String instanceId, String name, String config,
+    RateLimiterPolicy rateLimiterPolicy(String instanceId, String name, String config,
             @Nullable Consumer<RateLimiterConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
         RateLimiterConfig resolved = resolve(rateLimiterConfig(config), overrides, instances.rateLimiter().get(key), locked, RATE_LIMITER_KIND, key, config);
@@ -513,34 +456,22 @@ public final class ResilienceRegistry {
         return policy;
     }
 
-    /**
-     * Returns the timeout policy for one call site. Used by generated code; not intended to be called
-     * directly. Timeouts hold no state shared between calls, so every call site gets its own policy.
-     *
-     * @param instanceId derived id of the call site
-     * @param name unused: timeouts have no shared state; kept so that every policy has the same shape
-     * @param config named configuration to start from, or {@code ""}
-     * @param overrides values set in the annotations, or {@code null}
-     * @return the policy
-     */
-    public TimeoutPolicy timeoutPolicy(String instanceId, String name, String config,
-            @Nullable Consumer<TimeoutConfig.Builder> overrides) {
-        return timeoutPolicy(instanceId, name, config, overrides, false);
-    }
 
     /**
-     * Returns the timeout policy for one call site. Used by generated code; not intended to be called
-     * directly. Timeouts hold no state shared between calls, so every call site gets its own policy.
+     * Returns the timeout policy for one call site. Used by {@link Pipeline} and, through
+     * {@link dev.resilience4cata.generated.Policies}, by generated code. Timeouts hold no state shared between calls,
+     * so every call site gets its own policy; the id under which a snapshot shows it is {@code name}, or
+     * {@code instanceId} when it is empty.
      *
-     * @param instanceId derived id of the call site
-     * @param name unused: timeouts have no shared state; kept so that every policy has the same shape
+     * @param instanceId derived id of the call site, used when {@code name} is empty
+     * @param name explicit instance name from the annotation, or {@code ""}
      * @param config named configuration to start from, or {@code ""}
      * @param overrides values set in the annotations, or {@code null}
      * @param locked {@code locked = true} on the annotation: the values set in {@code overrides} win over
      *     the instance's per-instance overrides
      * @return the policy
      */
-    public TimeoutPolicy timeoutPolicy(String instanceId, String name, String config,
+    TimeoutPolicy timeoutPolicy(String instanceId, String name, String config,
             @Nullable Consumer<TimeoutConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
         TimeoutConfig resolved = resolve(timeoutConfig(config), overrides, instances.timeout().get(key), locked, TIMEOUT_KIND, key, config);
@@ -552,55 +483,27 @@ public final class ResilienceRegistry {
     }
 
     /**
-     * Returns the fallback policy for one method. Used by generated code; not intended to be called
-     * directly. Fallbacks hold no state, so every method gets its own policy; the registry only adds
-     * its event listeners.
+     * Returns the fallback policy for one method. Fallbacks hold no state, so every method gets its own policy;
+     * the registry only adds its event listeners.
      *
      * @param instanceId id of the method, {@code <interface>#<method>(<parameter types>)}
      * @param applyOn failures that get the fallback
      * @param skipOn failures that never get the fallback; wins over {@code applyOn}
+     * @param taken the exception types of sibling fallback methods that do not take every failure (a failure
+     *     that is none of them is not handled, so no {@code FallbackEvent.Applied} is published for it), or
+     *     {@code null} when the fallback takes every failure that {@code applyOn} and {@code skipOn} let through
      * @return the policy
      */
-    public FallbackPolicy fallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
-            List<Class<? extends Throwable>> skipOn) {
-        return new FallbackPolicy(instanceId, applyOn, skipOn, environment);
+    FallbackPolicy fallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
+            List<Class<? extends Throwable>> skipOn, @Nullable List<Class<? extends Throwable>> taken) {
+        return taken == null ? new FallbackPolicy(instanceId, applyOn, skipOn, environment)
+                : new FallbackPolicy(instanceId, applyOn, skipOn, taken, environment);
     }
 
-    /**
-     * Returns the fallback policy for a method whose sibling fallback methods do not take every failure.
-     * Used by generated code; not intended to be called directly. A failure that is not an instance of
-     * one of {@code taken} is not handled, so no {@code FallbackEvent.Applied} is published for it.
-     *
-     * @param instanceId id of the method, {@code <interface>#<method>(<parameter types>)}
-     * @param applyOn failures that get the fallback
-     * @param skipOn failures that never get the fallback; wins over {@code applyOn}
-     * @param taken the exception types of the sibling fallback methods
-     * @return the policy
-     */
-    public FallbackPolicy fallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
-            List<Class<? extends Throwable>> skipOn, List<Class<? extends Throwable>> taken) {
-        return new FallbackPolicy(instanceId, applyOn, skipOn, taken, environment);
-    }
 
     /**
-     * Returns the bulkhead for one call site, creating it on first use. Used by generated code; not
-     * intended to be called directly.
-     *
-     * @param instanceId derived id of the call site, used when {@code name} is empty
-     * @param name explicit instance name from the annotation, or {@code ""}
-     * @param config named configuration to start from, or {@code ""}
-     * @param overrides values set in the annotations, or {@code null}
-     * @return the bulkhead
-     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
-     */
-    public BulkheadPolicy bulkheadPolicy(String instanceId, String name, String config,
-            @Nullable Consumer<BulkheadConfig.Builder> overrides) {
-        return bulkheadPolicy(instanceId, name, config, overrides, false);
-    }
-
-    /**
-     * Returns the bulkhead for one call site, creating it on first use. Used by generated code; not
-     * intended to be called directly.
+     * Returns the bulkhead for one call site, creating it on first use. Used by {@link Pipeline} and,
+     * through {@link dev.resilience4cata.generated.Policies}, by generated code.
      *
      * @param instanceId derived id of the call site, used when {@code name} is empty
      * @param name explicit instance name from the annotation, or {@code ""}
@@ -611,7 +514,7 @@ public final class ResilienceRegistry {
      * @return the bulkhead
      * @throws IllegalStateException if two call sites share a name but resolve to different configurations
      */
-    public BulkheadPolicy bulkheadPolicy(String instanceId, String name, String config,
+    BulkheadPolicy bulkheadPolicy(String instanceId, String name, String config,
             @Nullable Consumer<BulkheadConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
         BulkheadConfig resolved = resolve(bulkheadConfig(config), overrides, instances.bulkhead().get(key), locked, BULKHEAD_KIND, key, config);
@@ -637,25 +540,10 @@ public final class ResilienceRegistry {
         return handle;
     }
 
-    /**
-     * Returns the adaptive limit for one call site, creating it on first use. Used by generated code; not
-     * intended to be called directly.
-     *
-     * @param instanceId derived id of the call site, used when {@code name} is empty
-     * @param name explicit instance name from the annotation, or {@code ""}
-     * @param config named configuration to start from, or {@code ""}
-     * @param overrides values set in the annotations, or {@code null}
-     * @return the adaptive limit
-     * @throws IllegalStateException if two call sites share a name but resolve to different configurations
-     */
-    public AdaptiveLimitPolicy adaptiveLimitPolicy(String instanceId, String name, String config,
-            @Nullable Consumer<AdaptiveLimitConfig.Builder> overrides) {
-        return adaptiveLimitPolicy(instanceId, name, config, overrides, false);
-    }
 
     /**
-     * Returns the adaptive limit for one call site, creating it on first use. Used by generated code; not
-     * intended to be called directly.
+     * Returns the adaptive limit for one call site, creating it on first use. Used by {@link Pipeline} and,
+     * through {@link dev.resilience4cata.generated.Policies}, by generated code.
      *
      * @param instanceId derived id of the call site, used when {@code name} is empty
      * @param name explicit instance name from the annotation, or {@code ""}
@@ -666,7 +554,7 @@ public final class ResilienceRegistry {
      * @return the adaptive limit
      * @throws IllegalStateException if two call sites share a name but resolve to different configurations
      */
-    public AdaptiveLimitPolicy adaptiveLimitPolicy(String instanceId, String name, String config,
+    AdaptiveLimitPolicy adaptiveLimitPolicy(String instanceId, String name, String config,
             @Nullable Consumer<AdaptiveLimitConfig.Builder> overrides, boolean locked) {
         String key = name.isEmpty() ? instanceId : name;
         AdaptiveLimitConfig resolved = resolve(adaptiveLimitConfig(config), overrides, instances.adaptiveLimit().get(key), locked,
@@ -1568,6 +1456,72 @@ public final class ResilienceRegistry {
             } catch (IllegalArgumentException e) {
                 throw invalidNamed(CIRCUIT_BREAKER_NAME, name, e);
             }
+        }
+    }
+
+    /**
+     * Lets {@link dev.resilience4cata.generated.Policies}, which generated code calls, reach the package-private
+     * policy factories above, so that they stay out of this class's public API.
+     */
+    private static final class Access extends RegistryAccess {
+
+        @Override
+        public RetryPolicy retryPolicy(ResilienceRegistry registry, String instanceId, String name, String config,
+                @Nullable Consumer<RetryConfig.Builder> overrides, boolean locked) {
+            return registry.retryPolicy(instanceId, name, config, overrides, locked);
+        }
+
+        @Override
+        public HedgePolicy hedgePolicy(ResilienceRegistry registry, String instanceId, String name, String config,
+                @Nullable Consumer<HedgeConfig.Builder> overrides, boolean locked) {
+            return registry.hedgePolicy(instanceId, name, config, overrides, locked);
+        }
+
+        @Override
+        public CircuitBreakerPolicy circuitBreakerPolicy(ResilienceRegistry registry, String instanceId, String name,
+                String config, @Nullable Consumer<CircuitBreakerConfig.Builder> overrides, boolean locked) {
+            return registry.circuitBreakerPolicy(instanceId, name, config, overrides, locked);
+        }
+
+        @Override
+        public RateLimiterPolicy rateLimiterPolicy(ResilienceRegistry registry, String instanceId, String name,
+                String config, @Nullable Consumer<RateLimiterConfig.Builder> overrides, boolean locked) {
+            return registry.rateLimiterPolicy(instanceId, name, config, overrides, locked);
+        }
+
+        @Override
+        public AdaptiveLimitPolicy adaptiveLimitPolicy(ResilienceRegistry registry, String instanceId, String name,
+                String config, @Nullable Consumer<AdaptiveLimitConfig.Builder> overrides, boolean locked) {
+            return registry.adaptiveLimitPolicy(instanceId, name, config, overrides, locked);
+        }
+
+        @Override
+        public TimeoutPolicy timeoutPolicy(ResilienceRegistry registry, String instanceId, String name, String config,
+                @Nullable Consumer<TimeoutConfig.Builder> overrides, boolean locked) {
+            return registry.timeoutPolicy(instanceId, name, config, overrides, locked);
+        }
+
+        @Override
+        public BulkheadPolicy bulkheadPolicy(ResilienceRegistry registry, String instanceId, String name,
+                String config, @Nullable Consumer<BulkheadConfig.Builder> overrides, boolean locked) {
+            return registry.bulkheadPolicy(instanceId, name, config, overrides, locked);
+        }
+
+        @Override
+        public FallbackPolicy fallbackPolicy(ResilienceRegistry registry, String instanceId,
+                List<Class<? extends Throwable>> applyOn, List<Class<? extends Throwable>> skipOn,
+                @Nullable List<Class<? extends Throwable>> taken) {
+            return registry.fallbackPolicy(instanceId, applyOn, skipOn, taken);
+        }
+
+        @Override
+        public IllegalStateException runtimeTooOld(String component, Class<?> generated, int level, int supported) {
+            return new IllegalStateException(ErrorCode.RUNTIME_TOO_OLD.message(generated.getName()
+                    + " was generated by a newer resilience4cata-processor than this " + component + " supports"
+                    + " (generated-code level " + level + ", supported up to " + supported + "). Use a " + component
+                    + " at least as new as the resilience4cata-processor that compiled it: import one"
+                    + " resilience4cata-bom version for every resilience4cata artifact, or check which version your"
+                    + " dependency tree resolves."));
         }
     }
 }

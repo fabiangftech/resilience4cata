@@ -1,5 +1,6 @@
 package dev.resilience4cata.testkit;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.BulkheadFullException;
@@ -25,7 +26,7 @@ class BulkheadOnManualClockTest {
     private final ResilienceRegistry registry = ResilienceTesting.registry(clock)
             .bulkheadDefaults(b -> b.maxConcurrent(1).maxWait(Duration.ofSeconds(3)))
             .build();
-    private final BulkheadPolicy bulkhead = registry.bulkheadPolicy("b", "", "", null);
+    private final BulkheadPolicy bulkhead = Policies.bulkhead(registry, "b", "", "", null, false);
 
     @AfterEach
     void clearInterrupt() {

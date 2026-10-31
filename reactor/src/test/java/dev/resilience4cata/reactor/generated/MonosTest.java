@@ -1,5 +1,6 @@
 package dev.resilience4cata.reactor.generated;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.BulkheadFullException;
@@ -58,11 +59,11 @@ class MonosTest {
     }
 
     private RetryPolicy retry(String id, int attempts) {
-        return registry.retryPolicy(id, "", "", r -> r.maxAttempts(attempts).delay(Duration.ofMillis(100)).backoff(Backoff.FIXED).jitter(Jitter.NONE));
+        return Policies.retry(registry, id, "", "", r -> r.maxAttempts(attempts).delay(Duration.ofMillis(100)).backoff(Backoff.FIXED).jitter(Jitter.NONE), false);
     }
 
     private TimeoutPolicy timeout(String id, Duration timeout) {
-        return registry.timeoutPolicy(id, "", "", t -> t.timeout(timeout));
+        return Policies.timeout(registry, id, "", "", t -> t.timeout(timeout), false);
     }
 
     // ---- laziness and subscriptions
@@ -390,7 +391,7 @@ class MonosTest {
 
     @Test
     void cancellingFreesTheBulkheadSlot() {
-        BulkheadPolicy bulkhead = registry.bulkheadPolicy("slot", "", "", b -> b.maxConcurrent(1));
+        BulkheadPolicy bulkhead = Policies.bulkhead(registry, "slot", "", "", b -> b.maxConcurrent(1), false);
         Mono<String> mono = Monos.defer(context -> bulkhead.executeAsync(
                 () -> Monos.stage(tracked(Mono.<String>never()), context)));
 
@@ -407,8 +408,8 @@ class MonosTest {
 
     @Test
     void aCancelledCallIsNotRecordedByTheBreaker() {
-        CircuitBreakerPolicy breaker = registry.circuitBreakerPolicy("breaker", "", "",
-                b -> b.windowSize(2).minimumCalls(2).failureRateThreshold(50));
+        CircuitBreakerPolicy breaker = Policies.circuitBreaker(registry, "breaker", "", "",
+                b -> b.windowSize(2).minimumCalls(2).failureRateThreshold(50), false);
         Mono<String> mono = Monos.defer(context -> breaker.executeAsync(
                 () -> Monos.stage(Mono.<String>never(), context)));
 
@@ -421,7 +422,7 @@ class MonosTest {
 
     @Test
     void anOpenBreakerRejectsWithoutSubscribingToTheDelegate() {
-        CircuitBreakerPolicy breaker = registry.circuitBreakerPolicy("open", "", "", null);
+        CircuitBreakerPolicy breaker = Policies.circuitBreaker(registry, "open", "", "", null, false);
         registry.circuitBreaker("open").forceOpen();
         Mono<String> mono = Monos.defer(context -> breaker.executeAsync(
                 () -> Monos.stage(tracked(Mono.just("never")), context)));
@@ -473,7 +474,7 @@ class MonosTest {
 
     @Test
     void aHedgeCancelsTheAttemptThatLost() {
-        HedgePolicy hedge = registry.hedgePolicy("hedge", "", "", h -> h.maxAttempts(2).delay(Duration.ofMillis(50)));
+        HedgePolicy hedge = Policies.hedge(registry, "hedge", "", "", h -> h.maxAttempts(2).delay(Duration.ofMillis(50)), false);
         Sinks.One<String> slow = Sinks.one();
         Sinks.One<String> fast = Sinks.one();
         AtomicInteger attempt = new AtomicInteger();
@@ -508,7 +509,7 @@ class MonosTest {
 
     @Test
     void aFallbackMonoReplacesTheFailure() {
-        FallbackPolicy fallback = registry.fallbackPolicy("fallback", List.of(Throwable.class), List.of());
+        FallbackPolicy fallback = Policies.fallback(registry, "fallback", List.of(Throwable.class), List.of(), null);
         RetryPolicy retry = retry("fallback", 2);
         Mono<String> mono = Monos.defer(context -> retry.executeAsync(
                 () -> Monos.stage(Mono.<String>error(new IOException("x")), context), fallback,
@@ -522,7 +523,7 @@ class MonosTest {
 
     @Test
     void theFallbackSeesTheContextToo() {
-        FallbackPolicy fallback = registry.fallbackPolicy("fallback-context", List.of(Throwable.class), List.of());
+        FallbackPolicy fallback = Policies.fallback(registry, "fallback-context", List.of(Throwable.class), List.of(), null);
         Mono<String> mono = Monos.defer(context -> fallback.executeAsync(
                 () -> Monos.stage(Mono.<String>error(new IOException("x")), context),
                 (failure, attempts) -> Monos.stage(Mono.deferContextual(v -> Mono.just(v.<String>get("who"))), context)));
@@ -536,7 +537,7 @@ class MonosTest {
     void manyCancelledSubscriptionsLeaveNoTimersAndNoSlots() {
         RetryPolicy retry = retry("many", 3);
         TimeoutPolicy timeout = timeout("many", Duration.ofSeconds(1));
-        BulkheadPolicy bulkhead = registry.bulkheadPolicy("many", "", "", b -> b.maxConcurrent(10_000));
+        BulkheadPolicy bulkhead = Policies.bulkhead(registry, "many", "", "", b -> b.maxConcurrent(10_000), false);
         Supplier<Mono<String>> source = () -> tracked(Mono.never());
         Mono<String> mono = Monos.defer(context -> retry.executeAsync(() -> timeout.executeAsync(
                 () -> bulkhead.executeAsync(() -> Monos.stage(source.get(), context)))));

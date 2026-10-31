@@ -1,5 +1,6 @@
 package dev.resilience4cata;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -73,19 +74,21 @@ class ErrorCodeTest {
         triggers.put(ErrorCode.RETRY_WITH_HEDGE, () -> Pipeline.builder(registry, "p").retry().hedge().build());
         triggers.put(ErrorCode.NOT_FOR_STREAMS, () -> Pipeline.builder(registry, "streamed", String.class).hedge().build()
                 .executeStreamAsync(new NoStream()));
+        triggers.put(ErrorCode.RUNTIME_TOO_OLD, () -> dev.resilience4cata.generated.Abi.require(Integer.MAX_VALUE,
+                ErrorCodeTest.class));
         triggers.put(ErrorCode.INVALID_VALUE, () -> RetryConfig.builder().maxAttempts(0).build());
         triggers.put(ErrorCode.INVALID_NAMED_CONFIG, () -> ResilienceRegistry.builder()
                 .retry("bad", r -> r.maxAttempts(0)).build());
-        triggers.put(ErrorCode.INVALID_INSTANCE_CONFIG, () -> ResilienceRegistry.builder()
-                .retryInstance("p", r -> r.maxAttempts(0)).build().retryPolicy("A#m()", "p", "", null));
+        triggers.put(ErrorCode.INVALID_INSTANCE_CONFIG, () -> Policies.retry(ResilienceRegistry.builder()
+                .retryInstance("p", r -> r.maxAttempts(0)).build(), "A#m()", "p", "", null, false));
         triggers.put(ErrorCode.UNKNOWN_CONFIG, () -> registry.retryConfig("fiev"));
         triggers.put(ErrorCode.DUPLICATE_CONFIG, () -> ResilienceRegistry.builder()
                 .retry("five", r -> { }).retry("five", r -> { }));
         triggers.put(ErrorCode.RESERVED_CONFIG_NAME, () -> ResilienceRegistry.builder().retry("default", r -> { }));
         triggers.put(ErrorCode.EMPTY_INSTANCE_ID, () -> ResilienceRegistry.builder().retryInstance("", r -> { }));
         triggers.put(ErrorCode.CONFLICTING_INSTANCE, () -> {
-            registry.retryPolicy("A#m()", "shared", "", null);
-            registry.retryPolicy("B#n()", "shared", "", r -> r.maxAttempts(9));
+            Policies.retry(registry, "A#m()", "shared", "", null, false);
+            Policies.retry(registry, "B#n()", "shared", "", r -> r.maxAttempts(9), false);
         });
         triggers.put(ErrorCode.UNKNOWN_INSTANCE, () -> registry.bulkhead("nope"));
 

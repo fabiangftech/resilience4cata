@@ -33,10 +33,10 @@ public final class SearchApi$Resilient implements SearchApi {
     // …
     public SearchApi$Resilient(SearchApi delegate, dev.resilience4cata.ResilienceRegistry registry) {
         // …
-        this.rateLimiter0 = registry.rateLimiterPolicy("dev.resilience4cata.examples.docs.ratelimiter.SearchApi#search(java.lang.String)", "", "", r4c$b -> {
+        this.rateLimiter0 = dev.resilience4cata.generated.Policies.rateLimiter(registry, "dev.resilience4cata.examples.docs.ratelimiter.SearchApi#search(java.lang.String)", "", "", r4c$b -> {
             r4c$b.permits(10);
             r4c$b.period(java.time.Duration.ofNanos(1000000000L));
-        });
+        }, false);
     }
 
     @Override

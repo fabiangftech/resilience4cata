@@ -1,5 +1,6 @@
 package dev.resilience4cata.testkit;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.ResilienceRegistry;
@@ -31,7 +32,7 @@ class HedgeOnManualClockTest {
 
     @Test
     void theHedgeStartsExactlyAtTheDelayOnTheAdvancingThread() {
-        HedgePolicy hedge = registry.hedgePolicy("hedge", "", "", null);
+        HedgePolicy hedge = Policies.hedge(registry, "hedge", "", "", null, false);
         CompletableFuture<String> result = hedge.executeAsync(this::attempt);
         assertThat(clock.pendingTasks()).isOne();
 
@@ -49,7 +50,7 @@ class HedgeOnManualClockTest {
 
     @Test
     void aCallThatFinishesInTimeLeavesNoPendingTask() {
-        HedgePolicy hedge = registry.hedgePolicy("hedge", "", "", null);
+        HedgePolicy hedge = Policies.hedge(registry, "hedge", "", "", null, false);
         CompletableFuture<String> result = hedge.executeAsync(this::attempt);
         attempts.get(0).complete("first");
         assertThat(result).isCompletedWithValue("first");
@@ -59,9 +60,9 @@ class HedgeOnManualClockTest {
 
     @Test
     void eachAttemptTakesItsOwnPermitsAndTheLoserGivesThemBack() {
-        HedgePolicy hedge = registry.hedgePolicy("quotes", "", "", h -> h.maxAttempts(3));
-        CircuitBreakerPolicy breaker = registry.circuitBreakerPolicy("quotes", "", "", cb -> cb.minimumCalls(1));
-        BulkheadPolicy bulkhead = registry.bulkheadPolicy("quotes", "", "", b -> b.maxConcurrent(3));
+        HedgePolicy hedge = Policies.hedge(registry, "quotes", "", "", h -> h.maxAttempts(3), false);
+        CircuitBreakerPolicy breaker = Policies.circuitBreaker(registry, "quotes", "", "", cb -> cb.minimumCalls(1), false);
+        BulkheadPolicy bulkhead = Policies.bulkhead(registry, "quotes", "", "", b -> b.maxConcurrent(3), false);
         CompletableFuture<String> result = hedge.executeAsync(
                 () -> breaker.executeAsync(() -> bulkhead.executeAsync(this::attempt)));
 

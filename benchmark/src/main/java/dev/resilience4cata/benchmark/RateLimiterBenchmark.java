@@ -1,5 +1,6 @@
 package dev.resilience4cata.benchmark;
 
+import dev.resilience4cata.generated.Policies;
 import dev.resilience4cata.RateLimitExceededException;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
@@ -57,7 +58,7 @@ public class RateLimiterBenchmark {
                 .rateLimiter("bench-exhausted", r -> r.permits(1).period(Duration.ofHours(1)))
                 .build();
         resilience4cata = Resilient.of(ThrottledService.class, new ThrottledService.Impl(), registry);
-        if (!registry.rateLimiterPolicy("setup", "exhausted", "bench-exhausted", null).tryAcquire()) {
+        if (!Policies.rateLimiter(registry, "setup", "exhausted", "bench-exhausted", null, false).tryAcquire()) {
             throw new IllegalStateException("could not take the only permit");
         }
 

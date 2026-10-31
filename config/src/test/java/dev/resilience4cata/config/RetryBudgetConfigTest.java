@@ -1,5 +1,6 @@
 package dev.resilience4cata.config;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -13,7 +14,7 @@ import org.junit.jupiter.api.Test;
 class RetryBudgetConfigTest {
 
     private static RetryConfig retry(ResilienceRegistry registry, String instanceId, String name, String config) {
-        return registry.retryPolicy(instanceId, name, config, null).config();
+        return Policies.retry(registry, instanceId, name, config, null, false).config();
     }
 
     @Test

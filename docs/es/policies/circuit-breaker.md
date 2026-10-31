@@ -34,13 +34,13 @@ public final class PaymentGateway$Resilient implements PaymentGateway {
     // …
     public PaymentGateway$Resilient(PaymentGateway delegate, dev.resilience4cata.ResilienceRegistry registry) {
         // …
-        this.circuitBreaker0 = registry.circuitBreakerPolicy("dev.resilience4cata.examples.docs.circuitbreaker.PaymentGateway#charge(java.lang.String)", "payments", "", r4c$b -> {
+        this.circuitBreaker0 = dev.resilience4cata.generated.Policies.circuitBreaker(registry, "dev.resilience4cata.examples.docs.circuitbreaker.PaymentGateway#charge(java.lang.String)", "payments", "", r4c$b -> {
             r4c$b.windowSize(10);
             r4c$b.minimumCalls(10);
             r4c$b.failureRateThreshold(50.0f);
             r4c$b.waitInOpen(java.time.Duration.ofNanos(30000000000L));
             r4c$b.halfOpenCalls(2);
-        });
+        }, false);
     }
 
     @Override

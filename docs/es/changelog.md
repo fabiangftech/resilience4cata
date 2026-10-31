@@ -4,6 +4,15 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Unreleased] :id=unreleased
+
+Camino a 1.0: la API se está revisando antes de congelarla, así que esta versión la cambia en algunos puntos.
+
+### Cambiado
+
+- **El código generado y core siguen una sola regla de compatibilidad.** El código generado por el procesador `1.a` funciona sobre core (y reactor) `1.b` para todo `b >= a`, dentro de una versión mayor, así que una librería compilada con resilience4cata sigue funcionando cuando una aplicación lo actualiza. Cada constructor generado comprueba primero que el runtime sea lo bastante nuevo y, si no lo es, falla enseguida con el error nuevo [R4C-RT-021](errors.md#r4c-rt-021), en vez de con un `NoSuchMethodError` en la primera falla en producción. El código generado por 0.11.0 o antes se debe compilar de nuevo con este procesador.
+- Las fábricas de políticas que llama el código generado (`ResilienceRegistry.retryPolicy(...)`, `circuitBreakerPolicy(...)` y las demás, 16 métodos) ya no son métodos públicos de `ResilienceRegistry`: el código generado llama a `dev.resilience4cata.generated.Policies`, que es solo para código generado. Para políticas construidas en código, usa `Pipeline`.
+
 ## [0.11.0] - 2026-10-30 :id=0.11.0
 
 ### Agregado

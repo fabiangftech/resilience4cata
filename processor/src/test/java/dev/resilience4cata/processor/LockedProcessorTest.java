@@ -48,26 +48,26 @@ class LockedProcessorTest {
         String generated = result.generatedSource("demo.Client$Resilient");
         assertThat(generated)
                 .contains("""
-                        this.circuitBreaker0 = registry.circuitBreakerPolicy("demo.Client#locked()", "a", "", r4c$b -> {
+                        this.circuitBreaker0 = dev.resilience4cata.generated.Policies.circuitBreaker(registry, "demo.Client#locked()", "a", "", r4c$b -> {
                                     r4c$b.minimumCalls(5);
                                 }, true);""")
                 .contains("""
-                        this.circuitBreaker1 = registry.circuitBreakerPolicy("demo.Client#nothingToLock()", "b", "", null);""")
+                        this.circuitBreaker1 = dev.resilience4cata.generated.Policies.circuitBreaker(registry, "demo.Client#nothingToLock()", "b", "", null, false);""")
                 .contains("""
-                        this.retry2 = registry.retryPolicy("demo.Client#unlocked()", "", "", r4c$b -> {
+                        this.retry2 = dev.resilience4cata.generated.Policies.retry(registry, "demo.Client#unlocked()", "", "", r4c$b -> {
                                     r4c$b.maxAttempts(2);
-                                });""")
+                                }, false);""")
                 .contains("""
-                        this.timeout2 = registry.timeoutPolicy("demo.Client#unlocked()", "", "", r4c$b -> {
+                        this.timeout2 = dev.resilience4cata.generated.Policies.timeout(registry, "demo.Client#unlocked()", "", "", r4c$b -> {
                                     r4c$b.timeout(java.time.Duration.ofNanos(2000000000L));
-                                });""")
+                                }, false);""")
                 .contains("""
-                        this.bulkhead3 = registry.bulkheadPolicy("demo.Client#bundled()", "", "", r4c$b -> {
+                        this.bulkhead3 = dev.resilience4cata.generated.Policies.bulkhead(registry, "demo.Client#bundled()", "", "", r4c$b -> {
                                     r4c$b.maxConcurrent(3);
                                 }, true);""");
         // The type-level lock applies to every method that does not unlock it.
         assertThat(generated).contains("""
-                        this.retry0 = registry.retryPolicy("demo.Client#locked()", "", "", r4c$b -> {
+                        this.retry0 = dev.resilience4cata.generated.Policies.retry(registry, "demo.Client#locked()", "", "", r4c$b -> {
                                     r4c$b.maxAttempts(2);
                                 }, true);""");
     }

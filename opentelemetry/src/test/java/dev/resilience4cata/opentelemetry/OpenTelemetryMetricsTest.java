@@ -1,5 +1,6 @@
 package dev.resilience4cata.opentelemetry;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -248,7 +249,7 @@ class OpenTelemetryMetricsTest {
     @Test
     void timeoutsAndFallbacksAreCounted() throws Exception {
         ResilienceRegistry registry = metrics.register(ResilienceTesting.registry(clock)).build();
-        TimeoutPolicy timeout = registry.timeoutPolicy("slow", "", "", t -> t.timeout(Duration.ofSeconds(1)));
+        TimeoutPolicy timeout = Policies.timeout(registry, "slow", "", "", t -> t.timeout(Duration.ofSeconds(1)), false);
         CompletableFuture<String> timedOut = timeout.executeAsync(CompletableFuture::new);
         clock.advance(Duration.ofSeconds(1));
         assertThatThrownBy(timedOut::get).isInstanceOf(ExecutionException.class).hasCauseInstanceOf(CallTimeoutException.class);

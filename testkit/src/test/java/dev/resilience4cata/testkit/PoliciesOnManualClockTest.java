@@ -1,5 +1,6 @@
 package dev.resilience4cata.testkit;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -38,7 +39,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .retryDefaults(r -> r.maxAttempts(4).delay(Duration.ofSeconds(1)).jitter(RetryConfig.Jitter.NONE))
                 .build();
-        RetryPolicy retry = registry.retryPolicy("retry", "", "", null);
+        RetryPolicy retry = Policies.retry(registry, "retry", "", "", null, false);
         List<Long> attemptsAt = new ArrayList<>();
 
         long started = System.nanoTime();
@@ -62,7 +63,7 @@ class PoliciesOnManualClockTest {
                 .retryDefaults(r -> r.maxAttempts(10).delay(Duration.ofSeconds(1)).backoff(RetryConfig.Backoff.FIXED)
                         .jitter(RetryConfig.Jitter.NONE).maxDuration(Duration.ofMillis(2_500)))
                 .build();
-        RetryPolicy retry = registry.retryPolicy("retry", "", "", null);
+        RetryPolicy retry = Policies.retry(registry, "retry", "", "", null, false);
         AtomicInteger attempts = new AtomicInteger();
 
         assertThatThrownBy(() -> retryLoop(retry, () -> {
@@ -82,7 +83,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(own, seed)
                 .retryDefaults(r -> r.maxAttempts(6).delay(Duration.ofSeconds(1)).jitter(RetryConfig.Jitter.FULL))
                 .build();
-        RetryPolicy retry = registry.retryPolicy("retry", "", "", null);
+        RetryPolicy retry = Policies.retry(registry, "retry", "", "", null, false);
         List<Long> delays = new ArrayList<>();
         for (int attempt = 1; attempt < 6; attempt++) {
             long delay = retry.onFailure(attempt, new IllegalStateException(), retry.start());
@@ -97,7 +98,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .circuitBreakerDefaults(cb -> cb.windowSize(2).minimumCalls(2).waitInOpen(Duration.ofSeconds(30)))
                 .build();
-        CircuitBreakerPolicy breaker = registry.circuitBreakerPolicy("cb", "", "", null);
+        CircuitBreakerPolicy breaker = Policies.circuitBreaker(registry, "cb", "", "", null, false);
         for (int i = 0; i < 2; i++) {
             breaker.onFailure(breaker.acquire(), breaker.startTimer(), new IllegalStateException());
         }
@@ -118,7 +119,7 @@ class PoliciesOnManualClockTest {
                 .circuitBreakerDefaults(cb -> cb.windowSize(1).minimumCalls(1)
                         .slowCallDuration(Duration.ofSeconds(2)).slowCallRateThreshold(100))
                 .build();
-        CircuitBreakerPolicy breaker = registry.circuitBreakerPolicy("cb", "", "", null);
+        CircuitBreakerPolicy breaker = Policies.circuitBreaker(registry, "cb", "", "", null, false);
         long token = breaker.acquire();
         long start = breaker.startTimer();
         clock.advance(Duration.ofSeconds(2));
@@ -132,7 +133,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .rateLimiterDefaults(rl -> rl.permits(2).period(Duration.ofSeconds(1)).maxWait(Duration.ofSeconds(1)))
                 .build();
-        RateLimiterPolicy limiter = registry.rateLimiterPolicy("rl", "", "", null);
+        RateLimiterPolicy limiter = Policies.rateLimiter(registry, "rl", "", "", null, false);
         assertThat(limiter.tryAcquire()).isTrue();
         assertThat(limiter.tryAcquire()).isTrue();
         assertThat(clock.read()).isZero();
@@ -149,7 +150,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .timeoutDefaults(t -> t.timeout(Duration.ofSeconds(1)))
                 .build();
-        TimeoutPolicy timeout = registry.timeoutPolicy("t", "", "", null);
+        TimeoutPolicy timeout = Policies.timeout(registry, "t", "", "", null, false);
 
         assertThatThrownBy(() -> timed(timeout, () -> {
             clock.sleep(Duration.ofSeconds(5));
@@ -175,7 +176,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .timeoutDefaults(t -> t.timeout(Duration.ofSeconds(1)))
                 .build();
-        TimeoutPolicy timeout = registry.timeoutPolicy("t", "", "", null);
+        TimeoutPolicy timeout = Policies.timeout(registry, "t", "", "", null, false);
         CompletableFuture<Throwable> outcome = new CompletableFuture<>();
         CompletableFuture<Void> started = new CompletableFuture<>();
         Thread caller = Thread.ofPlatform().start(() -> {
@@ -205,7 +206,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .retryDefaults(r -> r.maxAttempts(3).delay(Duration.ofSeconds(1)).jitter(RetryConfig.Jitter.NONE))
                 .build();
-        RetryPolicy retry = registry.retryPolicy("retry", "", "", null);
+        RetryPolicy retry = Policies.retry(registry, "retry", "", "", null, false);
         List<Long> attemptsAt = new ArrayList<>();
 
         CompletableFuture<String> result = retry.executeAsync(() -> {
@@ -229,7 +230,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .retryDefaults(r -> r.maxAttempts(3).delay(Duration.ZERO).jitter(RetryConfig.Jitter.NONE))
                 .build();
-        RetryPolicy retry = registry.retryPolicy("retry", "", "", null);
+        RetryPolicy retry = Policies.retry(registry, "retry", "", "", null, false);
         List<Thread> attemptThreads = new ArrayList<>();
 
         CompletableFuture<String> result = retry.executeAsync(() -> {
@@ -254,7 +255,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .timeoutDefaults(t -> t.timeout(Duration.ofSeconds(2)))
                 .build();
-        TimeoutPolicy timeout = registry.timeoutPolicy("t", "", "", null);
+        TimeoutPolicy timeout = Policies.timeout(registry, "t", "", "", null, false);
         CompletableFuture<String> never = new CompletableFuture<>();
         CompletableFuture<String> later = new CompletableFuture<>();
 
@@ -278,7 +279,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .timeoutDefaults(t -> t.timeout(Duration.ofSeconds(2)))
                 .build();
-        TimeoutPolicy timeout = registry.timeoutPolicy("t", "", "", null);
+        TimeoutPolicy timeout = Policies.timeout(registry, "t", "", "", null, false);
         CompletableFuture<String> later = new CompletableFuture<>();
 
         CompletableFuture<String> completed = timeout.executeAsync(() -> later);
@@ -295,7 +296,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .rateLimiterDefaults(rl -> rl.permits(1).period(Duration.ofSeconds(1)).maxWait(Duration.ofSeconds(5)))
                 .build();
-        RateLimiterPolicy limiter = registry.rateLimiterPolicy("rl", "", "", null);
+        RateLimiterPolicy limiter = Policies.rateLimiter(registry, "rl", "", "", null, false);
 
         CompletableFuture<String> first = limiter.executeAsync(() -> CompletableFuture.completedFuture("first"));
         CompletableFuture<String> second = limiter.executeAsync(() -> CompletableFuture.completedFuture("second"));
@@ -311,7 +312,7 @@ class PoliciesOnManualClockTest {
         ResilienceRegistry registry = ResilienceTesting.registry(clock)
                 .bulkheadDefaults(b -> b.maxConcurrent(1).maxWait(Duration.ofSeconds(3)))
                 .build();
-        BulkheadPolicy bulkhead = registry.bulkheadPolicy("b", "", "", null);
+        BulkheadPolicy bulkhead = Policies.bulkhead(registry, "b", "", "", null, false);
         CompletableFuture<String> busy = new CompletableFuture<>();
         bulkhead.executeAsync(() -> busy);
 

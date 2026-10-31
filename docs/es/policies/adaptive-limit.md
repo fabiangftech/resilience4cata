@@ -33,7 +33,7 @@ public final class SearchClient$Resilient implements SearchClient {
     // …
     public SearchClient$Resilient(SearchClient delegate, dev.resilience4cata.ResilienceRegistry registry) {
         // …
-        this.adaptiveLimit0 = registry.adaptiveLimitPolicy("dev.resilience4cata.examples.docs.adaptivelimit.SearchClient#search(java.lang.String)", "", "", null);
+        this.adaptiveLimit0 = dev.resilience4cata.generated.Policies.adaptiveLimit(registry, "dev.resilience4cata.examples.docs.adaptivelimit.SearchClient#search(java.lang.String)", "", "", null, false);
     }
 
     @Override

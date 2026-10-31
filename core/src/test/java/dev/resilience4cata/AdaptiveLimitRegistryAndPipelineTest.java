@@ -1,5 +1,6 @@
 package dev.resilience4cata;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
@@ -79,9 +80,9 @@ class AdaptiveLimitRegistryAndPipelineTest {
         assertThat(registry.adaptiveLimitConfig("backend").initialLimit()).isEqualTo(30);
         assertThat(registry.adaptiveLimitConfig("backend").maxLimit()).isEqualTo(100);
 
-        AdaptiveLimitPolicy orders = registry.adaptiveLimitPolicy("Api#order()", "orders", "backend", a -> a.minLimit(2));
+        AdaptiveLimitPolicy orders = Policies.adaptiveLimit(registry, "Api#order()", "orders", "backend", a -> a.minLimit(2), false);
         assertThat(orders.config().minLimit()).as("the instance override comes last").isEqualTo(5);
-        assertThat(registry.adaptiveLimitPolicy("Other#order()", "orders", "backend", a -> a.minLimit(2)))
+        assertThat(Policies.adaptiveLimit(registry, "Other#order()", "orders", "backend", a -> a.minLimit(2), false))
                 .as("shared by name").isSameAs(orders);
         assertThat(registry.adaptiveLimit("orders")).isSameAs(orders);
     }
@@ -95,12 +96,12 @@ class AdaptiveLimitRegistryAndPipelineTest {
         ResilienceRegistry registry = ResilienceRegistry.builder().adaptiveLimit("backend", a -> { }).build();
         assertThatIllegalArgumentException().isThrownBy(() -> registry.adaptiveLimitConfig("backnd"))
                 .withMessageStartingWith("[R4C-REG-004]").withMessageContaining("Did you mean 'backend'?");
-        registry.adaptiveLimitPolicy("A#a()", "shared", "", a -> a.maxLimit(50));
-        assertThatIllegalStateException().isThrownBy(() -> registry.adaptiveLimitPolicy("B#b()", "shared", "",
-                        a -> a.maxLimit(60)))
+        Policies.adaptiveLimit(registry, "A#a()", "shared", "", a -> a.maxLimit(50), false);
+        assertThatIllegalStateException().isThrownBy(() -> Policies.adaptiveLimit(registry, "B#b()", "shared", "",
+                        a -> a.maxLimit(60), false))
                 .withMessageStartingWith("[R4C-REG-008] Adaptive limit 'shared'");
-        assertThatIllegalArgumentException().isThrownBy(() -> registry.adaptiveLimitPolicy("C#c()", "", "",
-                a -> a.initialLimit(500))).withMessageStartingWith("[R4C-REG-003]");
+        assertThatIllegalArgumentException().isThrownBy(() -> Policies.adaptiveLimit(registry, "C#c()", "", "",
+                a -> a.initialLimit(500), false)).withMessageStartingWith("[R4C-REG-003]");
         assertThatIllegalArgumentException().isThrownBy(() -> registry.adaptiveLimit("sharde"))
                 .withMessageStartingWith("[R4C-REG-009] No adaptive limit 'sharde'").withMessageContaining("'shared'");
     }
@@ -110,8 +111,8 @@ class AdaptiveLimitRegistryAndPipelineTest {
         ResilienceRegistry registry = ResilienceRegistry.builder().build();
         AtomicInteger created = new AtomicInteger();
         registry.onInstanceCreated(created::incrementAndGet);
-        registry.adaptiveLimitPolicy("B#b()", "", "", a -> a.algorithm(Algorithm.AIMD));
-        registry.adaptiveLimitPolicy("A#a()", "", "", a -> a.initialLimit(7)).acquire();
+        Policies.adaptiveLimit(registry, "B#b()", "", "", a -> a.algorithm(Algorithm.AIMD), false);
+        Policies.adaptiveLimit(registry, "A#a()", "", "", a -> a.initialLimit(7), false).acquire();
 
         List<AdaptiveLimitSnapshot> limits = registry.snapshot().adaptiveLimits();
         assertThat(limits).extracting(AdaptiveLimitSnapshot::instance).containsExactly("A#a()", "B#b()");

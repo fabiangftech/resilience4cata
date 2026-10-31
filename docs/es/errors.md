@@ -2559,6 +2559,19 @@ un classifier juzga un resultado mientras que un stream tiene muchos.
 
 **Corrección:** quita `.hedge(...)` o el classifier, o construye un pipeline aparte para el `Flux`.
 
+### R4C-RT-021
+
+**Causa:** se construye una clase generada por el procesador de anotaciones (`X$Resilient`) sobre un
+`resilience4cata-core` (o, para métodos `Mono` y `Flux`, un `resilience4cata-reactor`) más viejo que el
+`resilience4cata-processor` que la generó (`IllegalStateException`, desde el constructor generado). El código
+generado puede llamar métodos que ese runtime no tiene. El código generado por el procesador `1.a` funciona sobre
+el runtime `1.b` para todo `b >= a`, dentro de una misma versión mayor. Suele pasar cuando una librería compilada
+con un resilience4cata más nuevo se usa en una aplicación cuyo árbol de dependencias resuelve un core más viejo.
+
+**Corrección:** usa un runtime al menos tan nuevo como el procesador: importa la misma versión de
+`resilience4cata-bom` para todos los artefactos de resilience4cata, o revisa qué versión resuelve tu build
+(`./gradlew dependencyInsight --dependency resilience4cata-core`, `mvn dependency:tree`).
+
 ## Ejecución: registro y configuración de políticas (R4C-REG)
 
 Los lanza `resilience4cata-core` cuando se construye la configuración de una política (`RetryConfig.builder()`

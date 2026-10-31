@@ -1,5 +1,6 @@
 package dev.resilience4cata.spring;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.CircuitBreakerState;
@@ -104,8 +105,8 @@ class ObservabilityTest {
                     assertThat(endpoint.instance("nobody")).as("404").isNull();
 
                     dev.resilience4cata.ResilienceRegistry registry = context.getBean(dev.resilience4cata.ResilienceRegistry.class);
-                    registry.adaptiveLimitPolicy("Orders#place()", "orders", "", null);
-                    registry.hedgePolicy("Quotes#get()", "quotes", "", null);
+                    Policies.adaptiveLimit(registry, "Orders#place()", "orders", "", null, false);
+                    Policies.hedge(registry, "Quotes#get()", "quotes", "", null, false);
                     assertThat(endpoint.instance("orders")).isNotNull().satisfies(o -> assertThat(o.adaptiveLimits()).hasSize(1));
                     assertThat(endpoint.instance("quotes")).isNotNull().satisfies(q -> assertThat(q.hedges()).hasSize(1));
 

@@ -37,9 +37,9 @@ public final class QuoteApi$Resilient implements QuoteApi {
     // …
     public QuoteApi$Resilient(QuoteApi delegate, dev.resilience4cata.ResilienceRegistry registry) {
         // …
-        this.hedge0 = registry.hedgePolicy("dev.resilience4cata.examples.docs.hedge.QuoteApi#quote(java.lang.String)", "", "", r4c$b -> {
+        this.hedge0 = dev.resilience4cata.generated.Policies.hedge(registry, "dev.resilience4cata.examples.docs.hedge.QuoteApi#quote(java.lang.String)", "", "", r4c$b -> {
             r4c$b.delay(java.time.Duration.ofNanos(50000000L));
-        });
+        }, false);
     }
 
     @Override
