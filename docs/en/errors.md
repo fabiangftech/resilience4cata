@@ -255,7 +255,7 @@ public interface PriceClient {
 }
 ```
 
-**Fix:** set a positive duration. To switch the policy off, use `enabled = "false"` (or configuration)
+**Fix:** set a positive duration. To switch the policy off, use `enabled = false` (or configuration)
 instead.
 
 ```java
@@ -364,33 +364,8 @@ public interface PriceClient {
 
 ### R4C-ATR-006
 
-**Trigger:** `enabled` is neither `""` (not set), `"true"` nor `"false"`.
-
-**Wrong:**
-
-```java
-package com.acme;
-
-import dev.resilience4cata.annotation.Retry;
-
-public interface PriceClient {
-    @Retry(enabled = "yes")
-    String price(String sku);
-}
-```
-
-**Fix:** use `"true"` or `"false"`, or leave it out.
-
-```java
-package com.acme;
-
-import dev.resilience4cata.annotation.Retry;
-
-public interface PriceClient {
-    @Retry(enabled = "false")
-    String price(String sku);
-}
-```
+**Trigger:** retired; no longer reported. `enabled` was a string (`""`, `"true"` or `"false"`); since 0.12.0 it is
+a `boolean` (`enabled = false`), which the compiler checks.
 
 ### R4C-ATR-007
 

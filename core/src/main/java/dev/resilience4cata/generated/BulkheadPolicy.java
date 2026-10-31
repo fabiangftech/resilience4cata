@@ -68,7 +68,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
      * @param id the bulkhead's id, used in the rejection message
      * @param config the configuration
      */
-    public BulkheadPolicy(String id, BulkheadConfig config) {
+    BulkheadPolicy(String id, BulkheadConfig config) {
         this(id, config, PolicyEnvironment.DEFAULT);
     }
 
@@ -79,6 +79,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
      * @param config the configuration
      * @param environment the timer for the wait limit of queued asynchronous calls
      */
+    @dev.resilience4cata.annotation.Internal
     public BulkheadPolicy(String id, BulkheadConfig config, PolicyEnvironment environment) {
         this.id = id;
         this.environment = environment;

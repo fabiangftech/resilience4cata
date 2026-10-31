@@ -58,7 +58,7 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
      * @param id the rate limiter's id, used in the rejection message
      * @param config the configuration
      */
-    public RateLimiterPolicy(String id, RateLimiterConfig config) {
+    RateLimiterPolicy(String id, RateLimiterConfig config) {
         this(id, config, PolicyEnvironment.DEFAULT);
     }
 
@@ -73,6 +73,7 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
      * @param config the configuration
      * @param environment the clock, sleeper and timer to use
      */
+    @dev.resilience4cata.annotation.Internal
     public RateLimiterPolicy(String id, RateLimiterConfig config, PolicyEnvironment environment) {
         this.id = id;
         this.config = config;

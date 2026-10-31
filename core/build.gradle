@@ -7,6 +7,8 @@ description = 'Resilience policies, registry and the runtime used by generated c
 
 dependencies {
     api libs.jspecify
+    // @Internal and @Experimental only (CLASS retention): read by the API compatibility check, never at run time.
+    compileOnly project(':annotations')
 }
 
 tasks.named('test') {

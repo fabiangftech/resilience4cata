@@ -77,7 +77,7 @@ sequenceDiagram
 - **Losers.** Once the call has its outcome, every other attempt's stage is completed with `HedgeCancelledException`, a `CancellationException` (so it reports `isCancelled()`), a new instance for each losing attempt, without a stack trace (`handle`/`whenComplete` on the stage see it as is; from JDK 23 on, `join()` throws a new `CancellationException` with it as the cause). The policies inside the attempt take it as a cancel: a circuit breaker records nothing (a half-open permit is given back), a bulkhead frees the slot, a timeout cancels its deadline, and a `CompletableFuture` returned by your method is cancelled. A late result of a loser is dropped: it completes nothing and publishes nothing.
 - **Cancelling** the future you got back cancels every attempt in flight and the pending delay ([cancellation](../guides/async.md#cancellation)).
 - **Fast path.** A first attempt whose stage is already complete and successful when your method returns (a cache hit) needs no timer and no hedge.
-- **Disabled** (`enabled = "false"`): one attempt, as if there were no annotation (the fallback still runs on failure).
+- **Disabled** (`enabled = false`): one attempt, as if there were no annotation (the fallback still runs on failure).
 
 ### The hedge budget
 
@@ -101,7 +101,7 @@ It is **on by default** (10 % of the calls plus 1 hedge per second, over 10 s), 
 | `name` | `String` | one instance per method | annotation only | Instance id; methods with the same `name` share one hedge, and so its budget. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
 | `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
-| `enabled` | `String` | `"true"` | `defaults.hedge.enabled` | `""` (inherit), `"true"` or `"false"`. |
+| `enabled` | `boolean` | `true` | `defaults.hedge.enabled` | `false` lets every call through; not set inherits. |
 
 Every key also exists under `configs.<name>.hedge.…` and `instances.<id>.hedge.…`; see [Configuration](../guides/configuration.md). There is no classifier and no `maxDuration` yet: the per-attempt `@Timeout` and `maxAttempts × delay` bound a call.
 

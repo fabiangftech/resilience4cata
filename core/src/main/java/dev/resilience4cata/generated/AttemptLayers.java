@@ -7,6 +7,7 @@ import java.util.concurrent.CompletionStage;
  * it and return the stage of its stream. See {@link StreamCall#attempt}.
  */
 @FunctionalInterface
+@dev.resilience4cata.annotation.Internal
 public interface AttemptLayers {
 
     /**

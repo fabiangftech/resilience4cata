@@ -99,6 +99,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
      * @param config the configuration
      * @param environment the clock and the event listeners
      */
+    @dev.resilience4cata.annotation.Internal
     public AdaptiveLimitPolicy(String id, AdaptiveLimitConfig config, PolicyEnvironment environment) {
         this(id, config, environment, RetryBudget.stripes(Runtime.getRuntime().availableProcessors()));
     }
@@ -262,7 +263,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
     }
 
     /** Frees a slot without a sample: the call was cancelled by its caller. */
-    public void release() {
+    void release() {
         if (enabled) {
             inFlight.decrement();
         }

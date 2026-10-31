@@ -92,7 +92,7 @@ stateDiagram-v2
 - **Opening.** Rates are evaluated once the window holds `minimumCalls` calls (for a count window, `minimumCalls` is capped at `windowSize`). The breaker opens when the failure rate is at or above `failureRateThreshold`, or the slow-call rate at or above `slowCallRateThreshold`.
 - **Open.** Every call is rejected at once with `CallNotPermittedException`, without reaching the method. The breaker does not move by itself: the first call that arrives after `waitInOpen` moves it to half-open and becomes a probe.
 - **Half-open.** `halfOpenCalls` probe calls are let through; further calls are rejected until the probes finish. When the last probe completes, the same thresholds are applied to the probes: below them the breaker closes with an empty window, otherwise it opens again. If `maxWaitInHalfOpen` is set and the probes have not all finished in that time, the next call opens it again. An ignored probe (an `ignoreOn` exception, or `IGNORE` from a classifier) gives its permit back.
-- **Forced open and disabled** are set by hand, through the [handle](#handle): `forceOpen()` rejects everything, `disable()` lets everything through and records nothing, both until `reset()`. `enabled = "false"` starts the breaker in `DISABLED`, and `reset()` then goes back to `DISABLED`.
+- **Forced open and disabled** are set by hand, through the [handle](#handle): `forceOpen()` rejects everything, `disable()` lets everything through and records nothing, both until `reset()`. `enabled = false` starts the breaker in `DISABLED`, and `reset()` then goes back to `DISABLED`.
 - A call's outcome is dropped if the breaker changed state while it ran, so a slow call that started while closed cannot decide a half-open probe.
 
 The rejection, `dev.resilience4cata.CallNotPermittedException`, is a `RuntimeException` with `id()`. It is created once per breaker and has no stack trace, so a rejection costs nothing; its message names the breaker.
@@ -116,7 +116,7 @@ The rejection, `dev.resilience4cata.CallNotPermittedException`, is a `RuntimeExc
 | `name` | `String` | one breaker per method | annotation only | Instance id; methods with the same `name` share one breaker. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
 | `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
-| `enabled` | `String` | `"true"` | `defaults.circuitBreaker.enabled` | `""` (inherit), `"true"` or `"false"` (starts `DISABLED`). |
+| `enabled` | `boolean` | `true` | `defaults.circuitBreaker.enabled` | `false` lets every call through (starts `DISABLED`); not set inherits. |
 
 The defaults are Resilience4j's, except that slow-call detection is off. Config keys also accept kebab-case (`circuit-breaker.wait-in-open`) and exist under `configs.<name>.` and `instances.<id>.`; see [Configuration](../guides/configuration.md).
 

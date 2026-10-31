@@ -146,18 +146,22 @@ class ResilienceProcessorTest {
     }
 
     @Test
-    void rejectsInvalidEnabledValues() {
+    void enabledIsPassedOnlyWhenWritten() {
         Compilation result = compile("demo.Client", """
                 package demo;
                 import dev.resilience4cata.annotation.Retry;
                 public interface Client {
-                    @Retry(enabled = "yes")
-                    String call();
+                    @Retry(enabled = false)
+                    String off();
+                    @Retry(maxAttempts = 2)
+                    String inherits();
                 }
                 """);
 
-        assertThat(result.errorCodes()).containsExactlyInAnyOrder("R4C-ATR-006");
-        assertThat(result.errors()).singleElement().asString().contains("@Retry.enabled must be");
+        assertThat(result.errors()).isEmpty();
+        String generated = result.generatedSource("demo.Client$Resilient");
+        assertThat(generated).contains("r4c$b.enabled(false);");
+        assertThat(generated.split("enabled\\(", -1)).as("only the method that writes it").hasSize(2);
     }
 
     @Test

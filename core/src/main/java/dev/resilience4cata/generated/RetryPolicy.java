@@ -73,7 +73,7 @@ public final class RetryPolicy {
      *
      * @param config the configuration
      */
-    public RetryPolicy(RetryConfig config) {
+    RetryPolicy(RetryConfig config) {
         this("retry", config, PolicyEnvironment.DEFAULT);
     }
 
@@ -88,6 +88,7 @@ public final class RetryPolicy {
      * @param config the configuration
      * @param environment the clock, sleeper, random generator and timers to use
      */
+    @dev.resilience4cata.annotation.Internal
     public RetryPolicy(String id, RetryConfig config, PolicyEnvironment environment) {
         this.id = id;
         this.config = config;
@@ -111,6 +112,7 @@ public final class RetryPolicy {
     }
 
     /** Returns the configuration this policy was created from. */
+    @dev.resilience4cata.annotation.Internal
     public RetryConfig config() {
         return config;
     }
@@ -133,6 +135,7 @@ public final class RetryPolicy {
     }
 
     /** The budget's current window, for snapshots; {@code null} without a budget. Off the call path. */
+    @dev.resilience4cata.annotation.Internal
     public RetrySnapshot.@Nullable Budget budgetSnapshot() {
         RetryBudget retryBudget = this.budget;
         return retryBudget != null ? retryBudget.snapshot(ticker.getAsLong()) : null;

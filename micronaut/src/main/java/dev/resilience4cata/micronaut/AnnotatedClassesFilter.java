@@ -39,6 +39,7 @@ import org.jspecify.annotations.Nullable;
  * <p>A beans predicate set before this one is kept; one the application sets afterwards replaces it, and an
  * annotated class is then reported at its creation (R4C-MN-004) instead of being silently doubled.
  */
+@dev.resilience4cata.annotation.Internal // public only for ServiceLoader
 public final class AnnotatedClassesFilter implements ApplicationContextConfigurer {
 
     private static final String DEFINITION = "$Definition";

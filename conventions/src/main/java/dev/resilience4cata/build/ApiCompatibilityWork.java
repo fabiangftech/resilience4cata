@@ -96,6 +96,9 @@ public abstract class ApiCompatibilityWork implements WorkAction<ApiCompatibilit
         options.setOutputOnlyModifications(true);
         options.setIgnoreMissingClasses(true);
         options.addIncludeFromArgument(Optional.of(String.join(";", parameters.getPackages().get())), true);
+        // Public for another module of this project, or not settled yet: not frozen (see the annotations' Javadoc).
+        options.addExcludeFromArgument(Optional.of("@dev.resilience4cata.annotation.Internal;"
+                + "@dev.resilience4cata.annotation.Experimental"), false);
         options.setClassPathMode(JApiCli.ClassPathMode.TWO_SEPARATE_CLASSPATHS);
         options.setOldClassPath(Optional.of(path(parameters.getBaselineClasspath())));
         options.setNewClassPath(Optional.of(path(parameters.getCurrentClasspath())));

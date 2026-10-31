@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
  * a {@code final} field: {@code null} when nobody listens, so publishing costs one null check and the
  * event object is never created.
  */
+@dev.resilience4cata.annotation.Internal
 public final class EventDispatcher {
 
     /** No listeners at all. */

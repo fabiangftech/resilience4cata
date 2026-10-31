@@ -29,7 +29,7 @@ public final class CircuitBreakerStress {
     private CircuitBreakerStress() {}
 
     static CircuitBreakerPolicy breaker(CircuitBreakerConfig.Builder config) {
-        return new CircuitBreakerPolicy("stress", config.build());
+        return new CircuitBreakerPolicy("stress", config.build(), dev.resilience4cata.generated.PolicyEnvironment.DEFAULT);
     }
 
     static void fail(CircuitBreakerPolicy breaker) {

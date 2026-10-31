@@ -95,7 +95,7 @@ flowchart TD
 - **Presupuesto de tiempo.** Con `maxDuration`, el retry se rinde en lugar de esperar cuando el siguiente intento empezaría después del presupuesto (tiempo desde el primer intento + la siguiente espera > `maxDuration`). Nunca corta un intento en curso: para eso agrega [`@Timeout`](timeout.md), que se aplica por intento.
 - **Cuando se rinde**, la última falla se relanza tal cual: las excepciones checked conservan su tipo y el stack trace es el del último intento. Con `@Fallback` en el mismo método, se ejecuta el fallback, una sola vez, con la cantidad de intentos hechos.
 - **Interrupciones.** Un retry sync espera en el thread de quien llama. Si ese thread se interrumpe, el retry se detiene enseguida y relanza la última falla, con el flag de interrupción activado de nuevo. Una falla que es una `InterruptedException` tampoco se reintenta.
-- **Desactivado** (`enabled = "false"`, o `defaults.retry.enabled=false`): un solo intento, como si no hubiera anotación.
+- **Desactivado** (`enabled = false`, o `defaults.retry.enabled=false`): un solo intento, como si no hubiera anotación.
 
 ## Atributos
 
@@ -118,7 +118,7 @@ flowchart TD
 | `name` | `String` | una instancia por método | solo anotación | Id de la instancia; los métodos con el mismo `name` comparten una política de retry. |
 | `config` | `String` | `default` | solo anotación | Configuración con nombre de la que partir. |
 | `locked` | `boolean` | `false` | solo anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
-| `enabled` | `String` | `"true"` | `defaults.retry.enabled` | `""` (heredar), `"true"` o `"false"`. |
+| `enabled` | `boolean` | `true` | `defaults.retry.enabled` | `false` deja pasar todas las llamadas; sin escribirlo, se hereda. |
 
 - Las duraciones son strings: `"250ms"`, `"2s"`, `"1m"`, `"PT2S"` o `"0"`. Se validan al compilar.
 - Un atributo que no defines conserva el valor de la configuración con nombre y, si no, el de los valores por defecto. Cada clave existe también como `configs.<name>.retry.…` e `instances.<id>.retry.…`; ver [Configuración](../guides/configuration.md).

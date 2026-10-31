@@ -15,6 +15,7 @@ import java.util.List;
  *
  * @param <E> the event type
  */
+@dev.resilience4cata.annotation.Internal
 public final class EventSink<E extends ResilienceEvent> {
 
     private final EventListener<? super E>[] listeners;

@@ -39,6 +39,7 @@ public final class FallbackPolicy {
      * @param applyOn failures that get the fallback
      * @param skipOn failures that never get the fallback; wins over {@code applyOn}
      */
+    @dev.resilience4cata.annotation.Internal
     public FallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
             List<Class<? extends Throwable>> skipOn) {
         this(instanceId, applyOn, skipOn, PolicyEnvironment.DEFAULT);
@@ -52,6 +53,7 @@ public final class FallbackPolicy {
      * @param skipOn failures that never get the fallback; wins over {@code applyOn}
      * @param environment the clock and the event listeners
      */
+    @dev.resilience4cata.annotation.Internal
     public FallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
             List<Class<? extends Throwable>> skipOn, PolicyEnvironment environment) {
         this(instanceId, applyOn, skipOn, null, environment);
@@ -68,6 +70,7 @@ public final class FallbackPolicy {
      *     takes every failure (a handler, or a sibling that takes {@code Throwable} or no exception)
      * @param environment the clock and the event listeners
      */
+    @dev.resilience4cata.annotation.Internal
     public FallbackPolicy(String instanceId, List<Class<? extends Throwable>> applyOn,
             List<Class<? extends Throwable>> skipOn, @Nullable List<Class<? extends Throwable>> taken,
             PolicyEnvironment environment) {

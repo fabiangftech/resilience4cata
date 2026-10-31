@@ -5,6 +5,7 @@
 @org.jspecify.annotations.NullMarked
 module dev.resilience4cata.core {
     requires transitive org.jspecify;
+    requires static dev.resilience4cata.annotations; // @Internal, @Experimental: CLASS retention, compile only
 
     exports dev.resilience4cata;
     exports dev.resilience4cata.event;

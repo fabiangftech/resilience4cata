@@ -71,7 +71,7 @@ flowchart TD
 - **Las esperas sync** duermen en el thread de quien llama. Si el thread se interrumpe mientras espera, el permiso se devuelve, el flag de interrupción se activa de nuevo y la llamada se rechaza.
 - **Ráfagas.** Como los permisos sin usar se acumulan hasta una ráfaga completa, una ventana de un `period` puede ver hasta el doble de `permits` llamadas: una ráfaga completa y luego el ritmo constante. Es lo mismo que con los ciclos fijos de Resilience4j.
 - No hay ningún thread en segundo plano reponiendo permisos: cada llamada calcula el suyo a partir del reloj.
-- **Desactivado** (`enabled = "false"`): todas las llamadas pasan.
+- **Desactivado** (`enabled = false`): todas las llamadas pasan.
 
 Por dentro es GCRA, la forma "medidor" de un token bucket: todo el estado es un solo número, el instante en que llega el siguiente permiso, que cada llamada adelanta en `period / permits`.
 
@@ -85,7 +85,7 @@ Por dentro es GCRA, la forma "medidor" de un token bucket: todo el estado es un 
 | `name` | `String` | un limiter por método | solo anotación | Id de la instancia; los métodos con el mismo `name` comparten un limiter y sus permisos. |
 | `config` | `String` | `default` | solo anotación | Configuración con nombre de la que partir. |
 | `locked` | `boolean` | `false` | solo anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
-| `enabled` | `String` | `"true"` | `defaults.rateLimiter.enabled` | `""` (heredar), `"true"` o `"false"`. |
+| `enabled` | `boolean` | `true` | `defaults.rateLimiter.enabled` | `false` deja pasar todas las llamadas; sin escribirlo, se hereda. |
 
 Los valores por defecto difieren de los de Resilience4j (50 permisos cada 500 ns, 5 s de espera): aquí esperar es opcional, como en el bulkhead. Las claves también existen bajo `configs.<name>.` e `instances.<id>.`; ver [Configuración](../guides/configuration.md).
 

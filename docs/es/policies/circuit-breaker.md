@@ -92,7 +92,7 @@ stateDiagram-v2
 - **Apertura.** Las tasas se evalúan una vez que la ventana tiene `minimumCalls` llamadas (en una ventana por conteo, `minimumCalls` tiene tope en `windowSize`). El breaker abre cuando la tasa de fallas llega a `failureRateThreshold` o la supera, o la tasa de llamadas lentas llega a `slowCallRateThreshold` o la supera.
 - **Abierto.** Toda llamada se rechaza enseguida con `CallNotPermittedException`, sin llegar al método. El breaker no se mueve solo: la primera llamada que llega después de `waitInOpen` lo pasa a half-open y se convierte en prueba.
 - **Half-open.** Se dejan pasar `halfOpenCalls` llamadas de prueba; las demás se rechazan hasta que las pruebas terminan. Cuando termina la última prueba, se aplican los mismos umbrales a las pruebas: por debajo, el breaker se cierra con una ventana vacía; si no, vuelve a abrir. Si `maxWaitInHalfOpen` está definido y las pruebas no terminaron todas en ese tiempo, la siguiente llamada lo vuelve a abrir. Una prueba ignorada (una excepción de `ignoreOn`, o `IGNORE` de un classifier) devuelve su permiso.
-- **Forzado abierto y desactivado** se ponen a mano, con el [handle](#handle): `forceOpen()` rechaza todo, `disable()` deja pasar todo y no registra nada, ambos hasta `reset()`. `enabled = "false"` arranca el breaker en `DISABLED`, y `reset()` entonces vuelve a `DISABLED`.
+- **Forzado abierto y desactivado** se ponen a mano, con el [handle](#handle): `forceOpen()` rechaza todo, `disable()` deja pasar todo y no registra nada, ambos hasta `reset()`. `enabled = false` arranca el breaker en `DISABLED`, y `reset()` entonces vuelve a `DISABLED`.
 - El resultado de una llamada se descarta si el breaker cambió de estado mientras corría, así que una llamada lenta que empezó con el breaker cerrado no puede decidir una prueba de half-open.
 
 El rechazo, `dev.resilience4cata.CallNotPermittedException`, es una `RuntimeException` con `id()`. Se crea una vez por breaker y no tiene stack trace, así que un rechazo no cuesta nada; su mensaje nombra al breaker.
@@ -116,7 +116,7 @@ El rechazo, `dev.resilience4cata.CallNotPermittedException`, es una `RuntimeExce
 | `name` | `String` | un breaker por método | solo anotación | Id de la instancia; los métodos con el mismo `name` comparten un breaker. |
 | `config` | `String` | `default` | solo anotación | Configuración con nombre de la que partir. |
 | `locked` | `boolean` | `false` | solo anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
-| `enabled` | `String` | `"true"` | `defaults.circuitBreaker.enabled` | `""` (heredar), `"true"` o `"false"` (arranca en `DISABLED`). |
+| `enabled` | `boolean` | `true` | `defaults.circuitBreaker.enabled` | `false` deja pasar todas las llamadas (arranca en `DISABLED`); sin escribirlo, se hereda. |
 
 Los valores por defecto son los de Resilience4j, salvo que la detección de llamadas lentas está desactivada. Las claves de config también aceptan kebab-case (`circuit-breaker.wait-in-open`) y existen bajo `configs.<name>.` e `instances.<id>.`; ver [Configuración](../guides/configuration.md).
 

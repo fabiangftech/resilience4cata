@@ -73,7 +73,7 @@ flowchart TD
 - **Rejection.** With `maxWait = "0"` (the default), a call that finds the bulkhead full fails at once with `dev.resilience4cata.BulkheadFullException` (a `RuntimeException` with `id()`; one per bulkhead, no stack trace). The method is not called.
 - **Waiting, sync.** With `maxWait` > 0, the calling thread blocks until a slot is free or `maxWait` passes. On a virtual thread, blocking is cheap and does not pin a carrier. If the waiting thread is interrupted, the call is rejected and the interrupt flag is set again. Waiting is not first-come, first-served: a new caller can take a freed slot ahead of a waiting one.
 - **This is a semaphore bulkhead**: the call runs on the caller's thread. There is no thread-pool bulkhead; with virtual threads you rarely need one.
-- **Disabled** (`enabled = "false"`): every call passes.
+- **Disabled** (`enabled = false`): every call passes.
 
 ## Attributes
 
@@ -84,7 +84,7 @@ flowchart TD
 | `name` | `String` | one bulkhead per method | annotation only | Instance id; methods with the same `name` share one bulkhead and its slots. |
 | `config` | `String` | `default` | annotation only | Named configuration to start from. |
 | `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
-| `enabled` | `String` | `"true"` | `defaults.bulkhead.enabled` | `""` (inherit), `"true"` or `"false"`. |
+| `enabled` | `boolean` | `true` | `defaults.bulkhead.enabled` | `false` lets every call through; not set inherits. |
 
 The defaults are Resilience4j's. Keys exist under `configs.<name>.` and `instances.<id>.` too; see [Configuration](../guides/configuration.md).
 

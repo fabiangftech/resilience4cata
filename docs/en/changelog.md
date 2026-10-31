@@ -25,6 +25,8 @@ Toward 1.0: the API is being reviewed before it is frozen, so this release chang
 - `PipelineOperator` (for `Mono`) is renamed `MonoPipelineOperator`, next to `FluxPipelineOperator`.
 - **Profiles no longer beat stronger sources.** A key under an active profile still wins over the same key without a profile in the same source, but an environment variable or a system property now wins over a profile key in a file, as in Spring Boot and Quarkus: an operator's `R4C_…` variable is no longer ignored when a profile sets the same key.
 - Spring Boot: the Java API is the package `dev.resilience4cata.spring` (`ResilienceRegistryCustomizer`, `ResilienceHealthIndicator`, `ResilienceEndpoint`). `ResilienceSpringProperties` moved to `dev.resilience4cata.spring.autoconfigure`, and the `@Bean` methods of the auto-configuration classes are no longer public: the contract there is the auto-configuration class names (for `exclude`), the bean names and the `resilience4cata.spring.*` property names, which are unchanged.
+- **`enabled` on the policy annotations is a `boolean`** (`@Retry(enabled = false)`) instead of the strings `""`, `"true"` and `"false"`; not writing it still inherits. [R4C-ATR-006](errors.md#r4c-atr-006), the error for another string, is retired: the compiler checks the value now.
+- Members that are public only for another resilience4cata module (the registry's use of policy constructors and configs, `PolicyEnvironment`, the event dispatch, the streaming support of `Pipeline` for the reactor module, Micronaut's `AnnotatedClassesFilter`) are marked `@Internal`, and the API compatibility check leaves out what is marked `@Internal` or `@Experimental`. Policy constructors that only tests used are no longer public.
 
 ### Fixed
 

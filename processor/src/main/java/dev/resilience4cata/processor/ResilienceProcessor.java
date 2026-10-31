@@ -693,13 +693,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 }
                 case "config" -> config = (String) value;
                 case "locked" -> locked = (Boolean) value;
-                case "enabled" -> {
-                    if (value.equals("true") || value.equals("false")) {
-                        overrides.add("enabled(" + value + ")");
-                    } else {
-                        valid = invalid(method, ProcessorError.INVALID_ENABLED, label + " must be \"\", \"true\" or \"false\", was \"" + value + "\"");
-                    }
-                }
+                case "enabled" -> overrides.add("enabled(" + value + ")"); // only when written: getElementValues
                 case "classifier" -> {
                     if (!(value instanceof TypeMirror classifierType)) {
                         valid = false; // the compiler already reported the unresolvable class

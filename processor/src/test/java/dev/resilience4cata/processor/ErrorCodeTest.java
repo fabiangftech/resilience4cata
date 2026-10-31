@@ -50,6 +50,9 @@ class ErrorCodeTest {
             "(?m)^(?:(?:public|final|abstract|sealed|non-sealed)\\s+)*(?:@interface|interface|class|record|enum)\\s+(\\w+)");
     /** Areas of the processor's codes; the other areas on the pages belong to core (RT) and config (CFG). */
     private static final Set<String> AREAS = Set.of("APT", "ATR", "CMP", "ASY", "HDG", "ORD", "CLS", "FB", "SUB");
+    /** Codes no longer reported: their sections say so and have no example. */
+    private static final Set<ProcessorError> RETIRED = Set.of(ProcessorError.INVALID_ENABLED);
+
     /** Codes whose wrong example needs a classpath without resilience4cata-core. */
     private static final Set<ProcessorError> WITHOUT_CORE =
             Set.of(ProcessorError.CLASSIFIER_MISSING_CORE, ProcessorError.HANDLER_MISSING_CORE);
@@ -90,7 +93,8 @@ class ErrorCodeTest {
     Stream<DynamicTest> everyCodeIsEmittedByItsDocumentedExample() throws IOException {
         String english = page("en");
         return Arrays.stream(ProcessorError.values())
-                .filter(error -> error != ProcessorError.UNKNOWN_ATTRIBUTE && error != ProcessorError.WRITE_FAILED)
+                .filter(error -> error != ProcessorError.UNKNOWN_ATTRIBUTE && error != ProcessorError.WRITE_FAILED
+                        && !RETIRED.contains(error))
                 .map(error -> DynamicTest.dynamicTest(error.code(), () -> {
                     List<String> blocks = javaBlocks(section(english, error.code()));
                     assertThat(blocks).as("java examples of " + error.code()).isNotEmpty().hasSizeLessThanOrEqualTo(2);

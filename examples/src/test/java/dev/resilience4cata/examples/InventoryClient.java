@@ -17,7 +17,7 @@ public interface InventoryClient {
     @Retry(maxAttempts = 3, delay = "1ms", jitter = Jitter.NONE, abortOn = IllegalArgumentException.class)
     void reserve(String sku, int quantity);
 
-    @Retry(enabled = "false")
+    @Retry(enabled = false)
     int disabled();
 
     @Retry(config = "inventory")
