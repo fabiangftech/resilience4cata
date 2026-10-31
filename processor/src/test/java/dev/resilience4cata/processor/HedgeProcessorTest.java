@@ -49,7 +49,7 @@ class HedgeProcessorTest {
         String generated = result.generatedSource("demo.QuoteApi$Resilient");
         assertThat(generated)
                 .contains("private final dev.resilience4cata.generated.HedgePolicy hedge0;")
-                .contains("this.hedge0 = registry.hedgePolicy(\"demo.QuoteApi#quote(java.lang.String)\", \"\", \"\", r4c$b -> {")
+                .contains("this.hedge0 = dev.resilience4cata.generated.Policies.hedge(registry, \"demo.QuoteApi#quote(java.lang.String)\", \"\", \"\", r4c$b -> {")
                 .contains("r4c$b.delay(java.time.Duration.ofNanos(50000000L));")
                 .contains("r4c$b.maxAttempts(3);")
                 .contains("r4c$b.hedgeOn(java.util.List.of(java.io.IOException.class));")
@@ -62,7 +62,7 @@ class HedgeProcessorTest {
                         + "this.bulkhead0.executeAsync(() -> this.delegate.quote(p0))))), this.fallback0, "
                         + "(r4c$e, r4c$attempts) -> this.r4c$recover0(r4c$e, r4c$attempts, p0));")
                 .doesNotContain("this.fallback0.executeAsync")
-                .contains("this.hedge2 = registry.hedgePolicy(\"demo.QuoteApi#count()\", \"shared\", \"\", r4c$b -> {")
+                .contains("this.hedge2 = dev.resilience4cata.generated.Policies.hedge(registry, \"demo.QuoteApi#count()\", \"shared\", \"\", r4c$b -> {")
                 .contains("r4c$b.delay(java.time.Duration.ofNanos(0L));")
                 .contains("return this.hedge2.executeAsync(() -> this.delegate.count());");
     }

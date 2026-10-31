@@ -1,5 +1,6 @@
 package dev.resilience4cata;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
@@ -16,18 +17,18 @@ class InstanceCreatedTest {
         List<ResilienceSnapshot> seen = new ArrayList<>();
         registry.onInstanceCreated(() -> seen.add(registry.snapshot()));
 
-        registry.circuitBreakerPolicy("A#m()", "", "", null);
+        Policies.circuitBreaker(registry, "A#m()", "", "", null, false);
         assertThat(seen).hasSize(1);
         assertThat(seen.get(0).circuitBreakers()).extracting(CircuitBreakerSnapshot::instance).containsExactly("A#m()");
-        assertThat(registry.circuitBreakerPolicy("A#m()", "", "", null)).isNotNull(); // existing: no run
+        assertThat(Policies.circuitBreaker(registry, "A#m()", "", "", null, false)).isNotNull(); // existing: no run
         assertThat(seen).hasSize(1);
 
-        registry.retryPolicy("A#m()", "", "", null);
-        registry.rateLimiterPolicy("A#m()", "", "", null);
-        registry.bulkheadPolicy("A#m()", "", "", null);
-        registry.timeoutPolicy("A#m()", "", "", t -> t.timeout(Duration.ofSeconds(1)));
-        registry.timeoutPolicy("A#m()", "", "", t -> t.timeout(Duration.ofSeconds(1))); // same id: no run
-        registry.adaptiveLimitPolicy("A#m()", "", "", null);
+        Policies.retry(registry, "A#m()", "", "", null, false);
+        Policies.rateLimiter(registry, "A#m()", "", "", null, false);
+        Policies.bulkhead(registry, "A#m()", "", "", null, false);
+        Policies.timeout(registry, "A#m()", "", "", t -> t.timeout(Duration.ofSeconds(1)), false);
+        Policies.timeout(registry, "A#m()", "", "", t -> t.timeout(Duration.ofSeconds(1)), false); // same id: no run
+        Policies.adaptiveLimit(registry, "A#m()", "", "", null, false);
         assertThat(seen).hasSize(6);
         assertThat(seen.get(5).adaptiveLimits()).hasSize(1);
         ResilienceSnapshot last = seen.get(4);
@@ -58,7 +59,7 @@ class InstanceCreatedTest {
 
         first.close();
         first.close();
-        registry.circuitBreakerPolicy("A#m()", "", "", null);
+        Policies.circuitBreaker(registry, "A#m()", "", "", null, false);
 
         assertThat(runs).containsExactly("x");
     }
@@ -73,7 +74,7 @@ class InstanceCreatedTest {
                 throw new IllegalStateException("boom");
             });
             registry.onInstanceCreated(() -> runs.add("second"));
-            registry.circuitBreakerPolicy("A#m()", "", "", null);
+            Policies.circuitBreaker(registry, "A#m()", "", "", null, false);
             runs.add(registry.circuitBreaker("A#m()").id());
         });
         thread.setUncaughtExceptionHandler((t, e) -> uncaught.add(e));

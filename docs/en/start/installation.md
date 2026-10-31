@@ -22,7 +22,7 @@ Two lines are enough to start: `resilience4cata-all` and the annotation processo
 | `resilience4cata-testkit` | Optional. `ManualClock` and `ResilienceTesting` for deterministic tests ([testing guide](../guides/testing.md)). Does not depend on JUnit | `testImplementation` / `test` |
 | `resilience4cata-junit` | Optional, since 0.3.0. JUnit Jupiter extension (`@ResilienceTest`): a fresh `ManualClock` and a registry on it for each test, as parameters ([testing guide](../guides/testing.md#junit)). Brings testkit; needs JUnit 5.10 or newer, JUnit 6 included | `testImplementation` / `test` |
 
-`core` and `processor` must have the same version; the BOM makes sure they do.
+`core` must be at least as new as `processor` (same major version); the BOM keeps them on one version.
 
 ## The short way
 
@@ -69,7 +69,7 @@ dependencies {
 
 <!-- tabs:end -->
 
-Write the same version on both lines: `core` and `processor` must match. The annotations end up on the runtime class path too; they are a small jar that nothing reads at run time. To keep them compile-only, or to leave out `config`, add the modules one by one as below.
+Write the same version on both lines: `core` must be at least as new as `processor`, and keeping them equal is simplest. The annotations end up on the runtime class path too; they are a small jar that nothing reads at run time. To keep them compile-only, or to leave out `config`, add the modules one by one as below.
 
 ## Module by module
 

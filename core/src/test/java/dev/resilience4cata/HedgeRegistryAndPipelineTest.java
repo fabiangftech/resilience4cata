@@ -1,5 +1,6 @@
 package dev.resilience4cata;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
@@ -28,10 +29,10 @@ class HedgeRegistryAndPipelineTest {
         assertThat(registry.hedgeConfig("reads").budgetPercent()).isEqualTo(5);
         assertThat(registry.hedgeConfig("reads").delay()).isEqualTo(Duration.ofMillis(80));
 
-        HedgePolicy quotes = registry.hedgePolicy("Api#quote()", "quotes", "reads", h -> h.delay(Duration.ofMillis(20)));
+        HedgePolicy quotes = Policies.hedge(registry, "Api#quote()", "quotes", "reads", h -> h.delay(Duration.ofMillis(20)), false);
         assertThat(quotes.config().maxAttempts()).as("the instance override comes last").isEqualTo(4);
         assertThat(quotes.config().delay()).isEqualTo(Duration.ofMillis(20));
-        assertThat(registry.hedgePolicy("Other#quote()", "quotes", "reads", h -> h.delay(Duration.ofMillis(20))))
+        assertThat(Policies.hedge(registry, "Other#quote()", "quotes", "reads", h -> h.delay(Duration.ofMillis(20)), false))
                 .as("shared by name").isSameAs(quotes);
     }
 
@@ -43,10 +44,10 @@ class HedgeRegistryAndPipelineTest {
         assertThatIllegalArgumentException().isThrownBy(() -> ResilienceRegistry.builder().build().hedgeConfig("redas"))
                 .withMessageStartingWith("[R4C-REG-004]");
         ResilienceRegistry registry = ResilienceRegistry.builder().build();
-        registry.hedgePolicy("A#a()", "shared", "", h -> h.maxAttempts(2));
-        assertThatIllegalStateException().isThrownBy(() -> registry.hedgePolicy("B#b()", "shared", "", h -> h.maxAttempts(3)))
+        Policies.hedge(registry, "A#a()", "shared", "", h -> h.maxAttempts(2), false);
+        assertThatIllegalStateException().isThrownBy(() -> Policies.hedge(registry, "B#b()", "shared", "", h -> h.maxAttempts(3), false))
                 .withMessageStartingWith("[R4C-REG-008] Hedge instance 'shared'");
-        assertThatIllegalArgumentException().isThrownBy(() -> registry.hedgePolicy("C#c()", "", "", h -> h.maxAttempts(12)))
+        assertThatIllegalArgumentException().isThrownBy(() -> Policies.hedge(registry, "C#c()", "", "", h -> h.maxAttempts(12), false))
                 .withMessageStartingWith("[R4C-REG-003]");
     }
 
@@ -55,8 +56,8 @@ class HedgeRegistryAndPipelineTest {
         ResilienceRegistry registry = ResilienceRegistry.builder().build();
         AtomicInteger created = new AtomicInteger();
         registry.onInstanceCreated(created::incrementAndGet);
-        registry.hedgePolicy("B#b()", "", "", h -> h.budgetPercent(0));
-        registry.hedgePolicy("A#a()", "", "", null);
+        Policies.hedge(registry, "B#b()", "", "", h -> h.budgetPercent(0), false);
+        Policies.hedge(registry, "A#a()", "", "", null, false);
 
         List<HedgeSnapshot> hedges = registry.snapshot().hedges();
         assertThat(hedges).extracting(HedgeSnapshot::instance).containsExactly("A#a()", "B#b()");

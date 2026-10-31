@@ -1,5 +1,6 @@
 package dev.resilience4cata;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
@@ -40,7 +41,7 @@ class ResilienceRegistryTest {
 
     @Test
     void unknownInstanceSuggestsTheClosestId() {
-        registry.circuitBreakerPolicy("A#m()", "payments", "", null);
+        Policies.circuitBreaker(registry, "A#m()", "payments", "", null, false);
 
         assertThatIllegalArgumentException().isThrownBy(() -> registry.circuitBreaker("paymnets"))
                 .withMessageStartingWith("[R4C-REG-009] No circuit breaker 'paymnets'")
@@ -50,7 +51,7 @@ class ResilienceRegistryTest {
 
     @Test
     void overridesApplyOnTopOfTheNamedConfig() {
-        RetryPolicy policy = registry.retryPolicy("A#m()", "", "external", r -> r.maxAttempts(7));
+        RetryPolicy policy = Policies.retry(registry, "A#m()", "", "external", r -> r.maxAttempts(7), false);
 
         assertThat(policy.config().maxAttempts()).isEqualTo(7);
         assertThat(policy.config().delay()).isEqualTo(Duration.ofSeconds(1));
@@ -58,18 +59,18 @@ class ResilienceRegistryTest {
 
     @Test
     void sameNameAndConfigShareOneInstance() {
-        RetryPolicy first = registry.retryPolicy("A#m()", "shared", "external", null);
-        RetryPolicy second = registry.retryPolicy("B#n()", "shared", "external", null);
+        RetryPolicy first = Policies.retry(registry, "A#m()", "shared", "external", null, false);
+        RetryPolicy second = Policies.retry(registry, "B#n()", "shared", "external", null, false);
 
         assertThat(first).isSameAs(second);
     }
 
     @Test
     void sameNameWithDifferentConfigFails() {
-        registry.retryPolicy("A#m()", "shared", "external", null);
+        Policies.retry(registry, "A#m()", "shared", "external", null, false);
 
         assertThatIllegalStateException()
-                .isThrownBy(() -> registry.retryPolicy("B#n()", "shared", "external", r -> r.maxAttempts(9)))
+                .isThrownBy(() -> Policies.retry(registry, "B#n()", "shared", "external", r -> r.maxAttempts(9), false))
                 .withMessageStartingWith("[R4C-REG-008] Retry instance 'shared'");
     }
 
@@ -93,7 +94,7 @@ class ResilienceRegistryTest {
     @Test
     void invalidPipelineOrAnnotationValuesNameTheInstance() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> registry.timeoutPolicy("A#m()", "", "", t -> t.timeout(Duration.ZERO)))
+                .isThrownBy(() -> Policies.timeout(registry, "A#m()", "", "", t -> t.timeout(Duration.ZERO), false))
                 .withMessageStartingWith("[R4C-REG-003] Invalid timeout config for instance 'A#m()': timeout must be"
                         + " positive")
                 .withMessageContaining("the values set in its annotation or pipeline step;");

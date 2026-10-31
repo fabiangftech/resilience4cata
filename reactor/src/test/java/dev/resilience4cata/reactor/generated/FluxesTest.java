@@ -1,5 +1,6 @@
 package dev.resilience4cata.reactor.generated;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.BulkheadFullException;
@@ -88,12 +89,12 @@ class FluxesTest {
     }
 
     private RetryPolicy retry(String id, int attempts) {
-        return registry.retryPolicy(id, "", "", r -> r.maxAttempts(attempts).delay(Duration.ofMillis(100))
-                .backoff(Backoff.FIXED).jitter(Jitter.NONE));
+        return Policies.retry(registry, id, "", "", r -> r.maxAttempts(attempts).delay(Duration.ofMillis(100))
+                .backoff(Backoff.FIXED).jitter(Jitter.NONE), false);
     }
 
     private TimeoutPolicy timeout(String id, Duration timeout) {
-        return registry.timeoutPolicy(id, "", "", t -> t.timeout(timeout));
+        return Policies.timeout(registry, id, "", "", t -> t.timeout(timeout), false);
     }
 
     /** Retry around a timeout around the delegate, as a generated method with both. */
@@ -309,7 +310,7 @@ class FluxesTest {
     @Test
     void theFallbackReplacesAStreamThatFailedBeforeItsFirstElement() {
         attempts.add(() -> Flux.error(new IOException("x")));
-        FallbackPolicy fallback = registry.fallbackPolicy("fallback", List.of(Throwable.class), List.of());
+        FallbackPolicy fallback = Policies.fallback(registry, "fallback", List.of(Throwable.class), List.of(), null);
         Flux<String> flux = Fluxes.<String>defer(stream -> retry("fallback", 2).executeAsync(
                 () -> stream.attempt(attempt -> attempt.subscribe(delegate())), fallback,
                 (failure, attempts) -> stream.recover(Flux.just("cached " + attempts, "values"))));
@@ -320,7 +321,7 @@ class FluxesTest {
     @Test
     void theFallbackDoesNotRunAfterTheFirstElement() {
         attempts.add(() -> Flux.just("a").concatWith(Flux.error(new IOException("broken"))));
-        FallbackPolicy fallback = registry.fallbackPolicy("no-fallback", List.of(Throwable.class), List.of());
+        FallbackPolicy fallback = Policies.fallback(registry, "no-fallback", List.of(Throwable.class), List.of(), null);
         AtomicInteger recovered = new AtomicInteger();
         Flux<String> flux = Fluxes.<String>defer(stream -> fallback.executeAsync(
                 () -> stream.attempt(attempt -> attempt.subscribe(delegate())),
@@ -433,7 +434,7 @@ class FluxesTest {
         // and only then do the attempt's layers subscribe to the delegate.
         List<FluxCall.Attempt<String>> late = new ArrayList<>();
         Sinks.Many<String> fallbackStream = Sinks.many().unicast().onBackpressureBuffer();
-        FallbackPolicy fallback = registry.fallbackPolicy("late", List.of(Throwable.class), List.of());
+        FallbackPolicy fallback = Policies.fallback(registry, "late", List.of(Throwable.class), List.of(), null);
         Flux<String> flux = Fluxes.<String>defer(stream -> fallback.executeAsync(
                 () -> stream.attempt(attempt -> {
                     late.add(attempt);
@@ -458,7 +459,7 @@ class FluxesTest {
         // (as one racing its cancel): only its own, closed number stops it.
         List<FluxCall.Attempt<String>> late = new ArrayList<>();
         Sinks.Many<String> fallbackStream = Sinks.many().unicast().onBackpressureBuffer();
-        FallbackPolicy fallback = registry.fallbackPolicy("late-first", List.of(Throwable.class), List.of());
+        FallbackPolicy fallback = Policies.fallback(registry, "late-first", List.of(Throwable.class), List.of(), null);
         Flux<String> eager = Flux.from(subscriber -> {
             subscriber.onSubscribe(new Subscription() {
                 @Override
@@ -493,7 +494,7 @@ class FluxesTest {
 
     @Test
     void theBulkheadHoldsItsSlotUntilTheStreamEndsAndACancelFreesIt() {
-        BulkheadPolicy bulkhead = registry.bulkheadPolicy("slot", "", "", b -> b.maxConcurrent(1));
+        BulkheadPolicy bulkhead = Policies.bulkhead(registry, "slot", "", "", b -> b.maxConcurrent(1), false);
         attempts.add(timed("a@100", "b@5000", ".@6000"));
         Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(
                 attempt -> bulkhead.executeAsync(() -> attempt.subscribe(delegate()))));
@@ -513,7 +514,7 @@ class FluxesTest {
 
     @Test
     void theBreakerRecordsAFailureAfterElements() {
-        CircuitBreakerPolicy breaker = registry.circuitBreakerPolicy("broken", "", "", b -> b.windowSize(2).minimumCalls(2));
+        CircuitBreakerPolicy breaker = Policies.circuitBreaker(registry, "broken", "", "", b -> b.windowSize(2).minimumCalls(2), false);
         attempts.add(() -> Flux.just("a").concatWith(Flux.error(new IOException("broken"))));
         Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(
                 attempt -> breaker.executeStreamAsync(() -> attempt.subscribe(delegate()), attempt)));
@@ -523,8 +524,8 @@ class FluxesTest {
 
     @Test
     void theBreakerTimesSlowCallsUntilTheFirstElement() {
-        CircuitBreakerPolicy breaker = registry.circuitBreakerPolicy("slow", "", "", b -> b.windowSize(2).minimumCalls(2)
-                .slowCallDuration(Duration.ofSeconds(1)));
+        CircuitBreakerPolicy breaker = Policies.circuitBreaker(registry, "slow", "", "", b -> b.windowSize(2).minimumCalls(2)
+                .slowCallDuration(Duration.ofSeconds(1)), false);
         attempts.add(timed("a@200", "b@5000", ".@6000"));
         Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(
                 attempt -> breaker.executeStreamAsync(() -> attempt.subscribe(delegate()), attempt)));
@@ -535,8 +536,8 @@ class FluxesTest {
 
     @Test
     void theAdaptiveLimitSamplesTheFirstElementAndHoldsItsSlotForTheStream() {
-        AdaptiveLimitPolicy limit = registry.adaptiveLimitPolicy("limit", "", "", l -> l.initialLimit(1)
-                .minWindowSamples(1).window(Duration.ofSeconds(1)));
+        AdaptiveLimitPolicy limit = Policies.adaptiveLimit(registry, "limit", "", "", l -> l.initialLimit(1)
+                .minWindowSamples(1).window(Duration.ofSeconds(1)), false);
         attempts.add(timed("a@300", ".@4000"));
         Flux<String> flux = Fluxes.<String>defer(stream -> stream.attempt(
                 attempt -> limit.executeStreamAsync(() -> attempt.subscribe(delegate()), attempt)));
@@ -551,7 +552,7 @@ class FluxesTest {
 
     @Test
     void cancellingTheSubscriptionCancelsTheCallThroughEveryPolicy() {
-        BulkheadPolicy bulkhead = registry.bulkheadPolicy("cancel", "", "", b -> b.maxConcurrent(1));
+        BulkheadPolicy bulkhead = Policies.bulkhead(registry, "cancel", "", "", b -> b.maxConcurrent(1), false);
         TimeoutPolicy timeout = timeout("cancel", Duration.ofSeconds(1));
         attempts.add(timed("a@100", "b@200", "c@300"));
         Flux<String> flux = Fluxes.<String>defer(stream -> retry("cancel", 3).executeAsync(() -> stream.attempt(

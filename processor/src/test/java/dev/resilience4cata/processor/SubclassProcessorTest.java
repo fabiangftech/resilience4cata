@@ -64,7 +64,7 @@ class SubclassProcessorTest {
                 .doesNotContain("plain")
                 .doesNotContain("delegate");
         // every constructor sets up every policy
-        assertThat(generated.split("this\\.retry0 = registry\\.retryPolicy", -1)).hasSize(3);
+        assertThat(generated.split("this\\.retry0 = dev\\.resilience4cata\\.generated\\.Policies\\.retry\\(registry", -1)).hasSize(3);
     }
 
     @Test
@@ -413,7 +413,8 @@ class SubclassProcessorTest {
                         java.lang.String dataSource, @demo.Both java.lang.String registry, int r4c$p2, long r4c$p3) {
                                 super(dataSource, registry, r4c$p2, r4c$p3);
                                 java.util.Objects.requireNonNull(r4c$registry, "registry");
-                                this.retry0 = r4c$registry.retryPolicy(""")
+                                dev.resilience4cata.generated.Abi.require(1, Service$Resilient.class);
+                                this.retry0 = dev.resilience4cata.generated.Policies.retry(r4c$registry,""")
                 .contains("""
                             @java.beans.ConstructorProperties({"registry", "name"})
                             public Service$Resilient(dev.resilience4cata.ResilienceRegistry registry, java.lang.String name) {
@@ -717,6 +718,6 @@ class SubclassProcessorTest {
     private static String section(String generated, String instanceId) {
         int start = generated.indexOf("\"" + instanceId + "\"");
         assertThat(start).as(instanceId).isNotNegative();
-        return generated.substring(start, generated.indexOf("});", start));
+        return generated.substring(start, generated.indexOf("}, ", start));
     }
 }

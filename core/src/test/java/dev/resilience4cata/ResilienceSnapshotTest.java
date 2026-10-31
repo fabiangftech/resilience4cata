@@ -1,5 +1,6 @@
 package dev.resilience4cata;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.event.CircuitBreakerEvent;
@@ -23,12 +24,12 @@ class ResilienceSnapshotTest {
         ResilienceRegistry registry = ResilienceRegistry.builder().build();
         assertThat(registry.snapshot()).isEqualTo(new ResilienceSnapshot(List.of(), List.of(), List.of(), List.of(), List.of()));
 
-        registry.circuitBreakerPolicy("B#m()", "", "", null);
-        registry.circuitBreakerPolicy("A#m()", "", "", null);
-        registry.retryPolicy("A#m()", "", "", r -> r.maxAttempts(5));
-        registry.rateLimiterPolicy("A#m()", "limiter", "", null);
-        registry.timeoutPolicy("A#m()", "", "", t -> t.timeout(Duration.ofSeconds(2)));
-        registry.bulkheadPolicy("A#m()", "", "", b -> b.maxConcurrent(3));
+        Policies.circuitBreaker(registry, "B#m()", "", "", null, false);
+        Policies.circuitBreaker(registry, "A#m()", "", "", null, false);
+        Policies.retry(registry, "A#m()", "", "", r -> r.maxAttempts(5), false);
+        Policies.rateLimiter(registry, "A#m()", "limiter", "", null, false);
+        Policies.timeout(registry, "A#m()", "", "", t -> t.timeout(Duration.ofSeconds(2)), false);
+        Policies.bulkhead(registry, "A#m()", "", "", b -> b.maxConcurrent(3), false);
 
         ResilienceSnapshot snapshot = registry.snapshot();
         assertThat(snapshot.circuitBreakers()).extracting(CircuitBreakerSnapshot::instance).containsExactly("A#m()", "B#m()");
@@ -52,13 +53,13 @@ class ResilienceSnapshotTest {
                 .listen("payments", CircuitBreakerEvent.StateTransition.class, payments::add)
                 .build();
 
-        CircuitBreakerPolicy other = registry.circuitBreakerPolicy("Other#m()", "", "", null);
-        CircuitBreakerPolicy cb = registry.circuitBreakerPolicy("Payments#charge()", "payments", "", null);
+        CircuitBreakerPolicy other = Policies.circuitBreaker(registry, "Other#m()", "", "", null, false);
+        CircuitBreakerPolicy cb = Policies.circuitBreaker(registry, "Payments#charge()", "payments", "", null, false);
         other.forceOpen();
         cb.forceOpen();
-        RetryPolicy retry = registry.retryPolicy("A#m()", "", "", r -> r.maxAttempts(1));
+        RetryPolicy retry = Policies.retry(registry, "A#m()", "", "", r -> r.maxAttempts(1), false);
         retry.onFailure(1, new IOException(), retry.start());
-        FallbackPolicy fallback = registry.fallbackPolicy("A#m()", List.of(Exception.class), List.of());
+        FallbackPolicy fallback = Policies.fallback(registry, "A#m()", List.of(Exception.class), List.of(), null);
         fallback.handles(new IOException());
 
         assertThat(payments).extracting(CircuitBreakerEvent.StateTransition::instance).containsExactly("payments");

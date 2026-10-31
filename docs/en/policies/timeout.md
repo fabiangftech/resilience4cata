@@ -33,9 +33,9 @@ public final class ReportApi$Resilient implements ReportApi {
     // …
     public ReportApi$Resilient(ReportApi delegate, dev.resilience4cata.ResilienceRegistry registry) {
         // …
-        this.timeout0 = registry.timeoutPolicy("dev.resilience4cata.examples.docs.timeout.ReportApi#build(java.lang.String)", "", "", r4c$b -> {
+        this.timeout0 = dev.resilience4cata.generated.Policies.timeout(registry, "dev.resilience4cata.examples.docs.timeout.ReportApi#build(java.lang.String)", "", "", r4c$b -> {
             r4c$b.timeout(java.time.Duration.ofNanos(2000000000L));
-        });
+        }, false);
     }
 
     @Override

@@ -1,5 +1,6 @@
 package dev.resilience4cata.benchmark;
 
+import dev.resilience4cata.generated.Policies;
 import dev.resilience4cata.BulkheadFullException;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
@@ -57,7 +58,7 @@ public class BulkheadBenchmark {
                 .bulkhead("bench-full", b -> b.maxConcurrent(1))
                 .build();
         resilience4cata = Resilient.of(LimitedService.class, new LimitedService.Impl(), registry);
-        if (!registry.bulkheadPolicy("setup", "full", "bench-full", null).tryEnter()) {
+        if (!Policies.bulkhead(registry, "setup", "full", "bench-full", null, false).tryEnter()) {
             throw new IllegalStateException("could not fill the bulkhead");
         }
 

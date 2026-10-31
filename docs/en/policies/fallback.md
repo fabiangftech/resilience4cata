@@ -37,7 +37,7 @@ public final class PriceApi$Resilient implements PriceApi {
     // …
     public PriceApi$Resilient(PriceApi delegate, dev.resilience4cata.ResilienceRegistry registry) {
         // …
-        this.fallback0 = registry.fallbackPolicy("dev.resilience4cata.examples.docs.fallback.PriceApi#price(java.lang.String)", java.util.List.of(java.lang.Throwable.class), java.util.List.of());
+        this.fallback0 = dev.resilience4cata.generated.Policies.fallback(registry, "dev.resilience4cata.examples.docs.fallback.PriceApi#price(java.lang.String)", java.util.List.of(java.lang.Throwable.class), java.util.List.of(), null);
     }
 
     @Override

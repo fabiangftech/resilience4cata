@@ -1,5 +1,6 @@
 package dev.resilience4cata;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
@@ -92,8 +93,8 @@ class ResilienceRegistryOverridesTest {
                 .retryInstance("A#m()", r -> r.maxAttempts(9))
                 .build();
 
-        RetryPolicy policy = registry.retryPolicy("A#m()", "", "external", r -> r.maxAttempts(6).jitter(
-                RetryConfig.Jitter.NONE));
+        RetryPolicy policy = Policies.retry(registry, "A#m()", "", "external", r -> r.maxAttempts(6).jitter(
+                RetryConfig.Jitter.NONE), false);
 
         assertThat(policy.config().maxAttempts()).isEqualTo(9);
         assertThat(policy.config().jitter()).isEqualTo(RetryConfig.Jitter.NONE);
@@ -106,8 +107,8 @@ class ResilienceRegistryOverridesTest {
                 .retryInstance("A#m()", r -> r.maxAttempts(9))
                 .build();
 
-        assertThat(registry.retryPolicy("A#m()", "", "", null).config().maxAttempts()).isEqualTo(9);
-        assertThat(registry.retryPolicy("B#m()", "", "", null).config()).isEqualTo(RetryConfig.DEFAULTS);
+        assertThat(Policies.retry(registry, "A#m()", "", "", null, false).config().maxAttempts()).isEqualTo(9);
+        assertThat(Policies.retry(registry, "B#m()", "", "", null, false).config()).isEqualTo(RetryConfig.DEFAULTS);
     }
 
     @Test
@@ -117,8 +118,8 @@ class ResilienceRegistryOverridesTest {
                 .circuitBreakerInstance("A#m()", cb -> cb.minimumCalls(99))
                 .build();
 
-        CircuitBreakerConfig first = registry.circuitBreakerPolicy("A#m()", "payments", "", null).config();
-        CircuitBreakerConfig second = registry.circuitBreakerPolicy("B#n()", "payments", "", null).config();
+        CircuitBreakerConfig first = Policies.circuitBreaker(registry, "A#m()", "payments", "", null, false).config();
+        CircuitBreakerConfig second = Policies.circuitBreaker(registry, "B#n()", "payments", "", null, false).config();
 
         assertThat(first.minimumCalls()).isEqualTo(3);
         assertThat(second).isEqualTo(first);
@@ -133,9 +134,9 @@ class ResilienceRegistryOverridesTest {
                 .bulkheadInstance("A#m()", b -> b.maxConcurrent(2))
                 .build();
 
-        assertThat(registry.rateLimiterPolicy("A#m()", "", "", rl -> rl.permits(8)).config().permits()).isEqualTo(3);
-        assertThat(registry.timeoutPolicy("A#m()", "", "", null).config().timeout()).isEqualTo(Duration.ofMillis(70));
-        assertThat(registry.bulkheadPolicy("A#m()", "", "", null).config().maxConcurrent()).isEqualTo(2);
+        assertThat(Policies.rateLimiter(registry, "A#m()", "", "", rl -> rl.permits(8), false).config().permits()).isEqualTo(3);
+        assertThat(Policies.timeout(registry, "A#m()", "", "", null, false).config().timeout()).isEqualTo(Duration.ofMillis(70));
+        assertThat(Policies.bulkhead(registry, "A#m()", "", "", null, false).config().maxConcurrent()).isEqualTo(2);
     }
 
     @Test
@@ -145,7 +146,7 @@ class ResilienceRegistryOverridesTest {
                 .retryInstance("A#m()", r -> r.maxAttempts(2))
                 .build();
 
-        RetryConfig config = registry.retryPolicy("A#m()", "", "", null).config();
+        RetryConfig config = Policies.retry(registry, "A#m()", "", "", null, false).config();
         assertThat(config.maxAttempts()).isEqualTo(2);
         assertThat(config.delay()).isEqualTo(Duration.ZERO);
     }
@@ -157,7 +158,7 @@ class ResilienceRegistryOverridesTest {
                 .build();
 
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> registry.retryPolicy("A#m()", "", "", r -> r.maxDelay(Duration.ofSeconds(20))))
+                .isThrownBy(() -> Policies.retry(registry, "A#m()", "", "", r -> r.maxDelay(Duration.ofSeconds(20)), false))
                 .withMessageStartingWith("[R4C-REG-003] Invalid retry config for instance 'A#m()'")
                 .withMessageContaining("retryInstance(\"A#m()\", ...)")
                 .withMessageContaining("maxDelay");

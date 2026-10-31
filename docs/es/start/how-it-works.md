@@ -27,10 +27,11 @@ public final class StockClient$Resilient implements StockClient {
     public StockClient$Resilient(StockClient delegate, ResilienceRegistry registry) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
         // …
-        this.retry0 = registry.retryPolicy("….StockClient#stock(java.lang.String,int)", "", "", r4c$b -> {
+        Abi.require(1, StockClient$Resilient.class); // falla enseguida con un core más viejo que el procesador
+        this.retry0 = Policies.retry(registry, "….StockClient#stock(java.lang.String,int)", "", "", r4c$b -> {
             r4c$b.maxAttempts(3);
-        });
-        this.circuitBreaker0 = registry.circuitBreakerPolicy("….StockClient#stock(java.lang.String,int)", "", "", null);
+        }, false);
+        this.circuitBreaker0 = Policies.circuitBreaker(registry, "….StockClient#stock(java.lang.String,int)", "", "", null, false);
     }
 
     @Override
@@ -74,7 +75,7 @@ Lo que se desprende de este diseño:
 
 - **Los errores son errores de compilación.** Atributos desconocidos, duraciones inválidas, un fallback con la firma incorrecta, una anotación en un método `static` o `private`: el build falla con un código como `[R4C-ATR-001]` que tiene su propia sección en la [referencia de errores](../errors.md).
 - **El procesador es obligatorio.** Si falta la clase generada, `Resilient.of` falla de inmediato con [`R4C-RT-003`](../errors.md#r4c-rt-003), indicando la dependencia que hay que agregar. No hay alternativa por reflexión.
-- **El código generado solo puede llamar a la API de `core`**, así que `core` y `processor` deben tener la misma versión (si no, [`R4C-RT-004`](../errors.md#r4c-rt-004); el BOM las mantiene alineadas).
+- **El código generado solo puede llamar a la API de `core`**, así que `core` debe ser al menos tan nuevo como el `processor` que compiló el código, dentro de la misma versión mayor: el código generado por el procesador `1.a` funciona sobre core `1.b` para todo `b >= a`. Con un core más viejo, el constructor generado falla enseguida con [`R4C-RT-021`](../errors.md#r4c-rt-021); el BOM mantiene alineadas las versiones.
 - **El wrapper es thread-safe.** Créalo una vez y compártelo, igual que el registry.
 
 > [!MEASURED]

@@ -33,10 +33,10 @@ public final class InventoryApi$Resilient implements InventoryApi {
     // …
     public InventoryApi$Resilient(InventoryApi delegate, dev.resilience4cata.ResilienceRegistry registry) {
         // …
-        this.retry0 = registry.retryPolicy("dev.resilience4cata.examples.docs.retry.InventoryApi#stock(java.lang.String)", "", "", r4c$b -> {
+        this.retry0 = dev.resilience4cata.generated.Policies.retry(registry, "dev.resilience4cata.examples.docs.retry.InventoryApi#stock(java.lang.String)", "", "", r4c$b -> {
             r4c$b.maxAttempts(3);
             r4c$b.delay(java.time.Duration.ofNanos(100000000L));
-        });
+        }, false);
     }
 
     @Override

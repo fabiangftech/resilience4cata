@@ -129,7 +129,7 @@ public final class Pipeline<T> {
             this.fallback = null;
             this.recovery = null;
         } else {
-            FallbackPolicy policy = registry.fallbackPolicy(id, builder.fallbackApplyOn, builder.fallbackSkipOn);
+            FallbackPolicy policy = registry.fallbackPolicy(id, builder.fallbackApplyOn, builder.fallbackSkipOn, null);
             this.fallback = policy;
             if (asyncHandler != null) {
                 // FallbackPolicy turns a null stage into a NullPointerException.

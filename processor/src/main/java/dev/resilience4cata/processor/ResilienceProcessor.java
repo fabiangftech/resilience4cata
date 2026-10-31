@@ -89,29 +89,37 @@ public final class ResilienceProcessor extends AbstractProcessor {
             "io.reactivex.rxjava3.core.Single", "io.reactivex.rxjava3.core.Maybe", "io.reactivex.rxjava3.core.Completable",
             "io.reactivex.rxjava3.core.Observable");
     private static final String EXECUTE_ASYNC = ".executeAsync(() -> ";
+    private static final String POLICIES = "dev.resilience4cata.generated.Policies";
+    /**
+     * The generated-code level of this processor, which every generated constructor passes to core's
+     * {@code Abi.require} (and the reactor module's {@code ReactorAbi.require}). Raise it, together with the
+     * runtimes' own level, when the generated code starts calling something older runtimes do not have.
+     */
+    private static final int GENERATED_CODE_LEVEL = 1;
 
     /** Supported policies, in nesting order: outermost first. */
     private enum Kind {
         FALLBACK(Fallback.class, "fallback", "dev.resilience4cata.generated.FallbackPolicy", "", ""),
-        RETRY(Retry.class, "retry", "dev.resilience4cata.generated.RetryPolicy", "retryPolicy",
+        RETRY(Retry.class, "retry", "dev.resilience4cata.generated.RetryPolicy", "retry",
                 "dev.resilience4cata.RetryConfig"),
         /** Takes Retry's place (the two are exclusive on one method); asynchronous methods only. */
-        HEDGE(Hedge.class, "hedge", "dev.resilience4cata.generated.HedgePolicy", "hedgePolicy",
+        HEDGE(Hedge.class, "hedge", "dev.resilience4cata.generated.HedgePolicy", "hedge",
                 "dev.resilience4cata.HedgeConfig"),
         CIRCUIT_BREAKER(CircuitBreaker.class, "circuitBreaker", "dev.resilience4cata.generated.CircuitBreakerPolicy",
-                "circuitBreakerPolicy", "dev.resilience4cata.CircuitBreakerConfig"),
+                "circuitBreaker", "dev.resilience4cata.CircuitBreakerConfig"),
         RATE_LIMITER(RateLimiter.class, "rateLimiter", "dev.resilience4cata.generated.RateLimiterPolicy",
-                "rateLimiterPolicy", "dev.resilience4cata.RateLimiterConfig"),
+                "rateLimiter", "dev.resilience4cata.RateLimiterConfig"),
         ADAPTIVE_LIMIT(AdaptiveLimit.class, "adaptiveLimit", "dev.resilience4cata.generated.AdaptiveLimitPolicy",
-                "adaptiveLimitPolicy", "dev.resilience4cata.AdaptiveLimitConfig"),
-        TIMEOUT(Timeout.class, "timeout", "dev.resilience4cata.generated.TimeoutPolicy", "timeoutPolicy",
+                "adaptiveLimit", "dev.resilience4cata.AdaptiveLimitConfig"),
+        TIMEOUT(Timeout.class, "timeout", "dev.resilience4cata.generated.TimeoutPolicy", "timeout",
                 "dev.resilience4cata.TimeoutConfig"),
-        BULKHEAD(Bulkhead.class, "bulkhead", "dev.resilience4cata.generated.BulkheadPolicy", "bulkheadPolicy",
+        BULKHEAD(Bulkhead.class, "bulkhead", "dev.resilience4cata.generated.BulkheadPolicy", "bulkhead",
                 "dev.resilience4cata.BulkheadConfig");
 
         final Class<?> annotation;
         final String field;
         final String policyType;
+        /** The {@code dev.resilience4cata.generated.Policies} method that creates it. */
         final String registryMethod;
         final String configType;
 
@@ -1456,14 +1464,14 @@ public final class ResilienceProcessor extends AbstractProcessor {
         if (subclass) {
             for (SubclassWriter.Constructor constructor : subclasses.constructors(iface)) { // mirrors every constructor
                 appendConstructorStart(out, simpleName, constructor);
-                appendFieldInits(out, methods, constructor.registry());
+                appendFieldInits(out, simpleName, methods, constructor.registry());
                 out.append("    }\n");
             }
         } else {
             out.append("\n    public ").append(simpleName).append("(").append(ifaceType).append(" delegate, ")
                     .append(REGISTRY_TYPE).append(" registry) {\n");
             out.append("        this.delegate = java.util.Objects.requireNonNull(delegate, \"delegate\");\n");
-            appendFieldInits(out, methods, "registry");
+            appendFieldInits(out, simpleName, methods, "registry");
             out.append("    }\n");
         }
         for (int i = 0; i < methods.size(); i++) {
@@ -1553,15 +1561,23 @@ public final class ResilienceProcessor extends AbstractProcessor {
     }
 
     /** The constructor statements that set the fields written by {@link #appendFields}. */
-    private static void appendFieldInits(StringBuilder out, List<MethodModel> methods, String registry) {
+    private static void appendFieldInits(StringBuilder out, String simpleName, List<MethodModel> methods,
+            String registry) {
         out.append("        java.util.Objects.requireNonNull(").append(registry).append(", \"registry\");\n");
+        out.append("        dev.resilience4cata.generated.Abi.require(").append(GENERATED_CODE_LEVEL).append(", ")
+                .append(simpleName).append(".class);\n");
+        if (methods.stream().anyMatch(m -> (!m.policies().isEmpty() || m.fallback() != null)
+                && (isMono(m.type()) || isFlux(m.type())))) {
+            out.append("        dev.resilience4cata.reactor.generated.ReactorAbi.require(").append(GENERATED_CODE_LEVEL)
+                    .append(", ").append(simpleName).append(".class);\n");
+        }
         for (int i = 0; i < methods.size(); i++) {
             FallbackModel fallback = methods.get(i).fallback();
             if (fallback != null) {
-                out.append("        this.fallback").append(i).append(" = ").append(registry).append(".fallbackPolicy(")
-                        .append(literal(fallback.instanceId())).append(", java.util.List.of(").append(fallback.applyOn())
-                        .append("), java.util.List.of(").append(fallback.skipOn()).append(")")
-                        .append(fallback.taken() == null ? "" : ", java.util.List.of(" + fallback.taken() + ")")
+                out.append("        this.fallback").append(i).append(" = ").append(POLICIES).append(".fallback(")
+                        .append(registry).append(", ").append(literal(fallback.instanceId())).append(", java.util.List.of(")
+                        .append(fallback.applyOn()).append("), java.util.List.of(").append(fallback.skipOn()).append("), ")
+                        .append(fallback.taken() == null ? "null" : "java.util.List.of(" + fallback.taken() + ")")
                         .append(");\n");
                 if (fallback.handler() != null) {
                     out.append("        this.fallbackHandler").append(i).append(" = new ").append(fallback.handler()).append("();\n");
@@ -1570,10 +1586,11 @@ public final class ResilienceProcessor extends AbstractProcessor {
             for (Map.Entry<Kind, PolicyModel> entry : methods.get(i).policies().entrySet()) {
                 Kind kind = entry.getKey();
                 PolicyModel policy = entry.getValue();
-                out.append("        this.").append(kind.field).append(i).append(" = ").append(registry).append('.').append(kind.registryMethod)
-                        .append('(').append(literal(policy.instanceId())).append(", ").append(literal(policy.name()))
+                out.append("        this.").append(kind.field).append(i).append(" = ").append(POLICIES).append('.')
+                        .append(kind.registryMethod).append('(').append(registry).append(", ")
+                        .append(literal(policy.instanceId())).append(", ").append(literal(policy.name()))
                         .append(", ").append(literal(policy.config())).append(", ").append(overrides(policy.overrides()))
-                        .append(policy.locked() ? ", true" : "").append(");\n");
+                        .append(", ").append(policy.locked()).append(");\n");
                 if (ownsClassifier(methods.get(i), kind, i)) {
                     out.append("        this.").append(classifierField(methods.get(i), kind, i)).append(" = new ")
                             .append(policy.classifier()).append("();\n");

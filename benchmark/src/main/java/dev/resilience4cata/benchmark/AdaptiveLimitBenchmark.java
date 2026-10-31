@@ -1,5 +1,6 @@
 package dev.resilience4cata.benchmark;
 
+import dev.resilience4cata.generated.Policies;
 import com.netflix.concurrency.limits.Limiter;
 import com.netflix.concurrency.limits.limit.Gradient2Limit;
 import com.netflix.concurrency.limits.limit.WindowedLimit;
@@ -67,7 +68,7 @@ public class AdaptiveLimitBenchmark {
                 .adaptiveLimit("bench-full", a -> a.initialLimit(1).minLimit(1).maxLimit(1))
                 .build();
         resilience4cata = Resilient.of(AdaptiveService.class, new AdaptiveService.Impl(), registry);
-        registry.adaptiveLimitPolicy("setup", "full", "bench-full", null).acquire(); // holds the only slot
+        Policies.adaptiveLimit(registry, "setup", "full", "bench-full", null, false).acquire(); // holds the only slot
 
         netflix = limiter(1000);
         netflixFull = limiter(1);

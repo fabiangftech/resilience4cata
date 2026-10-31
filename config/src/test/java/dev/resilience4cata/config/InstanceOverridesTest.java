@@ -1,5 +1,6 @@
 package dev.resilience4cata.config;
 
+import dev.resilience4cata.generated.Policies;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
@@ -37,7 +38,7 @@ class InstanceOverridesTest {
     }
 
     private static RetryConfig retry(ResilienceRegistry registry, String instanceId, String name) {
-        return registry.retryPolicy(instanceId, name, "", null).config();
+        return Policies.retry(registry, instanceId, name, "", null, false).config();
     }
 
     // ---- resolution ----
@@ -51,7 +52,7 @@ class InstanceOverridesTest {
                 """).build().toRegistry();
         assertThat(retry(registry, "com.acme.Payments#pay()", "payments").maxAttempts()).isEqualTo(7);
         assertThat(retry(registry, GET, "").delay()).isEqualTo(Duration.ofMillis(15));
-        assertThat(registry.timeoutPolicy(GET, "", "", null).config().timeout()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(Policies.timeout(registry, GET, "", "", null, false).config().timeout()).isEqualTo(Duration.ofSeconds(2));
         assertThat(retry(registry, "com.acme.Api#other()", "")).isEqualTo(RetryConfig.DEFAULTS);
     }
 
@@ -63,8 +64,8 @@ class InstanceOverridesTest {
                 configs.external.retry.delay=1s
                 instances.payments.retry.maxAttempts=9
                 """).build().toRegistry();
-        RetryConfig config = registry.retryPolicy("A#m()", "payments", "external",
-                r -> r.maxAttempts(5).maxDelay(Duration.ofSeconds(30))).config();
+        RetryConfig config = Policies.retry(registry, "A#m()", "payments", "external",
+                r -> r.maxAttempts(5).maxDelay(Duration.ofSeconds(30)), false).config();
         assertThat(config.maxAttempts()).isEqualTo(9);
         assertThat(config.delay()).isEqualTo(Duration.ofSeconds(1));
         assertThat(config.maxDelay()).isEqualTo(Duration.ofSeconds(30));
@@ -98,10 +99,10 @@ class InstanceOverridesTest {
                 instances.x.timeout.enabled=false
                 instances.x.retry.enabled=false
                 """).build().toRegistry();
-        assertThat(registry.circuitBreakerPolicy("A#m()", "x", "", null).config().minimumCalls()).isEqualTo(3);
-        assertThat(registry.rateLimiterPolicy("A#m()", "x", "", null).config().permits()).isEqualTo(4);
-        assertThat(registry.bulkheadPolicy("A#m()", "x", "", null).config().maxConcurrent()).isEqualTo(5);
-        assertThat(registry.timeoutPolicy("A#m()", "x", "", null).config().enabled()).isFalse();
+        assertThat(Policies.circuitBreaker(registry, "A#m()", "x", "", null, false).config().minimumCalls()).isEqualTo(3);
+        assertThat(Policies.rateLimiter(registry, "A#m()", "x", "", null, false).config().permits()).isEqualTo(4);
+        assertThat(Policies.bulkhead(registry, "A#m()", "x", "", null, false).config().maxConcurrent()).isEqualTo(5);
+        assertThat(Policies.timeout(registry, "A#m()", "x", "", null, false).config().enabled()).isFalse();
         assertThat(retry(registry, "A#m()", "x").enabled()).isFalse();
     }
 
@@ -135,9 +136,9 @@ class InstanceOverridesTest {
                 "R4C_PROFILES_EU_INSTANCES_PAYMENTS_BULKHEAD_MAXCONCURRENT", "2",
                 "R4C_PROFILES_ACTIVE", "eu")).build().toRegistry();
         assertThat(retry(registry, "A#m()", "payments-api").maxAttempts()).isEqualTo(5);
-        assertThat(registry.circuitBreakerPolicy("A#m()", "payments", "", null).config().waitInOpen())
+        assertThat(Policies.circuitBreaker(registry, "A#m()", "payments", "", null, false).config().waitInOpen())
                 .isEqualTo(Duration.ofSeconds(3));
-        assertThat(registry.bulkheadPolicy("A#m()", "payments", "", null).config().maxConcurrent()).isEqualTo(2);
+        assertThat(Policies.bulkhead(registry, "A#m()", "payments", "", null, false).config().maxConcurrent()).isEqualTo(2);
     }
 
     @Test
@@ -175,10 +176,10 @@ class InstanceOverridesTest {
                 """).environment(Map.of("R4C_INSTANCES_P_RETRY_MAXATTEMPTS", "6"));
         ResilienceRegistry base = builder.build().toRegistry();
         assertThat(retry(base, "A#m()", "p").maxAttempts()).isEqualTo(6);
-        assertThat(base.rateLimiterPolicy(GET, "", "", null).config()).isEqualTo(RateLimiterConfig.DEFAULTS);
+        assertThat(Policies.rateLimiter(base, GET, "", "", null, false).config()).isEqualTo(RateLimiterConfig.DEFAULTS);
         ResilienceRegistry test = builder.profiles("test").build().toRegistry();
         assertThat(retry(test, "A#m()", "p").maxAttempts()).isEqualTo(1);
-        assertThat(test.rateLimiterPolicy(GET, "", "", null).config().permits()).isEqualTo(1);
+        assertThat(Policies.rateLimiter(test, GET, "", "", null, false).config().permits()).isEqualTo(1);
     }
 
     @Test
@@ -267,7 +268,7 @@ class InstanceOverridesTest {
         assertThatIllegalArgumentException().isThrownBy(() -> retry(registry, "A#m()", "p"))
                 .withMessageContaining("Invalid retry config for instance 'p'")
                 .withMessageContaining("instances.p.retry.*");
-        assertThat(registry.retryPolicy("A#m()", "p", "", r -> r.maxDelay(Duration.ofMinutes(1))).config().delay())
+        assertThat(Policies.retry(registry, "A#m()", "p", "", r -> r.maxDelay(Duration.ofMinutes(1)), false).config().delay())
                 .isEqualTo(Duration.ofSeconds(20));
     }
 
@@ -296,9 +297,9 @@ class InstanceOverridesTest {
                 instances."com.acme.Api#get(java.lang.Strin)".retry.delay=1ms
                 """).build();
         ResilienceRegistry registry = config.toRegistry();
-        registry.retryPolicy("A#m()", "payments", "", null);
-        registry.retryPolicy(GET, "", "", null);
-        registry.circuitBreakerPolicy("B#m()", "orders", "", null);
+        Policies.retry(registry, "A#m()", "payments", "", null, false);
+        Policies.retry(registry, GET, "", "", null, false);
+        Policies.circuitBreaker(registry, "B#m()", "orders", "", null, false);
 
         ConfigException e = org.assertj.core.api.Assertions.catchThrowableOfType(ConfigException.class,
                 () -> config.verifyInstances(registry));
@@ -317,7 +318,7 @@ class InstanceOverridesTest {
     void verifyInstancesPassesWhenEveryOverrideIsUsed() {
         ResilienceConfig config = text("instances.orders.circuitBreaker.minimumCalls=2").build();
         ResilienceRegistry registry = config.toRegistry();
-        registry.circuitBreakerPolicy("B#m()", "orders", "", null);
+        Policies.circuitBreaker(registry, "B#m()", "orders", "", null, false);
         assertThatCode(() -> config.verifyInstances(registry)).doesNotThrowAnyException();
         assertThatCode(() -> text("").build().verifyInstances(registry)).doesNotThrowAnyException();
     }
@@ -330,7 +331,7 @@ class InstanceOverridesTest {
                 instances.payments.retry.jitter=none
                 """).build();
         ResilienceRegistry registry = config.toRegistry();
-        RetryConfig resolved = registry.retryPolicy("A#m()", "payments", "",
+        RetryConfig resolved = Policies.retry(registry, "A#m()", "payments", "",
                 r -> r.maxAttempts(5).jitter(RetryConfig.Jitter.NONE), true).config();
 
         assertThat(resolved.maxAttempts()).isEqualTo(5);
@@ -347,7 +348,7 @@ class InstanceOverridesTest {
     void verifyInstancesPassesWhenALockedInstanceUsesEveryOverride() {
         ResilienceConfig config = text("instances.payments.retry.delay=7ms").build();
         ResilienceRegistry registry = config.toRegistry();
-        registry.retryPolicy("A#m()", "payments", "", r -> r.maxAttempts(5), true);
+        Policies.retry(registry, "A#m()", "payments", "", r -> r.maxAttempts(5), true);
         assertThatCode(() -> config.verifyInstances(registry)).doesNotThrowAnyException();
     }
 }
