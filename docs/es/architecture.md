@@ -196,8 +196,8 @@ Lo que declara un usuario (detalles, Maven y JPMS en [primeros pasos](start/inst
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:0.11.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.11.0')   // el path del processor no lo hereda
+    implementation platform('dev.resilience4cata:resilience4cata-bom:0.12.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:0.12.0')   // el path del processor no lo hereda
     implementation 'dev.resilience4cata:resilience4cata-core'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'   // retención CLASS: no hace falta en runtime
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
