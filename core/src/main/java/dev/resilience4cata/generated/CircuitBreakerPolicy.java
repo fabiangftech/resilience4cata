@@ -476,7 +476,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
     }
 
     private SlidingWindow newWindow() {
-        return timeWindow ? new TimeWindow(windowSize) : new CountWindow(windowSize, false);
+        return timeWindow ? new TimeWindow(windowSize, ticker.getAsLong()) : new CountWindow(windowSize, false);
     }
 
     /**

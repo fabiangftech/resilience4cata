@@ -114,6 +114,7 @@ Benchmarks (`benchmark` module, plugin `r4c.jmh` in `conventions`) use plain JMH
 
 Where tests go:
 - `core`: unit tests of policies and config. `RetryPolicy` has a package-private constructor that takes a fake clock and sleeper.
+- `core` model tests (`generated/*ModelTest`, `ModelRuns`): seeded random operations on a policy with a fake clock, checked against a simple reference model; `-Ptest.seed=<n>` replays a failing seed. Processor fuzz test (`ProcessorFuzzTest`): random annotated sources that must compile warning-free or report the expected codes; `-PfuzzSeed`/`-PfuzzCount`; every case it finds becomes a reduced test in `FuzzFoundProcessorTest`.
 - `processor`: compile Java sources in-memory with the processor via the `Compilation` helper (plain `javax.tools`, no compile-testing library) and assert on errors or generated source. Compilation uses `-Xlint:all -Werror`, so generated code must be warning-free.
 - `examples`: annotated interfaces under `src/test/java` are processed by `testAnnotationProcessor project(':processor')`; tests call `Resilient.of(...)` on them. Generated sources land in `examples/build/generated/sources/annotationProcessor/java/test`.
 - `testkit`: tests of `ManualClock` and of the policies driven through a registry on a manual clock. Users' own deterministic tests should use it too (see `TestkitEndToEndTest` in `examples`).
