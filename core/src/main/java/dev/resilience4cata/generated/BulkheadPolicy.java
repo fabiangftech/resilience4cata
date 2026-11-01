@@ -11,7 +11,6 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Future;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import org.jspecify.annotations.Nullable;
 
@@ -31,8 +30,8 @@ import org.jspecify.annotations.Nullable;
  * counter. A full bulkhead only reads that counter, so rejections under overload do not add
  * contention. The counter lives in its own padded object, so that the writes of every call do not
  * share a cache line with the configuration fields that every call reads. With waiting, a non-fair
- * {@link Semaphore} is used instead: same cost when a slot is free, and it parks virtual threads
- * without pinning them.
+ * {@link BulkheadSemaphore} is used instead: the same counter and atomics when a slot is free, and a queue
+ * that parks waiting threads (virtual threads included, without pinning them).
  *
  * <p>Asynchronous calls ({@link #executeAsync}) never block while waiting: they queue in
  * {@link BulkheadWaiters} and receive a released slot directly, oldest first. Synchronous and
@@ -56,7 +55,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
     /** Whether synchronous waits are measured on a manual {@link dev.resilience4cata.Ticker} instead of real time. */
     private final boolean waitsOnTicker;
     private final PaddedCounter inUse = new PaddedCounter();
-    private final @Nullable Semaphore semaphore;
+    private final @Nullable BulkheadSemaphore semaphore;
     private final @Nullable BulkheadWaiters waiters;
     private final BulkheadFullException rejection;
     private final PolicyEnvironment environment;
@@ -88,7 +87,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
         this.maxConcurrent = config.maxConcurrent();
         this.maxWaitNanos = config.maxWait().toNanos();
         this.waitsOnTicker = environment.manual != null && maxWaitNanos > 0;
-        this.semaphore = maxWaitNanos > 0 ? new Semaphore(maxConcurrent, false) : null;
+        this.semaphore = maxWaitNanos > 0 ? new BulkheadSemaphore(maxConcurrent) : null;
         this.waiters = maxWaitNanos > 0 ? new BulkheadWaiters() : null;
         this.rejection = new BulkheadFullException(id);
         this.rejected = environment.events.sink(BulkheadEvent.Rejected.class, id);
@@ -106,13 +105,13 @@ public final class BulkheadPolicy implements BulkheadHandle {
 
     @Override
     public int concurrentCalls() {
-        Semaphore waiting = semaphore;
+        BulkheadSemaphore waiting = semaphore;
         return waiting != null ? maxConcurrent - waiting.availablePermits() : inUse.get();
     }
 
     @Override
     public int waitingCalls() {
-        Semaphore waiting = semaphore;
+        BulkheadSemaphore waiting = semaphore;
         return waiting != null ? queuedCalls() + waiting.getQueueLength() : 0;
     }
 
@@ -138,7 +137,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
         if (!enabled) {
             return true;
         }
-        Semaphore waiting = semaphore;
+        BulkheadSemaphore waiting = semaphore;
         if (waiting == null) {
             return inUse.tryIncrement(maxConcurrent) || rejected();
         }
@@ -162,7 +161,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
      * release, hand-off rule and {@link #waitingCalls()} sees it), and a {@link TickerWait} scheduled on
      * the ticker ends the wait when the ticker passes {@code maxWait}. Not used without a manual ticker.
      */
-    private boolean awaitOnTicker(Semaphore waiting) {
+    private boolean awaitOnTicker(BulkheadSemaphore waiting) {
         TickerWait wait = new TickerWait(Thread.currentThread(), waiting);
         Future<?> deadline = environment.later(maxWaitNanos, wait);
         boolean acquired;
@@ -235,13 +234,13 @@ public final class BulkheadPolicy implements BulkheadHandle {
         static final int TIMED_OUT = 4;
 
         private final Thread thread;
-        private final Semaphore semaphore;
+        private final BulkheadSemaphore semaphore;
 
         // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
         @SuppressWarnings({"unused", "java:S1845"}) // accessed through STATE
         private volatile int state;
 
-        TickerWait(Thread thread, Semaphore semaphore) {
+        TickerWait(Thread thread, BulkheadSemaphore semaphore) {
             this.thread = thread;
             this.semaphore = semaphore;
         }
@@ -303,7 +302,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
         if (!enabled) {
             return;
         }
-        Semaphore waiting = semaphore;
+        BulkheadSemaphore waiting = semaphore;
         if (waiting == null) {
             inUse.decrement();
         } else {
@@ -320,7 +319,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
      * semaphore as well, every other release is left to them; otherwise the slot goes to the oldest
      * asynchronous waiter.
      */
-    private void handOff(Semaphore waiting, BulkheadWaiters queued) {
+    private void handOff(BulkheadSemaphore waiting, BulkheadWaiters queued) {
         if (waiting.hasQueuedThreads() && queued.yieldToSync()) {
             return;
         }
@@ -335,7 +334,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
      * back; the queue is then checked again, since a waiter may have been queued in between and failed
      * to take the permit while it was held here.
      */
-    private void drain(Semaphore waiting, BulkheadWaiters queued) {
+    private void drain(BulkheadSemaphore waiting, BulkheadWaiters queued) {
         while (queued.count() > 0) {
             if (!waiting.tryAcquire()) {
                 return;
@@ -448,7 +447,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
      */
     public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
         BulkheadWaiters queued = waiters;
-        Semaphore waiting = semaphore;
+        BulkheadSemaphore waiting = semaphore;
         if (!enabled || queued == null || waiting == null) {
             if (!tryEnter()) {
                 return CompletableFuture.failedFuture(rejection());
