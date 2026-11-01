@@ -67,15 +67,16 @@ class CircuitBreakerModelTest {
     private static void run(long seed, CircuitBreakerConfig.WindowType type) {
         SplittableRandom random = new SplittableRandom(seed * 31 + type.ordinal());
         CircuitBreakerConfig config = config(random, type);
-        long start = switch (random.nextInt(4)) {
+        long start = switch (random.nextInt(5)) {
             case 0 -> 0L;
+            case 4 -> Long.MAX_VALUE - random.nextLong(100L * SECOND); // wraps during the run
             case 1 -> -random.nextLong(1_000L * SECOND); // nanoTime may be negative
             case 2 -> random.nextLong(1_000L * SECOND);
             default -> 7 * SECOND - 1; // just before a second boundary
         };
         ModelRuns.Clock clock = new ModelRuns.Clock(start);
         CircuitBreakerPolicy breaker = new CircuitBreakerPolicy("model", config, clock::read);
-        Model model = new Model(config);
+        Model model = new Model(config, start);
         ModelRuns.Trace trace = new ModelRuns.Trace(seed, config + ", start " + start);
         List<long[]> pending = new ArrayList<>(); // {policy token, model token, start}
 
@@ -94,7 +95,7 @@ class CircuitBreakerModelTest {
                 long[] call = pending.remove(random.nextInt(pending.size()));
                 complete(random, trace, breaker, model, call, clock.now);
             } else if (op < 94) {
-                long by = random.nextInt(3) == 0 ? toBoundary(random, model, pending, clock.now) : advance(random);
+                long by = random.nextInt(3) == 0 ? toBoundary(random, model, pending, clock.now) : advance(random, model.timeWindow);
                 clock.now += by;
                 trace.step("advance " + Duration.ofNanos(by) + " to " + clock.now);
             } else if (op < 96) {
@@ -108,7 +109,7 @@ class CircuitBreakerModelTest {
             } else {
                 trace.step("reset");
                 breaker.reset();
-                model.reset();
+                model.reset(clock.now);
             }
             compare(trace, model, breaker, clock.now);
         }
@@ -173,13 +174,21 @@ class CircuitBreakerModelTest {
             case 0 -> model.openedAt + model.waitInOpen;
             case 1 -> model.halfOpenSince + model.maxWaitInHalfOpen;
             case 2 -> pending.isEmpty() ? now : pending.get(random.nextInt(pending.size()))[2] + model.slowNanos;
-            default -> (Math.floorDiv(now, SECOND) + 1) * SECOND;
+            default -> model.windowOrigin + (Math.floorDiv(now - model.windowOrigin, SECOND) + 1) * SECOND;
         };
-        target += random.nextInt(3) - 1;
-        return Math.max(0, target - now);
+        long by = target + random.nextInt(3) - 1 - now; // by subtraction: the clock may wrap
+        return by >= 0 && by <= 10 * SECOND ? by : 0; // an instant already passed (or long gone): stay
     }
 
-    private static long advance(SplittableRandom random) {
+    private static long advance(SplittableRandom random, boolean timeWindow) {
+        if (timeWindow) { // enough calls per second to fill a window of a few seconds
+            return switch (random.nextInt(10)) {
+                case 0, 1 -> 0L;
+                case 2, 3, 4, 5 -> random.nextLong(1, 20 * MILLI);
+                case 6, 7, 8 -> random.nextLong(20 * MILLI, 300 * MILLI);
+                default -> random.nextLong(300 * MILLI, 3 * SECOND);
+            };
+        }
         return switch (random.nextInt(10)) {
             case 0, 1 -> 0L;
             case 2, 3, 4 -> random.nextLong(1, 50 * MILLI);
@@ -237,6 +246,8 @@ class CircuitBreakerModelTest {
 
         CircuitBreakerState state;
         long generation;
+        /** Closed, time window: when the window was created; its seconds count from there. */
+        long windowOrigin;
         long openedAt;
         long halfOpenSince;
         int permits;
@@ -247,7 +258,7 @@ class CircuitBreakerModelTest {
         /** Closed, time window: the seconds that already have a recorded call. */
         final Set<Long> secondsWithCalls = new HashSet<>();
 
-        Model(CircuitBreakerConfig config) {
+        Model(CircuitBreakerConfig config, long now) {
             enabled = config.enabled();
             timeWindow = config.windowType() == CircuitBreakerConfig.WindowType.TIME;
             windowSize = config.windowSize();
@@ -260,11 +271,12 @@ class CircuitBreakerModelTest {
             waitInOpen = config.waitInOpen().toNanos();
             maxWaitInHalfOpen = config.maxWaitInHalfOpen().toNanos();
             halfOpenCalls = config.halfOpenCalls();
-            enterInitial(0);
+            enterInitial(0, now);
         }
 
-        private void enterInitial(long nextGeneration) {
+        private void enterInitial(long nextGeneration, long now) {
             generation = nextGeneration;
+            windowOrigin = now;
             state = enabled ? CircuitBreakerState.CLOSED : CircuitBreakerState.DISABLED;
             clearWindow();
         }
@@ -331,7 +343,7 @@ class CircuitBreakerModelTest {
             boolean failed = outcome == Outcome.FAILURE;
             if (state == CircuitBreakerState.CLOSED) {
                 if (timeWindow) {
-                    long second = Math.floorDiv(now, SECOND);
+                    long second = Math.floorDiv(now - windowOrigin, SECOND);
                     boolean firstOfItsSecond = secondsWithCalls.add(second);
                     timedOutcomes.add(new long[] {second, failed ? 1 : 0, slow ? 1 : 0});
                     // Documented: successes alone trigger an evaluation at most once per second.
@@ -360,14 +372,15 @@ class CircuitBreakerModelTest {
                         open(now);
                     } else {
                         seen("half-open closed");
-                        enterInitialClosed();
+                        enterInitialClosed(now);
                     }
                 }
             }
         }
 
-        private void enterInitialClosed() {
+        private void enterInitialClosed(long now) {
             generation++;
+            windowOrigin = now;
             state = CircuitBreakerState.CLOSED;
             clearWindow();
         }
@@ -393,7 +406,7 @@ class CircuitBreakerModelTest {
         int[] counts(long now) {
             int[] counts = new int[3];
             if (state == CircuitBreakerState.CLOSED && timeWindow) {
-                long second = Math.floorDiv(now, SECOND);
+                long second = Math.floorDiv(now - windowOrigin, SECOND);
                 for (long[] call : timedOutcomes) {
                     if (call[0] > second - windowSeconds && call[0] <= second) {
                         counts[0]++;
@@ -423,8 +436,8 @@ class CircuitBreakerModelTest {
             clearWindow();
         }
 
-        void reset() {
-            enterInitial(generation + 1);
+        void reset(long now) {
+            enterInitial(generation + 1, now);
         }
 
         CircuitBreakerSnapshot snapshot(long now) {
