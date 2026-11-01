@@ -3,6 +3,9 @@ package dev.resilience4cata.spring.usability;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.spring.autoconfigure.ResilienceAutoConfiguration;
+import dev.resilience4cata.spring.scenarios.EmailNotifier;
+import dev.resilience4cata.spring.scenarios.Notifications;
+import dev.resilience4cata.spring.scenarios.SmsNotifier;
 import dev.resilience4cata.spring.usability.fixtures.LazyPayments;
 import dev.resilience4cata.spring.usability.fixtures.ScopedCounter;
 import dev.resilience4cata.spring.usability.fixtures.SpecialClient;
@@ -24,7 +27,10 @@ import org.springframework.core.test.tools.CompileWithForkedClassLoader;
 import org.springframework.core.test.tools.TestCompiler;
 import org.springframework.javapoet.ClassName;
 
-/** Spring AOT with less common bean shapes: a class-based scoped proxy, a lazy bean, an annotated subclass. */
+/**
+ * Spring AOT with less common bean shapes: a class-based scoped proxy, a lazy bean, an annotated subclass, and
+ * annotated classes told apart by a custom qualifier.
+ */
 @CompileWithForkedClassLoader
 class AotShapesTest {
 
@@ -57,13 +63,19 @@ class AotShapesTest {
 
                 assertThat(optimized.getBean(LazyPayments.class).getClass().getName())
                         .endsWith("LazyPayments$Resilient");
+
+                Notifications notifications = optimized.getBean(Notifications.class);
+                assertThat(notifications.email).as("the custom qualifier is in the generated bean definition")
+                        .isSameAs(optimized.getBean(EmailNotifier.class));
+                assertThat(notifications.sms).isSameAs(optimized.getBean(SmsNotifier.class));
             }
         });
     }
 
     @Configuration(proxyBeanMethods = false)
     @ImportAutoConfiguration(ResilienceAutoConfiguration.class)
-    @Import({ScopedCounter.class, SpecialClient.class, LazyPayments.class})
+    @Import({ScopedCounter.class, SpecialClient.class, LazyPayments.class, EmailNotifier.class, SmsNotifier.class,
+            Notifications.class})
     static class App {
 
         @Bean
