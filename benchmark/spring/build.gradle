@@ -1,0 +1,23 @@
+plugins {
+    id 'r4c.jmh'
+}
+
+// Its own group: with the root's, Gradle would take this project and :spring for the same module.
+group = 'dev.resilience4cata.benchmark'
+
+description = 'JMH benchmarks of Spring Boot beans: resilience4cata against resilience4j-spring-boot4. Not published.'
+
+dependencies {
+    implementation platform(libs.spring.boot.dependencies)
+    implementation project(':spring')
+    compileOnly project(':annotations')
+    annotationProcessor project(':processor')
+    // Resilience4j's annotations work through Spring AOP aspects, which need AspectJ's annotation support.
+    implementation libs.resilience4j.spring.boot4
+    implementation libs.resilience4j.retry
+    implementation libs.resilience4j.circuitbreaker
+    implementation libs.resilience4j.bulkhead
+    implementation libs.resilience4j.ratelimiter
+    implementation libs.resilience4j.timelimiter
+    implementation libs.aspectjweaver
+}

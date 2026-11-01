@@ -1,0 +1,40 @@
+plugins {
+    id 'r4c.jmh'
+}
+
+// Its own group: with the root's, Gradle would take this project and :micronaut for the same module.
+group = 'dev.resilience4cata.benchmark'
+
+description = 'JMH benchmarks of Micronaut beans: resilience4cata against resilience4j-micronaut and Micronaut\'s own retry. Not published.'
+
+// Micronaut 5 needs Java 25, as the micronaut module.
+r4cJava.release = 25
+
+dependencies {
+    implementation platform(libs.micronaut.platform)
+    implementation project(':micronaut')
+    implementation libs.micronaut.inject
+    implementation libs.micronaut.retry
+    implementation libs.resilience4j.micronaut
+    // used by resilience4j-micronaut's registries, not declared in its POM
+    implementation libs.resilience4j.consumer
+    // Its interceptors need a PublisherExtension bean, which exists only with Reactor (or RxJava) on the class path.
+    implementation platform(libs.reactor.bom)
+    implementation libs.reactor.core
+    implementation libs.resilience4j.reactor
+    implementation libs.resilience4j.retry
+    implementation libs.resilience4j.circuitbreaker
+    implementation libs.resilience4j.bulkhead
+    implementation libs.resilience4j.ratelimiter
+    implementation libs.resilience4j.timelimiter
+    runtimeOnly libs.logback.classic
+    compileOnly project(':annotations')
+    annotationProcessor platform(libs.micronaut.platform)
+    annotationProcessor libs.micronaut.inject.java
+    annotationProcessor project(':processor')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    // Micronaut's classes carry annotations of jars it does not ship, as in the micronaut module.
+    options.compilerArgs.addAll(['-Xlint:-classfile', '-Ar4c.inject=micronaut'])
+}

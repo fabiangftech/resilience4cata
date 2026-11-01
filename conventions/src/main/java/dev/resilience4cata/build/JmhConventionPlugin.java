@@ -23,7 +23,7 @@ import org.gradle.jvm.toolchain.JavaToolchainService;
  * <pre>
  * ./gradlew :benchmark:jmh                                   # every benchmark, default settings
  * ./gradlew :benchmark:jmh -Pjmh="Retry -prof gc"            # JMH command-line options
- * ./gradlew :benchmark:jmh -PjmhJdk=25                       # run on another JDK
+ * ./gradlew :benchmark:jmh -PjmhJdk=25                       # run on another JDK (never below the module's release)
  * ./gradlew :benchmark:allocationCheck                       # allocation gate (see below)
  * </pre>
  *
@@ -44,7 +44,11 @@ public final class JmhConventionPlugin implements Plugin<Project> {
         project.getDependencies().add("annotationProcessor", libs.findLibrary("jmh-annprocess").orElseThrow());
 
         Provider<String> options = project.getProviders().gradleProperty("jmh").orElse("");
-        Provider<Integer> jdk = project.getProviders().gradleProperty("jmhJdk").map(Integer::parseInt).orElse(21);
+        // Never below the module's release (25 for a Micronaut benchmark), as for its tests.
+        Provider<Integer> release = project.getExtensions().getByType(JavaLibraryConventionPlugin.JavaReleaseExtension.class)
+                .getRelease();
+        Provider<Integer> jdk = project.getProviders().gradleProperty("jmhJdk").map(Integer::parseInt).orElse(21)
+                .zip(release, Math::max);
         Provider<RegularFile> results = project.getLayout().getBuildDirectory().file("jmh/results.json");
         JavaToolchainService toolchains = project.getExtensions().getByType(JavaToolchainService.class);
         SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);

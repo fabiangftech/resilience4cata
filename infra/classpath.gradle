@@ -1,13 +1,23 @@
-// Gradle init script used by infra/bench.sh: compiles the benchmark module and writes its runtime
-// classpath (exactly what the jmh task runs with) to benchmark/build/r4c-classpath.txt.
+// Gradle init script used by infra/bench.sh: compiles every benchmark project (:benchmark and its framework
+// subprojects) and writes, for each, the class path JMH runs with to build/r4c-classpath.txt and the Java release
+// it needs to build/r4c-jdk.txt. A project may set ext.benchmarkClasspath (benchmark:quarkus: its augmented
+// uber-jar); otherwise it is the main runtime class path, exactly what the jmh task runs with.
 allprojects {
-    if (path == ':benchmark') {
-        tasks.register('r4cClasspath') {
-            def files = project.sourceSets.main.runtimeClasspath
-            dependsOn files
-            def out = layout.buildDirectory.file('r4c-classpath.txt')
-            outputs.file(out)
-            doLast { out.get().asFile.text = files.files.collect { it.absolutePath }.join('\n') }
+    if (path == ':benchmark' || path.startsWith(':benchmark:')) {
+        pluginManager.withPlugin('java') {
+            tasks.register('r4cClasspath') {
+                def files = project.hasProperty('benchmarkClasspath') ? project.benchmarkClasspath
+                        : project.sourceSets.main.runtimeClasspath
+                def release = project.extensions.findByName('r4cJava')?.release ?: 21
+                dependsOn files
+                def out = layout.buildDirectory.file('r4c-classpath.txt')
+                def jdk = layout.buildDirectory.file('r4c-jdk.txt')
+                outputs.files(out, jdk)
+                doLast {
+                    out.get().asFile.text = files.files.collect { it.absolutePath }.join('\n')
+                    jdk.get().asFile.text = String.valueOf(release instanceof Provider ? release.get() : release)
+                }
+            }
         }
     }
 }

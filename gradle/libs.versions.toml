@@ -81,6 +81,12 @@ resilience4j-bulkhead = { module = "io.github.resilience4j:resilience4j-bulkhead
 resilience4j-ratelimiter = { module = "io.github.resilience4j:resilience4j-ratelimiter", version.ref = "resilience4j" }
 resilience4j-hedge = { module = "io.github.resilience4j:resilience4j-hedge", version.ref = "resilience4j" }
 resilience4j-reactor = { module = "io.github.resilience4j:resilience4j-reactor", version.ref = "resilience4j" }
+# benchmark:spring only: Resilience4j's Spring Boot 4 integration (its annotations and aspects).
+resilience4j-spring-boot4 = { module = "io.github.resilience4j:resilience4j-spring-boot4", version.ref = "resilience4j" }
+# benchmark:micronaut only: Resilience4j's Micronaut integration (built for Micronaut 4).
+resilience4j-micronaut = { module = "io.github.resilience4j:resilience4j-micronaut", version.ref = "resilience4j" }
+# resilience4j-micronaut needs it at run time but does not declare it.
+resilience4j-consumer = { module = "io.github.resilience4j:resilience4j-consumer", version.ref = "resilience4j" }
 # Netflix concurrency-limits: only the benchmark module uses it, to compare @AdaptiveLimit with SimpleLimiter.
 concurrency-limits-core = { module = "com.netflix.concurrency-limits:concurrency-limits-core", version.ref = "concurrencyLimits" }
 reactor-bom = { module = "io.projectreactor:reactor-bom", version.ref = "reactorBom" }
@@ -178,6 +184,8 @@ micronaut-http-client = { module = "io.micronaut:micronaut-http-client" }
 micronaut-serde-jackson = { module = "io.micronaut.serde:micronaut-serde-jackson" }
 micronaut-test-junit5 = { module = "io.micronaut.test:micronaut-test-junit5" }
 logback-classic = { module = "ch.qos.logback:logback-classic" }
+# benchmark:micronaut only: Micronaut's own @Retryable and @CircuitBreaker.
+micronaut-retry = { module = "io.micronaut:micronaut-retry" }
 micronaut-data-tx = { module = "io.micronaut.data:micronaut-data-tx" }
 commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" }
 commonmark-ext-gfm-tables = { module = "org.commonmark:commonmark-ext-gfm-tables", version.ref = "commonmark" }
