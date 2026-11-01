@@ -203,7 +203,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
         messager = processingEnv.getMessager();
         subclasses = new SubclassWriter(elements, types, messager);
         for (Kind kind : Kind.values()) {
-            attributes.put(kind, new PolicyAttributes(messager, kind.annotation));
+            attributes.put(kind, kind == Kind.CIRCUIT_BREAKER
+                    ? new PolicyAttributes(messager, kind.annotation, ResilienceProcessor::windowMismatch)
+                    : new PolicyAttributes(messager, kind.annotation));
         }
         order = new PolicyAttributes(messager, PolicyOrder.class);
         String inject = processingEnv.getOptions().get(INJECT_OPTION);
@@ -831,9 +833,6 @@ public final class ResilienceProcessor extends AbstractProcessor {
         if (kind == Kind.ADAPTIVE_LIMIT) {
             valid &= limitsInOrder(method, annotation, values);
         }
-        if (kind == Kind.CIRCUIT_BREAKER) {
-            valid &= windowFitsType(method, annotation, values);
-        }
         if (values.containsKey("onExhaustedResult") && !values.containsKey("classifier")) {
             valid = invalid(method, ProcessorError.EXHAUSTED_WITHOUT_CLASSIFIER, annotation + ".onExhaustedResult needs " + annotation + ".classifier: only a"
                     + " classifier can reject a result. Add a classifier, or remove onExhaustedResult.");
@@ -849,29 +848,31 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
     /**
      * Checks that {@code windowSize} is set only for a count window and {@code windowDuration} only for a time
-     * window, as far as the annotation says. Returns false after reporting.
+     * window, as far as one element's {@code @CircuitBreaker} (with its bundles) says: the error message, or null.
+     * Each element is checked on its own, as R4C-ATR-010 documents. Once merged, a method may change the window
+     * type that its type implies, and the window ignores the attribute of the other type, as configuration does.
      */
-    private boolean windowFitsType(ExecutableElement method, String annotation, Map<String, AnnotationValue> values) {
+    private static String windowMismatch(Map<String, AnnotationValue> values) {
         AnnotationValue type = values.get("windowType");
         String windowType = type == null ? null : constant(type.getValue());
         boolean size = values.containsKey("windowSize");
         boolean duration = values.containsKey("windowDuration");
         if (size && duration) {
-            return invalid(method, ProcessorError.WINDOW_MISMATCH, annotation + " sets both windowSize and"
-                    + " windowDuration: windowSize counts the calls of a COUNT window, windowDuration is the length"
-                    + " of a TIME window. Keep the one that fits windowType.");
+            return ProcessorError.WINDOW_MISMATCH.message("@CircuitBreaker sets both windowSize and windowDuration:"
+                    + " windowSize counts the calls of a COUNT window, windowDuration is the length of a TIME"
+                    + " window. Keep the one that fits windowType.");
         }
         if ("TIME".equals(windowType) && size) {
-            return invalid(method, ProcessorError.WINDOW_MISMATCH, annotation + ".windowSize counts the calls of a"
-                    + " COUNT window, but windowType is TIME: set windowDuration instead, for example"
-                    + " windowDuration = \"60s\".");
+            return ProcessorError.WINDOW_MISMATCH.message("@CircuitBreaker.windowSize counts the calls of a COUNT"
+                    + " window, but windowType is TIME: set windowDuration instead, for example windowDuration ="
+                    + " \"60s\".");
         }
         if ("COUNT".equals(windowType) && duration) {
-            return invalid(method, ProcessorError.WINDOW_MISMATCH, annotation + ".windowDuration is the length of a"
-                    + " TIME window, but windowType is COUNT: set windowSize (a number of calls) instead, or"
+            return ProcessorError.WINDOW_MISMATCH.message("@CircuitBreaker.windowDuration is the length of a TIME"
+                    + " window, but windowType is COUNT: set windowSize (a number of calls) instead, or"
                     + " windowType = WindowType.TIME.");
         }
-        return true;
+        return null;
     }
 
     /**

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import javax.annotation.processing.Messager;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
@@ -35,10 +36,23 @@ final class PolicyAttributes {
     // by element, not by toString(): methods of different types print alike, and each needs its own error
     private final Set<Map.Entry<Element, String>> reported = new HashSet<>();
 
+    // checks the values of one site (an element's annotation and bundles) on their own, before they are merged
+    private final Function<Map<String, AnnotationValue>, String> siteCheck;
+
     PolicyAttributes(Messager messager, Class<?> annotation) {
+        this(messager, annotation, values -> null);
+    }
+
+    /**
+     * @param siteCheck the error message (with its code) for the values that one element sets, merged from its
+     *        direct annotation and its bundles, or null if they are valid; reported on that element
+     */
+    PolicyAttributes(Messager messager, Class<?> annotation,
+            Function<Map<String, AnnotationValue>, String> siteCheck) {
         this.messager = messager;
         this.annotation = annotation.getCanonicalName();
         this.simpleName = annotation.getSimpleName();
+        this.siteCheck = siteCheck;
     }
 
     /** The annotation's simple name, for messages: {@code "Retry"}. */
@@ -57,7 +71,14 @@ final class PolicyAttributes {
      * same attribute to different values are reported as an error.
      */
     Optional<Map<String, AnnotationValue>> on(Element element) {
-        return collect(element, element, new ArrayDeque<>());
+        Optional<Map<String, AnnotationValue>> values = collect(element, element, new ArrayDeque<>());
+        if (values.isPresent()) {
+            String message = siteCheck.apply(values.get());
+            if (message != null && reported.add(Map.entry(element, message))) {
+                messager.printMessage(Diagnostic.Kind.ERROR, message, element);
+            }
+        }
+        return values;
     }
 
     private Optional<Map<String, AnnotationValue>> collect(Element element, Element reportOn, Deque<String> path) {

@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
 import java.util.Map;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -184,8 +183,6 @@ class FuzzFoundProcessorTest {
     }
 
     @Test
-    @Disabled("bug: R4C-ATR-010 checks the window attributes merged from every site (type, bundles, method), not each"
-            + " annotation as documented; fixing it needs a decision on which annotation's windowType a merged window uses")
     void aMethodMayChangeTheWindowTypeThatItsTypeImplies() {
         Compilation result = Compilation.compile(workDir, Map.of("demo.Client", """
                 package demo;
