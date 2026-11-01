@@ -33,7 +33,7 @@ jacksonAnnotations = "2.22"
 # never bump it with the rest, .github/dependabot.yml ignores the artifacts that use it); its tests run on the
 # Micronaut platform BOM (micronautPlatform), which manages every Micronaut module.
 micronautPlatform = "5.2.2"
-micronautMinimum = "5.2.0"
+micronautMinimum = "5.2.16"
 # The oldest Micronaut platform BOM, for the other Micronaut modules in the micronaut module's minimumMicronautTest suite
 # (no platform ships core 5.2.0: platform 5.2.0 has core 5.2.8, so the suite forces core to micronautMinimum).
 micronautPlatformMinimum = "5.2.0"
