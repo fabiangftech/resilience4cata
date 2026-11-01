@@ -10,7 +10,7 @@ jmh = "1.37"
 jcstress = "0.16"
 # The API compatibility check of every published module (apiCompatibility in r4c.publish), run through Gradle's
 # Worker API: no third-party Gradle plugin.
-japicmp = "0.26.3"
+japicmp = "0.26.5"
 resilience4j = "2.4.0"
 concurrencyLimits = "0.5.4"
 # api of the micrometer module; the Prometheus registry is test-only (examples), for the sample scrape in the docs.
