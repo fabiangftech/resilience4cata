@@ -14,6 +14,9 @@ Sin cambios de API.
 
 ### Corregido
 
+- Circuit breaker con ventana de tiempo (`windowType = TIME`): los segundos se numeraban desde el origen de `System.nanoTime()`, así que donde el reloj da la vuelta todos los segundos anteriores parecían más nuevos que el actual, se perdían llamadas y el breaker no podía abrirse. Ahora los segundos cuentan desde la creación de la ventana.
+- Procesador: código generado que no compilaba, encontrado por un test de fuzzing del procesador: una clase interna de una clase genérica (`Holder<Integer>.Inner`) se escribe con los argumentos de tipo de la clase exterior; las variables de tipo con una cota recursiva (`<T extends Comparable<T>>`) se pasan explícitamente; un fallback handler en un método que lanza una variable de tipo; los métodos de fallback estáticos de una interfaz se encuentran desde una subinterfaz y desde una clase que la implementa.
+- Procesador: dos bundles en conflicto (R4C-CMP-002) se reportan en cada método que los usa, no solo en el primero de varios métodos con la misma firma; R4C-ATR-010 revisa cada anotación por separado, así que un método puede poner `windowType = TIME` con `windowDuration` mientras su tipo pone `windowSize`.
 - Spring: una clase anotada con una anotación de qualifier propia (meta-anotada con `@Qualifier`, sin `@Inherited`, como `@Email`) no se podía inyectar por ese qualifier, porque su bean es la subclase generada, que no repite las anotaciones de la clase. Ahora esos qualifiers se copian a la definición del bean, también con AOT.
 
 ## [0.13.0] - 2026-10-31 :id=0.13.0
