@@ -15,4 +15,7 @@ dependencies {
 tasks.named('test') {
     // ErrorCodeTest checks the error codes against the error reference pages.
     inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
+    // ProcessorFuzzTest: -PfuzzSeed=<n> replays one seed, -PfuzzCount=<n> runs that many seeds
+    systemProperty 'test.seed', providers.gradleProperty('fuzzSeed').getOrElse('')
+    systemProperty 'test.fuzz.count', providers.gradleProperty('fuzzCount').getOrElse('400')
 }

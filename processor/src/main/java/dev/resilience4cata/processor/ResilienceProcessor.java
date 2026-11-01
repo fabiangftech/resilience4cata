@@ -11,11 +11,14 @@ import dev.resilience4cata.annotation.Retry;
 import dev.resilience4cata.annotation.Timeout;
 import java.io.IOException;
 import java.io.Writer;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -200,7 +203,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
         messager = processingEnv.getMessager();
         subclasses = new SubclassWriter(elements, types, messager);
         for (Kind kind : Kind.values()) {
-            attributes.put(kind, new PolicyAttributes(messager, kind.annotation));
+            attributes.put(kind, kind == Kind.CIRCUIT_BREAKER
+                    ? new PolicyAttributes(messager, kind.annotation, ResilienceProcessor::windowMismatch)
+                    : new PolicyAttributes(messager, kind.annotation));
         }
         order = new PolicyAttributes(messager, PolicyOrder.class);
         String inject = processingEnv.getOptions().get(INJECT_OPTION);
@@ -828,9 +833,6 @@ public final class ResilienceProcessor extends AbstractProcessor {
         if (kind == Kind.ADAPTIVE_LIMIT) {
             valid &= limitsInOrder(method, annotation, values);
         }
-        if (kind == Kind.CIRCUIT_BREAKER) {
-            valid &= windowFitsType(method, annotation, values);
-        }
         if (values.containsKey("onExhaustedResult") && !values.containsKey("classifier")) {
             valid = invalid(method, ProcessorError.EXHAUSTED_WITHOUT_CLASSIFIER, annotation + ".onExhaustedResult needs " + annotation + ".classifier: only a"
                     + " classifier can reject a result. Add a classifier, or remove onExhaustedResult.");
@@ -846,29 +848,31 @@ public final class ResilienceProcessor extends AbstractProcessor {
 
     /**
      * Checks that {@code windowSize} is set only for a count window and {@code windowDuration} only for a time
-     * window, as far as the annotation says. Returns false after reporting.
+     * window, as far as one element's {@code @CircuitBreaker} (with its bundles) says: the error message, or null.
+     * Each element is checked on its own, as R4C-ATR-010 documents. Once merged, a method may change the window
+     * type that its type implies, and the window ignores the attribute of the other type, as configuration does.
      */
-    private boolean windowFitsType(ExecutableElement method, String annotation, Map<String, AnnotationValue> values) {
+    private static String windowMismatch(Map<String, AnnotationValue> values) {
         AnnotationValue type = values.get("windowType");
         String windowType = type == null ? null : constant(type.getValue());
         boolean size = values.containsKey("windowSize");
         boolean duration = values.containsKey("windowDuration");
         if (size && duration) {
-            return invalid(method, ProcessorError.WINDOW_MISMATCH, annotation + " sets both windowSize and"
-                    + " windowDuration: windowSize counts the calls of a COUNT window, windowDuration is the length"
-                    + " of a TIME window. Keep the one that fits windowType.");
+            return ProcessorError.WINDOW_MISMATCH.message("@CircuitBreaker sets both windowSize and windowDuration:"
+                    + " windowSize counts the calls of a COUNT window, windowDuration is the length of a TIME"
+                    + " window. Keep the one that fits windowType.");
         }
         if ("TIME".equals(windowType) && size) {
-            return invalid(method, ProcessorError.WINDOW_MISMATCH, annotation + ".windowSize counts the calls of a"
-                    + " COUNT window, but windowType is TIME: set windowDuration instead, for example"
-                    + " windowDuration = \"60s\".");
+            return ProcessorError.WINDOW_MISMATCH.message("@CircuitBreaker.windowSize counts the calls of a COUNT"
+                    + " window, but windowType is TIME: set windowDuration instead, for example windowDuration ="
+                    + " \"60s\".");
         }
         if ("COUNT".equals(windowType) && duration) {
-            return invalid(method, ProcessorError.WINDOW_MISMATCH, annotation + ".windowDuration is the length of a"
-                    + " TIME window, but windowType is COUNT: set windowSize (a number of calls) instead, or"
+            return ProcessorError.WINDOW_MISMATCH.message("@CircuitBreaker.windowDuration is the length of a TIME"
+                    + " window, but windowType is COUNT: set windowSize (a number of calls) instead, or"
                     + " windowType = WindowType.TIME.");
         }
-        return true;
+        return null;
     }
 
     /**
@@ -1003,7 +1007,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String instanceId = iface.getQualifiedName() + "#" + method.getSimpleName() + "(" + erasedParameters(type) + ")";
         List<String> checkedThrown = new ArrayList<>();
         for (TypeMirror thrown : type.getThrownTypes()) {
-            if (isChecked(thrown)) {
+            // a type variable (throws E) cannot be tested with instanceof: a handler's E is wrapped like an undeclared one
+            if (isChecked(thrown) && thrown.getKind() != TypeKind.TYPEVAR) {
                 checkedThrown.add(TypePrinter.print(thrown));
             }
         }
@@ -1148,6 +1153,19 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 + method.getSimpleName() + "\").";
     }
 
+    /** True if the bound of one of {@code variables} uses one of them ({@code <T extends Comparable<T>>}). */
+    private static boolean boundsUseTypeVariables(List<? extends TypeVariable> variables) {
+        for (TypeVariable variable : variables) {
+            TypeMirror bound = variable.getUpperBound();
+            List<? extends TypeMirror> bounds = bound.getKind() == TypeKind.INTERSECTION
+                    ? ((IntersectionType) bound).getBounds() : List.of(bound);
+            if (bounds.stream().anyMatch(b -> mentions(b, variables))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** True if {@code type} uses any of {@code variables}. */
     private static boolean mentions(TypeMirror type, List<? extends TypeVariable> variables) {
         return switch (type.getKind()) {
@@ -1221,7 +1239,17 @@ public final class ResilienceProcessor extends AbstractProcessor {
         List<String> problems = new ArrayList<>();
         Set<String> names = new TreeSet<>(); // every method that could be a fallback, for "did you mean"
         boolean named = false;
-        for (ExecutableElement candidate : ElementFilter.methodsIn(elements.getAllMembers(iface))) {
+        List<ExecutableElement> candidates = new ArrayList<>(ElementFilter.methodsIn(elements.getAllMembers(iface)));
+        // Static methods of an interface are not inherited: a method declared in another interface (a superinterface,
+        // or one an annotated class implements) may still use the static siblings next to its declaration there.
+        for (TypeElement declaring : declaringInterfaces(iface, method)) {
+            for (ExecutableElement sibling : ElementFilter.methodsIn(declaring.getEnclosedElements())) {
+                if (sibling.getModifiers().contains(Modifier.STATIC)) {
+                    candidates.add(sibling);
+                }
+            }
+        }
+        for (ExecutableElement candidate : candidates) {
             if (mayBeFallback(iface, method, candidate)) {
                 names.add(candidate.getSimpleName().toString());
                 if (candidate.getSimpleName().contentEquals(name)) {
@@ -1242,6 +1270,28 @@ public final class ResilienceProcessor extends AbstractProcessor {
         targets.sort(Comparator.comparingInt((FallbackTarget t) -> t.exceptionType() == null ? Integer.MIN_VALUE
                 : depth(exceptionTypes.get(t))).reversed());
         return targets;
+    }
+
+    /**
+     * The supertypes of {@code type} that are interfaces, other than {@code type}, declaring {@code method} or a
+     * method it overrides: their static methods are not members of {@code type}.
+     */
+    private Set<TypeElement> declaringInterfaces(TypeElement type, ExecutableElement method) {
+        Set<TypeElement> found = new LinkedHashSet<>();
+        Deque<TypeMirror> pending = new ArrayDeque<>(types.directSupertypes(type.asType()));
+        Set<TypeElement> seen = new HashSet<>();
+        while (!pending.isEmpty()) {
+            if (!(pending.pop() instanceof DeclaredType declared) || !(declared.asElement() instanceof TypeElement supertype)
+                    || !seen.add(supertype)) {
+                continue;
+            }
+            pending.addAll(types.directSupertypes(supertype.asType()));
+            if (supertype.getKind() == ElementKind.INTERFACE && ElementFilter.methodsIn(supertype.getEnclosedElements()).stream()
+                    .anyMatch(m -> m.equals(method) || elements.overrides(method, m, type))) {
+                found.add(supertype);
+            }
+        }
+        return found;
     }
 
     /** A usable sibling fallback method, and the type of its exception parameter (null without one). */
@@ -1699,14 +1749,20 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String throwsClause = type.getThrownTypes().isEmpty() ? "" : " throws " + TypePrinter.join(type.getThrownTypes(), ", ");
         String signatureTail = "(" + String.join(", ", parameters) + ")" + throwsClause;
         String args = String.join(", ", arguments);
-        String delegateCall = delegateReceiver + "." + method.getSimpleName() + "(" + args + ")";
+        boolean async = model.asyncResult() != null && (!model.policies().isEmpty() || model.fallback() != null);
+        // javac cannot always infer a type variable whose bound uses a type variable (<T extends Comparable<T>>):
+        // not from an async layer's lambda return type alone, nor from a Collection<? super T> argument. Calls to the
+        // delegate and to the private layers pass such type variables explicitly.
+        String typeArguments = boundsUseTypeVariables(type.getTypeVariables())
+                ? "<" + TypePrinter.join(type.getTypeVariables(), ", ") + ">" : "";
+        String delegateCall = delegateReceiver + "." + typeArguments + method.getSimpleName() + "(" + args + ")";
         // The subclass's override repeats the annotations of the method it overrides and of its parameters, for
         // frameworks that read them on the invoked method only (@Transactional, interceptor bindings).
         String annotations = subclass ? AnnotationPrinter.methodAnnotations(method, "\n    ") : "";
         String publicTail = subclass ? "(" + String.join(", ", annotatedParameters(method, parameters)) + ")" + throwsClause
                 : signatureTail;
 
-        if (model.asyncResult() != null && (!model.policies().isEmpty() || model.fallback() != null)) {
+        if (async) {
             writeAsyncMethod(out, model, index, typeVariables, returnType, annotations + "public ",
                     method.getSimpleName() + publicTail, String.join(", ", parameters), arguments, delegateCall);
             return;
@@ -1725,13 +1781,13 @@ public final class ResilienceProcessor extends AbstractProcessor {
         if (layers.isEmpty()) {
             appendLines(out, List.of(isVoid ? delegateCall + ";" : "return " + delegateCall + ";"));
         } else {
-            appendLines(out, layer(layers.get(0), model, index, inner(layerNames, 1, args, delegateCall), isVoid, returnType, arguments));
+            appendLines(out, layer(layers.get(0), model, index, inner(layerNames, 1, typeArguments, args, delegateCall), isVoid, returnType, arguments));
         }
         out.append("    }\n");
         for (int i = 1; i < layers.size(); i++) {
             out.append("\n    private ").append(typeVariables).append(returnType).append(' ').append(layerNames.get(i))
                     .append(signatureTail).append(" {\n");
-            appendLines(out, layer(layers.get(i), model, index, inner(layerNames, i + 1, args, delegateCall), isVoid, returnType, arguments));
+            appendLines(out, layer(layers.get(i), model, index, inner(layerNames, i + 1, typeArguments, args, delegateCall), isVoid, returnType, arguments));
             out.append("    }\n");
         }
     }
@@ -1994,8 +2050,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return "dev.resilience4cata.generated.AsyncCall.<" + result + ">widen(" + stage + ")";
     }
 
-    private static String inner(List<String> layerNames, int next, String args, String delegateCall) {
-        return next < layerNames.size() ? "this." + layerNames.get(next) + "(" + args + ")" : delegateCall;
+    private static String inner(List<String> layerNames, int next, String typeArguments, String args, String delegateCall) {
+        return next < layerNames.size() ? "this." + typeArguments + layerNames.get(next) + "(" + args + ")" : delegateCall;
     }
 
     private static void appendLines(StringBuilder out, List<String> lines) {
