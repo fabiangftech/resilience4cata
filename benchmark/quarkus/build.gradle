@@ -1,0 +1,34 @@
+plugins {
+    id 'r4c.jmh'
+    // The application must be built (augmented) by Quarkus before JMH can start it: the third use of the official
+    // Quarkus Gradle plugin, after quarkus:it (CLAUDE.md).
+    alias(libs.plugins.quarkus)
+}
+
+// Its own group: with the root's, Gradle would take this project and :quarkus for the same module.
+group = 'dev.resilience4cata.benchmark'
+
+description = 'JMH benchmarks of Quarkus beans: resilience4cata against SmallRye Fault Tolerance and Resilience4j used in code. Not published.'
+
+dependencies {
+    implementation enforcedPlatform(libs.quarkus.bom)
+    implementation project(':quarkus:runtime')
+    implementation libs.quarkus.arc
+    implementation libs.quarkus.smallrye.fault.tolerance
+    implementation libs.resilience4j.retry
+    implementation libs.resilience4j.circuitbreaker
+    implementation libs.resilience4j.bulkhead
+    implementation libs.resilience4j.ratelimiter
+    implementation libs.resilience4j.timelimiter
+    compileOnly project(':annotations')
+    annotationProcessor project(':processor')
+}
+
+// JMH runs the uber-jar that quarkusBuild writes, which holds the application as Quarkus augmented it and the
+// harness that JMH's annotation processor generated, instead of the plain runtime class path.
+def runner = layout.buildDirectory.file("${project.name}-${project.version}-runner.jar")
+tasks.named('jmh') {
+    dependsOn 'quarkusBuild'
+    classpath = files(runner)
+}
+ext.benchmarkClasspath = files(runner).builtBy('quarkusBuild')

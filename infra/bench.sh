@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the JMH benchmarks on temporary EC2 spot machines in parallel and compares two git revisions.
 # Each benchmark method (at each thread count) runs for both revisions back to back on the same
-# machine. Every resource is destroyed at the end, also on failure or Ctrl+C.
+# machine. The framework benchmarks (benchmark/spring, micronaut, quarkus) are included, each on its own JDK. Every resource is destroyed at the end, also on failure or Ctrl+C.
 #
 #   infra/bench.sh <base-rev> <new-rev> [include-regex]
 #
@@ -41,8 +41,9 @@ prepare() { # <name> <spec>
   if [[ $spec == *@* ]]; then repo=${spec%@*}; rev=${spec##*@}; fi
   local dir="$WORK/src-$name"
   git clone -q "$repo" "$dir" && git -C "$dir" checkout -q "$rev"
-  (cd "$dir" && ./gradlew -q --no-configuration-cache -I "$INFRA/classpath.gradle" :benchmark:r4cClasspath)
-  python3 "$INFRA/plan.py" bundle "$dir/benchmark/build/r4c-classpath.txt" "$WORK/$name.tar.gz"
+  # Every benchmark project the revision has (:benchmark, and benchmark/<framework> where they exist).
+  (cd "$dir" && ./gradlew -q --no-configuration-cache -I "$INFRA/classpath.gradle" r4cClasspath)
+  python3 "$INFRA/plan.py" bundle "$dir" "$WORK/$name.tar.gz"
   echo "$name = $repo@$(git -C "$dir" rev-parse --short HEAD)" >> "$WORK/revisions.txt"
 }
 log "compiling $1 and $2"

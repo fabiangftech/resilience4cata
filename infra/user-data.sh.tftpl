@@ -18,6 +18,17 @@ trap finish EXIT
 ( sleep $((${max_minutes} * 60)); aws s3 cp /var/log/r4c-bench.log "$RESULTS/log.txt"; shutdown -h now ) &
 
 dnf install -y -q java-21-amazon-corretto-headless
+# Java 25 for the Micronaut benchmark (Micronaut 5 needs it): the package if the repository has it, else the tarball.
+if ! dnf install -y -q java-25-amazon-corretto-headless; then
+  mkdir -p /opt/jdk25 && curl -sL https://corretto.aws/downloads/latest/amazon-corretto-25-aarch64-linux-jdk.tar.gz \
+      | tar xz -C /opt/jdk25 --strip-components 1
+fi
+java_of() { # <release>
+  for j in /usr/lib/jvm/java-$1-amazon-corretto*/bin/java /opt/jdk$1/bin/java; do
+    [ -x "$j" ] && { echo "$j"; return; }
+  done
+  echo "no java $1" >&2; echo java
+}
 lscpu > /tmp/lscpu.txt && aws s3 cp /tmp/lscpu.txt "$RESULTS/lscpu.txt"
 
 for v in base new; do
@@ -25,16 +36,16 @@ for v in base new; do
   aws s3 cp "s3://$BUCKET/src/$v.tar.gz" - | tar xz -C "/opt/$v"
 done
 
-# version|threads|id|regex, in the planned order.
+# version|project|jdk|threads|id|regex, in the planned order.
 cat > /tmp/runs.txt <<'RUNS'
 ${runs}
 RUNS
 
-while IFS='|' read -r version threads id pattern; do
+while IFS='|' read -r version project jdk threads id pattern; do
   [ -n "$version" ] || continue
   echo "== $(date +%T) $id"
-  cd "/opt/$version"
-  java -cp "$(cat classpath.txt)" org.openjdk.jmh.Main "$pattern" ${jmh_options} -t "$threads" \
+  cd "/opt/$version/$project"
+  "$(java_of "$jdk")" -cp "$(cat classpath.txt)" org.openjdk.jmh.Main "$pattern" ${jmh_options} -t "$threads" \
       -rf json -rff "/tmp/$id.json" > "/tmp/$id.txt" 2>&1 < /dev/null
   aws s3 cp "/tmp/$id.json" "$RESULTS/$id.json" || true
   aws s3 cp "/tmp/$id.txt" "$RESULTS/$id.txt" || true

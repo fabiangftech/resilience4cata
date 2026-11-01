@@ -185,7 +185,7 @@ resource "aws_instance" "bench" {
   user_data = templatefile("${path.module}/user-data.sh.tftpl", {
     bucket      = aws_s3_bucket.run.id
     name        = each.key
-    runs        = join("\n", [for r in each.value.runs : "${r.version}|${r.threads}|${r.id}|${r.regex}"])
+    runs        = join("\n", [for r in each.value.runs : "${r.version}|${r.project}|${r.jdk}|${r.threads}|${r.id}|${r.regex}"])
     jmh_options = var.jmh_options
     max_minutes = var.max_minutes
   })

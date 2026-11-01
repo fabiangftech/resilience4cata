@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Plans and summarises a parallel JMH run for infra/bench.sh.
 
-  plan.py bundle <classpath.txt> <out.tar.gz>        package a runtime classpath
+  plan.py bundle <source-dir> <out.tar.gz>           package every benchmark project's class path
   plan.py plan <base-dir> <new-dir> <machines> <threads> [include-regex]  > plan.json
   plan.py summary <results-dir>                      print a markdown table of a finished run
 
@@ -22,16 +22,35 @@ SECONDS_PER_RUN = 33  # 3 forks x (5 warmup + 5 measurement) x 1 s, plus fork st
 CALIBRATION = ("BulkheadBenchmark", "resilience4cataFree", 1)
 
 
-def benchmark_methods(source_dir):
-    """{class: [methods]} from the @Benchmark methods in benchmark/src/main/java."""
-    pkg = os.path.join(source_dir, "benchmark/src/main/java/dev/resilience4cata/benchmark")
-    found = {}
-    for name in sorted(os.listdir(pkg)):
-        if name.endswith("Benchmark.java"):
-            text = open(os.path.join(pkg, name)).read()
-            methods = re.findall(r"@Benchmark\s+(?:@\w+(?:\([^)]*\))?\s+)*public\s+\S+\s+(\w+)\s*\(", text)
-            found[name[:-5]] = methods
+def projects(source_dir):
+    """{project: directory} of the benchmark projects in a checkout: "core" is benchmark/ itself, a framework
+    benchmark is benchmark/<framework>/ (only revisions that have them)."""
+    found = {"core": os.path.join(source_dir, "benchmark")}
+    root = found["core"]
+    for name in sorted(os.listdir(root)):
+        if os.path.isfile(os.path.join(root, name, "build.gradle")):
+            found[name] = os.path.join(root, name)
     return found
+
+
+def benchmark_methods(source_dir):
+    """{(project, class): [methods]} from the @Benchmark methods of every benchmark project."""
+    found = {}
+    for project, pdir in projects(source_dir).items():
+        java = os.path.join(pdir, "src/main/java")
+        for dirpath, _, files in os.walk(java):
+            for name in sorted(files):
+                if name.endswith("Benchmark.java"):
+                    text = open(os.path.join(dirpath, name)).read()
+                    methods = re.findall(r"@Benchmark\s+(?:@\w+(?:\([^)]*\))?\s+)*public\s+\S+\s+(\w+)\s*\(", text)
+                    found[(project, name[:-5])] = methods
+    return found
+
+
+def jdk(source_dir, project):
+    """The Java release a project's benchmarks run on (written by infra/classpath.gradle)."""
+    path = os.path.join(projects(source_dir)[project], "build/r4c-jdk.txt")
+    return open(path).read().strip() if os.path.exists(path) else "21"
 
 
 def regex(cls, method):
@@ -42,28 +61,28 @@ def regex(cls, method):
 def plan(base_dir, new_dir, machines, threads, include=None):
     base, new = benchmark_methods(base_dir), benchmark_methods(new_dir)
     units = []
-    for cls, methods in new.items():
+    for (project, cls), methods in new.items():
         for method in methods:
             if include and not re.search(include, f"{cls}.{method}"):
                 continue
             for t in threads:
-                versions = ["base", "new"] if method in base.get(cls, []) else ["new"]
-                units.append((cls, method, t, versions))
-    units.sort(key=lambda u: -len(u[3]))
+                versions = ["base", "new"] if method in base.get((project, cls), []) else ["new"]
+                units.append((project, cls, method, t, versions))
+    units.sort(key=lambda u: -len(u[4]))
     loads = [[] for _ in range(machines)]
     for unit in units:
-        min(loads, key=lambda runs: len(runs)).append(unit)
+        min(loads, key=lambda runs: sum(len(u[4]) for u in runs)).append(unit)
     result = []
     for i, assigned in enumerate(loads):
         if not assigned:
             continue
-        runs = [{"version": "new", "regex": regex(CALIBRATION[0], CALIBRATION[1]),
-                 "threads": CALIBRATION[2], "id": "calibration"}]
-        for j, (cls, method, t, versions) in enumerate(assigned):
+        runs = [{"version": "new", "project": "core", "jdk": "21",
+                 "regex": regex(CALIBRATION[0], CALIBRATION[1]), "threads": CALIBRATION[2], "id": "calibration"}]
+        for j, (project, cls, method, t, versions) in enumerate(assigned):
             order = versions if j % 2 == 0 else list(reversed(versions))
             for v in order:
-                runs.append({"version": v, "regex": regex(cls, method), "threads": t,
-                             "id": f"{cls}.{method}-t{t}-{v}"})
+                runs.append({"version": v, "project": project, "jdk": jdk(new_dir, project),
+                             "regex": regex(cls, method), "threads": t, "id": f"{cls}.{method}-t{t}-{v}"})
         result.append({"name": f"m{i:02d}", "runs": runs})
     total = sum(len(m["runs"]) for m in result)
     longest = max(len(m["runs"]) for m in result)
@@ -72,18 +91,24 @@ def plan(base_dir, new_dir, machines, threads, include=None):
     return result
 
 
-def bundle(classpath_file, out):
+def bundle(source_dir, out):
+    """Packages every benchmark project's class path (build/r4c-classpath.txt) into <project>/ of one archive."""
     root = out + ".dir"
     shutil.rmtree(root, ignore_errors=True)
-    os.makedirs(os.path.join(root, "cp"))
-    entries = []
-    for i, path in enumerate(p for p in open(classpath_file).read().split("\n") if p):
-        if not os.path.exists(path):
+    for project, pdir in projects(source_dir).items():
+        classpath_file = os.path.join(pdir, "build/r4c-classpath.txt")
+        if not os.path.exists(classpath_file):
             continue
-        name = f"{i:02d}-{os.path.basename(path)}"
-        (shutil.copytree if os.path.isdir(path) else shutil.copy)(path, os.path.join(root, "cp", name))
-        entries.append("cp/" + name)
-    open(os.path.join(root, "classpath.txt"), "w").write(":".join(entries))
+        proot = os.path.join(root, project)
+        os.makedirs(os.path.join(proot, "cp"))
+        entries = []
+        for i, path in enumerate(p for p in open(classpath_file).read().split("\n") if p):
+            if not os.path.exists(path):
+                continue
+            name = f"{i:02d}-{os.path.basename(path)}"
+            (shutil.copytree if os.path.isdir(path) else shutil.copy)(path, os.path.join(proot, "cp", name))
+            entries.append("cp/" + name)
+        open(os.path.join(proot, "classpath.txt"), "w").write(":".join(entries))
     with tarfile.open(out, "w:gz") as tar:
         tar.add(root, arcname=".")
     shutil.rmtree(root)
