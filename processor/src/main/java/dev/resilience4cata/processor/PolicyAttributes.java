@@ -32,7 +32,8 @@ final class PolicyAttributes {
     private final Messager messager;
     private final String annotation;
     private final String simpleName;
-    private final Set<String> reported = new HashSet<>();
+    // by element, not by toString(): methods of different types print alike, and each needs its own error
+    private final Set<Map.Entry<Element, String>> reported = new HashSet<>();
 
     PolicyAttributes(Messager messager, Class<?> annotation) {
         this.messager = messager;
@@ -100,7 +101,7 @@ final class PolicyAttributes {
                         + " is set to " + previous + " by @" + composedSource.get(entry.getKey())
                         + " and to " + entry.getValue() + " by @" + type.getSimpleName()
                         + ". Set it directly on the element to resolve the conflict.");
-                if (reported.add(reportOn + "|" + message)) {
+                if (reported.add(Map.entry(reportOn, message))) {
                     messager.printMessage(Diagnostic.Kind.ERROR, message, reportOn);
                 }
             }

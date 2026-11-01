@@ -7,6 +7,7 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.IntersectionType;
+import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.TypeVariable;
 import javax.lang.model.type.WildcardType;
@@ -39,9 +40,19 @@ final class TypePrinter {
     }
 
     private static String declared(DeclaredType type) {
-        String name = ((TypeElement) type.asElement()).getQualifiedName().toString();
+        // An inner class of a generic class: Outer<String>.Inner, since the qualified name alone is a raw type.
+        TypeMirror enclosing = type.getEnclosingType();
+        String name = enclosing.getKind() == TypeKind.DECLARED && hasTypeArguments((DeclaredType) enclosing)
+                ? declared((DeclaredType) enclosing) + "." + type.asElement().getSimpleName()
+                : ((TypeElement) type.asElement()).getQualifiedName().toString();
         List<? extends TypeMirror> arguments = type.getTypeArguments();
         return arguments.isEmpty() ? name : name + "<" + join(arguments, ", ") + ">";
+    }
+
+    private static boolean hasTypeArguments(DeclaredType type) {
+        TypeMirror enclosing = type.getEnclosingType();
+        return !type.getTypeArguments().isEmpty()
+                || enclosing.getKind() == TypeKind.DECLARED && hasTypeArguments((DeclaredType) enclosing);
     }
 
     private static String wildcard(WildcardType type) {
