@@ -305,4 +305,65 @@ class TimeoutTimerTest {
         timer.tick(0);
         assertThat(timer.pending()).isZero();
     }
+
+    // ---- precise lanes (hedge delays)
+
+    @Test
+    void aPreciseEntryFiresAtItsStartPlusTheDurationHoweverLateTheTimerTookIt() {
+        TimeoutTimer.Lane lane = timer.preciseLane(10 * MS);
+        Counting entry = new Counting();
+        timer.schedule(entry, lane, 0);
+
+        timer.tick(MS - 1); // taken almost a tick after the start: a plain lane would fire at 11 ms
+        timer.tick(10 * MS - 1);
+        assertThat(launched).isEmpty();
+        timer.tick(10 * MS);
+        assertThat(launched).containsExactly(entry);
+
+        Counting late = new Counting();
+        timer.schedule(late, lane, 20 * MS);
+        timer.tick(31 * MS);
+        assertThat(launched).as("already due when taken: fires in the same tick").containsExactly(entry, late);
+    }
+
+    @Test
+    void theTimerWakesUpAtTheEarliestPreciseDeadlineInsteadOfTheNextTick() {
+        timer.lane(1_000 * MS); // a plain lane does not shorten the wait
+        TimeoutTimer.Lane lane = timer.preciseLane(16 * MS); // tick 1 ms
+        assertThat(timer.nextWait(0)).isEqualTo(timer.tick());
+        timer.schedule(new Counting(), lane, 0);
+
+        timer.tick(15_500_000L);
+        assertThat(timer.nextWait(15_500_000L)).isEqualTo(500_000L);
+        assertThat(timer.nextWait(15_990_000L)).as("at least a sixteenth of a tick").isEqualTo(MS / 16);
+        assertThat(timer.nextWait(0)).as("at most one tick").isEqualTo(MS);
+
+        timer.tick(16 * MS);
+        assertThat(launched).hasSize(1);
+        assertThat(timer.nextWait(16 * MS)).as("nothing precise is pending").isEqualTo(MS);
+    }
+
+    @Test
+    void preciseEntriesOfOneThreadKeepTheirOwnDeadlines() {
+        // the inbox is a stack: taken newest first, the older entry would get the newer one's deadline
+        TimeoutTimer.Lane lane = timer.preciseLane(10 * MS);
+        Counting older = new Counting();
+        Counting newer = new Counting();
+        timer.schedule(older, lane, 0);
+        timer.schedule(newer, lane, 500_000L);
+
+        timer.tick(MS);
+        timer.tick(10 * MS);
+        assertThat(launched).containsExactly(older);
+        timer.tick(10_500_000L);
+        assertThat(launched).containsExactly(older, newer);
+    }
+
+    @Test
+    void aStartTimeGoesOnlyWithAPreciseLane() {
+        TimeoutTimer.Lane plain = timer.lane(10 * MS);
+        TimeoutTimer.Lane precise = timer.preciseLane(10 * MS);
+        assertThatThrownBy(() -> timer.schedule(new Counting(), plain, 0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> timer.schedule(new Counting(), precise)).isInstanceOf(IllegalArgumentException.class);
+    }
 }

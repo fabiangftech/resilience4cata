@@ -34,6 +34,15 @@ import org.jspecify.annotations.Nullable;
  * and up to one tick between its deadline and the tick that sees it. The tick is {@code duration / 16}
  * of the shortest duration in use, between 1 ms and 50 ms, as for the sync {@link Watchdog}.
  *
+ * <p><b>Precise lanes</b> ({@link #preciseLane}, for hedge delays) trade one clock read per schedule for
+ * precision: the caller passes the time it started, the deadline is {@code start + duration}, and the timer
+ * thread wakes up at the earliest deadline of a precise lane instead of only at the next tick (at most 16
+ * wake-ups per tick). A precise entry is drained within one tick, which is no longer than its duration
+ * (unless the duration is below 1 ms), so it fires at its deadline plus the OS's wake-up delay. Entries are
+ * appended in drain order, inbox by inbox (a precise lane's oldest first), and expiring still looks only at a lane's head, so
+ * an entry drained after one that started later (another thread's inbox) waits for it: late by at most the
+ * spread of the starts drained in one tick, at most one tick.
+ *
  * <p><b>Cancelling</b> is one CAS on the entry's own state. If the timer has not drained the entry yet
  * (the call completed within about a tick, the common case), that is all; otherwise the entry is also
  * pushed to a cancelled stack and unlinked at the next tick. A drained entry is reachable from the timer
@@ -55,6 +64,8 @@ final class TimeoutTimer {
     // Owned by the timer thread (or by the test calling tick).
     private final ArrayList<Lane> active = new ArrayList<>();
     private int linked;
+    private boolean preciseDue; // a precise lane has entries; the earliest head's deadline is preciseDeadline
+    private long preciseDeadline;
     private volatile int linkedSnapshot;
 
     /** The shared timer; its thread starts on the first {@link #schedule}. */
@@ -87,7 +98,12 @@ final class TimeoutTimer {
 
     /** A lane for entries of {@code durationNanos}; create one per policy and reuse it. */
     Lane lane(long durationNanos) {
-        return new Lane(this, durationNanos);
+        return new Lane(this, durationNanos, false);
+    }
+
+    /** A lane whose entries are scheduled with their start time ({@link #schedule(TimerEntry, Lane, long)}). */
+    Lane preciseLane(long durationNanos) {
+        return new Lane(this, durationNanos, true);
     }
 
     /**
@@ -95,6 +111,25 @@ final class TimeoutTimer {
      * first.
      */
     void schedule(TimerEntry entry, Lane lane) {
+        if (lane.precise) {
+            throw new IllegalArgumentException("A precise lane needs the start time");
+        }
+        push(entry, lane);
+    }
+
+    /**
+     * Fires {@code entry} on a new virtual thread once {@code lane}'s duration has passed since {@code startNanos}
+     * ({@code System.nanoTime()} on the shared timer), unless it is cancelled first. For a precise lane.
+     */
+    void schedule(TimerEntry entry, Lane lane, long startNanos) {
+        if (!lane.precise) {
+            throw new IllegalArgumentException("Only a precise lane takes a start time");
+        }
+        entry.deadline = startNanos + lane.durationNanos; // published with the entry by the inbox push
+        push(entry, lane);
+    }
+
+    private void push(TimerEntry entry, Lane lane) {
         if (lane.timer != this) {
             throw new IllegalArgumentException("The lane belongs to another timer");
         }
@@ -147,8 +182,20 @@ final class TimeoutTimer {
             } catch (Throwable e) {
                 // Keep timing out calls whatever happens; nothing here should throw.
             }
-            LockSupport.parkNanos(tick.get());
+            LockSupport.parkNanos(nextWait(System.nanoTime()));
         }
+    }
+
+    /**
+     * How long the timer thread parks after a tick: one tick, or less if a precise lane's head is due sooner (but
+     * at least a sixteenth of a tick).
+     */
+    long nextWait(long now) {
+        long wait = tick.get();
+        if (preciseDue) {
+            wait = Math.clamp(preciseDeadline - now, wait / 16, wait);
+        }
+        return wait;
     }
 
     /** One tick at time {@code now}: unlink cancelled entries, schedule new ones, fire expired ones. */
@@ -175,16 +222,27 @@ final class TimeoutTimer {
     /** Step 2 of a tick; separate for tests that replay races. */
     void drainNew(long now) {
         for (Stripe stripe : stripes) {
-            TimerEntry entry = stripe.take(Heads.INBOX);
+            TimerEntry entry = stripe.take(Heads.INBOX); // newest first
+            TimerEntry precise = null; // this inbox's precise entries, oldest first, linked through next
             while (entry != null) {
                 TimerEntry next = entry.stackNext;
                 entry.stackNext = null; // before the CAS: a canceller may reuse the link once it sees SCHEDULED
                 if (entry.tryMove(TimerEntry.NEW, TimerEntry.SCHEDULED)) {
                     Lane lane = entry.lane;
-                    entry.deadline = now + lane.durationNanos;
-                    append(lane, entry);
+                    if (lane.precise) {
+                        entry.next = precise; // the deadline was set from the caller's start
+                        precise = entry;
+                    } else {
+                        entry.deadline = now + lane.durationNanos;
+                        append(lane, entry);
+                    }
                 } // else cancelled before we saw it: drop it
                 entry = next;
+            }
+            while (precise != null) {
+                TimerEntry next = precise.next;
+                append(precise.lane, precise);
+                precise = next;
             }
         }
         linkedSnapshot = linked;
@@ -195,6 +253,8 @@ final class TimeoutTimer {
     // java:S1181: a launcher failure of any kind must not stop the other timeouts from firing.
     @SuppressWarnings({"java:S3776", "java:S1181"})
     void expire(long now) {
+        boolean due = false;
+        long earliest = 0;
         for (int i = active.size() - 1; i >= 0; i--) {
             Lane lane = active.get(i);
             for (TimerEntry head = lane.head; head != null && now - head.deadline >= 0; head = lane.head) {
@@ -207,14 +267,20 @@ final class TimeoutTimer {
                     }
                 } // else cancelled meanwhile: it is on a cancelled stack, and unlink is idempotent
             }
-            if (lane.head == null) {
+            TimerEntry head = lane.head;
+            if (head == null) {
                 lane.active = false;
                 Lane last = active.remove(active.size() - 1);
                 if (last != lane) {
                     active.set(i, last);
                 }
+            } else if (lane.precise && (!due || head.deadline - earliest < 0)) {
+                due = true;
+                earliest = head.deadline;
             }
         }
+        preciseDue = due;
+        preciseDeadline = earliest;
         linkedSnapshot = linked;
     }
 
@@ -277,15 +343,18 @@ final class TimeoutTimer {
     static final class Lane {
         final TimeoutTimer timer;
         final long durationNanos;
+        /** Entries carry their own deadline, from the start time their caller passed. */
+        final boolean precise;
         boolean registered; // written by callers; a stale false only repeats the registration
         // Owned by the timer thread.
         @Nullable TimerEntry head;
         @Nullable TimerEntry tail;
         boolean active;
 
-        Lane(TimeoutTimer timer, long durationNanos) {
+        Lane(TimeoutTimer timer, long durationNanos, boolean precise) {
             this.timer = timer;
             this.durationNanos = durationNanos;
+            this.precise = precise;
         }
     }
 

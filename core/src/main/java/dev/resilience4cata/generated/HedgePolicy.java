@@ -38,8 +38,10 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Cost when the first attempt wins before {@code delay}: the returned future, the {@code HedgeCall}
  * and the JDK's callback node; scheduling is one release compare-and-set onto the shared
- * {@link TimeoutTimer}'s per-thread inbox, cancelling one compare-and-set on the entry; with a hedge
- * budget, one lossy write to this thread's stripe of the budget. No clock is read. A first attempt whose
+ * {@link TimeoutTimer}'s per-thread inbox, after one clock read for its start (the delay's lane is precise:
+ * a hedge starts at {@code start + delay} plus the OS's wake-up delay, not up to two timer ticks late),
+ * cancelling one compare-and-set on the entry; with a hedge budget, one lossy write to this thread's stripe
+ * of the budget. A first attempt whose
  * stage is already complete when the delegate returns needs no timer. On a manual {@link Ticker}, delays
  * are scheduled on the ticker (exact) and hedges start on the thread that advances it.
  */
@@ -111,7 +113,7 @@ public final class HedgePolicy {
         this.budget = enabled && config.hasBudget() ? new RetryBudget(config, environment.ticker.getAsLong()) : null;
         this.verdicts = new Classification(config.hedgeOn(), config.abortOn());
         this.lane = enabled && delayNanos > 0 && environment.manual == null && timer != null
-                ? timer.lane(delayNanos) : null; // no thread starts until the first hedged call
+                ? timer.preciseLane(delayNanos) : null; // no thread starts until the first hedged call
         this.environment = environment;
         this.ticker = environment.ticker;
         this.hedged = environment.events.sink(HedgeEvent.Hedged.class, id);
@@ -325,7 +327,7 @@ public final class HedgePolicy {
             TimeoutTimer.Lane delays = hedge.lane;
             if (delays != null) {
                 TIMER.setRelease(this, this); // before the push: the timer task may fire on another thread
-                delays.timer.schedule(this, delays);
+                delays.timer.schedule(this, delays, hedge.ticker.getAsLong());
             } else if (hedge.delayNanos > 0) {
                 arm(1);
             } else {
@@ -571,7 +573,7 @@ public final class HedgePolicy {
             TimeoutTimer.Lane delays = hedge.lane;
             if (delays != null) {
                 if (replaceTimer(next, launched)) {
-                    delays.timer.schedule(next, delays);
+                    delays.timer.schedule(next, delays, hedge.ticker.getAsLong());
                 }
                 return;
             }
