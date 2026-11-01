@@ -14,4 +14,9 @@ dependencies {
 tasks.named('test') {
     // ErrorCodeTest checks the error codes against the error reference pages.
     inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
+    // The seeded model tests (*ModelTest) replay one seed with -Ptest.seed=<n>.
+    def seed = providers.gradleProperty('test.seed')
+    if (seed.present) {
+        systemProperty 'test.seed', seed.get()
+    }
 }
