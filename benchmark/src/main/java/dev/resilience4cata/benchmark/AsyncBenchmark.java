@@ -15,7 +15,6 @@ import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -39,8 +38,10 @@ import org.openjdk.jmh.annotations.Warmup;
  * <p>Resilience4j uses its {@code decorateCompletionStage} variants with the same settings: count
  * window of 100 for the breaker, 3 attempts for the retry, 1 s for the time limiter, 1000 concurrent
  * calls for the bulkhead, one billion permits per second for the rate limiter. Its retry and time
- * limiter need a {@code ScheduledExecutorService}, given one daemon thread here; resilience4cata uses
- * its own single timer thread. {@code *Stack} nests retry, circuit breaker, timeout and bulkhead in
+ * limiter need a {@code ScheduledExecutorService}, given one daemon thread here with
+ * {@code setRemoveOnCancelPolicy(true)}; resilience4cata uses its own single timer thread. With the JDK default
+ * (cancelled tasks stay queued until due), every cancelled one-second timeout of {@code resilience4jTimeout}
+ * stayed queued for a second, and with four threads the fork ran out of heap. {@code *Stack} nests retry, circuit breaker, timeout and bulkhead in
  * the same order in both libraries.
  *
  * <p>An already completed stage cannot time out, so resilience4cata's timeout skips its timer for it,
@@ -77,7 +78,9 @@ public class AsyncBenchmark {
         direct = new AsyncService.Impl();
         resilience4cata = Resilient.of(AsyncService.class, new AsyncService.Impl(), ResilienceRegistry.builder().build());
 
-        scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().daemon().factory());
+        ScheduledThreadPoolExecutor shared = new ScheduledThreadPoolExecutor(1, Thread.ofPlatform().daemon().factory());
+        shared.setRemoveOnCancelPolicy(true);
+        scheduler = shared;
         AsyncService.Impl impl = new AsyncService.Impl();
         CircuitBreakerConfig breakerConfig = CircuitBreakerConfig.custom().slidingWindowSize(100).minimumNumberOfCalls(100).build();
         RetryConfig retryConfig = RetryConfig.custom().maxAttempts(3).build();

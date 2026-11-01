@@ -16,8 +16,8 @@ import jakarta.inject.Singleton;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -25,13 +25,12 @@ import java.util.function.Supplier;
  * Resilience4j in a Quarkus bean, used in code: it has no Quarkus extension, so this is what an application writes.
  * The decorated calls are built once, with the settings of {@link CataCalls}'s annotations; the stack nests retry,
  * circuit breaker, rate limiter and bulkhead, resilience4cata's default order. Its time limiter needs a scheduler:
- * one daemon thread, as in the core {@code AsyncBenchmark}.
+ * one daemon thread that drops cancelled tasks, as in the core {@code AsyncBenchmark}.
  */
 @Singleton
 public class R4jCalls {
 
-    private final ScheduledExecutorService scheduler =
-            Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().daemon().factory());
+    private final ScheduledExecutorService scheduler = scheduler();
     private final Supplier<String> retry;
     private final Function<Flip, String> retryOnce;
     private final Supplier<String> circuitBreaker;
@@ -58,6 +57,13 @@ public class R4jCalls {
         timeoutAsync = timeLimiter.decorateCompletionStage(scheduler, () -> PlainCalls.DONE);
         stack = Retry.decorateSupplier(retry("stack"), CircuitBreaker.decorateSupplier(breaker("stack"),
                 RateLimiter.decorateSupplier(limiter("stack"), Bulkhead.decorateSupplier(bulkhead("stack"), R4jCalls::ok))));
+    }
+
+    /** One daemon thread that drops cancelled timeouts at once, as in the core {@code AsyncBenchmark}. */
+    private static ScheduledExecutorService scheduler() {
+        ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1, Thread.ofPlatform().daemon().factory());
+        scheduler.setRemoveOnCancelPolicy(true);
+        return scheduler;
     }
 
     private static String ok() {
