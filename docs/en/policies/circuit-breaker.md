@@ -87,7 +87,7 @@ stateDiagram-v2
     DISABLED --> CLOSED: reset()
 ```
 
-- **Closed.** Calls go through and their outcomes go into a sliding window. With `COUNT` (the default) the window holds the last `windowSize` calls; with `TIME` it holds the calls of the last `windowSize` seconds, in one-second buckets.
+- **Closed.** Calls go through and their outcomes go into a sliding window. With `COUNT` (the default) the window holds the last `windowSize` calls; with `TIME` it holds the calls of the last `windowDuration`, in one-second buckets.
 - **What counts as a failure.** An exception that is an instance of a `recordOn` type (default: `Exception`) and of no `ignoreOn` type. `ignoreOn` wins: those calls count neither way. Any other throwable counts as a **success**, so by default an `Error` does not open the breaker. With slow-call detection on (`slowCallDuration` > 0), a call that takes `slowCallDuration` or longer also counts as slow, whether it succeeded or failed.
 - **Opening.** Rates are evaluated once the window holds `minimumCalls` calls (for a count window, `minimumCalls` is capped at `windowSize`). The breaker opens when the failure rate is at or above `failureRateThreshold`, or the slow-call rate at or above `slowCallRateThreshold`.
 - **Open.** Every call is rejected at once with `CallNotPermittedException`, without reaching the method. The breaker does not move by itself: the first call that arrives after `waitInOpen` moves it to half-open and becomes a probe.
@@ -101,11 +101,12 @@ The rejection, `dev.resilience4cata.CallNotPermittedException`, is a `RuntimeExc
 
 | Attribute | Type | Default | Config key | Meaning |
 |---|---|---|---|---|
-| `windowType` | `WindowType` | `COUNT` | `defaults.circuitBreaker.windowType` | `COUNT`: the last `windowSize` calls. `TIME`: the calls of the last `windowSize` seconds. |
-| `windowSize` | `int` | `100` | `defaults.circuitBreaker.windowSize` | Calls (`COUNT`) or seconds (`TIME`). At least 1. |
+| `windowType` | `WindowType` | `COUNT` | `defaults.circuitBreaker.windowType` | `COUNT`: the last `windowSize` calls. `TIME`: the calls of the last `windowDuration`. |
+| `windowSize` | `int` | `100` | `defaults.circuitBreaker.windowSize` | Calls in a `COUNT` window. At least 1. |
+| `windowDuration` | duration | `60s` | `defaults.circuitBreaker.windowDuration` | Length of a `TIME` window, a whole number of seconds (at least `1s`). |
 | `minimumCalls` | `int` | `100` | `defaults.circuitBreaker.minimumCalls` | Calls needed before the rates are evaluated. At least 1. |
-| `failureRateThreshold` | `float` | `50` | `defaults.circuitBreaker.failureRateThreshold` | Failure rate, in percent (0 < x ≤ 100), that opens the breaker. |
-| `slowCallRateThreshold` | `float` | `100` | `defaults.circuitBreaker.slowCallRateThreshold` | Slow-call rate, in percent (0 < x ≤ 100), that opens the breaker. |
+| `failureRateThreshold` | `double` | `50` | `defaults.circuitBreaker.failureRateThreshold` | Failure rate, in percent (0 < x ≤ 100), that opens the breaker. |
+| `slowCallRateThreshold` | `double` | `100` | `defaults.circuitBreaker.slowCallRateThreshold` | Slow-call rate, in percent (0 < x ≤ 100), that opens the breaker. |
 | `slowCallDuration` | duration | `0` (off) | `defaults.circuitBreaker.slowCallDuration` | Duration from which a call is slow. `0` turns slow-call detection off: calls are not timed at all. |
 | `waitInOpen` | duration | `60s` | `defaults.circuitBreaker.waitInOpen` | How long the breaker stays open before the next call may probe. |
 | `halfOpenCalls` | `int` | `10` | `defaults.circuitBreaker.halfOpenCalls` | Probe calls allowed in half-open. At least 1. |
@@ -124,7 +125,7 @@ A breaker that looks at the last minute, treats calls of 2 s or more as slow, an
 
 <!-- snippet: circuit-breaker-tuned -->
 ```java
-@CircuitBreaker(windowType = WindowType.TIME, windowSize = 60, minimumCalls = 5,
+@CircuitBreaker(windowType = WindowType.TIME, windowDuration = "60s", minimumCalls = 5,
         slowCallDuration = "2s", slowCallRateThreshold = 80,
         ignoreOn = IllegalArgumentException.class)
 long balance(String account);
@@ -237,11 +238,12 @@ On a [`ManualClock`](../guides/testing.md), `waitInOpen`, slow calls and time wi
 ## Small print
 
 - `minimumCalls` larger than a count window's `windowSize` is capped at `windowSize`. A time window has no such cap.
+- `windowSize` is for a count window and `windowDuration` for a time window; each window ignores the other one, so defaults and named configs may set both. On one annotation, which decides for one method, a size with `windowType = TIME`, a duration with `windowType = COUNT`, or both together is a compile error ([`R4C-ATR-010`](../errors.md#r4c-atr-010)).
 - A time window reads the clock on every call. A count window reads it only when slow-call detection is on.
 - With the defaults, the breaker needs 100 calls before it can open. For a low-traffic dependency, lower `minimumCalls` (and `windowSize`), or use a time window.
 - Thresholds are inclusive: 5 failures out of 10 opens a breaker with `failureRateThreshold = 50`.
 - `CallNotPermittedException` has no stack trace by design. Log the message or `id()`.
-- Related errors: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (duration syntax), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`windowSize`, `minimumCalls`, `halfOpenCalls` below 1), [`R4C-ATR-005`](../errors.md#r4c-atr-005) (rates outside (0, 100]), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` with `recordOn`), [`R4C-REG-004`](../errors.md#r4c-reg-004) (unknown `config`), [`R4C-REG-008`](../errors.md#r4c-reg-008) (shared `name`, different config), [`R4C-REG-009`](../errors.md#r4c-reg-009) (unknown id for `registry.circuitBreaker`).
+- Related errors: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (duration syntax), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`windowSize`, `minimumCalls`, `halfOpenCalls` below 1), [`R4C-ATR-005`](../errors.md#r4c-atr-005) (rates outside (0, 100]), [`R4C-ATR-010`](../errors.md#r4c-atr-010) (window size or duration for the other window type), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` with `recordOn`), [`R4C-REG-004`](../errors.md#r4c-reg-004) (unknown `config`), [`R4C-REG-008`](../errors.md#r4c-reg-008) (shared `name`, different config), [`R4C-REG-009`](../errors.md#r4c-reg-009) (unknown id for `registry.circuitBreaker`).
 
 ## What it costs
 

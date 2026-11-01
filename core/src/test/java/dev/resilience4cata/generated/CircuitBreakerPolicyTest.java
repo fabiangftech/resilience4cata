@@ -275,7 +275,7 @@ class CircuitBreakerPolicyTest {
 
     private static CircuitBreakerConfig.Builder timeWindow(int seconds, int minimumCalls) {
         return CircuitBreakerConfig.builder().windowType(CircuitBreakerConfig.WindowType.TIME)
-                .windowSize(seconds).minimumCalls(minimumCalls).failureRateThreshold(50)
+                .windowDuration(Duration.ofSeconds(seconds)).minimumCalls(minimumCalls).failureRateThreshold(50)
                 .waitInOpen(Duration.ofSeconds(60));
     }
 

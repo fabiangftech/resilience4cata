@@ -16,7 +16,7 @@ import dev.resilience4cata.internal.RegistryAccess;
 public final class Abi {
 
     /** The highest level this core supports. Not a public constant: it would be inlined into callers. */
-    private static final int LEVEL = 1;
+    private static final int LEVEL = 2;
 
     private Abi() {
     }

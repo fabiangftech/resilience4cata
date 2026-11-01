@@ -74,6 +74,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
     private final String id;
     private final CircuitBreakerConfig config;
     private final boolean timeWindow;
+    /** Calls of a count window, seconds of a time window. */
     private final int windowSize;
     private final int minimumCalls;
     private final float failureRateThreshold;
@@ -124,10 +125,11 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         this.id = id;
         this.config = config;
         this.timeWindow = config.windowType() == CircuitBreakerConfig.WindowType.TIME;
-        this.windowSize = config.windowSize();
+        this.windowSize = timeWindow ? (int) config.windowDuration().getSeconds() : config.windowSize();
         this.minimumCalls = timeWindow ? config.minimumCalls() : Math.min(config.minimumCalls(), config.windowSize());
-        this.failureRateThreshold = config.failureRateThreshold();
-        this.slowCallRateThreshold = config.slowCallRateThreshold();
+        // The windows compare in single precision, as before 0.13.0: the per-call path is unchanged.
+        this.failureRateThreshold = (float) config.failureRateThreshold();
+        this.slowCallRateThreshold = (float) config.slowCallRateThreshold();
         this.slowCallNanos = config.slowCallDuration().toNanos();
         this.timed = slowCallNanos > 0;
         this.waitInOpenNanos = config.waitInOpen().toNanos();
@@ -177,8 +179,8 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         }
         int calls = counts[0];
         boolean evaluated = calls > 0 && calls >= minimum;
-        float failureRate = evaluated ? counts[1] * 100f / calls : -1f;
-        float slowCallRate = evaluated && timed ? counts[2] * 100f / calls : -1f;
+        double failureRate = evaluated ? counts[1] * 100.0 / calls : -1;
+        double slowCallRate = evaluated && timed ? counts[2] * 100.0 / calls : -1;
         return new CircuitBreakerSnapshot(id, current.state(), failureRate, slowCallRate, calls, counts[1], counts[2]);
     }
 

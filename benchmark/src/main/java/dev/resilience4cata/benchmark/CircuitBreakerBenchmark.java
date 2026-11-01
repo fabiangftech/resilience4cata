@@ -82,7 +82,7 @@ public class CircuitBreakerBenchmark {
                 .circuitBreaker("bench", cb -> cb.windowSize(100).minimumCalls(100).failureRateThreshold(50)
                         .waitInOpen(Duration.ofSeconds(60)))
                 .circuitBreaker("bench-time", cb -> cb.windowType(dev.resilience4cata.CircuitBreakerConfig.WindowType.TIME)
-                        .windowSize(10).minimumCalls(100).failureRateThreshold(50).waitInOpen(Duration.ofSeconds(60)))
+                        .windowDuration(Duration.ofSeconds(10)).minimumCalls(100).failureRateThreshold(50).waitInOpen(Duration.ofSeconds(60)))
                 .build();
         resilience4cata = Resilient.of(GuardedService.class, new GuardedService.Impl(), registry);
         registry.circuitBreaker("bench-open").forceOpen();

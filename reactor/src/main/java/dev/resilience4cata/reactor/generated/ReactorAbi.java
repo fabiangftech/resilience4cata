@@ -11,7 +11,7 @@ import dev.resilience4cata.generated.Abi;
 public final class ReactorAbi {
 
     /** The highest level this module supports. Not a public constant: it would be inlined into callers. */
-    private static final int LEVEL = 1;
+    private static final int LEVEL = 2;
 
     private ReactorAbi() {
     }

@@ -18,6 +18,6 @@ package dev.resilience4cata;
  * @param failedCalls failed calls in the window, at most {@code bufferedCalls}
  * @param slowCalls slow calls in the window, at most {@code bufferedCalls}
  */
-public record CircuitBreakerSnapshot(String id, CircuitBreakerState state, float failureRate,
-        float slowCallRate, int bufferedCalls, int failedCalls, int slowCalls) {
+public record CircuitBreakerSnapshot(String id, CircuitBreakerState state, double failureRate,
+        double slowCallRate, int bufferedCalls, int failedCalls, int slowCalls) {
 }

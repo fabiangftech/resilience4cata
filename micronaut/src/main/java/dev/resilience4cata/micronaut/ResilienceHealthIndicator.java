@@ -93,7 +93,7 @@ public final class ResilienceHealthIndicator implements HealthIndicator {
         return HealthResult.builder(NAME, status).details(Map.of("circuitBreakers", breakers)).build();
     }
 
-    private static Object finite(float rate) {
-        return Float.isFinite(rate) ? rate : "n/a";
+    private static Object finite(double rate) {
+        return Double.isFinite(rate) ? rate : "n/a";
     }
 }

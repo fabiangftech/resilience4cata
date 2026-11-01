@@ -87,7 +87,7 @@ stateDiagram-v2
     DISABLED --> CLOSED: reset()
 ```
 
-- **Cerrado.** Las llamadas pasan y sus resultados entran en una ventana deslizante. Con `COUNT` (por defecto) la ventana guarda las últimas `windowSize` llamadas; con `TIME` guarda las llamadas de los últimos `windowSize` segundos, en buckets de un segundo.
+- **Cerrado.** Las llamadas pasan y sus resultados entran en una ventana deslizante. Con `COUNT` (por defecto) la ventana guarda las últimas `windowSize` llamadas; con `TIME` guarda las llamadas del último `windowDuration`, en buckets de un segundo.
 - **Qué cuenta como falla.** Una excepción que es instancia de un tipo de `recordOn` (por defecto: `Exception`) y de ningún tipo de `ignoreOn`. `ignoreOn` gana: esas llamadas no cuentan para ningún lado. Cualquier otro throwable cuenta como **éxito**, así que por defecto un `Error` no abre el breaker. Con la detección de llamadas lentas activa (`slowCallDuration` > 0), una llamada que tarda `slowCallDuration` o más también cuenta como lenta, haya tenido éxito o no.
 - **Apertura.** Las tasas se evalúan una vez que la ventana tiene `minimumCalls` llamadas (en una ventana por conteo, `minimumCalls` tiene tope en `windowSize`). El breaker abre cuando la tasa de fallas llega a `failureRateThreshold` o la supera, o la tasa de llamadas lentas llega a `slowCallRateThreshold` o la supera.
 - **Abierto.** Toda llamada se rechaza enseguida con `CallNotPermittedException`, sin llegar al método. El breaker no se mueve solo: la primera llamada que llega después de `waitInOpen` lo pasa a half-open y se convierte en prueba.
@@ -101,11 +101,12 @@ El rechazo, `dev.resilience4cata.CallNotPermittedException`, es una `RuntimeExce
 
 | Atributo | Tipo | Por defecto | Clave de config | Significado |
 |---|---|---|---|---|
-| `windowType` | `WindowType` | `COUNT` | `defaults.circuitBreaker.windowType` | `COUNT`: las últimas `windowSize` llamadas. `TIME`: las llamadas de los últimos `windowSize` segundos. |
-| `windowSize` | `int` | `100` | `defaults.circuitBreaker.windowSize` | Llamadas (`COUNT`) o segundos (`TIME`). Al menos 1. |
+| `windowType` | `WindowType` | `COUNT` | `defaults.circuitBreaker.windowType` | `COUNT`: las últimas `windowSize` llamadas. `TIME`: las llamadas del último `windowDuration`. |
+| `windowSize` | `int` | `100` | `defaults.circuitBreaker.windowSize` | Llamadas de una ventana `COUNT`. Al menos 1. |
+| `windowDuration` | duración | `60s` | `defaults.circuitBreaker.windowDuration` | Duración de una ventana `TIME`, en segundos enteros (al menos `1s`). |
 | `minimumCalls` | `int` | `100` | `defaults.circuitBreaker.minimumCalls` | Llamadas necesarias antes de evaluar las tasas. Al menos 1. |
-| `failureRateThreshold` | `float` | `50` | `defaults.circuitBreaker.failureRateThreshold` | Tasa de fallas, en porcentaje (0 < x ≤ 100), que abre el breaker. |
-| `slowCallRateThreshold` | `float` | `100` | `defaults.circuitBreaker.slowCallRateThreshold` | Tasa de llamadas lentas, en porcentaje (0 < x ≤ 100), que abre el breaker. |
+| `failureRateThreshold` | `double` | `50` | `defaults.circuitBreaker.failureRateThreshold` | Tasa de fallas, en porcentaje (0 < x ≤ 100), que abre el breaker. |
+| `slowCallRateThreshold` | `double` | `100` | `defaults.circuitBreaker.slowCallRateThreshold` | Tasa de llamadas lentas, en porcentaje (0 < x ≤ 100), que abre el breaker. |
 | `slowCallDuration` | duración | `0` (desactivado) | `defaults.circuitBreaker.slowCallDuration` | Duración a partir de la cual una llamada es lenta. `0` desactiva la detección: las llamadas no se cronometran. |
 | `waitInOpen` | duración | `60s` | `defaults.circuitBreaker.waitInOpen` | Cuánto tiempo queda abierto antes de que la siguiente llamada pueda probar. |
 | `halfOpenCalls` | `int` | `10` | `defaults.circuitBreaker.halfOpenCalls` | Llamadas de prueba permitidas en half-open. Al menos 1. |
@@ -124,7 +125,7 @@ Un breaker que mira el último minuto, trata como lentas las llamadas de 2 s o m
 
 <!-- snippet: circuit-breaker-tuned -->
 ```java
-@CircuitBreaker(windowType = WindowType.TIME, windowSize = 60, minimumCalls = 5,
+@CircuitBreaker(windowType = WindowType.TIME, windowDuration = "60s", minimumCalls = 5,
         slowCallDuration = "2s", slowCallRateThreshold = 80,
         ignoreOn = IllegalArgumentException.class)
 long balance(String account);
@@ -237,11 +238,12 @@ Con un [`ManualClock`](../guides/testing.md), `waitInOpen`, las llamadas lentas 
 ## Letra chica
 
 - Un `minimumCalls` mayor que el `windowSize` de una ventana por conteo queda con tope en `windowSize`. Una ventana por tiempo no tiene ese tope.
+- `windowSize` es para una ventana por conteo y `windowDuration` para una por tiempo; cada ventana ignora el otro, así que los valores por defecto y las configuraciones con nombre pueden poner los dos. En una anotación, que decide por un solo método, un tamaño con `windowType = TIME`, una duración con `windowType = COUNT`, o los dos juntos, es un error de compilación ([`R4C-ATR-010`](../errors.md#r4c-atr-010)).
 - Una ventana por tiempo lee el reloj en cada llamada. Una ventana por conteo solo lo lee si la detección de llamadas lentas está activa.
 - Con los valores por defecto, el breaker necesita 100 llamadas antes de poder abrir. Para una dependencia de poco tráfico, baja `minimumCalls` (y `windowSize`), o usa una ventana por tiempo.
 - Los umbrales son inclusivos: 5 fallas de 10 abren un breaker con `failureRateThreshold = 50`.
 - `CallNotPermittedException` no tiene stack trace, a propósito. Registra en el log el mensaje o `id()`.
-- Errores relacionados: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (sintaxis de duración), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`windowSize`, `minimumCalls`, `halfOpenCalls` menores que 1), [`R4C-ATR-005`](../errors.md#r4c-atr-005) (tasas fuera de (0, 100]), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` junto con `recordOn`), [`R4C-REG-004`](../errors.md#r4c-reg-004) (`config` desconocida), [`R4C-REG-008`](../errors.md#r4c-reg-008) (`name` compartido con otra configuración), [`R4C-REG-009`](../errors.md#r4c-reg-009) (id desconocido en `registry.circuitBreaker`).
+- Errores relacionados: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (sintaxis de duración), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`windowSize`, `minimumCalls`, `halfOpenCalls` menores que 1), [`R4C-ATR-005`](../errors.md#r4c-atr-005) (tasas fuera de (0, 100]), [`R4C-ATR-010`](../errors.md#r4c-atr-010) (tamaño o duración de ventana para el otro tipo de ventana), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` junto con `recordOn`), [`R4C-REG-004`](../errors.md#r4c-reg-004) (`config` desconocida), [`R4C-REG-008`](../errors.md#r4c-reg-008) (`name` compartido con otra configuración), [`R4C-REG-009`](../errors.md#r4c-reg-009) (id desconocido en `registry.circuitBreaker`).
 
 ## Cuánto cuesta
 

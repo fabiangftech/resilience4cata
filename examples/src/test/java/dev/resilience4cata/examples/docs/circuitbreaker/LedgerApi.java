@@ -8,7 +8,7 @@ import java.util.concurrent.CompletableFuture;
 public interface LedgerApi {
 
     // tag::circuit-breaker-tuned[]
-    @CircuitBreaker(windowType = WindowType.TIME, windowSize = 60, minimumCalls = 5,
+    @CircuitBreaker(windowType = WindowType.TIME, windowDuration = "60s", minimumCalls = 5,
             slowCallDuration = "2s", slowCallRateThreshold = 80,
             ignoreOn = IllegalArgumentException.class)
     long balance(String account);

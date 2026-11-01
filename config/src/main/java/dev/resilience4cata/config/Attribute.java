@@ -22,7 +22,6 @@ final class Attribute<B> {
     enum Kind {
         BOOLEAN("true or false"),
         INT("an integer"),
-        FLOAT("a number"),
         DOUBLE("a number"),
         DURATION("a duration"),
         ENUM("one of the listed values"),
@@ -64,10 +63,6 @@ final class Attribute<B> {
         return new Attribute<>(name, name, Kind.INT, null, (b, v) -> setter.accept(b, (Integer) v));
     }
 
-    static <B> Attribute<B> decimal(String name, BiConsumer<B, Float> setter) {
-        return new Attribute<>(name, name, Kind.FLOAT, null, (b, v) -> setter.accept(b, (Float) v));
-    }
-
     static <B> Attribute<B> real(String name, ObjDoubleConsumer<B> setter) {
         return new Attribute<>(name, name, Kind.DOUBLE, null, (b, v) -> setter.accept(b, (Double) v));
     }
@@ -107,7 +102,7 @@ final class Attribute<B> {
         return switch (kind) {
             case BOOLEAN -> parseBoolean(text, origin);
             case INT -> parseInt(text, origin);
-            case FLOAT, DOUBLE -> parseDecimal(text, origin);
+            case DOUBLE -> parseDecimal(text, origin);
             case DURATION -> parseDuration(text, origin);
             case ENUM -> parseEnum(text, origin);
             default -> parseClasses(text, origin, loader);
@@ -135,13 +130,6 @@ final class Attribute<B> {
     private Object parseDecimal(String text, String origin) {
         if (!DECIMAL.matcher(text).matches()) {
             throw invalid(text, origin, "expected a decimal number such as 50 or 2.5");
-        }
-        if (kind == Kind.FLOAT) {
-            float value = Float.parseFloat(text);
-            if (Float.isInfinite(value)) {
-                throw invalid(text, origin, "too large");
-            }
-            return value;
         }
         double value = Double.parseDouble(text);
         if (Double.isInfinite(value)) {

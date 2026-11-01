@@ -24,6 +24,6 @@ public interface PricingClient {
     @CircuitBreaker(name = "shared", config = "pricing")
     int second();
 
-    @CircuitBreaker(windowType = WindowType.TIME, windowSize = 60, minimumCalls = 3, failureRateThreshold = 50, waitInOpen = "1h")
+    @CircuitBreaker(windowType = WindowType.TIME, windowDuration = "60s", minimumCalls = 3, failureRateThreshold = 50, waitInOpen = "1h")
     int recent();
 }

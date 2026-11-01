@@ -467,6 +467,41 @@ public interface OrderClient {
 }
 ```
 
+### R4C-ATR-010
+
+**Trigger:** a `@CircuitBreaker` whose window attributes do not fit its window type: `windowSize` (a number of
+calls) with `windowType = TIME`, `windowDuration` with `windowType = COUNT`, both on one annotation, or a
+`windowDuration` that is not a whole number of seconds of at least `1s`. Configurations and builders may set
+both, since defaults serve both window types: each window ignores the other attribute.
+
+**Wrong:**
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.CircuitBreaker;
+import dev.resilience4cata.annotation.WindowType;
+
+public interface LedgerClient {
+    @CircuitBreaker(windowType = WindowType.TIME, windowSize = 60)
+    long balance(String account);
+}
+```
+
+**Fix:** give a time window its length with `windowDuration`, and a count window its calls with `windowSize`.
+
+```java
+package com.acme;
+
+import dev.resilience4cata.annotation.CircuitBreaker;
+import dev.resilience4cata.annotation.WindowType;
+
+public interface LedgerClient {
+    @CircuitBreaker(windowType = WindowType.TIME, windowDuration = "60s")
+    long balance(String account);
+}
+```
+
 ## Annotation processor: composed annotations (R4C-CMP)
 
 ### R4C-CMP-001

@@ -183,7 +183,7 @@ public class ResilienceJsonRpcService {
     }
 
     /** A rate in percent, or {@code null} while the snapshot reports {@code -1} (not enough calls yet). */
-    private static @Nullable Float rate(float rate) {
+    private static @Nullable Double rate(double rate) {
         return rate < 0 ? null : rate;
     }
 

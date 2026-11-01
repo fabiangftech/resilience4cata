@@ -12,9 +12,10 @@ public final class CircuitBreakerConfig implements PolicyConfig {
     private final boolean enabled;
     private final WindowType windowType;
     private final int windowSize;
+    private final Duration windowDuration;
     private final int minimumCalls;
-    private final float failureRateThreshold;
-    private final float slowCallRateThreshold;
+    private final double failureRateThreshold;
+    private final double slowCallRateThreshold;
     private final Duration slowCallDuration;
     private final Duration waitInOpen;
     private final int halfOpenCalls;
@@ -24,11 +25,11 @@ public final class CircuitBreakerConfig implements PolicyConfig {
 
     /**
      * Built-in defaults, the same as Resilience4j's except that slow-call detection is off: a window
-     * of 100 calls, evaluated after 100 calls, opening at 50% failures, 60 s open, 10 probes, no limit on
-     * the time spent half-open.
+     * of 100 calls (60 s for a time window), evaluated after 100 calls, opening at 50% failures, 60 s open,
+     * 10 probes, no limit on the time spent half-open.
      */
     public static final CircuitBreakerConfig DEFAULTS = new CircuitBreakerConfig(
-            true, WindowType.COUNT, 100, 100, 50f, 100f, Duration.ZERO, Duration.ofSeconds(60), 10,
+            true, WindowType.COUNT, 100, Duration.ofSeconds(60), 100, 50, 100, Duration.ZERO, Duration.ofSeconds(60), 10,
             Duration.ZERO, List.of(Exception.class), List.of());
 
     /**
@@ -39,7 +40,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
         /** The last {@code windowSize} calls. */
         COUNT,
         /**
-         * The calls of the last {@code windowSize} seconds, in one-second buckets. Every call reads the
+         * The calls of the last {@code windowDuration}, in one-second buckets. Every call reads the
          * clock, and successes alone trigger an evaluation at most once per second.
          */
         TIME
@@ -52,9 +53,10 @@ public final class CircuitBreakerConfig implements PolicyConfig {
     private CircuitBreakerConfig(boolean enabled,
             WindowType windowType,
             int windowSize,
+            Duration windowDuration,
             int minimumCalls,
-            float failureRateThreshold,
-            float slowCallRateThreshold,
+            double failureRateThreshold,
+            double slowCallRateThreshold,
             Duration slowCallDuration,
             Duration waitInOpen,
             int halfOpenCalls,
@@ -62,6 +64,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
             List<Class<? extends Throwable>> recordOn,
             List<Class<? extends Throwable>> ignoreOn) {
         Objects.requireNonNull(windowType, "windowType");
+        Objects.requireNonNull(windowDuration, "windowDuration");
         Objects.requireNonNull(slowCallDuration, "slowCallDuration");
         Objects.requireNonNull(waitInOpen, "waitInOpen");
         Objects.requireNonNull(maxWaitInHalfOpen, "maxWaitInHalfOpen");
@@ -69,6 +72,11 @@ public final class CircuitBreakerConfig implements PolicyConfig {
         ignoreOn = List.copyOf(ignoreOn);
         if (windowSize < 1) {
             throw ErrorCode.invalidValue(POLICY, "windowSize must be at least 1, was " + windowSize);
+        }
+        if (windowDuration.compareTo(Duration.ofSeconds(1)) < 0 || windowDuration.toNanosPart() != 0
+                || windowDuration.getSeconds() > Integer.MAX_VALUE) {
+            throw ErrorCode.invalidValue(POLICY, "windowDuration must be a whole number of seconds, at least 1s, was "
+                    + windowDuration);
         }
         if (minimumCalls < 1) {
             throw ErrorCode.invalidValue(POLICY, "minimumCalls must be at least 1, was " + minimumCalls);
@@ -90,6 +98,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
         this.enabled = enabled;
         this.windowType = windowType;
         this.windowSize = windowSize;
+        this.windowDuration = windowDuration;
         this.minimumCalls = minimumCalls;
         this.failureRateThreshold = failureRateThreshold;
         this.slowCallRateThreshold = slowCallRateThreshold;
@@ -101,7 +110,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
         this.ignoreOn = ignoreOn;
     }
 
-    private static void checkRate(String name, float rate) {
+    private static void checkRate(String name, double rate) {
         if (!(rate > 0 && rate <= 100)) {
             throw ErrorCode.invalidValue(POLICY, name + " must be a percentage > 0 and <= 100, was " + rate);
         }
@@ -122,9 +131,10 @@ public final class CircuitBreakerConfig implements PolicyConfig {
         private boolean enabled;
         private WindowType windowType;
         private int windowSize;
+        private Duration windowDuration;
         private int minimumCalls;
-        private float failureRateThreshold;
-        private float slowCallRateThreshold;
+        private double failureRateThreshold;
+        private double slowCallRateThreshold;
         private Duration slowCallDuration;
         private Duration waitInOpen;
         private int halfOpenCalls;
@@ -136,6 +146,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
             enabled = from.enabled;
             windowType = from.windowType;
             windowSize = from.windowSize;
+            windowDuration = from.windowDuration;
             minimumCalls = from.minimumCalls;
             failureRateThreshold = from.failureRateThreshold;
             slowCallRateThreshold = from.slowCallRateThreshold;
@@ -159,9 +170,21 @@ public final class CircuitBreakerConfig implements PolicyConfig {
             return this;
         }
 
-        /** @param windowSize number of calls in the sliding window @return this builder */
+        /**
+         * @param windowSize number of calls in a {@link WindowType#COUNT} window; a time window does not use it
+         * @return this builder
+         */
         public Builder windowSize(int windowSize) {
             this.windowSize = windowSize;
+            return this;
+        }
+
+        /**
+         * @param windowDuration length of a {@link WindowType#TIME} window, a whole number of seconds; a count
+         * window does not use it @return this builder
+         */
+        public Builder windowDuration(Duration windowDuration) {
+            this.windowDuration = Objects.requireNonNull(windowDuration, "windowDuration");
             return this;
         }
 
@@ -172,13 +195,13 @@ public final class CircuitBreakerConfig implements PolicyConfig {
         }
 
         /** @param failureRateThreshold failure rate, in percent, that opens the breaker @return this builder */
-        public Builder failureRateThreshold(float failureRateThreshold) {
+        public Builder failureRateThreshold(double failureRateThreshold) {
             this.failureRateThreshold = failureRateThreshold;
             return this;
         }
 
         /** @param slowCallRateThreshold slow-call rate, in percent, that opens the breaker @return this builder */
-        public Builder slowCallRateThreshold(float slowCallRateThreshold) {
+        public Builder slowCallRateThreshold(double slowCallRateThreshold) {
             this.slowCallRateThreshold = slowCallRateThreshold;
             return this;
         }
@@ -229,7 +252,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
          * @throws IllegalArgumentException if a value is invalid
          */
         public CircuitBreakerConfig build() {
-            return new CircuitBreakerConfig(enabled, windowType, windowSize, minimumCalls, failureRateThreshold,
+            return new CircuitBreakerConfig(enabled, windowType, windowSize, windowDuration, minimumCalls, failureRateThreshold,
                     slowCallRateThreshold, slowCallDuration, waitInOpen, halfOpenCalls, maxWaitInHalfOpen, recordOn, ignoreOn);
         }
     }
@@ -254,12 +277,21 @@ public final class CircuitBreakerConfig implements PolicyConfig {
     }
 
     /**
-     * Number of calls ({@link WindowType#COUNT}) or seconds ({@link WindowType#TIME}) in the window.
+     * Number of calls in a {@link WindowType#COUNT} window; not used by a time window.
      *
      * @return the value
      */
     public int windowSize() {
         return windowSize;
+    }
+
+    /**
+     * Length of a {@link WindowType#TIME} window, a whole number of seconds; not used by a count window.
+     *
+     * @return the value
+     */
+    public Duration windowDuration() {
+        return windowDuration;
     }
 
     /**
@@ -276,7 +308,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
      *
      * @return the value
      */
-    public float failureRateThreshold() {
+    public double failureRateThreshold() {
         return failureRateThreshold;
     }
 
@@ -285,7 +317,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
      *
      * @return the value
      */
-    public float slowCallRateThreshold() {
+    public double slowCallRateThreshold() {
         return slowCallRateThreshold;
     }
 
@@ -352,9 +384,10 @@ public final class CircuitBreakerConfig implements PolicyConfig {
                 && enabled == other.enabled
                 && windowType.equals(other.windowType)
                 && windowSize == other.windowSize
+                && windowDuration.equals(other.windowDuration)
                 && minimumCalls == other.minimumCalls
-                && Float.compare(failureRateThreshold, other.failureRateThreshold) == 0
-                && Float.compare(slowCallRateThreshold, other.slowCallRateThreshold) == 0
+                && Double.compare(failureRateThreshold, other.failureRateThreshold) == 0
+                && Double.compare(slowCallRateThreshold, other.slowCallRateThreshold) == 0
                 && slowCallDuration.equals(other.slowCallDuration)
                 && waitInOpen.equals(other.waitInOpen)
                 && halfOpenCalls == other.halfOpenCalls
@@ -365,7 +398,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
 
     @Override
     public int hashCode() {
-        return Objects.hash(enabled, windowType, windowSize, minimumCalls, failureRateThreshold,
+        return Objects.hash(enabled, windowType, windowSize, windowDuration, minimumCalls, failureRateThreshold,
                 slowCallRateThreshold, slowCallDuration, waitInOpen, halfOpenCalls, maxWaitInHalfOpen, recordOn,
                 ignoreOn);
     }
@@ -374,7 +407,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
     @Override
     public String toString() {
         return "CircuitBreakerConfig[enabled=" + enabled + ", windowType=" + windowType + ", windowSize=" + windowSize
-                + ", minimumCalls=" + minimumCalls + ", failureRateThreshold=" + failureRateThreshold
+                + ", windowDuration=" + windowDuration + ", minimumCalls=" + minimumCalls + ", failureRateThreshold=" + failureRateThreshold
                 + ", slowCallRateThreshold=" + slowCallRateThreshold + ", slowCallDuration=" + slowCallDuration
                 + ", waitInOpen=" + waitInOpen + ", halfOpenCalls=" + halfOpenCalls
                 + ", maxWaitInHalfOpen=" + maxWaitInHalfOpen + ", recordOn=" + recordOn
@@ -387,6 +420,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
         values.put("enabled", enabled);
         values.put("windowType", windowType);
         values.put("windowSize", windowSize);
+        values.put("windowDuration", windowDuration);
         values.put("minimumCalls", minimumCalls);
         values.put("failureRateThreshold", failureRateThreshold);
         values.put("slowCallRateThreshold", slowCallRateThreshold);

@@ -107,8 +107,9 @@ Everything is resolved once, when an instance is created. Nothing is reloaded af
 | Key | Environment variable | Type | Default | Valid values | Meaning |
 |---|---|---|---|---|---|
 | `defaults.circuitBreaker.enabled` | `R4C_DEFAULTS_CIRCUITBREAKER_ENABLED` | boolean | `true` | `true`, `false` | `false`: the breaker starts `DISABLED`, lets every call through and records nothing. |
-| `defaults.circuitBreaker.windowType` | `R4C_DEFAULTS_CIRCUITBREAKER_WINDOWTYPE` | enum | `count` | `count`, `time` | `count`: the last `windowSize` calls. `time`: the last `windowSize` seconds (reads the clock on every call). |
-| `defaults.circuitBreaker.windowSize` | `R4C_DEFAULTS_CIRCUITBREAKER_WINDOWSIZE` | int | `100` | ≥ 1 | Calls (`count`) or seconds (`time`) in the sliding window. |
+| `defaults.circuitBreaker.windowType` | `R4C_DEFAULTS_CIRCUITBREAKER_WINDOWTYPE` | enum | `count` | `count`, `time` | `count`: the last `windowSize` calls. `time`: the calls of the last `windowDuration` (reads the clock on every call). |
+| `defaults.circuitBreaker.windowSize` | `R4C_DEFAULTS_CIRCUITBREAKER_WINDOWSIZE` | int | `100` | ≥ 1 | Calls in a `count` window; a `time` window ignores it. |
+| `defaults.circuitBreaker.windowDuration` | `R4C_DEFAULTS_CIRCUITBREAKER_WINDOWDURATION` | duration | `60s` | whole seconds, ≥ `1s` | Length of a `time` window; a `count` window ignores it. |
 | `defaults.circuitBreaker.minimumCalls` | `R4C_DEFAULTS_CIRCUITBREAKER_MINIMUMCALLS` | int | `100` | ≥ 1 | Calls in the window before the rates are evaluated (capped at `windowSize` for a count window). |
 | `defaults.circuitBreaker.failureRateThreshold` | `R4C_DEFAULTS_CIRCUITBREAKER_FAILURERATETHRESHOLD` | decimal | `50` | > 0 and ≤ 100 | Failure rate, in percent, that opens the breaker. |
 | `defaults.circuitBreaker.slowCallRateThreshold` | `R4C_DEFAULTS_CIRCUITBREAKER_SLOWCALLRATETHRESHOLD` | decimal | `100` | > 0 and ≤ 100 | Slow-call rate, in percent, that opens the breaker. |
