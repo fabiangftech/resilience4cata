@@ -27,7 +27,7 @@ public final class StockClient$Resilient implements StockClient {
     public StockClient$Resilient(StockClient delegate, ResilienceRegistry registry) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
         // …
-        Abi.require(1, StockClient$Resilient.class); // fails at once on a core older than the processor
+        Abi.require(2, StockClient$Resilient.class); // fails at once on a core older than the processor
         this.retry0 = Policies.retry(registry, "….StockClient#stock(java.lang.String,int)", "", "", r4c$b -> {
             r4c$b.maxAttempts(3);
         }, false);

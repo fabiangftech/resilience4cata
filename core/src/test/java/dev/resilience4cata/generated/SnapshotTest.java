@@ -91,14 +91,14 @@ class SnapshotTest {
     @Test
     void aTimeWindowCountsTheCallsOfItsSeconds() {
         CircuitBreakerPolicy cb = breaker(CircuitBreakerConfig.builder().windowType(CircuitBreakerConfig.WindowType.TIME)
-                .windowSize(2).minimumCalls(2).failureRateThreshold(100));
+                .windowDuration(Duration.ofSeconds(2)).minimumCalls(2).failureRateThreshold(100));
         call(cb, true, 0);
         call(cb, false, 0);
         call(cb, false, 0);
         CircuitBreakerSnapshot snapshot = cb.snapshot();
         assertThat(snapshot.bufferedCalls()).isEqualTo(3);
         assertThat(snapshot.failedCalls()).isEqualTo(1);
-        assertThat(snapshot.failureRate()).isCloseTo(33.3f, org.assertj.core.data.Offset.offset(0.1f));
+        assertThat(snapshot.failureRate()).isCloseTo(33.3, org.assertj.core.data.Offset.offset(0.1));
 
         now.addAndGet(Duration.ofSeconds(3).toNanos());
         assertThat(cb.snapshot().bufferedCalls()).as("all buckets expired").isZero();

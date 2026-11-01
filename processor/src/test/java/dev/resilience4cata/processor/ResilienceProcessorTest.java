@@ -551,7 +551,7 @@ class ResilienceProcessorTest {
         String generated = result.generatedSource("demo.Client$Resilient");
         assertThat(generated)
                 .contains("r4c$b.windowSize(10);")
-                .contains("r4c$b.failureRateThreshold(25.0f);")
+                .contains("r4c$b.failureRateThreshold(25.0);")
                 .contains("r4c$b.waitInOpen(java.time.Duration.ofNanos(30000000000L));");
         int retryLoop = generated.indexOf("while (true)");
         int acquire = generated.indexOf("r4c$cb.acquire()");
@@ -591,6 +591,60 @@ class ResilienceProcessorTest {
         assertThat(result.errors()).isEmpty();
         assertThat(result.generatedSource("demo.Client$Resilient"))
                 .contains("r4c$b.windowType(dev.resilience4cata.CircuitBreakerConfig.WindowType.TIME);");
+    }
+
+    @Test
+    void aTimeWindowTakesItsDurationInWholeSeconds() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.CircuitBreaker;
+                import dev.resilience4cata.annotation.WindowType;
+                public interface Client {
+                    @CircuitBreaker(windowType = WindowType.TIME, windowDuration = "2m", failureRateThreshold = 12.5)
+                    String call();
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Client$Resilient"))
+                .contains("r4c$b.windowDuration(java.time.Duration.ofSeconds(120L));")
+                .contains("r4c$b.failureRateThreshold(12.5);");
+    }
+
+    @Test
+    void reportsAWindowThatDoesNotFitItsType() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                import dev.resilience4cata.annotation.CircuitBreaker;
+                import dev.resilience4cata.annotation.WindowType;
+                public interface Client {
+                    @CircuitBreaker(windowType = WindowType.TIME, windowSize = 60)
+                    String a();
+                    @CircuitBreaker(windowType = WindowType.COUNT, windowDuration = "60s")
+                    String b();
+                    @CircuitBreaker(windowSize = 60, windowDuration = "60s")
+                    String c();
+                    @CircuitBreaker(windowDuration = "1500ms")
+                    String d();
+                    @CircuitBreaker(windowDuration = "0s")
+                    String e();
+                    @CircuitBreaker(windowDuration = "90s")
+                    String f();
+                }
+                """);
+
+        assertThat(result.errors()).containsExactlyInAnyOrder(
+                "[R4C-ATR-010] @CircuitBreaker.windowSize counts the calls of a COUNT window, but windowType is TIME:"
+                        + " set windowDuration instead, for example windowDuration = \"60s\".",
+                "[R4C-ATR-010] @CircuitBreaker.windowDuration is the length of a TIME window, but windowType is COUNT:"
+                        + " set windowSize (a number of calls) instead, or windowType = WindowType.TIME.",
+                "[R4C-ATR-010] @CircuitBreaker sets both windowSize and windowDuration: windowSize counts the calls of"
+                        + " a COUNT window, windowDuration is the length of a TIME window. Keep the one that fits"
+                        + " windowType.",
+                "[R4C-ATR-010] @CircuitBreaker.windowDuration must be a whole number of seconds, at least 1s, was"
+                        + " \"1500ms\": a time window counts calls in one-second buckets.",
+                "[R4C-ATR-010] @CircuitBreaker.windowDuration must be a whole number of seconds, at least 1s, was"
+                        + " \"0s\": a time window counts calls in one-second buckets.");
     }
 
     @Test

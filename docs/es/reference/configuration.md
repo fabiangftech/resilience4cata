@@ -107,8 +107,9 @@ Atributos de `@CircuitBreaker`. Ver [Circuit breaker](../policies/circuit-breake
 | Clave | Variable de entorno | Tipo | Por defecto | Valores válidos | Significado |
 |---|---|---|---|---|---|
 | `defaults.circuitBreaker.enabled` | `R4C_DEFAULTS_CIRCUITBREAKER_ENABLED` | boolean | `true` | `true`, `false` | `false`: el breaker empieza `DISABLED`, deja pasar todas las llamadas y no registra nada. |
-| `defaults.circuitBreaker.windowType` | `R4C_DEFAULTS_CIRCUITBREAKER_WINDOWTYPE` | enum | `count` | `count`, `time` | `count`: las últimas `windowSize` llamadas. `time`: los últimos `windowSize` segundos (lee el reloj en cada llamada). |
-| `defaults.circuitBreaker.windowSize` | `R4C_DEFAULTS_CIRCUITBREAKER_WINDOWSIZE` | int | `100` | ≥ 1 | Llamadas (`count`) o segundos (`time`) de la ventana deslizante. |
+| `defaults.circuitBreaker.windowType` | `R4C_DEFAULTS_CIRCUITBREAKER_WINDOWTYPE` | enum | `count` | `count`, `time` | `count`: las últimas `windowSize` llamadas. `time`: las llamadas del último `windowDuration` (lee el reloj en cada llamada). |
+| `defaults.circuitBreaker.windowSize` | `R4C_DEFAULTS_CIRCUITBREAKER_WINDOWSIZE` | int | `100` | ≥ 1 | Llamadas de una ventana `count`; una ventana `time` lo ignora. |
+| `defaults.circuitBreaker.windowDuration` | `R4C_DEFAULTS_CIRCUITBREAKER_WINDOWDURATION` | duración | `60s` | segundos enteros, ≥ `1s` | Duración de una ventana `time`; una ventana `count` lo ignora. |
 | `defaults.circuitBreaker.minimumCalls` | `R4C_DEFAULTS_CIRCUITBREAKER_MINIMUMCALLS` | int | `100` | ≥ 1 | Llamadas en la ventana antes de evaluar las tasas (con tope `windowSize` en una ventana por conteo). |
 | `defaults.circuitBreaker.failureRateThreshold` | `R4C_DEFAULTS_CIRCUITBREAKER_FAILURERATETHRESHOLD` | decimal | `50` | > 0 y ≤ 100 | Tasa de fallos, en porcentaje, que abre el breaker. |
 | `defaults.circuitBreaker.slowCallRateThreshold` | `R4C_DEFAULTS_CIRCUITBREAKER_SLOWCALLRATETHRESHOLD` | decimal | `100` | > 0 y ≤ 100 | Tasa de llamadas lentas, en porcentaje, que abre el breaker. |

@@ -143,18 +143,23 @@
     "defaultValue" : 100,
     "description" : "Default windowSize of every circuit breaker (an integer)."
   }, {
+    "name" : "resilience4cata.defaults.circuit-breaker.window-duration",
+    "type" : "java.time.Duration",
+    "defaultValue" : "1m",
+    "description" : "Default windowDuration of every circuit breaker (a duration such as 250ms, 2s or PT2S)."
+  }, {
     "name" : "resilience4cata.defaults.circuit-breaker.minimum-calls",
     "type" : "java.lang.Integer",
     "defaultValue" : 100,
     "description" : "Default minimumCalls of every circuit breaker (an integer)."
   }, {
     "name" : "resilience4cata.defaults.circuit-breaker.failure-rate-threshold",
-    "type" : "java.lang.Float",
+    "type" : "java.lang.Double",
     "defaultValue" : 50.0,
     "description" : "Default failureRateThreshold of every circuit breaker (a number)."
   }, {
     "name" : "resilience4cata.defaults.circuit-breaker.slow-call-rate-threshold",
-    "type" : "java.lang.Float",
+    "type" : "java.lang.Double",
     "defaultValue" : 100.0,
     "description" : "Default slowCallRateThreshold of every circuit breaker (a number)."
   }, {

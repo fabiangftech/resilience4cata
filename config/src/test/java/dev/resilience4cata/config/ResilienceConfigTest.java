@@ -69,7 +69,7 @@ class ResilienceConfigTest {
                 configs.external.circuitBreaker.slowCallRateThreshold=75.5
                 configs.external.circuitBreaker.slowCallDuration=2s
                 configs.external.circuitBreaker.windowType=time
-                configs.external.circuitBreaker.windowSize=30
+                configs.external.circuitBreaker.windowDuration=30s
                 configs.external.circuitBreaker.minimumCalls=10
                 configs.external.circuitBreaker.waitInOpen=10s
                 configs.external.circuitBreaker.halfOpenCalls=3
@@ -115,7 +115,7 @@ class ResilienceConfigTest {
         assertThat(cb.slowCallRateThreshold()).isEqualTo(75.5f);
         assertThat(cb.slowCallDuration()).isEqualTo(Duration.ofSeconds(2));
         assertThat(cb.windowType()).isEqualTo(CircuitBreakerConfig.WindowType.TIME);
-        assertThat(cb.windowSize()).isEqualTo(30);
+        assertThat(cb.windowDuration()).isEqualTo(Duration.ofSeconds(30));
         assertThat(cb.minimumCalls()).isEqualTo(10);
         assertThat(cb.waitInOpen()).isEqualTo(Duration.ofSeconds(10));
         assertThat(cb.halfOpenCalls()).isEqualTo(3);
@@ -588,7 +588,7 @@ class ResilienceConfigTest {
         assertThat(problem("defaults.retry.enabled=yes")).contains("expected true or false");
         assertThat(problem("defaults.retry.multiplier=1,5")).contains("expected a decimal number");
         assertThat(problem("defaults.circuitBreaker.failureRateThreshold=NaN")).contains("expected a decimal number");
-        assertThat(problem("defaults.circuitBreaker.failureRateThreshold=1e40")).contains("too large");
+        assertThat(problem("defaults.circuitBreaker.failureRateThreshold=1e400")).contains("too large");
         assertThat(problem("defaults.retry.backoff=exponentail"))
                 .contains("expected one of fixed, exponential. Did you mean 'exponential'?");
         assertThat(problem("defaults.retry.delay=2 s")).contains("is not a valid duration");

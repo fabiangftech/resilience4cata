@@ -136,9 +136,6 @@ final class PolicyAttributes {
         if (v instanceof Double d) {
             return d == -1;
         }
-        if (v instanceof Float f) {
-            return f == -1;
-        }
         if (v instanceof String s) {
             return s.isEmpty();
         }

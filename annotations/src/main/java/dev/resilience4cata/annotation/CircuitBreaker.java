@@ -29,17 +29,23 @@ public @interface CircuitBreaker {
     /** How the sliding window is measured. */
     WindowType windowType() default WindowType.INHERIT;
 
-    /** Window size: number of calls for {@link WindowType#COUNT}, seconds for {@link WindowType#TIME}. */
+    /** Number of calls in a {@link WindowType#COUNT} window. Not allowed with {@code windowType = TIME}. */
     int windowSize() default -1;
+
+    /**
+     * Length of a {@link WindowType#TIME} window, a whole number of seconds, for example {@code "60s"}. Not
+     * allowed with {@code windowType = COUNT}.
+     */
+    String windowDuration() default "";
 
     /** Minimum number of calls before the failure rate is evaluated. */
     int minimumCalls() default -1;
 
     /** Failure rate, in percent ({@code 0 < x <= 100}), that opens the breaker. */
-    float failureRateThreshold() default -1f;
+    double failureRateThreshold() default -1;
 
     /** Slow-call rate, in percent ({@code 0 < x <= 100}), that opens the breaker. */
-    float slowCallRateThreshold() default -1f;
+    double slowCallRateThreshold() default -1;
 
     /** Duration above which a call counts as slow, for example {@code "2s"}. */
     String slowCallDuration() default "";

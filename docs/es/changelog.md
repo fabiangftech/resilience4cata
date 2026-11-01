@@ -6,8 +6,12 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y 
 
 ## [Unreleased] :id=unreleased
 
+El código generado por 0.12.0 se debe compilar de nuevo con este procesador: las tasas del circuit breaker ahora son `double`.
+
 ### Cambiado
 
+- **Las tasas del circuit breaker son `double`**, como todos los demás decimales de la API: `failureRateThreshold` y `slowCallRateThreshold` en `@CircuitBreaker` y `CircuitBreakerConfig` (y su builder), y `failureRate`/`slowCallRate` en `CircuitBreakerSnapshot`. El código que usa `50`, `50f` o `50.0` sigue compilando; el que las guarda en un `float` necesita un cast o un `double`. El breaker las sigue comparando en precisión simple, como antes.
+- **Una ventana por tiempo tiene su propia duración: `windowDuration`** (`"60s"`, segundos enteros; 60 s por defecto), en `@CircuitBreaker`, `CircuitBreakerConfig` y la clave `*.circuitBreaker.windowDuration`. `windowSize` ahora es solo el número de llamadas de una ventana por conteo. Cada ventana ignora el otro atributo; en una anotación, un tamaño con `windowType = TIME`, una duración con `COUNT`, o los dos, es el error nuevo del procesador [R4C-ATR-010](errors.md#r4c-atr-010). Una ventana por tiempo que tomaba su duración de `windowSize` (100 s por defecto) debe poner `windowDuration`.
 - Una propiedad del sistema o variable de entorno con el prefijo corto (`r4c.`, `R4C_`) cuyo primer segmento no es uno de los nuestros (`defaults`, `configs`, `instances`, `profiles`) ni se parece a uno se ignora como de otra herramienta, en vez de detener la aplicación con [R4C-CFG-001](errors.md#r4c-cfg-001): un prefijo de tres letras se comparte con facilidad. Los errores de escritura en nuestras claves (`R4C_DEFUALTS_…`) y las claves desconocidas con el prefijo largo `resilience4cata.`/`RESILIENCE4CATA_` siguen fallando ([Formas de clave](reference/configuration.md#key-forms)).
 
 ## [0.12.0] - 2026-10-31 :id=0.12.0

@@ -413,7 +413,7 @@ class SubclassProcessorTest {
                         java.lang.String dataSource, @demo.Both java.lang.String registry, int r4c$p2, long r4c$p3) {
                                 super(dataSource, registry, r4c$p2, r4c$p3);
                                 java.util.Objects.requireNonNull(r4c$registry, "registry");
-                                dev.resilience4cata.generated.Abi.require(1, Service$Resilient.class);
+                                dev.resilience4cata.generated.Abi.require(2, Service$Resilient.class);
                                 this.retry0 = dev.resilience4cata.generated.Policies.retry(r4c$registry,""")
                 .contains("""
                             @java.beans.ConstructorProperties({"registry", "name"})

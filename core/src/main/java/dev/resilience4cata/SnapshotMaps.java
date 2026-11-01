@@ -146,7 +146,6 @@ final class SnapshotMaps {
             case Enum<?> constant -> constant.name();
             case Class<?> type -> type.getName();
             case Double d -> Double.isFinite(d) ? d : null;
-            case Float f -> Float.isFinite(f) ? f : null;
             case Collection<?> collection -> {
                 List<@Nullable Object> list = new ArrayList<>(collection.size());
                 for (Object element : collection) {

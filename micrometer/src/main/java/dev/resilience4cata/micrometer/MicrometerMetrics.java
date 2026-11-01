@@ -233,7 +233,7 @@ public final class MicrometerMetrics implements AutoCloseable {
     }
 
     /** The snapshot reports -1 until the window holds minimumCalls calls: no value yet. */
-    private static double percent(float rate) {
+    private static double percent(double rate) {
         return rate < 0 ? Double.NaN : rate;
     }
 

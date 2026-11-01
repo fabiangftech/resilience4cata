@@ -37,10 +37,10 @@ class ConfigurationReferenceTest {
     private static final Pattern ROW = Pattern.compile(
             "^\\| `(defaults\\.[^`]+)` \\| `([A-Z0-9_]+)` \\| ([^|]+?) \\| (?:`([^`]*)`|(—)) \\|.*\\|$");
     private static final Map<String, Map<Attribute.Kind, String>> TYPES = Map.of(
-            "en", Map.of(Attribute.Kind.BOOLEAN, "boolean", Attribute.Kind.INT, "int", Attribute.Kind.FLOAT, "decimal",
+            "en", Map.of(Attribute.Kind.BOOLEAN, "boolean", Attribute.Kind.INT, "int",
                     Attribute.Kind.DOUBLE, "decimal", Attribute.Kind.DURATION, "duration", Attribute.Kind.ENUM, "enum",
                     Attribute.Kind.CLASSES, "class list"),
-            "es", Map.of(Attribute.Kind.BOOLEAN, "boolean", Attribute.Kind.INT, "int", Attribute.Kind.FLOAT, "decimal",
+            "es", Map.of(Attribute.Kind.BOOLEAN, "boolean", Attribute.Kind.INT, "int",
                     Attribute.Kind.DOUBLE, "decimal", Attribute.Kind.DURATION, "duración", Attribute.Kind.ENUM, "enum",
                     Attribute.Kind.CLASSES, "lista de clases"));
     private static final Map<String, Function<ResilienceRegistry, Object>> RESOLVED = Map.of(

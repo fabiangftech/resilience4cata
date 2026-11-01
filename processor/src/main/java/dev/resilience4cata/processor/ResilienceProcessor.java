@@ -95,7 +95,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
      * {@code Abi.require} (and the reactor module's {@code ReactorAbi.require}). Raise it, together with the
      * runtimes' own level, when the generated code starts calling something older runtimes do not have.
      */
-    private static final int GENERATED_CODE_LEVEL = 1;
+    private static final int GENERATED_CODE_LEVEL = 2;
 
     /** Supported policies, in nesting order: outermost first. */
     private enum Kind {
@@ -766,6 +766,19 @@ public final class ResilienceProcessor extends AbstractProcessor {
                         overrides.add(attribute + "(" + number + ")");
                     }
                 }
+                case "windowDuration" -> {
+                    long nanos = durationNanos(method, label + " = \"" + value + "\"", value);
+                    if (nanos < 0) {
+                        valid = false;
+                    } else if (nanos < 1_000_000_000L || nanos % 1_000_000_000L != 0
+                            || nanos / 1_000_000_000L > Integer.MAX_VALUE) {
+                        valid = invalid(method, ProcessorError.WINDOW_MISMATCH, label + " must be a whole number of"
+                                + " seconds, at least 1s, was \"" + value + "\": a time window counts calls in one-second"
+                                + " buckets.");
+                    } else {
+                        overrides.add("windowDuration(java.time.Duration.ofSeconds(" + nanos / 1_000_000_000L + "L))");
+                    }
+                }
                 case "window" -> {
                     long nanos = durationNanos(method, label + " = \"" + value + "\"", value);
                     if (nanos < 0) {
@@ -788,11 +801,11 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     }
                 }
                 case "failureRateThreshold", "slowCallRateThreshold" -> {
-                    float rate = (Float) value;
+                    double rate = (Double) value;
                     if (!(rate > 0 && rate <= 100)) {
                         valid = invalid(method, ProcessorError.INVALID_PERCENTAGE, label + " must be a percentage > 0 and <= 100, was " + rate);
                     } else {
-                        overrides.add(attribute + "(" + rate + "f)");
+                        overrides.add(attribute + "(" + rate + ")");
                     }
                 }
                 case "backoff" -> overrides.add("backoff(" + kind.configType + ".Backoff." + constant(value) + ")");
@@ -815,6 +828,9 @@ public final class ResilienceProcessor extends AbstractProcessor {
         if (kind == Kind.ADAPTIVE_LIMIT) {
             valid &= limitsInOrder(method, annotation, values);
         }
+        if (kind == Kind.CIRCUIT_BREAKER) {
+            valid &= windowFitsType(method, annotation, values);
+        }
         if (values.containsKey("onExhaustedResult") && !values.containsKey("classifier")) {
             valid = invalid(method, ProcessorError.EXHAUSTED_WITHOUT_CLASSIFIER, annotation + ".onExhaustedResult needs " + annotation + ".classifier: only a"
                     + " classifier can reject a result. Add a classifier, or remove onExhaustedResult.");
@@ -826,6 +842,33 @@ public final class ResilienceProcessor extends AbstractProcessor {
         // A lock with no attribute set locks nothing: the call stays the same as without it.
         return new PolicyModel(instanceId, name, config, overrides, classifier, throwOnExhaustedResult,
                 locked && !overrides.isEmpty());
+    }
+
+    /**
+     * Checks that {@code windowSize} is set only for a count window and {@code windowDuration} only for a time
+     * window, as far as the annotation says. Returns false after reporting.
+     */
+    private boolean windowFitsType(ExecutableElement method, String annotation, Map<String, AnnotationValue> values) {
+        AnnotationValue type = values.get("windowType");
+        String windowType = type == null ? null : constant(type.getValue());
+        boolean size = values.containsKey("windowSize");
+        boolean duration = values.containsKey("windowDuration");
+        if (size && duration) {
+            return invalid(method, ProcessorError.WINDOW_MISMATCH, annotation + " sets both windowSize and"
+                    + " windowDuration: windowSize counts the calls of a COUNT window, windowDuration is the length"
+                    + " of a TIME window. Keep the one that fits windowType.");
+        }
+        if ("TIME".equals(windowType) && size) {
+            return invalid(method, ProcessorError.WINDOW_MISMATCH, annotation + ".windowSize counts the calls of a"
+                    + " COUNT window, but windowType is TIME: set windowDuration instead, for example"
+                    + " windowDuration = \"60s\".");
+        }
+        if ("COUNT".equals(windowType) && duration) {
+            return invalid(method, ProcessorError.WINDOW_MISMATCH, annotation + ".windowDuration is the length of a"
+                    + " TIME window, but windowType is COUNT: set windowSize (a number of calls) instead, or"
+                    + " windowType = WindowType.TIME.");
+        }
+        return true;
     }
 
     /**
