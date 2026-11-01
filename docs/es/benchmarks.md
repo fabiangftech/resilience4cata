@@ -508,6 +508,21 @@ Todos los benchmarks contra todos los rivales, más tres nuevos que llaman a los
 | `FluxBenchmark` bulkhead, 4 hilos | 740.4 ± 83.9 | 688.2 ± 38.6 | dentro del error (309 B contra 203 B) |
 | `FluxBenchmark` rate limiter, 1 hilo | 256.6 ± 22.9 | 234.2 ± 1.0 | dentro del error (296 B contra 248 B) |
 
+## Esperas del hedge a su hora (2026-11-01, AWS Graviton3) :id=hedge-precision
+
+Base: `04e045e` (main). Nuevo: `7c9f25f`: la espera de un hedge va a una lane precisa de `TimeoutTimer`; quien llama pasa su inicio (una lectura del reloj), el plazo es `inicio + delay`, y el thread del timer despierta en el plazo más cercano de esas lanes en vez de solo en el siguiente tick. El mismo método que arriba (`infra/bench.sh`, `c7g.xlarge`; tres ejecuciones, las dos últimas con 6 forks; calibración 20.49–20.54 ns). ns/op con 1 / 4 hilos (µs para el hedge que se dispara):
+
+| Benchmark | Base | Nuevo | Resilience4j |
+|---|---:|---:|---:|
+| el hedge se dispara (espera de 1 ms), µs | 2113.5 / 2116.8 | **1059.6 / 1067.7** | 1067.3 / 1070.5 |
+| el primer intento sigue en curso cuando la llamada vuelve | 149.9 / 280.3 | 179.4 / 259.1 | 3667.7 / 5441.8 |
+| lo mismo, sin presupuesto | 152.4 / 256.7 | 180.1 / 268.7 | — |
+| el primer intento ya terminó | 9.4 / 9.7 | 9.5 / 9.7 | — |
+
+- **El hedge que se dispara** empezaba hasta dos ticks del timer tarde: con una espera de 1 ms el tick es de 1 ms, el timer tomaba la entrada hasta un tick después de la llamada y luego esperaba la espera entera, así que en este bucle cerrado cada llamada pagaba las dos cosas (2.1 ms). Ahora sale tras la espera más lo que tarda en despertar el thread, como el `ScheduledThreadPoolExecutor` de Resilience4j: 0.7% más rápido con un hilo, 0.3% con cuatro (ahí dentro del error). Ninguna de las dos librerías puede bajar más: las dos esperan la espera y lo que tarda el sistema operativo en despertar.
+- **El precio es una lectura del reloj** cuando el primer intento sigue en curso al volver la llamada, unos 29 ns con un hilo (con cuatro el cambio queda dentro del error). Un intento ya terminado no lee el reloj. Sigue unas 20× más rápido que `resilience4j-hedge`.
+- **Los timeouts async no se movieron** (`AsyncBenchmark.resilience4cataTimeout*`, `TimeoutBenchmark` y los timeouts de `ReactorBenchmark` y `FluxBenchmark`: dentro de ±5%). Una primera versión tomaba cada bandeja de la más vieja a la más nueva invirtiéndola, lo que hacía que el thread del timer recorriera cada bandeja dos veces: `AsyncBenchmark.resilience4cataTimeoutPending` con cuatro hilos pasó de 436 a 514 ns en dos ejecuciones, porque el thread del timer comparte los cuatro núcleos con los hilos del benchmark. Ahora solo se reordenan las entradas precisas, y las normales se toman en una sola pasada como antes (455.0 ± 61.1 → 437.1 ± 36.7).
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos en tres forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) y falla si el fork que menos asigna llega a su presupuesto + 1 B/op, o si un benchmark falta en los resultados. Tres forks porque C2 decide una vez por JVM si elimina un objeto (scalar replacement): un fork mantiene los mismos bytes en todas sus iteraciones, y el siguiente puede asignar uno o dos objetos más. En el runner de CI (x86), 21 ejecuciones del gate con un fork midieron `FluxBenchmark.resilience4cataPipelineStack` en 696, 728, 752 y 776 B y `resilience4cataTimeout` entre 384 y 440 B, así que el gate fallaba de vez en cuando en cambios que no asignan nada; un calentamiento más largo llevó todos los forks al valor más alto (Apple M1). Una allocation nueva en el código aparece en todos los forks, así que el fork más bajo la sigue detectando. La tabla muestra los bytes de cada fork. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.

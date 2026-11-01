@@ -508,6 +508,21 @@ Every benchmark against every rival, plus three new ones that call the beans a f
 | `FluxBenchmark` bulkhead, 4 threads | 740.4 ± 83.9 | 688.2 ± 38.6 | within the error (309 B against 203 B) |
 | `FluxBenchmark` rate limiter, 1 thread | 256.6 ± 22.9 | 234.2 ± 1.0 | within the error (296 B against 248 B) |
 
+## Hedge delays on time (2026-11-01, AWS Graviton3) :id=hedge-precision
+
+Base: `04e045e` (main). New: `7c9f25f`: a hedge's delay goes to a precise lane of `TimeoutTimer`; the caller passes its start (one clock read), the deadline is `start + delay`, and the timer thread wakes up at the earliest such deadline instead of only at the next tick. Same method as above (`infra/bench.sh`, `c7g.xlarge`; three runs, the last two with 6 forks; calibration 20.49–20.54 ns). ns/op 1 / 4 threads (µs for the hedge that fires):
+
+| Benchmark | Base | New | Resilience4j |
+|---|---:|---:|---:|
+| hedge fires (1 ms delay), µs | 2113.5 / 2116.8 | **1059.6 / 1067.7** | 1067.3 / 1070.5 |
+| first attempt still running, the call returns | 149.9 / 280.3 | 179.4 / 259.1 | 3667.7 / 5441.8 |
+| same, no budget | 152.4 / 256.7 | 180.1 / 268.7 | — |
+| first attempt already complete | 9.4 / 9.7 | 9.5 / 9.7 | — |
+
+- **The hedge that fires** started up to two timer ticks late: with a 1 ms delay the tick is 1 ms, the timer took the entry up to a tick after the call and then waited the whole delay, so in this closed loop every call paid both (2.1 ms). It now fires at the delay plus the thread's wake-up, as Resilience4j's `ScheduledThreadPoolExecutor` does: 0.7% faster on one thread, 0.3% with four (within the error there). Neither library can go lower: both wait the delay and the OS's wake-up.
+- **The price is one clock read** when the first attempt is still running as the call returns, about 29 ns on one thread (with four threads the change is within the error). An attempt already complete reads no clock. Still about 20× faster than `resilience4j-hedge`.
+- **Async timeouts did not move** (`AsyncBenchmark.resilience4cataTimeout*`, `TimeoutBenchmark`, `ReactorBenchmark` and `FluxBenchmark` timeouts: within ±5%). A first version took every inbox oldest first by reversing it, which made the timer thread walk each inbox twice: `AsyncBenchmark.resilience4cataTimeoutPending` with four threads went from 436 to 514 ns in two runs, since the timer thread shares the four cores with the benchmark's threads. Only precise entries are reordered now, and the plain ones are taken in one pass as before (455.0 ± 61.1 → 437.1 ± 36.7).
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings in three forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) and fails if the fork that allocates least reaches its budget + 1 B/op, or if a benchmark is missing from the results. Three forks because C2 decides once per JVM whether it scalar-replaces an object: a fork keeps the same bytes in every iteration, and the next one can allocate an object or two more. On the CI runner (x86), 21 runs of the one-fork gate measured `FluxBenchmark.resilience4cataPipelineStack` at 696, 728, 752 and 776 B and `resilience4cataTimeout` at 384 to 440 B, so the gate failed now and then on changes that allocate nothing; a longer warm-up put every fork on the higher value instead (Apple M1). An allocation the code starts making shows in every fork, so the lowest fork still catches it. The table shows every fork's bytes. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.

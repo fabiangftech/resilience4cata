@@ -14,6 +14,7 @@ No API changes.
 
 ### Fixed
 
+- Hedge: a delay started up to about two timer ticks late (a 1 ms delay hedged after about 2.1 ms). A hedge's delay now counts from the call's start and the timer wakes up at its deadline, so a hedge starts at `delay` plus the operating system's wake-up delay. A call whose first attempt is still running when it returns reads the clock once more.
 - Circuit breaker with a time window (`windowType = TIME`): seconds were numbered from `System.nanoTime()`'s origin, so where the clock wraps around every older second looked newer than the current one, calls were lost and the breaker could not open. Seconds now count from the window's creation.
 - Processor: generated code that did not compile, found by a fuzz test of the processor: an inner class of a generic class (`Holder<Integer>.Inner`) is printed with its outer type arguments; type variables with a recursive bound (`<T extends Comparable<T>>`) are passed explicitly; a fallback handler on a method that throws a type variable; static fallback methods of an interface are found from a subinterface and from a class that implements it.
 - Processor: two conflicting bundles (R4C-CMP-002) are reported on every method that uses them, not only on the first of several methods with the same signature; R4C-ATR-010 checks each annotation on its own, so a method may set `windowType = TIME` with `windowDuration` while its type sets `windowSize`.

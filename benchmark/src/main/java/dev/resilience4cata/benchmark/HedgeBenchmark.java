@@ -47,8 +47,8 @@ import org.openjdk.jmh.annotations.Warmup;
  *       completes by itself and the hedge (1 ms delay) succeeds at once; the benchmark waits for the
  *       result. This measures the path where the hedge starts and wins (timer precision, thread start,
  *       the loser's cancel), so the time is dominated by the delay and each library's timer precision.
- *       resilience4cata's timer is never early and at most about two ticks late (a tick is a sixteenth
- *       of the shortest delay, at least 1 ms); Resilience4j schedules on its
+ *       resilience4cata's hedge delays take their start from the call and the timer wakes up at the
+ *       deadline, so both fire at the delay plus the OS's wake-up delay; Resilience4j schedules on its
  *       {@code ScheduledThreadPoolExecutor}. Not part of the allocation gate.</li>
  * </ul>
  *
