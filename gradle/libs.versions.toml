@@ -21,7 +21,7 @@ opentelemetry = "1.67.0"
 opentelemetry-prometheus = "1.67.0-alpha"
 # The spring module compiles against the oldest supported Spring Boot (springBootMinimum: never bump it with the rest,
 # .github/dependabot.yml ignores the artifacts that use it) and its tests run on springBoot, through Boot's BOM.
-springBoot = "4.1.2"
+springBoot = "4.1.1"
 springBootMinimum = "4.1.0"
 # The Spring Framework of springBootMinimum, for the spring module's compile-only spring-tx (same Dependabot rule).
 springFrameworkMinimum = "7.0.8"
