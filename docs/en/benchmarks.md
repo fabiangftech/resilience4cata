@@ -476,6 +476,38 @@ Base: `4649484` (`Flux` support before this tuning). New: `53cba0a`: elements of
 
 A stage that is already complete when the call returns (a cached value, `Mono.just`, a stream that ended during its subscription) is now recorded at once and answered with a completed copy, as the timeout already did, instead of a linked future, a lambda and `whenComplete`'s dependent future. The retry, the timeout, the hedge, pending stages and every synchronous path did not move beyond the error (`PipelineBenchmark`, `HedgeBenchmark`, `AsyncBenchmark.resilience4cataRetry`/`Timeout*`, `ReactorBenchmark.*Pending`: within ±9%, all inside their error bars). Resilience4j's numbers in `ReactorBenchmark` did not move either (circuit breaker 243.3 / 1290.7, stack 4318.7 / 6671.2), so against resilience4j-reactor the `Mono` circuit breaker is now 2.3× faster on one thread and 12.3× with four.
 
+## Framework beans and a full comparison, 0.13.0 (2026-11-01, AWS Graviton3) :id=frameworks
+
+Every benchmark against every rival, plus three new ones that call the beans a framework hands to an application: `SpringBenchmark` (Spring Boot 4.1.2, resilience4j-spring-boot4 2.4.0's aspects), `MicronautBenchmark` (Micronaut 5.2.2 on JDK 25, resilience4j-micronaut 2.4.0's interceptors and Micronaut's own `@Retryable`/`@CircuitBreaker`) and `QuarkusBenchmark` (Quarkus 3.40.1, SmallRye Fault Tolerance's annotations and Resilience4j decorators built in a bean). resilience4cata's beans are the generated subclasses each integration creates. New: `f6e9097`. Same method as above (`infra/bench.sh`, `c7g.xlarge`, 3 forks; calibration 20.48–20.53 ns on 19 and 10 machines, two runs). Settings are those of the core benchmarks (retry 3 attempts with no delay, breaker count window of 100, bulkhead of 1000 without wait, rate limiter that never runs out, timeout 1 s); each setup checks that every Resilience4j instance takes part in its call, so a missing interceptor cannot look like a fast one (fairness notes in each benchmark's Javadoc). The plain bean costs 0.5–1.6 ns in every framework.
+
+**Framework beans**, ns/op 1 / 4 threads, against the fastest rival in that framework (B/op on one thread: resilience4cata allocates 0 B in every row):
+
+| Call | Spring: resilience4cata | Spring: Resilience4j | Micronaut: resilience4cata | Micronaut: fastest rival | Quarkus: resilience4cata | Quarkus: fastest rival |
+|---|---:|---:|---:|---:|---:|---:|
+| retry, first attempt succeeds | **1.1 / 1.1** | 1346.0 / 1530.9 | **1.1 / 1.0** | 104.8 / 100.4 (R4j) | **1.1 / 1.1** | 22.9 / 51.5 (R4j) |
+| retry, one failure | **6.1 / 6.7** | 5068.3 / 6007.2 | **10.2 / 9.3** | 959.5 / 1758.8 (R4j / Micronaut) | **6.2 / 6.3** | 471.3 / 568.4 (R4j) |
+| circuit breaker | **1.5 / 1.4** | 1737.0 / 2142.5 | **1.5 / 1.5** | 304.5 / 1500.7 (R4j) | **1.5 / 1.5** | 101.6 / 897.6 (R4j) |
+| open circuit breaker | **2.3 / 2.3** | 4174.2 / 4444.6 | **2.3 / 2.3** | 1127.4 / 1316.6 (R4j) | **2.3 / 2.3** | 355.9 / 452.7 (R4j) |
+| bulkhead | **20.4 / 280.4** | 1687.7 / 4411.2 | **20.7 / 279.9** | 490.2 / 2797.8 (R4j) | 20.4 / **270.2** | 20.3 / 460.8 (R4j) |
+| rate limiter | **42.0 / 184.4** | 1481.8 / 3956.2 | **42.0 / 181.7** | 141.9 / 629.8 (R4j) | **42.0 / 180.6** | 66.7 / 270.2 (R4j) |
+| timeout, sync | — | — | — | — | **24.2 / 23.2** | 1510.2 / 2246.9 (FT) |
+| timeout, completed future | **3.7 / 3.7** | 3632.2 / 8404.7 | **4.2 / 4.2** | 27816.7 / 17510.6 (R4j) | **3.7 / 3.7** | 444.1 / 1194.5 (R4j) |
+| retry + breaker + rate limiter + bulkhead | **62.1 / 289.6** | 6104.4 / 8317.4 | **62.1 / 268.2** | 1117.9 / 3474.8 (R4j) | **62.0 / 329.3** | 217.2 / 1067.9 (R4j) |
+
+- **Spring:** resilience4j-spring-boot4's aspects cost 1.3–6 µs and 1.6–6.3 KB per call: their pointcut is dynamic, and matching it loads a class by name (`Class.forName`) on every call. resilience4cata's subclass is a plain override, so a Spring bean costs what the policy costs in the core benchmarks.
+- **Micronaut:** resilience4j-micronaut's interceptors cost 100 ns–1.1 µs; Micronaut's own `@Retryable` and `@CircuitBreaker` cost 1.0–1.8 µs and 2.3–3.6 KB (`micronautRetry`, `micronautCircuitBreaker`). Resilience4j's timeout through the interceptor varies by forks (27.8 ± 23.1 µs).
+- **Quarkus:** Fault Tolerance's interceptors cost 0.3–1.9 µs and 0.6–2.2 KB per call; Resilience4j's decorators, called by hand from a bean with no interceptor at all, are the fastest rival in every row but the sync timeout (Resilience4j has none). Its bulkhead (two atomics, like ours) ties on one thread: 20.3 ± 0.0 against 20.4 ± 0.1.
+
+**The other benchmarks**, the same rows as the sections above, rerun against the fastest Resilience4j variant (`LockFree`, `Synchronized`, `NoSleep`) or Netflix's limiter: 156 comparable cases, 151 won. The rest:
+
+| Benchmark | resilience4cata | Fastest rival | Why |
+|---|---:|---:|---|
+| `HedgeBenchmark` hedge fires (1 ms delay), 1 / 4 threads | 2114.7 / 2116.6 | **1067.6 / 1069.4** | `TimeoutTimer`'s coarse ticks: never early, up to ~2 ticks late, so a 1 ms hedge starts after ~2 ms |
+| `BulkheadBenchmark` free slot, 1 thread | 20.5 ± 0.0 | **20.4 ± 0.0** | both are two atomics: the hardware's floor |
+| `BulkheadBenchmark` waiting allowed, 1 / 4 threads | **18.9** / 427.0 ± 85.1 | 20.4 / 445.6 ± 52.6 | a tie with four threads |
+| `FluxBenchmark` bulkhead, 4 threads | 740.4 ± 83.9 | 688.2 ± 38.6 | within the error (309 B against 203 B) |
+| `FluxBenchmark` rate limiter, 1 thread | 256.6 ± 22.9 | 234.2 ± 1.0 | within the error (296 B against 248 B) |
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings in three forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) and fails if the fork that allocates least reaches its budget + 1 B/op, or if a benchmark is missing from the results. Three forks because C2 decides once per JVM whether it scalar-replaces an object: a fork keeps the same bytes in every iteration, and the next one can allocate an object or two more. On the CI runner (x86), 21 runs of the one-fork gate measured `FluxBenchmark.resilience4cataPipelineStack` at 696, 728, 752 and 776 B and `resilience4cataTimeout` at 384 to 440 B, so the gate failed now and then on changes that allocate nothing; a longer warm-up put every fork on the higher value instead (Apple M1). An allocation the code starts making shows in every fork, so the lowest fork still catches it. The table shows every fork's bytes. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.

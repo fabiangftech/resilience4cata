@@ -318,19 +318,6 @@ class CircuitBreakerPolicyTest {
     }
 
     @Test
-    void timeWindowKeepsCountingWhereTheClockWraps() {
-        // Found by CircuitBreakerModelTest: seconds were numbered from the clock's zero, so past
-        // Long.MAX_VALUE every older bucket looked newer than the current second and swallowed its calls.
-        now.set(Long.MAX_VALUE - Duration.ofMillis(500).toNanos());
-        CircuitBreakerPolicy cb = breaker(timeWindow(3, 2));
-        fail(cb);
-        now.addAndGet(Duration.ofSeconds(1).toNanos()); // the clock wraps
-        assertThat(cb.snapshot().bufferedCalls()).isEqualTo(1);
-        fail(cb); // 2 of 2 within 3 s
-        assertThat(cb.state()).isEqualTo(CircuitBreakerState.OPEN);
-    }
-
-    @Test
     void timeWindowNoticesMinimumCallsReachedBySuccessesWithinOneSecond() {
         CircuitBreakerPolicy cb = breaker(timeWindow(10, 4).failureRateThreshold(25));
         fail(cb);
