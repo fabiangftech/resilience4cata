@@ -12,7 +12,7 @@ import reactor.core.publisher.Operators;
 import reactor.util.context.Context;
 
 /**
- * The subscriber of one {@link FluxCall.Attempt}: a subscription to the delegate's {@code Flux} whose elements go to
+ * What {@link FluxCall.Attempt} subscribes with (an attempt is its own subscriber, so it is one object): a subscription to the delegate's {@code Flux} whose elements go to
  * the call's subscriber, and a future that ends when the attempt's stream does ({@code null} when it
  * completes, its error otherwise), which the policies wait for.
  *
@@ -24,7 +24,7 @@ import reactor.util.context.Context;
  *
  * @param <T> the element type
  */
-final class AttemptSubscriber<T> extends CompletableFuture<Void> implements CoreSubscriber<T> {
+class AttemptSubscriber<T> extends CompletableFuture<Void> implements CoreSubscriber<T> {
 
     private static final VarHandle UPSTREAM;
 
@@ -48,11 +48,14 @@ final class AttemptSubscriber<T> extends CompletableFuture<Void> implements Core
         }
     };
 
-    private final FluxCall<T> call;
+    final FluxCall<T> call;
     final int number;
-    private final @Nullable ElementListener every;
-    private final @Nullable ElementListener first;
-    private final @Nullable ElementListener second;
+    // Registered by the policies around the attempt before it subscribes (on the thread that runs them, or
+    // published to the subscribing thread by the hand-off between them, a bulkhead's queue); the publisher's
+    // threads see them through the subscribe call, which happens before its signals.
+    @Nullable ElementListener every;
+    @Nullable ElementListener first;
+    @Nullable ElementListener second;
     private final Context context;
 
     @SuppressWarnings("unused") // accessed through UPSTREAM
@@ -62,13 +65,9 @@ final class AttemptSubscriber<T> extends CompletableFuture<Void> implements Core
     private boolean emitted;
     private boolean discarding;
 
-    AttemptSubscriber(FluxCall<T> call, int number, @Nullable ElementListener every, @Nullable ElementListener first,
-            @Nullable ElementListener second) {
+    AttemptSubscriber(FluxCall<T> call, int number) {
         this.call = call;
         this.number = number;
-        this.every = every;
-        this.first = first;
-        this.second = second;
         this.context = call.actual.currentContext();
     }
 

@@ -12,6 +12,10 @@ Sin cambios de API.
 
 - [Compatibilidad](reference/compatibility.md): qué sigue funcionando al actualizar dentro de una misma versión mayor desde 1.0.0 (la API de Java, el código generado, las claves de configuración, los nombres de métricas, el JSON de los endpoints, los códigos de error), y qué puede crecer en una versión menor.
 
+### Cambiado
+
+- Los métodos `Flux` asignan menos por stream: un intento es un objeto en vez de dos, y un stream que terminó durante su suscripción pasa por todas las políticas como un único stage compartido en vez de una copia completada por política (24 B menos con una política, 104 B con retry, breaker, timeout y bulkhead), y van hasta un 9% más rápido ([benchmarks](benchmarks.md#flux-ended)).
+
 ### Corregido
 
 - Hedge: una espera empezaba hasta unos dos ticks del timer tarde (una espera de 1 ms lanzaba el hedge tras unos 2,1 ms). Ahora la espera de un hedge cuenta desde el inicio de la llamada y el timer despierta en su plazo, así que un hedge sale tras `delay` más lo que tarda el sistema operativo en despertar el thread. Una llamada cuyo primer intento sigue en curso cuando vuelve lee el reloj una vez más.

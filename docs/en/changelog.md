@@ -12,6 +12,10 @@ No API changes.
 
 - [Compatibility](reference/compatibility.md): what an upgrade within one major version keeps working from 1.0.0 on (the Java API, generated code, configuration keys, metric names, the endpoints' JSON, error codes), and what may grow in a minor version.
 
+### Changed
+
+- `Flux` methods allocate less per stream: an attempt is one object instead of two, and a stream that ended during its subscription passes through every policy as one shared stage instead of a completed copy per policy (24 B less for one policy, 104 B for a retry, breaker, timeout and bulkhead), and run up to 9% faster ([benchmarks](benchmarks.md#flux-ended)).
+
 ### Fixed
 
 - Hedge: a delay started up to about two timer ticks late (a 1 ms delay hedged after about 2.1 ms). A hedge's delay now counts from the call's start and the timer wakes up at its deadline, so a hedge starts at `delay` plus the operating system's wake-up delay. A call whose first attempt is still running when it returns reads the clock once more.

@@ -367,4 +367,36 @@ class StreamPoliciesTest {
             }
         }
     }
+
+    // ---- the shared stage of an ended stream
+
+    @Test
+    void theEndedStageCannotBeChanged() {
+        CompletableFuture<Void> ended = Elements.ended();
+        assertThat(ended.complete(null)).isFalse();
+        assertThat(ended.completeExceptionally(new IOException())).isFalse();
+        assertThat(ended.cancel(true)).isFalse();
+        ended.obtrudeException(new IOException());
+        ended.orTimeout(1, TimeUnit.NANOSECONDS);
+        assertThat(ended.state()).isEqualTo(Future.State.SUCCESS);
+        assertThat(ended.resultNow()).isNull();
+    }
+
+    @Test
+    void everyPolicyPassesTheEndedStageOnAsItIsAndArmsNothing() {
+        CompletableFuture<Void> ended = Elements.ended();
+        assertThat(timeout(Duration.ofSeconds(1)).executeStreamAsync(() -> ended, stream)).isSameAs(ended);
+        assertThat(timeout(Duration.ofSeconds(1)).<Void>executeAsync(() -> ended)).isSameAs(ended);
+        CircuitBreakerPolicy breaker = new CircuitBreakerPolicy("cb", CircuitBreakerConfig.builder().build(), environment);
+        assertThat(breaker.executeStreamAsync(() -> ended, stream)).isSameAs(ended);
+        assertThat(breaker.<Void>executeAsync(() -> ended)).isSameAs(ended);
+        BulkheadPolicy bulkhead = new BulkheadPolicy("b", dev.resilience4cata.BulkheadConfig.builder().build(), environment);
+        assertThat(bulkhead.<Void>executeAsync(() -> ended)).isSameAs(ended);
+        assertThat(bulkhead.concurrentCalls()).as("the slot is freed").isZero();
+        RateLimiterPolicy limiter = new RateLimiterPolicy("r", dev.resilience4cata.RateLimiterConfig.builder().build(), environment);
+        assertThat(limiter.<Void>executeAsync(() -> ended)).isSameAs(ended);
+        AdaptiveLimitPolicy limit = new AdaptiveLimitPolicy("a", AdaptiveLimitConfig.builder().build(), environment);
+        assertThat(limit.executeStreamAsync(() -> ended, stream)).isSameAs(ended);
+        assertThat(ticker.pendingTasks()).as("no timeout armed").isZero();
+    }
 }

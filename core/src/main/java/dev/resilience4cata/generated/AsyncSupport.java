@@ -63,13 +63,19 @@ final class AsyncSupport {
      */
     static boolean succeeded(CompletionStage<?> stage) {
         Class<?> type = stage.getClass();
-        return (type == CompletableFuture.class || type == LinkedFuture.class)
+        return type == Ended.class || (type == CompletableFuture.class || type == LinkedFuture.class)
                 && ((CompletableFuture<?>) stage).state() == java.util.concurrent.Future.State.SUCCESS;
     }
 
-    /** A completed copy of a stage for which {@link #succeeded} holds: the caller never gets the inner future. */
+    /**
+     * A completed copy of a stage for which {@link #succeeded} holds: the caller never gets the inner future. The
+     * shared {@link Ended} stage is immutable, so it is returned as it is.
+     */
     @SuppressWarnings("unchecked")
     static <T> CompletableFuture<T> copy(CompletionStage<T> stage) {
+        if (stage.getClass() == Ended.class) {
+            return (CompletableFuture<T>) stage;
+        }
         return CompletableFuture.completedFuture(((CompletableFuture<T>) stage).resultNow());
     }
 

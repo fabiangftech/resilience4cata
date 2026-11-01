@@ -306,11 +306,11 @@ public final class TimeoutPolicy {
         // Exact classes only: subclasses (such as minimal stages) may not support state(). A LinkedFuture is
         // the future of an inner policy (a bulkhead, say), which supports it like a plain one.
         Class<?> type = stage.getClass();
-        if (type == CompletableFuture.class || type == LinkedFuture.class) {
+        if (type == CompletableFuture.class || type == LinkedFuture.class || type == Ended.class) {
             CompletableFuture<T> future = (CompletableFuture<T>) stage;
             Future.State state = future.state();
             if (state == Future.State.SUCCESS) {
-                return CompletableFuture.completedFuture(future.resultNow());
+                return AsyncSupport.copy(future);
             }
             if (state == Future.State.FAILED) {
                 return CompletableFuture.failedFuture(AsyncSupport.unwrap(future.exceptionNow()));
@@ -360,11 +360,11 @@ public final class TimeoutPolicy {
         elements.listen(idle, true);
         CompletionStage<T> stage = AsyncSupport.call(call);
         Class<?> type = stage.getClass();
-        if (type == CompletableFuture.class || type == LinkedFuture.class) {
+        if (type == CompletableFuture.class || type == LinkedFuture.class || type == Ended.class) {
             CompletableFuture<T> future = (CompletableFuture<T>) stage;
             Future.State state = future.state();
             if (state == Future.State.SUCCESS) {
-                return CompletableFuture.completedFuture(future.resultNow());
+                return AsyncSupport.copy(future);
             }
             if (state == Future.State.FAILED) {
                 return CompletableFuture.failedFuture(AsyncSupport.unwrap(future.exceptionNow()));

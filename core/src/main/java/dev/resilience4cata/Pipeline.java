@@ -665,8 +665,9 @@ public final class Pipeline<T> {
             return CompletableFuture.failedFuture(new NullPointerException("An asynchronous call returned null"
                     + " instead of a CompletionStage"));
         }
-        if (stage.getClass() == CompletableFuture.class) {
-            // Exactly a CompletableFuture: not a subclass such as minimalCompletionStage(), whose join() throws.
+        if (stage.getClass() == CompletableFuture.class || stage == dev.resilience4cata.generated.Elements.ended()) {
+            // Exactly a CompletableFuture (or the shared, immutable stage of an ended stream): not a subclass such as
+            // minimalCompletionStage(), whose join() throws.
             return (CompletableFuture<T>) stage;
         }
         CompletableFuture<T> result = new CompletableFuture<>();
