@@ -99,7 +99,7 @@ En AWS Graviton3, un retry cuyo primer intento tiene éxito cuesta 1.2 ns y un c
 
 ### ¿Está listo para producción? :id=production
 
-0.1.0 es la primera versión. Cada política tiene pruebas unitarias y de extremo a extremo, las lock-free también pruebas de concurrencia (jcstress), y la asignación de memoria se controla en CI, pero la API todavía puede cambiar antes de 1.0.0. Consulta el [Registro de cambios](changelog.md).
+Cada política tiene pruebas unitarias y de extremo a extremo, las lock-free también pruebas de concurrencia (jcstress), la asignación de memoria se controla en CI, y una prueba de resistencia semanal de dos horas ejecuta todas las políticas bajo carga. La API está revisada para 1.0 y no hay más cambios planeados, pero hasta 1.0.0 una versión menor todavía puede cambiarla; el [Registro de cambios](changelog.md) lista cada cambio incompatible. Lo que 1.0.0 mantendrá compatible está en [Compatibilidad](reference/compatibility.md).
 
 ### ¿Qué no se admite todavía? :id=not-supported
 

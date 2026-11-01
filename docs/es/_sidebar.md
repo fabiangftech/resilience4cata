@@ -30,6 +30,7 @@
   - [Solución de problemas](/es/guides/troubleshooting.md)
 - **Referencia**
   - [Claves de configuración](/es/reference/configuration.md)
+  - [Compatibilidad](/es/reference/compatibility.md)
   - [Códigos de error](/es/errors.md)
   - [Javadoc](https://javadoc.io/doc/dev.resilience4cata)
   - [Cambios](/es/changelog.md)

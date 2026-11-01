@@ -4,6 +4,14 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Unreleased] :id=unreleased
+
+Sin cambios de API.
+
+### Añadido
+
+- [Compatibilidad](reference/compatibility.md): qué sigue funcionando al actualizar dentro de una misma versión mayor desde 1.0.0 (la API de Java, el código generado, las claves de configuración, los nombres de métricas, el JSON de los endpoints, los códigos de error), y qué puede crecer en una versión menor.
+
 ## [0.13.0] - 2026-10-31 :id=0.13.0
 
 Los últimos cambios de API previstos antes de 1.0, todos en el circuit breaker y la configuración. El código generado por 0.12.0 se debe compilar de nuevo con este procesador: las tasas del circuit breaker ahora son `double`.
