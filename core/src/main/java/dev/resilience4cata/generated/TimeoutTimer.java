@@ -39,7 +39,7 @@ import org.jspecify.annotations.Nullable;
  * thread wakes up at the earliest deadline of a precise lane instead of only at the next tick (at most 16
  * wake-ups per tick). A precise entry is drained within one tick, which is no longer than its duration
  * (unless the duration is below 1 ms), so it fires at its deadline plus the OS's wake-up delay. Entries are
- * appended in drain order, inbox by inbox, oldest first, and expiring still looks only at a lane's head, so
+ * appended in drain order, inbox by inbox (a precise lane's oldest first), and expiring still looks only at a lane's head, so
  * an entry drained after one that started later (another thread's inbox) waits for it: late by at most the
  * spread of the starts drained in one tick, at most one tick.
  *
@@ -222,33 +222,30 @@ final class TimeoutTimer {
     /** Step 2 of a tick; separate for tests that replay races. */
     void drainNew(long now) {
         for (Stripe stripe : stripes) {
-            TimerEntry entry = oldestFirst(stripe.take(Heads.INBOX));
+            TimerEntry entry = stripe.take(Heads.INBOX); // newest first
+            TimerEntry precise = null; // this inbox's precise entries, oldest first, linked through next
             while (entry != null) {
                 TimerEntry next = entry.stackNext;
                 entry.stackNext = null; // before the CAS: a canceller may reuse the link once it sees SCHEDULED
                 if (entry.tryMove(TimerEntry.NEW, TimerEntry.SCHEDULED)) {
                     Lane lane = entry.lane;
-                    if (!lane.precise) {
+                    if (lane.precise) {
+                        entry.next = precise; // the deadline was set from the caller's start
+                        precise = entry;
+                    } else {
                         entry.deadline = now + lane.durationNanos;
-                    } // else set from the caller's start
-                    append(lane, entry);
+                        append(lane, entry);
+                    }
                 } // else cancelled before we saw it: drop it
                 entry = next;
             }
+            while (precise != null) {
+                TimerEntry next = precise.next;
+                append(precise.lane, precise);
+                precise = next;
+            }
         }
         linkedSnapshot = linked;
-    }
-
-    /** Reverses an inbox stack (newest first) into push order. */
-    private static @Nullable TimerEntry oldestFirst(@Nullable TimerEntry newest) {
-        TimerEntry reversed = null;
-        for (TimerEntry entry = newest; entry != null; ) {
-            TimerEntry next = entry.stackNext;
-            entry.stackNext = reversed;
-            reversed = entry;
-            entry = next;
-        }
-        return reversed;
     }
 
     /** Step 3 of a tick; separate for tests that replay races. */
