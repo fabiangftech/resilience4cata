@@ -163,8 +163,8 @@ public final class FluxCallStress {
         final FluxCall<String> call = new FluxCall<>(new Recorder());
         final Recording old = new Recording();
         final Recording fresh = new Recording();
-        final AttemptSubscriber<String> oldAttempt = new AttemptSubscriber<>(call, 0, null, null, null);
-        final AttemptSubscriber<String> freshAttempt = new AttemptSubscriber<>(call, 1, null, null, null);
+        final AttemptSubscriber<String> oldAttempt = new FluxCall.Attempt<>(call, 0);
+        final AttemptSubscriber<String> freshAttempt = new FluxCall.Attempt<>(call, 1);
 
         {
             oldAttempt.onSubscribe(old);
@@ -204,8 +204,8 @@ public final class FluxCallStress {
         final FluxCall<String> call = new FluxCall<>(new Recorder());
         final Recording late = new Recording();
         final Recording fresh = new Recording();
-        final AttemptSubscriber<String> lateAttempt = new AttemptSubscriber<>(call, 0, null, null, null);
-        final AttemptSubscriber<String> freshAttempt = new AttemptSubscriber<>(call, 1, null, null, null);
+        final AttemptSubscriber<String> lateAttempt = new FluxCall.Attempt<>(call, 0);
+        final AttemptSubscriber<String> freshAttempt = new FluxCall.Attempt<>(call, 1);
 
         {
             call.request(2);

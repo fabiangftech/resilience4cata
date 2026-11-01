@@ -86,7 +86,7 @@ public final class FluxCall<T> implements Subscription {
     private volatile boolean cancelled;
 
     /** The stage of an attempt that ended during its subscription: shared, as it only ever reads as done. */
-    private static final CompletableFuture<Void> ENDED = CompletableFuture.completedFuture(null);
+    private static final CompletableFuture<Void> ENDED = Elements.ended();
 
     // The attempt that may still commit, or COMMITTED.
     @SuppressWarnings("unused") // accessed through GATE
@@ -159,7 +159,7 @@ public final class FluxCall<T> implements Subscription {
         if (stage == null) {
             stage = CompletableFuture.failedFuture(new NullPointerException("a layer returned no stage"));
         }
-        if (stage.getClass() == CompletableFuture.class
+        if (stage == ENDED || stage.getClass() == CompletableFuture.class
                 && ((CompletableFuture<Void>) stage).state() == java.util.concurrent.Future.State.SUCCESS) {
             return stage; // ended during its subscription: nothing for the boundary to decide
         }
@@ -212,18 +212,10 @@ public final class FluxCall<T> implements Subscription {
      *
      * @param <T> the element type
      */
-    public static final class Attempt<T> implements Elements {
-        private final FluxCall<T> call;
-        final int number;
-        // Registered by the policies around this attempt before it subscribes (on the thread that runs them, or
-        // published to the subscribing thread by the hand-off between them, a bulkhead's queue).
-        private @Nullable ElementListener every;
-        private @Nullable ElementListener first;
-        private @Nullable ElementListener second;
+    public static final class Attempt<T> extends AttemptSubscriber<T> implements Elements {
 
         Attempt(FluxCall<T> call, int number) {
-            this.call = call;
-            this.number = number;
+            super(call, number);
         }
 
         @Override
@@ -249,14 +241,13 @@ public final class FluxCall<T> implements Subscription {
                 return CompletableFuture.failedFuture(new NullPointerException(
                         "A method that returns a Flux returned null instead of a Flux"));
             }
-            AttemptSubscriber<T> subscriber = new AttemptSubscriber<>(call, number, every, first, second);
-            flux.subscribe(subscriber);
-            if (subscriber.isDone() && !subscriber.isCompletedExceptionally()) {
+            flux.subscribe(this);
+            if (isDone() && !isCompletedExceptionally()) {
                 // Ended during subscribe (Flux.just with demand): a plain completed future lets the policies take
                 // their already-complete shortcut. The policies only read it (a cancel of a done future does nothing).
                 return ENDED;
             }
-            return subscriber;
+            return this;
         }
     }
 

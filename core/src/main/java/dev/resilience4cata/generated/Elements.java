@@ -1,5 +1,7 @@
 package dev.resilience4cata.generated;
 
+import java.util.concurrent.CompletableFuture;
+
 /**
  * One call of a streaming method (a method that returns a {@code Flux}), as the policies that need its
  * elements see it. The reactor module implements it; generated code passes it to the
@@ -20,4 +22,15 @@ public interface Elements {
      * @param everyElement {@code true} to hear about every element; {@code false} for the first one only
      */
     void listen(ElementListener listener, boolean everyElement);
+
+    /**
+     * The stage of an attempt whose stream ended while it was subscribed: completed with {@code null}, shared and
+     * immutable. Policies return it as it is where they would return a completed copy of a done stage.
+     *
+     * @return the shared stage
+     */
+    @dev.resilience4cata.annotation.Internal
+    static CompletableFuture<Void> ended() {
+        return Ended.INSTANCE;
+    }
 }
