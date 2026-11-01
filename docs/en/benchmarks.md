@@ -498,7 +498,7 @@ Every benchmark against every rival, plus three new ones that call the beans a f
 - **Micronaut:** resilience4j-micronaut's interceptors cost 100 ns–1.1 µs; Micronaut's own `@Retryable` and `@CircuitBreaker` cost 1.0–1.8 µs and 2.3–3.6 KB (`micronautRetry`, `micronautCircuitBreaker`). Resilience4j's timeout through the interceptor varies by forks (27.8 ± 23.1 µs).
 - **Quarkus:** Fault Tolerance's interceptors cost 0.3–1.9 µs and 0.6–2.2 KB per call; Resilience4j's decorators, called by hand from a bean with no interceptor at all, are the fastest rival in every row but the sync timeout (Resilience4j has none). Its bulkhead (two atomics, like ours) ties on one thread: 20.3 ± 0.0 against 20.4 ± 0.1.
 
-**The other benchmarks**, the same rows as the sections above, rerun against the fastest Resilience4j variant (`LockFree`, `Synchronized`, `NoSleep`) or Netflix's limiter: 156 comparable cases, 151 won. The rest:
+**The other benchmarks**, the same rows as the sections above, rerun against the fastest Resilience4j variant (`LockFree`, `Synchronized`, `NoSleep`) or Netflix's limiter: 156 comparable cases across this run and the framework benchmarks, 150 won. The other six are the Quarkus bulkhead on one thread (above) and the five below; the bulkhead with waiting allowed is a narrow win on one thread and a tie with four, so it is listed too:
 
 | Benchmark | resilience4cata | Fastest rival | Why |
 |---|---:|---:|---|
