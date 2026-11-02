@@ -34,9 +34,10 @@ Esto también se mantiene dentro de una versión mayor:
 Añadir es compatible, así que una versión menor puede hacer cualquiera de estas cosas. Escribe código que lo tolere:
 
 - **Constantes de enums** nuevas (`CircuitBreakerState`, `RetryEvent.Reason`, `Classifier.Outcome` y otros). Deja una rama `default` en un `switch` sobre ellos.
-- **Tipos de eventos** nuevos, y componentes nuevos en los records de eventos existentes. Deja una rama `default` en un `switch` sobre eventos, y lee los eventos con sus accessors, no con record patterns que los descompongan.
+- **Tipos de eventos** nuevos, y componentes nuevos en los records de eventos existentes. Deja una rama `default` en un `switch` sobre eventos, y lee los eventos con sus accessors, no con record patterns que los descompongan. Un record que gana un componente conserva su constructor anterior, así que el código que crea eventos, como los tests de un listener, sigue compilando.
+- **Tipos sealed** con subtipos nuevos cuando se añade una política: `PolicyConfig` una configuración nueva, `CallRejectedException` un rechazo nuevo, `ResilienceEvent` una interfaz de eventos nueva. Deja una rama `default` en un `switch` sobre ellos.
 - **Métodos** nuevos en los handles (`CircuitBreakerHandle` y los demás) y en `FallbackContext`. La librería implementa estas interfaces; no las implementes ni las mockees.
 - **Métodos de `Ticker`**: los que se añadan serán métodos `default`, así que tu propia implementación sigue compilando.
 - **Atributos de anotaciones** nuevos, siempre con valor por defecto.
-- **Snapshots** con componentes nuevos, y claves nuevas en el JSON de los endpoints. Ignora las claves que no conozcas.
+- **Snapshots** con componentes nuevos, y claves nuevas en el JSON de los endpoints. Como con los eventos, un record de snapshot conserva su constructor anterior. Ignora las claves que no conozcas.
 - **Métricas**, códigos de error y claves de configuración nuevos.

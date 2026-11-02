@@ -183,61 +183,111 @@ public final class RetryConfig implements PolicyConfig {
             budgetWindow = from.budgetWindow;
         }
 
-        /** @param enabled whether failed calls are retried at all @return this builder */
+        /**
+         * Sets {@code enabled}: whether failed calls are retried at all.
+         *
+         * @param enabled whether failed calls are retried at all
+         * @return this builder
+         */
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
             return this;
         }
 
-        /** @param maxAttempts total attempts, including the first one @return this builder */
+        /**
+         * Sets {@code maxAttempts}: total attempts, including the first one.
+         *
+         * @param maxAttempts total attempts, including the first one
+         * @return this builder
+         */
         public Builder maxAttempts(int maxAttempts) {
             this.maxAttempts = maxAttempts;
             return this;
         }
 
-        /** @param delay delay before the first retry @return this builder */
+        /**
+         * Sets {@code delay}: delay before the first retry.
+         *
+         * @param delay delay before the first retry
+         * @return this builder
+         */
         public Builder delay(Duration delay) {
             this.delay = Objects.requireNonNull(delay, "delay");
             return this;
         }
 
-        /** @param backoff how the delay grows between attempts @return this builder */
+        /**
+         * Sets {@code backoff}: how the delay grows between attempts.
+         *
+         * @param backoff how the delay grows between attempts
+         * @return this builder
+         */
         public Builder backoff(Backoff backoff) {
             this.backoff = Objects.requireNonNull(backoff, "backoff");
             return this;
         }
 
-        /** @param multiplier growth factor for exponential backoff @return this builder */
+        /**
+         * Sets {@code multiplier}: growth factor for exponential backoff.
+         *
+         * @param multiplier growth factor for exponential backoff
+         * @return this builder
+         */
         public Builder multiplier(double multiplier) {
             this.multiplier = multiplier;
             return this;
         }
 
-        /** @param maxDelay upper bound for a single delay @return this builder */
+        /**
+         * Sets {@code maxDelay}: upper bound for a single delay.
+         *
+         * @param maxDelay upper bound for a single delay
+         * @return this builder
+         */
         public Builder maxDelay(Duration maxDelay) {
             this.maxDelay = Objects.requireNonNull(maxDelay, "maxDelay");
             return this;
         }
 
-        /** @param jitter randomisation applied to each delay @return this builder */
+        /**
+         * Sets {@code jitter}: randomisation applied to each delay.
+         *
+         * @param jitter randomisation applied to each delay
+         * @return this builder
+         */
         public Builder jitter(Jitter jitter) {
             this.jitter = Objects.requireNonNull(jitter, "jitter");
             return this;
         }
 
-        /** @param maxDuration time budget for the whole operation; zero means unlimited @return this builder */
+        /**
+         * Sets {@code maxDuration}: time budget for the whole operation; zero means unlimited.
+         *
+         * @param maxDuration time budget for the whole operation; zero means unlimited
+         * @return this builder
+         */
         public Builder maxDuration(Duration maxDuration) {
             this.maxDuration = Objects.requireNonNull(maxDuration, "maxDuration");
             return this;
         }
 
-        /** @param retryOn exceptions that trigger a retry @return this builder */
+        /**
+         * Sets {@code retryOn}: exceptions that trigger a retry.
+         *
+         * @param retryOn exceptions that trigger a retry
+         * @return this builder
+         */
         public Builder retryOn(List<Class<? extends Throwable>> retryOn) {
             this.retryOn = List.copyOf(retryOn);
             return this;
         }
 
-        /** @param abortOn exceptions that stop retrying @return this builder */
+        /**
+         * Sets {@code abortOn}: exceptions that stop retrying.
+         *
+         * @param abortOn exceptions that stop retrying
+         * @return this builder
+         */
         public Builder abortOn(List<Class<? extends Throwable>> abortOn) {
             this.abortOn = List.copyOf(abortOn);
             return this;
@@ -263,7 +313,12 @@ public final class RetryConfig implements PolicyConfig {
             return this;
         }
 
-        /** @param budgetWindow how far back the budget counts calls and retries @return this builder */
+        /**
+         * Sets {@code budgetWindow}: how far back the budget counts calls and retries.
+         *
+         * @param budgetWindow how far back the budget counts calls and retries
+         * @return this builder
+         */
         public Builder budgetWindow(Duration budgetWindow) {
             this.budgetWindow = Objects.requireNonNull(budgetWindow, "budgetWindow");
             return this;

@@ -102,7 +102,7 @@ String geocode(String address);
 String reverse(double latitude, double longitude);
 ```
 
-Here `geocode` and `reverse` share 5 permits per second. When the burst is used up, the next call waits 200 ms for its permit (1 s / 5), within the 500 ms allowed; a call that would have to wait longer than 500 ms is rejected at once. Methods that share a `name` must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008). Without `name`, the id is `<interface>#<method>(<parameter types>)`.
+Here `geocode` and `reverse` share 5 permits per second. When the burst is used up, the next call waits 200 ms for its permit (1 s / 5), within the 500 ms allowed; a call that would have to wait longer than 500 ms is rejected at once. Methods that share a `name` must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008). Without `name`, the id is `<type>#<method>(<parameter types>)`.
 
 ### Handle
 

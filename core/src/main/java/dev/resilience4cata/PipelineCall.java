@@ -1,5 +1,7 @@
 package dev.resilience4cata;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * The call protected by a {@link Pipeline}: usually a lambda or method reference. It may throw a
  * checked exception, which {@link Pipeline#execute} then declares too:
@@ -12,7 +14,7 @@ package dev.resilience4cata;
  * @param <X> the checked exception the call may throw; {@link RuntimeException} when it throws none
  */
 @FunctionalInterface
-public interface PipelineCall<T, X extends Throwable> {
+public interface PipelineCall<T extends @Nullable Object, X extends Throwable> {
 
     /**
      * Runs the call once. A pipeline with a retry calls it again after a failure.

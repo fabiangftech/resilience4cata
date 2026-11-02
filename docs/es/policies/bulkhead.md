@@ -98,7 +98,7 @@ byte[] thumbnail(String imageId);
 
 ## Compartir e ids de instancia
 
-Sin `name`, cada método tiene su propio bulkhead, con el id `<interfaz>#<método>(<tipos de parámetros>)`. Para proteger un recurso que usan varios métodos (un pool de conexiones detrás de todo un cliente), dales el mismo `name`: entonces comparten los mismos `maxConcurrent` slots. Deben resolver la misma configuración, o envolverlos falla con [`R4C-REG-008`](../errors.md#r4c-reg-008).
+Sin `name`, cada método tiene su propio bulkhead, con el id `<tipo>#<método>(<tipos de parámetros>)`. Para proteger un recurso que usan varios métodos (un pool de conexiones detrás de todo un cliente), dales el mismo `name`: entonces comparten los mismos `maxConcurrent` slots. Deben resolver la misma configuración, o envolverlos falla con [`R4C-REG-008`](../errors.md#r4c-reg-008).
 
 ### Handle
 

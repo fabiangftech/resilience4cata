@@ -71,7 +71,7 @@ Every metric has a `name` attribute: the policy instance id (the `name` in the a
 
 | Name | OpenTelemetry instrument | Unit | Attributes | Source |
 |---|---|---|---|---|
-| `r4c.calls.rejected` | `LongCounter` | `{call}` | `name`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CircuitBreakerEvent.CallNotPermitted`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
+| `r4c.calls.rejected` | `LongCounter` | `{call}` | `name`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CircuitBreakerEvent.Rejected`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
 | `r4c.circuitbreaker.transitions` | `LongCounter` | `{transition}` | `name`, `from`, `to` (`closed`, `open`, `half_open`, `forced_open`, `disabled`) | `CircuitBreakerEvent.StateTransition` |
 | `r4c.retry.retries` | `LongCounter` | `{retry}` | `name` | `RetryEvent.Retrying` |
 | `r4c.retry.gave.up` | `LongCounter` | `{call}` | `name`, `reason` (`max_attempts`, `max_duration`, `not_retryable`, `interrupted`, `classifier_failed`, `budget_exhausted`) | `RetryEvent.GaveUp` |

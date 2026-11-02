@@ -102,7 +102,7 @@ String geocode(String address);
 String reverse(double latitude, double longitude);
 ```
 
-Aquí `geocode` y `reverse` comparten 5 permisos por segundo. Cuando la ráfaga se agota, la siguiente llamada espera 200 ms por su permiso (1 s / 5), dentro de los 500 ms permitidos; una llamada que tendría que esperar más de 500 ms se rechaza enseguida. Los métodos que comparten un `name` deben resolver la misma configuración, o envolverlos falla con [`R4C-REG-008`](../errors.md#r4c-reg-008). Sin `name`, el id es `<interfaz>#<método>(<tipos de parámetros>)`.
+Aquí `geocode` y `reverse` comparten 5 permisos por segundo. Cuando la ráfaga se agota, la siguiente llamada espera 200 ms por su permiso (1 s / 5), dentro de los 500 ms permitidos; una llamada que tendría que esperar más de 500 ms se rechaza enseguida. Los métodos que comparten un `name` deben resolver la misma configuración, o envolverlos falla con [`R4C-REG-008`](../errors.md#r4c-reg-008). Sin `name`, el id es `<tipo>#<método>(<tipos de parámetros>)`.
 
 ### Handle
 

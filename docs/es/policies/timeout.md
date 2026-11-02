@@ -112,7 +112,7 @@ El timeout cubre el stage, no la llamada al método que lo devuelve: un método 
 | `locked` | `boolean` | `false` | solo anotación | Conserva los valores fijados en la anotación: las claves `instances.<id>.*` no pueden cambiarlos. Ver [Bloquear una instancia](../guides/configuration.md#bloquear-una-instancia). |
 | `enabled` | `boolean` | `true` | `defaults.timeout.enabled` | `false` deja pasar todas las llamadas; sin escribirlo, se hereda. |
 
-`@Timeout` **no tiene `name`**: un timeout no guarda estado que valga la pena compartir, así que cada método anotado tiene su propia política, con el id `<interfaz>#<método>(<tipos de parámetros>)`. En la configuración externa el atributo es `value` (`configs.slow.timeout.value=10s`, `instances."com.acme.ReportApi#build(java.lang.String)".timeout.value=5s`); en código el método del builder es `TimeoutConfig.Builder.timeout(Duration)`. Ver [Configuración](../guides/configuration.md).
+`@Timeout` **no tiene `name`**: un timeout no guarda estado que valga la pena compartir, así que cada método anotado tiene su propia política, con el id `<tipo>#<método>(<tipos de parámetros>)`. En la configuración externa el atributo es `value` (`configs.slow.timeout.value=10s`, `instances."com.acme.ReportApi#build(java.lang.String)".timeout.value=5s`); en código el método del builder es `TimeoutConfig.Builder.timeout(Duration)`. Ver [Configuración](../guides/configuration.md).
 
 Tampoco hay **handle**: `registry` no tiene `timeout(id)`. `registry.snapshot().timeouts()` lista un `TimeoutSnapshot(id, config)` por método.
 

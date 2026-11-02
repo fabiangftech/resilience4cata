@@ -9,7 +9,7 @@ import org.jspecify.annotations.Nullable;
  * @param <T> the result type of the protected method
  */
 @FunctionalInterface
-public interface Classifier<T> {
+public interface Classifier<T extends @Nullable Object> {
 
     /**
      * Classifies one call. Exactly one of {@code result} or {@code failure} is meaningful:

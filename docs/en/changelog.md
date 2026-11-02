@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased] :id=unreleased
 
-No API changes.
+The last API changes before 1.0, from the review in the [plan to 1.0](plan-1.0.md): two small incompatible changes (an event renamed, two constants no longer public) and clearer promises about what may grow.
 
 ### Added
 
@@ -14,6 +14,13 @@ No API changes.
 
 ### Changed
 
+- **`CircuitBreakerEvent.CallNotPermitted` is now `CircuitBreakerEvent.Rejected`**, like the bulkhead's, rate limiter's and adaptive limit's rejection events. The exception keeps its name, `CallNotPermittedException`. Listeners registered for the old type must use the new one.
+- **`HedgeConfig.MIN_ATTEMPTS` and `MAX_ATTEMPTS` are no longer public.** As public constants they were copied into callers' class files, so a later change of the bounds (2 to 10, documented on `maxAttempts`) would not have reached code compiled earlier.
+- Type parameters that carry a call's result accept nullable types (`T extends @Nullable Object`): `Pipeline`, `PipelineCall`, `FallbackHandler`, `Classifier`, and the async types of generated code. Kotlin and NullAway users can now write `Pipeline<String?>` and fallbacks that return null. Nothing changes for the Java compiler.
+- `Resilient.create` declares that constructor arguments may be null (`@Nullable Object...`), which it already accepted.
+- [Compatibility](reference/compatibility.md): an event or snapshot record that gets a component keeps its previous constructor, so code that creates them keeps compiling; `PolicyConfig` and `CallRejectedException` may get subtypes when a policy is added.
+- Micronaut: the public constructors of `ResilienceHealthIndicator` and `ResilienceEndpoint` are `@Internal` (Micronaut creates these beans; they are not for your code).
+- Every setter of the `*Config` builders has a main description in its Javadoc; `@return` was read as part of the parameter's text.
 - The bulkhead without waiting and the adaptive limit give a slot back with a volatile add, which measured faster than the release-only add on Graviton3: a bulkhead call with a free slot costs 17.3 ns instead of 20.5 ns, 196 ns instead of 259 ns with four threads ([benchmarks](benchmarks.md#release-counters)).
 - A bulkhead with `maxWait` takes and gives back a free slot with its own counter instead of `java.util.concurrent.Semaphore`'s full-fence atomics: with four threads, 385 → 210 ns per call ([benchmarks](benchmarks.md#bulkhead-semaphore)).
 - `Flux` methods allocate less per stream: an attempt is one object instead of two, and a stream that ended during its subscription passes through every policy as one shared stage instead of a completed copy per policy (24 B less for one policy, 104 B for a retry, breaker, timeout and bulkhead), and run up to 9% faster ([benchmarks](benchmarks.md#flux-ended)).

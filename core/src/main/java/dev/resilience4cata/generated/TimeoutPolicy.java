@@ -294,7 +294,7 @@ public final class TimeoutPolicy {
      */
     // java:S2589: time != null always holds there (checked above); kept so the nullable local is visibly non-null.
     @SuppressWarnings("java:S2589")
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
         CompletionStage<T> stage = AsyncSupport.call(call);
         TimeoutTimer.Lane deadlines = lane;
         Ticker time = manual;
@@ -350,7 +350,7 @@ public final class TimeoutPolicy {
      * @param <T> the result type
      * @return a future that completes with the call's outcome, or fails with {@link CallTimeoutException}
      */
-    public <T> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
+    public <T extends @Nullable Object> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
         TimeoutTimer.Lane deadlines = lane;
         Ticker time = manual;
         if (deadlines == null && time == null) {

@@ -79,25 +79,45 @@ public final class RateLimiterConfig implements PolicyConfig {
             maxWait = from.maxWait;
         }
 
-        /** @param enabled whether calls are limited at all @return this builder */
+        /**
+         * Sets {@code enabled}: whether calls are limited at all.
+         *
+         * @param enabled whether calls are limited at all
+         * @return this builder
+         */
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
             return this;
         }
 
-        /** @param permits calls allowed per period, and the largest burst @return this builder */
+        /**
+         * Sets {@code permits}: calls allowed per period, and the largest burst.
+         *
+         * @param permits calls allowed per period, and the largest burst
+         * @return this builder
+         */
         public Builder permits(int permits) {
             this.permits = permits;
             return this;
         }
 
-        /** @param period length of the period @return this builder */
+        /**
+         * Sets {@code period}: length of the period.
+         *
+         * @param period length of the period
+         * @return this builder
+         */
         public Builder period(Duration period) {
             this.period = Objects.requireNonNull(period, "period");
             return this;
         }
 
-        /** @param maxWait how long a call may wait for a permit; zero rejects immediately @return this builder */
+        /**
+         * Sets {@code maxWait}: how long a call may wait for a permit; zero rejects immediately.
+         *
+         * @param maxWait how long a call may wait for a permit; zero rejects immediately
+         * @return this builder
+         */
         public Builder maxWait(Duration maxWait) {
             this.maxWait = Objects.requireNonNull(maxWait, "maxWait");
             return this;

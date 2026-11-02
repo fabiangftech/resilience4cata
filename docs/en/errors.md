@@ -2667,7 +2667,7 @@ give the config another name.
 (`IllegalArgumentException`).
 
 **Fix:** pass the id of the instance: the `name` set in its annotation, the pipeline id, or the derived id
-`<interface>#<method>(<parameter types>)`, for example `com.acme.PriceClient#price(java.lang.String)`.
+`<type>#<method>(<parameter types>)`, for example `com.acme.PriceClient#price(java.lang.String)`.
 
 ### R4C-REG-008
 
@@ -2700,7 +2700,7 @@ suggests the closest one. Instances are created when their interface is wrapped 
 is created (`Resilient.create`) or their pipeline is built, so looking one up earlier also fails.
 
 **Fix:** use the `name` set in the annotation (or the pipeline id), or the derived id
-`<interface>#<method>(<parameter types>)`, and look it up after the service or pipeline has been created.
+`<type>#<method>(<parameter types>)`, and look it up after the service or pipeline has been created.
 
 ## Runtime: external configuration (R4C-CFG)
 
@@ -2866,7 +2866,7 @@ instances."com.acme.Api#get(java.lang.String)".retry.max-attempts=5
 that policy in the registry (reported by `verifyInstances`, not `build()`, because instances exist only once
 services are wrapped). The message suggests the closest id.
 
-**Fix:** use an existing instance id: the policy's `name`, or `<interface>#<method>(<parameter types>)` when
+**Fix:** use an existing instance id: the policy's `name`, or `<type>#<method>(<parameter types>)` when
 it has none.
 
 ### R4C-CFG-014

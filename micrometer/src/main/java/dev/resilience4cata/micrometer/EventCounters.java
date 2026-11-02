@@ -65,7 +65,7 @@ final class EventCounters implements EventListener<ResilienceEvent> {
         }
         switch (event) {
             case CircuitBreakerEvent.StateTransition t -> transition(t);
-            case CircuitBreakerEvent.CallNotPermitted r ->
+            case CircuitBreakerEvent.Rejected r ->
                     count(r, REJECTED_CIRCUIT_BREAKER, CALLS_REJECTED, "kind", "circuitbreaker");
             case RateLimiterEvent.Rejected r -> count(r, REJECTED_RATE_LIMITER, CALLS_REJECTED, "kind", "ratelimiter");
             case BulkheadEvent.Rejected r -> count(r, REJECTED_BULKHEAD, CALLS_REJECTED, "kind", "bulkhead");

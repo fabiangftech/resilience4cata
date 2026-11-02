@@ -112,7 +112,7 @@ The timeout covers the stage, not the method call that returns it: a method that
 | `locked` | `boolean` | `false` | annotation only | Keeps the values set in the annotation: `instances.<id>.*` keys cannot change them. See [Locking an instance](../guides/configuration.md#locking-an-instance). |
 | `enabled` | `boolean` | `true` | `defaults.timeout.enabled` | `false` lets every call through; not set inherits. |
 
-`@Timeout` has **no `name`**: a timeout keeps no state worth sharing, so every annotated method gets its own policy, with the id `<interface>#<method>(<parameter types>)`. In external configuration the attribute is `value` (`configs.slow.timeout.value=10s`, `instances."com.acme.ReportApi#build(java.lang.String)".timeout.value=5s`); in code the builder method is `TimeoutConfig.Builder.timeout(Duration)`. See [Configuration](../guides/configuration.md).
+`@Timeout` has **no `name`**: a timeout keeps no state worth sharing, so every annotated method gets its own policy, with the id `<type>#<method>(<parameter types>)`. In external configuration the attribute is `value` (`configs.slow.timeout.value=10s`, `instances."com.acme.ReportApi#build(java.lang.String)".timeout.value=5s`); in code the builder method is `TimeoutConfig.Builder.timeout(Duration)`. See [Configuration](../guides/configuration.md).
 
 There is **no handle** either: `registry` has no `timeout(id)`. `registry.snapshot().timeouts()` lists a `TimeoutSnapshot(id, config)` per method.
 

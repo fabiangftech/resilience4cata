@@ -55,7 +55,7 @@ import org.jspecify.annotations.Nullable;
  * duration is {@code timeout.value}). Policy and attribute names may be written in camelCase or
  * kebab-case ({@code circuit-breaker.wait-in-open}). Config and profile names are lowercase letters
  * and digits separated by single hyphens. An instance id is the policy's {@code name}, or the derived
- * {@code <interface>#<method>(<parameter types>)} when it has none; it is case-sensitive and must be
+ * {@code <type>#<method>(<parameter types>)} when it has none; it is case-sensitive and must be
  * written in double quotes unless it is made of letters, digits, {@code _} and {@code -}. Keys may carry a {@code resilience4cata.} or {@code r4c.}
  * prefix; in system properties the prefix is required, and other system properties are ignored.
  *

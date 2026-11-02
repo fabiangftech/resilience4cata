@@ -34,9 +34,10 @@ These are kept within a major version as well:
 Adding is compatible, so a minor version may do any of the following. Write code that tolerates it:
 
 - **Enum constants** may be added (`CircuitBreakerState`, `RetryEvent.Reason`, `Classifier.Outcome` and others). Keep a `default` branch in a `switch` over them.
-- **Event types** may be added, and existing event records may get new components. Keep a `default` branch in a `switch` over events, and read events through their accessors, not with record patterns that deconstruct them.
+- **Event types** may be added, and existing event records may get new components. Keep a `default` branch in a `switch` over events, and read events through their accessors, not with record patterns that deconstruct them. A record that gets a component keeps its previous constructor, so code that creates events, such as a listener's tests, keeps compiling.
+- **Sealed types** may get new subtypes when a policy is added: `PolicyConfig` a new configuration, `CallRejectedException` a new rejection, `ResilienceEvent` a new event interface. Keep a `default` branch in a `switch` over them.
 - **Methods** may be added to the handles (`CircuitBreakerHandle` and the others) and to `FallbackContext`. The library implements these interfaces; do not implement or mock them.
 - **`Ticker` methods** added later will be `default` methods, so your own implementation keeps compiling.
 - **Annotation attributes** may be added, always with a default value.
-- **Snapshots** may get new components and the endpoints' JSON new keys. Ignore keys you do not know.
+- **Snapshots** may get new components and the endpoints' JSON new keys. As with events, a snapshot record keeps its previous constructor. Ignore keys you do not know.
 - **Metrics**, error codes and configuration keys may be added.

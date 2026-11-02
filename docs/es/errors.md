@@ -2685,7 +2685,7 @@ configuración externa), o dale otro nombre a la configuración.
 (`IllegalArgumentException`).
 
 **Corrección:** pasa el id de la instancia: el `name` de su anotación, el id del pipeline, o el id derivado
-`<interface>#<method>(<parameter types>)`, por ejemplo `com.acme.PriceClient#price(java.lang.String)`.
+`<type>#<method>(<parameter types>)`, por ejemplo `com.acme.PriceClient#price(java.lang.String)`.
 
 ### R4C-REG-008
 
@@ -2718,7 +2718,7 @@ sugiere el más parecido. Las instancias se crean cuando se envuelve su interfaz
 clase (`Resilient.create`) o se construye su pipeline, así que buscarlas antes también falla.
 
 **Corrección:** usa el `name` de la anotación (o el id del pipeline), o el id derivado
-`<interface>#<method>(<parameter types>)`, y búscala después de crear el servicio o el pipeline.
+`<type>#<method>(<parameter types>)`, y búscala después de crear el servicio o el pipeline.
 
 ## Ejecución: configuración externa (R4C-CFG)
 
@@ -2888,7 +2888,7 @@ instancia de esa política en el registry (lo reporta `verifyInstances`, no `bui
 solo existen una vez envueltos los servicios). El mensaje sugiere el id más parecido.
 
 **Corrección:** usa un id de instancia existente: el `name` de la política, o
-`<interface>#<method>(<parameter types>)` si no tiene.
+`<type>#<method>(<parameter types>)` si no tiene.
 
 ### R4C-CFG-014
 

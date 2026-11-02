@@ -379,7 +379,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
             switch (event) {
                 case CircuitBreakerEvent.StateTransition t ->
                         transitionCounter.add(1, transitions(id)[t.from().ordinal() * STATES.length + t.to().ordinal()]);
-                case CircuitBreakerEvent.CallNotPermitted r -> rejected.add(1, breakerRejection(id));
+                case CircuitBreakerEvent.Rejected r -> rejected.add(1, breakerRejection(id));
                 case RateLimiterEvent.Rejected r -> rejected.add(1, limiterRejection(id));
                 case BulkheadEvent.Rejected r -> rejected.add(1, bulkheadRejection(id));
                 case AdaptiveLimitEvent.Rejected r -> rejected.add(1, adaptiveLimitRejection(id));

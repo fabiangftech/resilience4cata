@@ -158,7 +158,7 @@ public class InventoryService {
 
 ## Compartir e ids de instancia
 
-Sin `name`, cada método tiene su propio límite, con el id `<interface>#<method>(<parameter types>)`. Los métodos que llaman a la misma dependencia normalmente deberían compartir uno: dales el mismo `name`. Deben resolverse a la misma configuración, o el envoltorio falla con [`R4C-REG-008`](../errors.md#r4c-reg-008).
+Sin `name`, cada método tiene su propio límite, con el id `<type>#<method>(<parameter types>)`. Los métodos que llaman a la misma dependencia normalmente deberían compartir uno: dales el mismo `name`. Deben resolverse a la misma configuración, o el envoltorio falla con [`R4C-REG-008`](../errors.md#r4c-reg-008).
 
 ### Handle
 

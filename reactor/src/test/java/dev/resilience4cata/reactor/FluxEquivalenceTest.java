@@ -49,7 +49,7 @@ class FluxEquivalenceTest {
     static void theSeedsCoverEverySituation() {
         assertThat(COVERAGE).as("seeds per situation").allSatisfy((situation, seeds) ->
                 assertThat(seeds).as(situation).isGreaterThanOrEqualTo(10));
-        assertThat(COVERAGE.keySet()).containsExactlyInAnyOrder("cancelled attempt", "TimedOut", "CallNotPermitted",
+        assertThat(COVERAGE.keySet()).containsExactlyInAnyOrder("cancelled attempt", "TimedOut", "Rejected",
                 "BulkheadFullException", "RateLimitExceededException", "AdaptiveLimitFullException", "fallback", "Retrying",
                 "GaveUp", "StateTransition", "slow call", "value:null");
     }
@@ -59,7 +59,7 @@ class FluxEquivalenceTest {
         if (!world.cancelled.isEmpty()) {
             seen.add("cancelled attempt");
         }
-        for (String event : List.of("TimedOut", "CallNotPermitted", "Retrying", "GaveUp", "StateTransition")) {
+        for (String event : List.of("TimedOut", "Rejected", "Retrying", "GaveUp", "StateTransition")) {
             if (world.events.stream().anyMatch(e -> e.startsWith(event + "["))) {
                 seen.add(event);
             }

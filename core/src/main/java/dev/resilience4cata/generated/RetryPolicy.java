@@ -371,7 +371,7 @@ public final class RetryPolicy {
      * @param <T> the result type
      * @return a future that completes with the first successful attempt, or the last failure
      */
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
         return executeAsync(call, null, null);
     }
 
@@ -385,7 +385,7 @@ public final class RetryPolicy {
      * @param <T> the result type
      * @return a future that completes with the first successful attempt, the fallback's result, or the last failure
      */
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call,
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call,
             @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery) {
         LinkedFuture<T> result = new LinkedFuture<>();
         new AsyncAttempts<>(this, call, null, false, fallback, recovery, result, start()).first();
@@ -408,7 +408,7 @@ public final class RetryPolicy {
      * @return a future that completes with the first accepted result, the last rejected result, the fallback's
      *     result, or the last failure
      */
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
             @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery) {
         return executeAsync(call, classifier, false, fallback, recovery);
     }
@@ -428,7 +428,7 @@ public final class RetryPolicy {
      * @return a future that completes with the first accepted result, the last rejected result (or a
      *     {@link ResultRejectedException}), the fallback's result, or the last failure
      */
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
             boolean throwOnExhaustedResult, @Nullable FallbackPolicy fallback, @Nullable Recovery<T> recovery) {
         LinkedFuture<T> result = new LinkedFuture<>();
         new AsyncAttempts<>(this, call, classifier, throwOnExhaustedResult, fallback, recovery, result, start()).first();
