@@ -541,6 +541,21 @@ Base: `04e045e` (main). New: `b6d6ac4`: a `Flux` attempt is its own subscriber (
 - **Bytes**: 24 B less per stream for each single policy, 104 B for the stacks. A stream still allocates 27–48 B more than resilience4j-reactor's operator for one breaker, bulkhead or rate limiter (its `Flux`, the call's subscription, the attempt and the layers' lambdas, against one operator subscriber), and far less as soon as a retry or a timeout is involved.
 - **Unchanged:** pending and long streams, the retry (its attempt already skipped the boundary for a stream that ended), and every `ReactorBenchmark` (`Mono`) and `AsyncBenchmark` row, within the error. A first run showed the `Flux` rate limiter with four threads 10% slower and the `Mono` retry up to 10% slower, each from one or two slow forks; with six forks both were 8% faster and unchanged. The sync adaptive limit with four threads (`AdaptiveLimitBenchmark.resilience4cata`, code this change does not touch) measured +40% in that run and +6% with six forks (342.3 ± 43.6 → 364.2 ± 45.2), while the plain bulkhead next to it moved −12%: four-thread rows there vary that much from run to run.
 
+## A waiting bulkhead with the no-wait bulkhead's atomics (2026-11-01, AWS Graviton3) :id=bulkhead-semaphore
+
+Base: `410a649` (main). New: `6395eb1`: with `maxWait > 0` the bulkhead used `java.util.concurrent.Semaphore`, whose `tryAcquire` and `release` are full-fence compare-and-set loops on the AQS state; it now uses `BulkheadSemaphore`, whose permits are a padded counter taken with an opaque read and one acquire compare-and-set, as without waiting, while `AbstractQueuedSynchronizer` only queues and parks the threads that wait. A release is a volatile add followed by the queue's wake-up. Same method as above (`infra/bench.sh`, `c7g.xlarge`, 6 forks on 8 machines; calibration 20.48–20.51 ns). ns/op 1 / 4 threads:
+
+| Benchmark | Base | New | Resilience4j |
+|---|---:|---:|---:|
+| `BulkheadBenchmark`, waiting allowed | 18.9 / 385.1 | **18.6 / 209.7** | 20.1 / 475.4 |
+| `BulkheadBenchmark`, no wait (unchanged code) | 20.5 / 263.9 | 20.5 / 257.4 | 20.0 / 430.4 |
+| `AsyncBenchmark` bulkhead (no wait) | 28.4 / 321.2 | 28.5 / 329.2 | 40.9 / 590.3 |
+| `QuarkusBenchmark` bulkhead (no wait) | 20.4 / 275.0 | 20.4 / 278.7 | 20.3 / 467.3 |
+
+- **With four threads the waiting bulkhead is 1.8× faster than before**, and 2.3× faster than Resilience4j's `SemaphoreBulkhead`, which it tied (both used AQS's full-fence atomics on one shared state).
+- **The waiting bulkhead is now faster than the no-wait one** (18.6 against 20.5 ns, 210 against 257 ns), though both take a slot the same way. The only difference left is how they give it back: a volatile `getAndAdd` with waiting, a `getAndAddRelease` without.
+- Bytes are unchanged (0 B sync). Bulkheads without waiting are unchanged, within the error.
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings in three forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) and fails if the fork that allocates least reaches its budget + 1 B/op, or if a benchmark is missing from the results. Three forks because C2 decides once per JVM whether it scalar-replaces an object: a fork keeps the same bytes in every iteration, and the next one can allocate an object or two more. On the CI runner (x86), 21 runs of the one-fork gate measured `FluxBenchmark.resilience4cataPipelineStack` at 696, 728, 752 and 776 B and `resilience4cataTimeout` at 384 to 440 B, so the gate failed now and then on changes that allocate nothing; a longer warm-up put every fork on the higher value instead (Apple M1). An allocation the code starts making shows in every fork, so the lowest fork still catches it. The table shows every fork's bytes. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.

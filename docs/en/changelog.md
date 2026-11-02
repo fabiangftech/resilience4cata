@@ -14,6 +14,7 @@ No API changes.
 
 ### Changed
 
+- A bulkhead with `maxWait` takes and gives back a free slot with its own counter instead of `java.util.concurrent.Semaphore`'s full-fence atomics: with four threads, 385 → 210 ns per call ([benchmarks](benchmarks.md#bulkhead-semaphore)).
 - `Flux` methods allocate less per stream: an attempt is one object instead of two, and a stream that ended during its subscription passes through every policy as one shared stage instead of a completed copy per policy (24 B less for one policy, 104 B for a retry, breaker, timeout and bulkhead), and run up to 9% faster ([benchmarks](benchmarks.md#flux-ended)).
 
 ### Fixed
