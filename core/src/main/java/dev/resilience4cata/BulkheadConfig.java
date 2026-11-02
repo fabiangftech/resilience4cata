@@ -51,19 +51,34 @@ public final class BulkheadConfig implements PolicyConfig {
             maxWait = from.maxWait;
         }
 
-        /** @param enabled whether concurrent calls are limited at all @return this builder */
+        /**
+         * Sets {@code enabled}: whether concurrent calls are limited at all.
+         *
+         * @param enabled whether concurrent calls are limited at all
+         * @return this builder
+         */
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
             return this;
         }
 
-        /** @param maxConcurrent maximum number of concurrent calls @return this builder */
+        /**
+         * Sets {@code maxConcurrent}: maximum number of concurrent calls.
+         *
+         * @param maxConcurrent maximum number of concurrent calls
+         * @return this builder
+         */
         public Builder maxConcurrent(int maxConcurrent) {
             this.maxConcurrent = maxConcurrent;
             return this;
         }
 
-        /** @param maxWait how long a call may wait for a slot; zero rejects immediately @return this builder */
+        /**
+         * Sets {@code maxWait}: how long a call may wait for a slot; zero rejects immediately.
+         *
+         * @param maxWait how long a call may wait for a slot; zero rejects immediately
+         * @return this builder
+         */
         public Builder maxWait(Duration maxWait) {
             this.maxWait = Objects.requireNonNull(maxWait, "maxWait");
             return this;

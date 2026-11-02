@@ -47,7 +47,7 @@ import org.jspecify.annotations.Nullable;
  * {@link #executeAsync}, and cannot be combined with a retry. A {@link Classifier} can decide what the retry
  * retries and what the breaker records, results included ({@link Builder#classifier}).
  *
- * <p><b>Instances.</b> The pipeline's id plays the part of the {@code <interface>#<method>} id of
+ * <p><b>Instances.</b> The pipeline's id plays the part of the {@code <type>#<method>} id of
  * annotated methods: its policies are created by the registry under that id, so that
  * {@code registry.circuitBreaker("payments")} finds the breaker, and two pipelines (or a pipeline and an
  * annotation with {@code name = "payments"}) with the same id and configuration share their circuit
@@ -69,7 +69,7 @@ import org.jspecify.annotations.Nullable;
  *
  * @param <T> the result type of the protected calls
  */
-public final class Pipeline<T> {
+public final class Pipeline<T extends @Nullable Object> {
 
     private static final @Nullable Object[] NO_ARGUMENTS = {};
     private static final String CONFIG = "config";
@@ -143,7 +143,7 @@ public final class Pipeline<T> {
     }
 
     /** The policy's own classifier if it has one, else the pipeline's shared one. */
-    private static <T> @Nullable Classifier<? super T> ownOrShared(@Nullable Classifier<? super T> own,
+    private static <T extends @Nullable Object> @Nullable Classifier<? super T> ownOrShared(@Nullable Classifier<? super T> own,
             @Nullable Classifier<? super T> shared) {
         return own != null ? own : shared;
     }
@@ -174,7 +174,7 @@ public final class Pipeline<T> {
      * @param <T> the result type of the protected calls
      * @return a builder with no policies
      */
-    public static <T> Builder<T> builder(ResilienceRegistry registry, String id) {
+    public static <T extends @Nullable Object> Builder<T> builder(ResilienceRegistry registry, String id) {
         return new Builder<>(registry, id);
     }
 
@@ -188,7 +188,7 @@ public final class Pipeline<T> {
      * @param <T> the result type of the protected calls
      * @return a builder with no policies
      */
-    public static <T> Builder<T> builder(ResilienceRegistry registry, String id, Class<T> type) {
+    public static <T extends @Nullable Object> Builder<T> builder(ResilienceRegistry registry, String id, Class<T> type) {
         Objects.requireNonNull(type, "type");
         return new Builder<>(registry, id);
     }
@@ -736,7 +736,7 @@ public final class Pipeline<T> {
      *
      * @param <T> the result type of the protected calls
      */
-    public static final class Builder<T> {
+    public static final class Builder<T extends @Nullable Object> {
         private final ResilienceRegistry registry;
         private final String id;
         private @Nullable Step<RetryConfig.Builder> retry;

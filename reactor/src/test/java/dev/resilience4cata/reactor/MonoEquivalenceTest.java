@@ -48,7 +48,7 @@ class MonoEquivalenceTest {
     static void theSeedsCoverEverySituation() {
         assertThat(COVERAGE).as("seeds per situation").allSatisfy((situation, seeds) ->
                 assertThat(seeds).as(situation).isGreaterThanOrEqualTo(10));
-        assertThat(COVERAGE.keySet()).containsExactlyInAnyOrder("cancelled attempt", "TimedOut", "CallNotPermitted",
+        assertThat(COVERAGE.keySet()).containsExactlyInAnyOrder("cancelled attempt", "TimedOut", "Rejected",
                 "BulkheadFullException", "fallback", "Hedged", "Retrying", "GaveUp", "StateTransition", "value:null");
     }
 
@@ -57,7 +57,7 @@ class MonoEquivalenceTest {
         if (!world.cancelled.isEmpty()) {
             seen.add("cancelled attempt");
         }
-        for (String event : List.of("TimedOut", "CallNotPermitted", "Hedged", "Retrying", "GaveUp", "StateTransition")) {
+        for (String event : List.of("TimedOut", "Rejected", "Hedged", "Retrying", "GaveUp", "StateTransition")) {
             if (world.events.stream().anyMatch(e -> e.startsWith(event + "["))) {
                 seen.add(event);
             }

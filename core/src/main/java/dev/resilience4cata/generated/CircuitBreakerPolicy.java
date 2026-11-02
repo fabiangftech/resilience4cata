@@ -88,7 +88,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
     private final CallNotPermittedException rejection;
     private final LongSupplier ticker;
     private final @Nullable EventSink<CircuitBreakerEvent.StateTransition> transitions;
-    private final @Nullable EventSink<CircuitBreakerEvent.CallNotPermitted> notPermitted;
+    private final @Nullable EventSink<CircuitBreakerEvent.Rejected> notPermitted;
 
     // java:S3077: Phase objects are immutable, swapped whole by compare-and-set through the PHASE VarHandle.
     // java:S1845: the field and its VarHandle share a name, the usual VarHandle naming convention.
@@ -139,7 +139,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         this.rejection = new CallNotPermittedException(id);
         this.ticker = environment.ticker;
         this.transitions = environment.events.sink(CircuitBreakerEvent.StateTransition.class, id);
-        this.notPermitted = environment.events.sink(CircuitBreakerEvent.CallNotPermitted.class, id);
+        this.notPermitted = environment.events.sink(CircuitBreakerEvent.Rejected.class, id);
         this.phase = initialPhase(0);
     }
 
@@ -265,15 +265,15 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
     }
 
     /**
-     * Publishes {@link CircuitBreakerEvent.CallNotPermitted} if someone listens, and returns {@link #REJECTED}.
+     * Publishes {@link CircuitBreakerEvent.Rejected} if someone listens, and returns {@link #REJECTED}.
      * Without listeners this is one null check: no allocation and no clock read.
      *
      * @param now the clock reading the caller already has, or 0 to read it here (only when publishing)
      */
     private long rejected(CircuitBreakerState state, long now) {
-        EventSink<CircuitBreakerEvent.CallNotPermitted> sink = notPermitted;
+        EventSink<CircuitBreakerEvent.Rejected> sink = notPermitted;
         if (sink != null) {
-            sink.publish(new CircuitBreakerEvent.CallNotPermitted(id, now == 0L ? ticker.getAsLong() : now, state));
+            sink.publish(new CircuitBreakerEvent.Rejected(id, now == 0L ? ticker.getAsLong() : now, state));
         }
         return REJECTED;
     }
@@ -360,7 +360,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @param <T> the result type
      * @return a future that completes with the call's outcome, or fails with {@link CallNotPermittedException}
      */
-    public <T> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
+    public <T extends @Nullable Object> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
         if (!timed) {
             return executeAsync(call);
         }
@@ -648,7 +648,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @param <T> the result type
      * @return a future that completes with the call's outcome
      */
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
         long token = acquire();
         if (token < 0) {
             return CompletableFuture.failedFuture(rejection());
@@ -685,7 +685,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @param <T> the result type
      * @return a future that completes with the call's outcome
      */
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier) {
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier) {
         return executeAsync(call, classifier, false);
     }
 
@@ -701,7 +701,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @return a future that completes with the call's outcome
      */
     @SuppressWarnings("java:S1181") // a classifier failure of any kind must fail the call's future, not escape
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call, Classifier<? super T> classifier,
             boolean insideRetry) {
         long token = acquire();
         if (token < 0) {

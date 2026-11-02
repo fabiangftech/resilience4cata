@@ -222,7 +222,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
      * @param <T> the result type
      * @return a future that completes with the call's outcome, or fails with {@link AdaptiveLimitFullException}
      */
-    public <T> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
+    public <T extends @Nullable Object> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
         if (!enabled) {
             return executeAsync(call);
         }
@@ -413,7 +413,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
      * @param <T> the result type
      * @return a future that completes with the call's outcome
      */
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
         long start;
         try {
             start = acquire();

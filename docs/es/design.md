@@ -36,6 +36,22 @@ resilience4cata es una librería de resiliencia para **Java 21+ puro**: circuit 
 | Recarga en caliente | **Ninguna.** La configuración es inmutable una vez construido el registry; para cambiarla hay que reiniciar la aplicación. Así todos los valores de configuración quedan en campos `final` en el camino caliente | [features](guides/configuration.md) |
 | Coordenadas | Dominio `resilience4cata.dev`: groupId de Maven `dev.resilience4cata`, paquete raíz `dev.resilience4cata` | [arquitectura](architecture.md#módulos) |
 
+## Decisiones de API para 1.0 :id=api-decisions
+
+Tomadas al revisar la API antes de congelarla ([plan hacia 1.0](plan-1.0.md), fase 1). Cada una mantiene la API actual a propósito; cambiarla después de 1.0 requeriría una versión mayor nueva, salvo que el cambio sea aditivo.
+
+| Tema | Decisión | Por qué |
+|---|---|---|
+| `@Timeout` no tiene `name` | Se mantiene | Un timeout no tiene estado que valga la pena compartir por nombre; su `value` es la duración. Añadir `name` después es aditivo |
+| Parámetros de lista de los builders (`retryOn(List<Class<? extends Throwable>>)`) | Se mantienen | `List.of(A.class, B.class)` escrito en la llamada infiere el tipo correcto; solo se rechaza una variable de tipo `List<Class<? extends Exception>>`. Ampliar a `Collection<…>` no compensaba una segunda forma para cada atributo de lista |
+| Orden de argumentos: `Resilient.of(type, delegate, registry)`, `Resilient.create(type, registry, args…)`, `Pipeline.builder(registry, id)` | Se mantiene | `create` termina con los varargs del constructor, así que el registry no puede ir al final; `of` y `create` empiezan los dos por el tipo, y `Pipeline.builder` no tiene un tipo con el que empezar |
+| El enum de la anotación `LimitAlgorithm` frente a `AdaptiveLimitConfig.Algorithm` | Se mantiene | Los enums de las anotaciones son tipos de primer nivel, donde `Algorithm` a secas sería vago; los de las configs están anidados, donde el nombre de la config los califica. Renombrar el enum de la config rompería además el código generado por 0.13.0, que lo nombra |
+| Formas de los snapshots (los de retry, timeout y hedge incluyen `config`; los de bulkhead, rate limiter y adaptive limit copian algunos campos; el del circuit breaker no tiene ninguno de los dos) | Se mantienen | Cada snapshot lleva lo que un operador lee junto a los contadores en vivo; se pueden añadir componentes después (conservando el constructor viejo), así que un campo que falte todavía puede llegar |
+| Las tasas de `CircuitBreakerSnapshot` son `-1` antes de que la ventana tenga `minimumCalls` | Se mantiene | Documentado en el record, y el JSON de los endpoints muestra el mismo `-1`. Un accesor `hasRates()` se puede añadir después |
+| `Pipeline.Builder.retry(String)` junto a `retry(Consumer)` (y los mismos pares en cada política) | Se mantienen | `retry(null)` es ambiguo, pero null nunca es un argumento con sentido ahí; `retry(String, Consumer)` acepta un consumer nulo |
+| `LockedOverride.policy` es un `String` | Se mantiene | Es la clave de configuración de la política (`retry`, `circuitBreaker`, …), el mismo texto que un usuario escribe en properties |
+| Dos enums llamados `ExhaustedResult` (`Pipeline.ExhaustedResult` y el de la anotación, que además tiene `INHERIT`) | Se mantienen | Están en módulos distintos y rara vez se importan juntos; la anotación necesita `INHERIT` y el pipeline no debe tenerlo |
+
 ## Estado de la implementación
 
 | Pieza | Estado |

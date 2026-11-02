@@ -9,6 +9,9 @@ package dev.resilience4cata;
  * <p>Each policy instance throws one preallocated instance, so that a rejection costs almost nothing: it has no
  * stack trace, {@link #addSuppressed} does nothing, and the same object is thrown to every rejected caller, so do
  * not compare rejections by identity or keep state in them.
+ *
+ * <p>The hierarchy is sealed, and a policy added in a minor version may add its own rejection to it: keep a
+ * {@code default} branch in a {@code switch} over the subclasses, or catch this type.
  */
 public abstract sealed class CallRejectedException extends RuntimeException
         permits CallNotPermittedException, BulkheadFullException, RateLimitExceededException, AdaptiveLimitFullException {

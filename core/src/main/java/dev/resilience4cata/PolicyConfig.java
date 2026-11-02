@@ -5,6 +5,9 @@ package dev.resilience4cata;
  * {@link CircuitBreakerConfig}, {@link RateLimiterConfig}, {@link AdaptiveLimitConfig}, {@link TimeoutConfig} or
  * {@link BulkheadConfig}. Each is built with its {@code builder()} or {@code toBuilder()}, and has an accessor per
  * attribute; attributes may be added in minor versions.
+ *
+ * <p>The hierarchy is sealed, and a policy added in a minor version adds its configuration to it: keep a
+ * {@code default} branch in a {@code switch} over {@code PolicyConfig}.
  */
 public sealed interface PolicyConfig permits RetryConfig, HedgeConfig, CircuitBreakerConfig, RateLimiterConfig,
         AdaptiveLimitConfig, TimeoutConfig, BulkheadConfig {

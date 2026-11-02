@@ -143,7 +143,7 @@ public final class HedgePolicy {
      * @param <T> the result type
      * @return a future that completes with the first successful attempt, or the last failure
      */
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call) {
         return executeAsync(call, null, null);
     }
 
@@ -159,7 +159,7 @@ public final class HedgePolicy {
      */
     // java:S2589: the stage's class is checked before the cast, as in TimeoutPolicy.
     @SuppressWarnings({"unchecked", "java:S2589"})
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, @Nullable FallbackPolicy fallback,
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call, @Nullable FallbackPolicy fallback,
             @Nullable Recovery<T> recovery) {
         if (!enabled) {
             return once(call, fallback, recovery);

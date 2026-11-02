@@ -486,7 +486,7 @@ public final class ResilienceRegistry {
      * Returns the fallback policy for one method. Fallbacks hold no state, so every method gets its own policy;
      * the registry only adds its event listeners.
      *
-     * @param instanceId id of the method, {@code <interface>#<method>(<parameter types>)}
+     * @param instanceId id of the method, {@code <type>#<method>(<parameter types>)}
      * @param applyOn failures that get the fallback
      * @param skipOn failures that never get the fallback; wins over {@code applyOn}
      * @param taken the exception types of sibling fallback methods that do not take every failure (a failure
@@ -528,7 +528,7 @@ public final class ResilienceRegistry {
     /**
      * Returns a bulkhead, to inspect it. Bulkheads are created when an annotated interface is wrapped.
      *
-     * @param id the bulkhead's {@code name}, or its derived id {@code <interface>#<method>(<parameter types>)}
+     * @param id the bulkhead's {@code name}, or its derived id {@code <type>#<method>(<parameter types>)}
      * @return the bulkhead
      * @throws IllegalArgumentException if no bulkhead has that id
      */
@@ -570,7 +570,7 @@ public final class ResilienceRegistry {
      * Returns an adaptive limit, to inspect it. Adaptive limits are created when an annotated interface is
      * wrapped.
      *
-     * @param id the adaptive limit's {@code name}, or its derived id {@code <interface>#<method>(<parameter types>)}
+     * @param id the adaptive limit's {@code name}, or its derived id {@code <type>#<method>(<parameter types>)}
      * @return the adaptive limit
      * @throws IllegalArgumentException if no adaptive limit has that id
      */
@@ -585,7 +585,7 @@ public final class ResilienceRegistry {
     /**
      * Returns a rate limiter, to inspect it. Rate limiters are created when an annotated interface is wrapped.
      *
-     * @param id the rate limiter's {@code name}, or its derived id {@code <interface>#<method>(<parameter types>)}
+     * @param id the rate limiter's {@code name}, or its derived id {@code <type>#<method>(<parameter types>)}
      * @return the rate limiter
      * @throws IllegalArgumentException if no rate limiter has that id
      */
@@ -601,7 +601,7 @@ public final class ResilienceRegistry {
      * Returns a circuit breaker, to inspect or control it. Breakers are created when an annotated
      * interface is wrapped with {@code Resilient.of(...)}, so this only finds them afterwards.
      *
-     * @param id the breaker's {@code name}, or its derived id {@code <interface>#<method>(<parameter types>)}
+     * @param id the breaker's {@code name}, or its derived id {@code <type>#<method>(<parameter types>)}
      * @return the breaker
      * @throws IllegalArgumentException if no breaker has that id
      */
@@ -617,7 +617,7 @@ public final class ResilienceRegistry {
         return new IllegalArgumentException(ErrorCode.UNKNOWN_INSTANCE.message("No " + what + " '" + id
                 + "' in this registry." + Suggestions.didYouMean(id, known) + " Known: " + new TreeSet<>(known)
                 + ". Use the name set in the annotation (or the pipeline id), or the derived id"
-                + " <interface>#<method>(<parameter types>); an instance exists only once its interface has been"
+                + " <type>#<method>(<parameter types>); an instance exists only once its interface has been"
                 + " wrapped with Resilient.of(...), its class created with Resilient.create(...), or its pipeline built."));
     }
 
@@ -793,17 +793,17 @@ public final class ResilienceRegistry {
          * Registers a listener for one event type on one policy instance only. See
          * {@link #listen(Class, EventListener)}.
          *
-         * @param instance the instance id: the {@code name} in the annotation, or the derived
-         *     {@code <interface>#<method>(<parameter types>)}
+         * @param id the instance id: the {@code name} in the annotation, or the derived
+         *     {@code <type>#<method>(<parameter types>)}
          * @param type the event type
          * @param listener the listener
          * @param <E> the event type
          * @return this builder
          */
-        public <E extends ResilienceEvent> Builder listen(String instance, Class<E> type,
+        public <E extends ResilienceEvent> Builder listen(String id, Class<E> type,
                 EventListener<? super E> listener) {
-            Objects.requireNonNull(instance, "instance");
-            listeners.add(new EventDispatcher.Subscription(type, instance, listener));
+            Objects.requireNonNull(id, "id");
+            listeners.add(new EventDispatcher.Subscription(type, id, listener));
             return this;
         }
 
@@ -858,7 +858,7 @@ public final class ResilienceRegistry {
          * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
          *
          * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
-         *     derived {@code <interface>#<method>(<parameter types>)}
+         *     derived {@code <type>#<method>(<parameter types>)}
          * @param overrides applied last when the instance's configuration is resolved
          * @return this builder
          */
@@ -920,7 +920,7 @@ public final class ResilienceRegistry {
          * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
          *
          * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
-         *     derived {@code <interface>#<method>(<parameter types>)}
+         *     derived {@code <type>#<method>(<parameter types>)}
          * @param overrides applied last when the instance's configuration is resolved
          * @return this builder
          */
@@ -983,7 +983,7 @@ public final class ResilienceRegistry {
          * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
          *
          * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
-         *     derived {@code <interface>#<method>(<parameter types>)}
+         *     derived {@code <type>#<method>(<parameter types>)}
          * @param overrides applied last when the instance's configuration is resolved
          * @return this builder
          */
@@ -1045,7 +1045,7 @@ public final class ResilienceRegistry {
          * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
          *
          * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
-         *     derived {@code <interface>#<method>(<parameter types>)}
+         *     derived {@code <type>#<method>(<parameter types>)}
          * @param overrides applied last when the instance's configuration is resolved
          * @return this builder
          */
@@ -1107,7 +1107,7 @@ public final class ResilienceRegistry {
          * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
          *
          * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
-         *     derived {@code <interface>#<method>(<parameter types>)}
+         *     derived {@code <type>#<method>(<parameter types>)}
          * @param overrides applied last when the instance's configuration is resolved
          * @return this builder
          */
@@ -1169,7 +1169,7 @@ public final class ResilienceRegistry {
          * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
          *
          * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
-         *     derived {@code <interface>#<method>(<parameter types>)}
+         *     derived {@code <type>#<method>(<parameter types>)}
          * @param overrides applied last when the instance's configuration is resolved
          * @return this builder
          */
@@ -1231,7 +1231,7 @@ public final class ResilienceRegistry {
          * after {@code ResilienceConfig.applyTo(...)} win over its {@code instances.<id>.*} keys.
          *
          * @param id the instance id: the {@code name} in the annotation (or the pipeline id), or the
-         *     derived {@code <interface>#<method>(<parameter types>)}
+         *     derived {@code <type>#<method>(<parameter types>)}
          * @param overrides applied last when the instance's configuration is resolved
          * @return this builder
          */
@@ -1298,7 +1298,7 @@ public final class ResilienceRegistry {
             if (id.isEmpty()) {
                 throw new IllegalArgumentException(ErrorCode.EMPTY_INSTANCE_ID.message("ResilienceRegistry.Builder."
                         + kind + "Instance(\"\", ...): the instance id must not be empty. Pass the name set in the"
-                        + " annotation (or the pipeline id), or the derived id <interface>#<method>(<parameter types>)."));
+                        + " annotation (or the pipeline id), or the derived id <type>#<method>(<parameter types>)."));
             }
             return id;
         }

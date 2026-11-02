@@ -135,7 +135,7 @@ It opens once it has seen 5 calls in the last 60 s and 80% or more of them were 
 
 ## Sharing and instance ids
 
-A breaker has state, so sharing matters. Without `name`, each method has its own breaker, with the id `<interface>#<method>(<parameter types>)`. With the same `name` on several methods (or on several interfaces wrapped with the same registry), they share one breaker: failures of one method open it for all. They must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008). A [`Pipeline`](#same-thing-with-pipeline) whose id equals the `name` shares it too.
+A breaker has state, so sharing matters. Without `name`, each method has its own breaker, with the id `<type>#<method>(<parameter types>)`. With the same `name` on several methods (or on several interfaces wrapped with the same registry), they share one breaker: failures of one method open it for all. They must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008). A [`Pipeline`](#same-thing-with-pipeline) whose id equals the `name` shares it too.
 
 ### Handle
 
@@ -204,7 +204,7 @@ The id `"payments"` is the breaker's instance id: `registry.circuitBreaker("paym
 | Event | When | Fields |
 |---|---|---|
 | `CircuitBreakerEvent.StateTransition` | Every state change, published once, by the thread that made it | `id`, `nanoTime`, `from`, `to` |
-| `CircuitBreakerEvent.CallNotPermitted` | A call was rejected (open, forced open, or no probes left) | `id`, `nanoTime`, `state` |
+| `CircuitBreakerEvent.Rejected` | A call was rejected (open, forced open, or no probes left) | `id`, `nanoTime`, `state` |
 
 `CircuitBreakerSnapshot(id, state, failureRate, slowCallRate, bufferedCalls, failedCalls, slowCalls)`: rates are percentages, or `-1` until the window holds `minimumCalls` calls (the slow-call rate is also `-1` while detection is off). In half-open the counts are the probes'. See [Observability](../guides/observability.md).
 

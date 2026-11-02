@@ -47,13 +47,23 @@ public final class TimeoutConfig implements PolicyConfig {
             timeout = from.timeout;
         }
 
-        /** @param enabled whether calls are timed out at all @return this builder */
+        /**
+         * Sets {@code enabled}: whether calls are timed out at all.
+         *
+         * @param enabled whether calls are timed out at all
+         * @return this builder
+         */
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
             return this;
         }
 
-        /** @param timeout how long one attempt may take @return this builder */
+        /**
+         * Sets {@code timeout}: how long one attempt may take.
+         *
+         * @param timeout how long one attempt may take
+         * @return this builder
+         */
         public Builder timeout(Duration timeout) {
             this.timeout = Objects.requireNonNull(timeout, POLICY);
             return this;

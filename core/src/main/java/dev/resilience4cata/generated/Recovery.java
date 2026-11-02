@@ -1,6 +1,7 @@
 package dev.resilience4cata.generated;
 
 import java.util.concurrent.CompletionStage;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The fallback of an asynchronous method, as generated code passes it to {@link FallbackPolicy} or
@@ -9,7 +10,7 @@ import java.util.concurrent.CompletionStage;
  * @param <T> the result type of the protected method
  */
 @FunctionalInterface
-public interface Recovery<T> {
+public interface Recovery<T extends @Nullable Object> {
 
     /**
      * Produces the alternative result.

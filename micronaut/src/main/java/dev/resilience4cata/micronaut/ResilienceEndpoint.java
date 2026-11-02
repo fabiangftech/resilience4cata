@@ -28,6 +28,7 @@ public final class ResilienceEndpoint {
      *
      * @param registry the registry to report
      */
+    @dev.resilience4cata.annotation.Internal // public for Micronaut, which creates the bean
     public ResilienceEndpoint(ResilienceRegistry registry) {
         this.registry = Objects.requireNonNull(registry, "registry");
     }

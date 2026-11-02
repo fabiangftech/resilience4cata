@@ -17,7 +17,7 @@ Cada evento implementa la interfaz sellada `dev.resilience4cata.event.Resilience
 | Política | Record del evento | Campos (después de `id`, `nanoTime`) | Se publica cuando |
 |---|---|---|---|
 | Circuit breaker | `CircuitBreakerEvent.StateTransition` | `CircuitBreakerState from`, `CircuitBreakerState to` | el estado cambia, exactamente una vez por cambio, incluidos `forceOpen()`, `disable()` y `reset()` |
-| Circuit breaker | `CircuitBreakerEvent.CallNotPermitted` | `CircuitBreakerState state` | una llamada es rechazada (`OPEN`, `FORCED_OPEN`, o `HALF_OPEN` con todas las pruebas tomadas) |
+| Circuit breaker | `CircuitBreakerEvent.Rejected` | `CircuitBreakerState state` | una llamada es rechazada (`OPEN`, `FORCED_OPEN`, o `HALF_OPEN` con todas las pruebas tomadas) |
 | Retry | `RetryEvent.Retrying` | `int attempt`, `Duration delay`, `@Nullable Throwable failure` | un intento falló y se ejecutará otro después de `delay`; `failure` es `null` cuando un [classifier](classifiers.md) rechazó un resultado |
 | Retry | `RetryEvent.GaveUp` | `int attempts`, `RetryEvent.Reason reason`, `@Nullable Throwable failure` | el retry se detiene sin un éxito: `MAX_ATTEMPTS`, `MAX_DURATION`, `NOT_RETRYABLE` (el fallo no está en `retryOn`, está en `abortOn`, o es la `CallNotPermittedException` de un breaker abierto), `INTERRUPTED`, `CLASSIFIER_FAILED`, `BUDGET_EXHAUSTED` (el [presupuesto de reintentos](../policies/retry.md#presupuesto-de-reintentos) se agotó) |
 | Hedge | `HedgeEvent.Hedged` | `int attempt`, `HedgeEvent.Reason reason` | un [hedge](../policies/hedge.md) inició el intento `attempt` (2 o más) junto a los demás: `DELAY` (sin resultado dentro de `delay`) o `FAILURE` (un intento falló con un fallo de `hedgeOn`) |
@@ -131,7 +131,7 @@ Los nombres van en minúsculas y separados por puntos, como recomienda Micromete
 
 | Meter | Tipo | Tags | Origen |
 |---|---|---|---|
-| `r4c.calls.rejected` | counter | `name`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CallNotPermitted`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
+| `r4c.calls.rejected` | counter | `name`, `kind` = `circuitbreaker` \| `ratelimiter` \| `adaptivelimit` \| `bulkhead` | `CircuitBreakerEvent.Rejected`, `RateLimiterEvent.Rejected`, `AdaptiveLimitEvent.Rejected`, `BulkheadEvent.Rejected` |
 | `r4c.circuitbreaker.transitions` | counter | `name`, `from`, `to` (estados en minúsculas) | `StateTransition` |
 | `r4c.retry.retries` | counter | `name` | `Retrying` |
 | `r4c.retry.gave.up` | counter | `name`, `reason` (`Reason` en minúsculas) | `GaveUp` |

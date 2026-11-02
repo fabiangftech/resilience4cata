@@ -26,6 +26,6 @@ public sealed interface CircuitBreakerEvent extends ResilienceEvent {
      * @param nanoTime when it happened
      * @param state the state that rejected the call
      */
-    record CallNotPermitted(String id, long nanoTime, CircuitBreakerState state) implements CircuitBreakerEvent {
+    record Rejected(String id, long nanoTime, CircuitBreakerState state) implements CircuitBreakerEvent {
     }
 }

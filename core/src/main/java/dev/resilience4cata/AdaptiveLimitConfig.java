@@ -179,88 +179,155 @@ public final class AdaptiveLimitConfig implements PolicyConfig {
             backoffRatio = from.backoffRatio;
         }
 
-        /** @param enabled whether calls are limited at all @return this builder */
+        /**
+         * Sets {@code enabled}: whether calls are limited at all.
+         *
+         * @param enabled whether calls are limited at all
+         * @return this builder
+         */
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
             return this;
         }
 
-        /** @param algorithm how the limit is recomputed at the end of each window @return this builder */
+        /**
+         * Sets {@code algorithm}: how the limit is recomputed at the end of each window.
+         *
+         * @param algorithm how the limit is recomputed at the end of each window
+         * @return this builder
+         */
         public Builder algorithm(Algorithm algorithm) {
             this.algorithm = Objects.requireNonNull(algorithm, "algorithm");
             return this;
         }
 
-        /** @param initialLimit the limit before the first window ends @return this builder */
+        /**
+         * Sets {@code initialLimit}: the limit before the first window ends.
+         *
+         * @param initialLimit the limit before the first window ends
+         * @return this builder
+         */
         public Builder initialLimit(int initialLimit) {
             this.initialLimit = initialLimit;
             return this;
         }
 
-        /** @param minLimit the lowest the limit goes, at least 1 @return this builder */
+        /**
+         * Sets {@code minLimit}: the lowest the limit goes, at least 1.
+         *
+         * @param minLimit the lowest the limit goes, at least 1
+         * @return this builder
+         */
         public Builder minLimit(int minLimit) {
             this.minLimit = minLimit;
             return this;
         }
 
-        /** @param maxLimit the highest the limit goes @return this builder */
+        /**
+         * Sets {@code maxLimit}: the highest the limit goes.
+         *
+         * @param maxLimit the highest the limit goes
+         * @return this builder
+         */
         public Builder maxLimit(int maxLimit) {
             this.maxLimit = maxLimit;
             return this;
         }
 
-        /** @param window how long a window lasts at least, 10 ms to 1 h @return this builder */
+        /**
+         * Sets {@code window}: how long a window lasts at least, 10 ms to 1 h.
+         *
+         * @param window how long a window lasts at least, 10 ms to 1 h
+         * @return this builder
+         */
         public Builder window(Duration window) {
             this.window = Objects.requireNonNull(window, "window");
             return this;
         }
 
-        /** @param minWindowSamples completed calls a window needs before it ends @return this builder */
+        /**
+         * Sets {@code minWindowSamples}: completed calls a window needs before it ends.
+         *
+         * @param minWindowSamples completed calls a window needs before it ends
+         * @return this builder
+         */
         public Builder minWindowSamples(int minWindowSamples) {
             this.minWindowSamples = minWindowSamples;
             return this;
         }
 
-        /** @param dropOn failures that count as a drop: the dependency is overloaded @return this builder */
+        /**
+         * Sets {@code dropOn}: failures that count as a drop: the dependency is overloaded.
+         *
+         * @param dropOn failures that count as a drop: the dependency is overloaded
+         * @return this builder
+         */
         public Builder dropOn(List<Class<? extends Throwable>> dropOn) {
             this.dropOn = List.copyOf(dropOn);
             return this;
         }
 
-        /** @param ignoreOn failures that are never samples; they win over {@code dropOn} @return this builder */
+        /**
+         * Sets {@code ignoreOn}: failures that are never samples; they win over {@code dropOn}.
+         *
+         * @param ignoreOn failures that are never samples; they win over {@code dropOn}
+         * @return this builder
+         */
         public Builder ignoreOn(List<Class<? extends Throwable>> ignoreOn) {
             this.ignoreOn = List.copyOf(ignoreOn);
             return this;
         }
 
-        /** @param smoothing Gradient2: how much of each new estimate is kept, in (0, 1] @return this builder */
+        /**
+         * Sets {@code smoothing} (Gradient2): how much of each new estimate is kept, in (0, 1].
+         *
+         * @param smoothing Gradient2: how much of each new estimate is kept, in (0, 1]
+         * @return this builder
+         */
         public Builder smoothing(double smoothing) {
             this.smoothing = smoothing;
             return this;
         }
 
         /**
-         * @param rttTolerance Gradient2: latency growth tolerated before the limit goes down, at least 1 @return
-         * this builder
+         * Sets {@code rttTolerance} (Gradient2): latency growth tolerated before the limit goes down, at least 1.
+         *
+         * @param rttTolerance Gradient2: latency growth tolerated before the limit goes down, at least 1
+         * @return this builder
          */
         public Builder rttTolerance(double rttTolerance) {
             this.rttTolerance = rttTolerance;
             return this;
         }
 
-        /** @param longWindow Gradient2: windows averaged into the long-term latency @return this builder */
+        /**
+         * Sets {@code longWindow} (Gradient2): windows averaged into the long-term latency.
+         *
+         * @param longWindow Gradient2: windows averaged into the long-term latency
+         * @return this builder
+         */
         public Builder longWindow(int longWindow) {
             this.longWindow = longWindow;
             return this;
         }
 
-        /** @param queueSize Gradient2: room left above the estimated concurrency @return this builder */
+        /**
+         * Sets {@code queueSize} (Gradient2): room left above the estimated concurrency.
+         *
+         * @param queueSize Gradient2: room left above the estimated concurrency
+         * @return this builder
+         */
         public Builder queueSize(int queueSize) {
             this.queueSize = queueSize;
             return this;
         }
 
-        /** @param backoffRatio AIMD: what a drop multiplies the limit by, in [0.5, 1) @return this builder */
+        /**
+         * Sets {@code backoffRatio} (AIMD): what a drop multiplies the limit by, in [0.5, 1).
+         *
+         * @param backoffRatio AIMD: what a drop multiplies the limit by, in [0.5, 1)
+         * @return this builder
+         */
         public Builder backoffRatio(double backoffRatio) {
             this.backoffRatio = backoffRatio;
             return this;

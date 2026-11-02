@@ -1,6 +1,7 @@
 package dev.resilience4cata.generated;
 
 import java.util.concurrent.CompletionStage;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One asynchronous layer of a generated method: the next policy, or the delegate. It may throw, like
@@ -9,7 +10,7 @@ import java.util.concurrent.CompletionStage;
  * @param <T> the result type of the protected method
  */
 @FunctionalInterface
-public interface AsyncCall<T> {
+public interface AsyncCall<T extends @Nullable Object> {
 
     /**
      * Starts the call.
@@ -35,7 +36,7 @@ public interface AsyncCall<T> {
      * @return the same stage
      */
     @SuppressWarnings("unchecked")
-    static <T> CompletionStage<T> widen(CompletionStage<? extends T> stage) {
+    static <T extends @Nullable Object> CompletionStage<T> widen(CompletionStage<? extends T> stage) {
         return (CompletionStage<T>) stage;
     }
 }

@@ -1,5 +1,7 @@
 package dev.resilience4cata;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Produces an alternative result when a call fails or is rejected. Referenced from
  * {@code @Fallback(MyFallback.class)}; the annotation processor checks that {@code T} matches the
@@ -11,7 +13,7 @@ package dev.resilience4cata;
  * @param <T> the result type of the protected method
  */
 @FunctionalInterface
-public interface FallbackHandler<T> {
+public interface FallbackHandler<T extends @Nullable Object> {
 
     /**
      * Returns the alternative result, or throws to propagate a failure.

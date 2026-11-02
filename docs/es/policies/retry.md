@@ -150,7 +150,7 @@ Si `report` sigue fallando, los dos primeros intentos abren el breaker, el terce
 
 ## Compartir e ids de instancia
 
-Sin `name`, cada método tiene su propia política de retry, con el id `<interfaz>#<método>(<tipos de parámetros>)`, por ejemplo `dev.resilience4cata.examples.docs.retry.InventoryApi#stock(java.lang.String)`. Ese id es el que usas en los overrides `instances.<id>.retry.…` y el que reportan los eventos y los snapshots.
+Sin `name`, cada método tiene su propia política de retry, con el id `<tipo>#<método>(<tipos de parámetros>)`, por ejemplo `dev.resilience4cata.examples.docs.retry.InventoryApi#stock(java.lang.String)`. Ese id es el que usas en los overrides `instances.<id>.retry.…` y el que reportan los eventos y los snapshots.
 
 Sin [presupuesto de reintentos](#presupuesto-de-reintentos), un retry no guarda estado entre llamadas (el conteo de intentos vive en una variable local del método generado), así que compartirlo por `name` solo comparte su configuración. Con presupuesto, comparte también el presupuesto. Los métodos que comparten un `name` deben resolver la misma configuración, o envolverlos falla con [`R4C-REG-008`](../errors.md#r4c-reg-008).
 

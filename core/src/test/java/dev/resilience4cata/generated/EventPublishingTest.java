@@ -15,7 +15,7 @@ import dev.resilience4cata.TimeoutConfig;
 import dev.resilience4cata.event.AdaptiveLimitEvent;
 import dev.resilience4cata.event.BulkheadEvent;
 import dev.resilience4cata.event.CircuitBreakerEvent;
-import dev.resilience4cata.event.CircuitBreakerEvent.CallNotPermitted;
+import dev.resilience4cata.event.CircuitBreakerEvent.Rejected;
 import dev.resilience4cata.event.CircuitBreakerEvent.StateTransition;
 import dev.resilience4cata.event.EventListener;
 import dev.resilience4cata.event.FallbackEvent;
@@ -92,7 +92,7 @@ class EventPublishingTest {
 
     @Test
     void rejectionsArePublishedWithTheStateThatRejected() {
-        CircuitBreakerPolicy cb = breaker(listening(CallNotPermitted.class));
+        CircuitBreakerPolicy cb = breaker(listening(Rejected.class));
         fail(cb);
         fail(cb);
         assertThat(cb.acquire()).isEqualTo(CircuitBreakerPolicy.REJECTED);
@@ -105,14 +105,14 @@ class EventPublishingTest {
         assertThat(cb.acquire()).isEqualTo(CircuitBreakerPolicy.REJECTED);
 
         assertThat(events).as("only the subscribed type").containsExactly(
-                new CallNotPermitted("cb", 1_000 * MS, CircuitBreakerState.OPEN),
-                new CallNotPermitted("cb", now.get(), CircuitBreakerState.HALF_OPEN),
-                new CallNotPermitted("cb", now.get(), CircuitBreakerState.FORCED_OPEN));
+                new Rejected("cb", 1_000 * MS, CircuitBreakerState.OPEN),
+                new Rejected("cb", now.get(), CircuitBreakerState.HALF_OPEN),
+                new Rejected("cb", now.get(), CircuitBreakerState.FORCED_OPEN));
     }
 
     @Test
     void asyncRejectionsArePublishedToo() {
-        CircuitBreakerPolicy cb = breaker(listening(CallNotPermitted.class));
+        CircuitBreakerPolicy cb = breaker(listening(Rejected.class));
         cb.forceOpen();
         assertThat(cb.executeAsync(() -> CompletableFuture.completedFuture("x"))).isCompletedExceptionally();
         assertThat(events).hasSize(1);
@@ -157,10 +157,10 @@ class EventPublishingTest {
         assertThat(EventDispatcher.of(List.of())).isSameAs(EventDispatcher.NONE);
         EventDispatcher dispatcher = EventDispatcher.of(List.of(
                 new EventDispatcher.Subscription(RetryEvent.class, null, e -> { }),
-                new EventDispatcher.Subscription(CallNotPermitted.class, "a", e -> { })));
+                new EventDispatcher.Subscription(Rejected.class, "a", e -> { })));
         assertThat(dispatcher.sink(StateTransition.class, "a")).as("other type").isNull();
-        assertThat(dispatcher.sink(CallNotPermitted.class, "b")).as("other instance").isNull();
-        assertThat(dispatcher.sink(CallNotPermitted.class, "a")).isNotNull();
+        assertThat(dispatcher.sink(Rejected.class, "b")).as("other instance").isNull();
+        assertThat(dispatcher.sink(Rejected.class, "a")).isNotNull();
         assertThat(dispatcher.sink(RetryEvent.GaveUp.class, "any")).as("interface matches its records").isNotNull();
     }
 

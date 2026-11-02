@@ -6,7 +6,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y 
 
 ## [Unreleased] :id=unreleased
 
-Sin cambios de API.
+Los últimos cambios de API antes de 1.0, de la revisión del [plan hacia 1.0](plan-1.0.md): dos cambios incompatibles pequeños (un evento renombrado, dos constantes que dejan de ser públicas) y promesas más claras sobre lo que puede crecer.
 
 ### Añadido
 
@@ -14,6 +14,13 @@ Sin cambios de API.
 
 ### Cambiado
 
+- **`CircuitBreakerEvent.CallNotPermitted` ahora es `CircuitBreakerEvent.Rejected`**, como los eventos de rechazo del bulkhead, el rate limiter y el adaptive limit. La excepción conserva su nombre, `CallNotPermittedException`. Los listeners registrados para el tipo viejo deben usar el nuevo.
+- **`HedgeConfig.MIN_ATTEMPTS` y `MAX_ATTEMPTS` dejan de ser públicas.** Como constantes públicas se copiaban en los class files de quien las usaba, así que un cambio posterior de los límites (de 2 a 10, documentados en `maxAttempts`) no habría llegado al código compilado antes.
+- Los parámetros de tipo que llevan el resultado de una llamada aceptan tipos que admiten null (`T extends @Nullable Object`): `Pipeline`, `PipelineCall`, `FallbackHandler`, `Classifier` y los tipos async del código generado. Quien usa Kotlin o NullAway puede escribir ahora `Pipeline<String?>` y fallbacks que devuelven null. Nada cambia para el compilador de Java.
+- `Resilient.create` declara que los argumentos del constructor pueden ser null (`@Nullable Object...`), algo que ya aceptaba.
+- [Compatibilidad](reference/compatibility.md): un record de evento o de snapshot que gana un componente conserva su constructor anterior, así que el código que los crea sigue compilando; `PolicyConfig` y `CallRejectedException` pueden ganar subtipos cuando se añade una política.
+- Micronaut: los constructores públicos de `ResilienceHealthIndicator` y `ResilienceEndpoint` son `@Internal` (Micronaut crea estos beans; no son para tu código).
+- Cada setter de los builders `*Config` tiene descripción principal en su Javadoc; el `@return` se leía como parte del texto del parámetro.
 - El bulkhead sin espera y el adaptive limit devuelven un slot con una suma volátil, que resultó más rápida que la suma solo-release en Graviton3: una llamada a un bulkhead con un slot libre cuesta 17.3 ns en vez de 20.5 ns, 196 ns en vez de 259 ns con cuatro hilos ([benchmarks](benchmarks.md#release-counters)).
 - Un bulkhead con `maxWait` toma y devuelve un slot libre con su propio contador en vez de los atómicos con barrera completa de `java.util.concurrent.Semaphore`: con cuatro hilos, 385 → 210 ns por llamada ([benchmarks](benchmarks.md#bulkhead-semaphore)).
 - Los métodos `Flux` asignan menos por stream: un intento es un objeto en vez de dos, y un stream que terminó durante su suscripción pasa por todas las políticas como un único stage compartido en vez de una copia completada por política (24 B menos con una política, 104 B con retry, breaker, timeout y bulkhead), y van hasta un 9% más rápido ([benchmarks](benchmarks.md#flux-ended)).

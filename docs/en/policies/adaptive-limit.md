@@ -158,7 +158,7 @@ public class InventoryService {
 
 ## Sharing and instance ids
 
-Without `name`, every method has its own limit, with the id `<interface>#<method>(<parameter types>)`. Methods that call the same dependency should usually share one: give them the same `name`. They must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008).
+Without `name`, every method has its own limit, with the id `<type>#<method>(<parameter types>)`. Methods that call the same dependency should usually share one: give them the same `name`. They must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008).
 
 ### Handle
 

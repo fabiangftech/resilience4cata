@@ -158,13 +158,23 @@ public final class CircuitBreakerConfig implements PolicyConfig {
             ignoreOn = from.ignoreOn;
         }
 
-        /** @param enabled whether the breaker records calls and can open @return this builder */
+        /**
+         * Sets {@code enabled}: whether the breaker records calls and can open.
+         *
+         * @param enabled whether the breaker records calls and can open
+         * @return this builder
+         */
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
             return this;
         }
 
-        /** @param windowType how the sliding window is measured @return this builder */
+        /**
+         * Sets {@code windowType}: how the sliding window is measured.
+         *
+         * @param windowType how the sliding window is measured
+         * @return this builder
+         */
         public Builder windowType(WindowType windowType) {
             this.windowType = Objects.requireNonNull(windowType, "windowType");
             return this;
@@ -188,58 +198,100 @@ public final class CircuitBreakerConfig implements PolicyConfig {
             return this;
         }
 
-        /** @param minimumCalls calls needed before the rates are evaluated @return this builder */
+        /**
+         * Sets {@code minimumCalls}: calls needed before the rates are evaluated.
+         *
+         * @param minimumCalls calls needed before the rates are evaluated
+         * @return this builder
+         */
         public Builder minimumCalls(int minimumCalls) {
             this.minimumCalls = minimumCalls;
             return this;
         }
 
-        /** @param failureRateThreshold failure rate, in percent, that opens the breaker @return this builder */
+        /**
+         * Sets {@code failureRateThreshold}: failure rate, in percent, that opens the breaker.
+         *
+         * @param failureRateThreshold failure rate, in percent, that opens the breaker
+         * @return this builder
+         */
         public Builder failureRateThreshold(double failureRateThreshold) {
             this.failureRateThreshold = failureRateThreshold;
             return this;
         }
 
-        /** @param slowCallRateThreshold slow-call rate, in percent, that opens the breaker @return this builder */
+        /**
+         * Sets {@code slowCallRateThreshold}: slow-call rate, in percent, that opens the breaker.
+         *
+         * @param slowCallRateThreshold slow-call rate, in percent, that opens the breaker
+         * @return this builder
+         */
         public Builder slowCallRateThreshold(double slowCallRateThreshold) {
             this.slowCallRateThreshold = slowCallRateThreshold;
             return this;
         }
 
         /**
-         * @param slowCallDuration duration above which a call is slow; zero turns detection off @return this
-         * builder
+         * Sets {@code slowCallDuration}: duration above which a call is slow; zero turns detection off.
+         *
+         * @param slowCallDuration duration above which a call is slow; zero turns detection off
+         * @return this builder
          */
         public Builder slowCallDuration(Duration slowCallDuration) {
             this.slowCallDuration = Objects.requireNonNull(slowCallDuration, "slowCallDuration");
             return this;
         }
 
-        /** @param waitInOpen how long the breaker stays open before probing @return this builder */
+        /**
+         * Sets {@code waitInOpen}: how long the breaker stays open before probing.
+         *
+         * @param waitInOpen how long the breaker stays open before probing
+         * @return this builder
+         */
         public Builder waitInOpen(Duration waitInOpen) {
             this.waitInOpen = Objects.requireNonNull(waitInOpen, "waitInOpen");
             return this;
         }
 
-        /** @param halfOpenCalls number of probe calls in the half-open state @return this builder */
+        /**
+         * Sets {@code halfOpenCalls}: number of probe calls in the half-open state.
+         *
+         * @param halfOpenCalls number of probe calls in the half-open state
+         * @return this builder
+         */
         public Builder halfOpenCalls(int halfOpenCalls) {
             this.halfOpenCalls = halfOpenCalls;
             return this;
         }
 
-        /** @param maxWaitInHalfOpen maximum time half-open; zero means no limit @return this builder */
+        /**
+         * Sets {@code maxWaitInHalfOpen}: maximum time half-open; zero means no limit.
+         *
+         * @param maxWaitInHalfOpen maximum time half-open; zero means no limit
+         * @return this builder
+         */
         public Builder maxWaitInHalfOpen(Duration maxWaitInHalfOpen) {
             this.maxWaitInHalfOpen = Objects.requireNonNull(maxWaitInHalfOpen, "maxWaitInHalfOpen");
             return this;
         }
 
-        /** @param recordOn exceptions recorded as failures @return this builder */
+        /**
+         * Sets {@code recordOn}: exceptions recorded as failures.
+         *
+         * @param recordOn exceptions recorded as failures
+         * @return this builder
+         */
         public Builder recordOn(List<Class<? extends Throwable>> recordOn) {
             this.recordOn = List.copyOf(recordOn);
             return this;
         }
 
-        /** @param ignoreOn exceptions that are not counted @return this builder */
+        /**
+         * Sets {@code ignoreOn}: exceptions that are not counted.
+         *
+         * @param ignoreOn exceptions that are not counted
+         * @return this builder
+         */
         public Builder ignoreOn(List<Class<? extends Throwable>> ignoreOn) {
             this.ignoreOn = List.copyOf(ignoreOn);
             return this;

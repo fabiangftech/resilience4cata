@@ -48,6 +48,7 @@ public final class ResilienceHealthIndicator implements HealthIndicator {
      * @param registry the registry to report
      * @param downWhenOpen the breaker ids that are critical, or {@code *} for all
      */
+    @dev.resilience4cata.annotation.Internal // public for Micronaut, which creates the bean
     public ResilienceHealthIndicator(ResilienceRegistry registry, List<String> downWhenOpen) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.downWhenOpen = Set.copyOf(downWhenOpen);

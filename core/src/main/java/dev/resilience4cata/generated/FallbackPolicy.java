@@ -35,7 +35,7 @@ public final class FallbackPolicy {
     /**
      * Creates the policy for one method.
      *
-     * @param instanceId id of the method, {@code <interface>#<method>(<parameter types>)}
+     * @param instanceId id of the method, {@code <type>#<method>(<parameter types>)}
      * @param applyOn failures that get the fallback
      * @param skipOn failures that never get the fallback; wins over {@code applyOn}
      */
@@ -48,7 +48,7 @@ public final class FallbackPolicy {
     /**
      * Creates the policy for one method, publishing {@link FallbackEvent}s to the environment's listeners.
      *
-     * @param instanceId id of the method, {@code <interface>#<method>(<parameter types>)}
+     * @param instanceId id of the method, {@code <type>#<method>(<parameter types>)}
      * @param applyOn failures that get the fallback
      * @param skipOn failures that never get the fallback; wins over {@code applyOn}
      * @param environment the clock and the event listeners
@@ -63,7 +63,7 @@ public final class FallbackPolicy {
      * Creates the policy for a method whose sibling fallback methods do not take every failure: a failure
      * that is not an instance of one of {@code taken} is rethrown, so this policy does not handle it either.
      *
-     * @param instanceId id of the method, {@code <interface>#<method>(<parameter types>)}
+     * @param instanceId id of the method, {@code <type>#<method>(<parameter types>)}
      * @param applyOn failures that get the fallback
      * @param skipOn failures that never get the fallback; wins over {@code applyOn}
      * @param taken the exception types of the sibling fallback methods, or {@code null} if a fallback
@@ -215,7 +215,7 @@ public final class FallbackPolicy {
      * @param <T> the result type
      * @return a future that completes with the call's or the fallback's outcome
      */
-    public <T> CompletableFuture<T> executeAsync(AsyncCall<T> call, Recovery<T> recovery) {
+    public <T extends @Nullable Object> CompletableFuture<T> executeAsync(AsyncCall<T> call, Recovery<T> recovery) {
         CompletionStage<T> stage = AsyncSupport.call(call);
         LinkedFuture<T> result = new LinkedFuture<>(stage);
         stage.whenComplete((value, failure) -> {

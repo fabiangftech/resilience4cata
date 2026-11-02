@@ -98,7 +98,7 @@ byte[] thumbnail(String imageId);
 
 ## Sharing and instance ids
 
-Without `name`, every method has its own bulkhead, with the id `<interface>#<method>(<parameter types>)`. To protect one resource used by several methods (one connection pool behind a whole client), give them the same `name`: they then share the same `maxConcurrent` slots. They must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008).
+Without `name`, every method has its own bulkhead, with the id `<type>#<method>(<parameter types>)`. To protect one resource used by several methods (one connection pool behind a whole client), give them the same `name`: they then share the same `maxConcurrent` slots. They must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008).
 
 ### Handle
 

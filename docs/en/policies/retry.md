@@ -150,7 +150,7 @@ If `report` keeps failing, the first two attempts open the breaker, the third ge
 
 ## Sharing and instance ids
 
-Without `name`, every method gets its own retry policy, with the id `<interface>#<method>(<parameter types>)`, for example `dev.resilience4cata.examples.docs.retry.InventoryApi#stock(java.lang.String)`. That id is what you use in `instances.<id>.retry.…` overrides and what events and snapshots report.
+Without `name`, every method gets its own retry policy, with the id `<type>#<method>(<parameter types>)`, for example `dev.resilience4cata.examples.docs.retry.InventoryApi#stock(java.lang.String)`. That id is what you use in `instances.<id>.retry.…` overrides and what events and snapshots report.
 
 Without a [retry budget](#retry-budget), a retry keeps no state between calls (the attempt count lives in a local variable of the generated method), so sharing one by `name` only shares its configuration. With a budget, it also shares the budget. Methods that share a `name` must resolve to the same configuration, or wrapping fails with [`R4C-REG-008`](../errors.md#r4c-reg-008).
 

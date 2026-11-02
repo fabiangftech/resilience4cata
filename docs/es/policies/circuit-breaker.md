@@ -135,7 +135,7 @@ Abre una vez que vio 5 llamadas en los últimos 60 s y el 80% o más fueron lent
 
 ## Compartir e ids de instancia
 
-Un breaker tiene estado, así que compartirlo importa. Sin `name`, cada método tiene su propio breaker, con el id `<interfaz>#<método>(<tipos de parámetros>)`. Con el mismo `name` en varios métodos (o en varias interfaces envueltas con el mismo registry), comparten un breaker: las fallas de un método lo abren para todos. Deben resolver la misma configuración, o envolverlos falla con [`R4C-REG-008`](../errors.md#r4c-reg-008). Un [`Pipeline`](#lo-mismo-con-pipeline) cuyo id es igual al `name` también lo comparte.
+Un breaker tiene estado, así que compartirlo importa. Sin `name`, cada método tiene su propio breaker, con el id `<tipo>#<método>(<tipos de parámetros>)`. Con el mismo `name` en varios métodos (o en varias interfaces envueltas con el mismo registry), comparten un breaker: las fallas de un método lo abren para todos. Deben resolver la misma configuración, o envolverlos falla con [`R4C-REG-008`](../errors.md#r4c-reg-008). Un [`Pipeline`](#lo-mismo-con-pipeline) cuyo id es igual al `name` también lo comparte.
 
 ### Handle
 
@@ -204,7 +204,7 @@ El id `"payments"` es el id de instancia del breaker: `registry.circuitBreaker("
 | Evento | Cuándo | Campos |
 |---|---|---|
 | `CircuitBreakerEvent.StateTransition` | Cada cambio de estado, publicado una vez, por el thread que lo hizo | `id`, `nanoTime`, `from`, `to` |
-| `CircuitBreakerEvent.CallNotPermitted` | Se rechazó una llamada (abierto, forzado abierto o sin pruebas disponibles) | `id`, `nanoTime`, `state` |
+| `CircuitBreakerEvent.Rejected` | Se rechazó una llamada (abierto, forzado abierto o sin pruebas disponibles) | `id`, `nanoTime`, `state` |
 
 `CircuitBreakerSnapshot(id, state, failureRate, slowCallRate, bufferedCalls, failedCalls, slowCalls)`: las tasas son porcentajes, o `-1` hasta que la ventana tiene `minimumCalls` llamadas (la tasa de llamadas lentas también es `-1` mientras la detección está desactivada). En half-open, los conteos son los de las pruebas. Ver [Observabilidad](../guides/observability.md).
 

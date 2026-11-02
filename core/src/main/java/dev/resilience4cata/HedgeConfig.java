@@ -24,10 +24,10 @@ public final class HedgeConfig implements PolicyConfig {
     private final int budgetMinHedgesPerSecond;
     private final Duration budgetWindow;
 
-    /** The fewest attempts: one hedge. */
-    public static final int MIN_ATTEMPTS = 2;
-    /** The most attempts in flight for one call. */
-    public static final int MAX_ATTEMPTS = 10;
+    // Private, not public constants: a public one would be copied into callers' class files, so raising the
+    // cap later would not reach code compiled earlier. The bounds are documented on maxAttempts.
+    private static final int MIN_ATTEMPTS = 2; // one hedge
+    private static final int MAX_ATTEMPTS = 10; // attempts in flight for one call
 
     private static final Duration MAX_BUDGET_WINDOW = Duration.ofHours(1);
 
@@ -122,34 +122,56 @@ public final class HedgeConfig implements PolicyConfig {
             budgetWindow = from.budgetWindow;
         }
 
-        /** @param enabled whether calls are hedged at all @return this builder */
+        /**
+         * Sets {@code enabled}: whether calls are hedged at all.
+         *
+         * @param enabled whether calls are hedged at all
+         * @return this builder
+         */
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
             return this;
         }
 
-        /** @param maxAttempts attempts in flight at most, including the first one, 2 to 10 @return this builder */
+        /**
+         * Sets {@code maxAttempts}: attempts in flight at most, including the first one, 2 to 10.
+         *
+         * @param maxAttempts attempts in flight at most, including the first one, 2 to 10
+         * @return this builder
+         */
         public Builder maxAttempts(int maxAttempts) {
             this.maxAttempts = maxAttempts;
             return this;
         }
 
         /**
-         * @param delay time without a result before the next attempt starts; zero starts all at once @return this
-         * builder
+         * Sets {@code delay}: time without a result before the next attempt starts; zero starts all at once.
+         *
+         * @param delay time without a result before the next attempt starts; zero starts all at once
+         * @return this builder
          */
         public Builder delay(Duration delay) {
             this.delay = Objects.requireNonNull(delay, "delay");
             return this;
         }
 
-        /** @param hedgeOn failures after which the next attempt starts at once @return this builder */
+        /**
+         * Sets {@code hedgeOn}: failures after which the next attempt starts at once.
+         *
+         * @param hedgeOn failures after which the next attempt starts at once
+         * @return this builder
+         */
         public Builder hedgeOn(List<Class<? extends Throwable>> hedgeOn) {
             this.hedgeOn = List.copyOf(hedgeOn);
             return this;
         }
 
-        /** @param abortOn failures that end the call at once @return this builder */
+        /**
+         * Sets {@code abortOn}: failures that end the call at once.
+         *
+         * @param abortOn failures that end the call at once
+         * @return this builder
+         */
         public Builder abortOn(List<Class<? extends Throwable>> abortOn) {
             this.abortOn = List.copyOf(abortOn);
             return this;
@@ -174,7 +196,12 @@ public final class HedgeConfig implements PolicyConfig {
             return this;
         }
 
-        /** @param budgetWindow how far back the budget counts calls and hedges @return this builder */
+        /**
+         * Sets {@code budgetWindow}: how far back the budget counts calls and hedges.
+         *
+         * @param budgetWindow how far back the budget counts calls and hedges
+         * @return this builder
+         */
         public Builder budgetWindow(Duration budgetWindow) {
             this.budgetWindow = Objects.requireNonNull(budgetWindow, "budgetWindow");
             return this;

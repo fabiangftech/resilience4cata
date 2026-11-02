@@ -98,7 +98,7 @@ class EventEndToEndTest {
 
         assertThat(paymentTransitions).containsExactly(new CircuitBreakerEvent.StateTransition("payments",
                 paymentTransitions.get(0).nanoTime(), CircuitBreakerState.CLOSED, CircuitBreakerState.OPEN));
-        assertThat(events).filteredOn(CircuitBreakerEvent.CallNotPermitted.class::isInstance).hasSize(1);
+        assertThat(events).filteredOn(CircuitBreakerEvent.Rejected.class::isInstance).hasSize(1);
         assertThat(registry.snapshot().circuitBreakers()).singleElement()
                 .isEqualTo(new CircuitBreakerSnapshot("payments", CircuitBreakerState.OPEN, -1f, -1f, 0, 0, 0));
     }

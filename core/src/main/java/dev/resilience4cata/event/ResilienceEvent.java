@@ -21,13 +21,14 @@ package dev.resilience4cata.event;
  * {@link MatchException} in the listener, which goes to the thread's uncaught exception handler and never
  * reaches the call. Event records may also get new components in minor versions, so record patterns that
  * deconstruct an event ({@code case RetryEvent.Retrying(var id, var t, var n, var d, var e)}) are not covered by
- * compatibility; use the accessors.
+ * compatibility; use the accessors. When a record gets a component, its previous canonical constructor stays as
+ * an extra constructor, so code that creates events, such as a listener's tests, keeps compiling and running.
  */
 public sealed interface ResilienceEvent
         permits CircuitBreakerEvent, RetryEvent, HedgeEvent, TimeoutEvent, BulkheadEvent, RateLimiterEvent,
         AdaptiveLimitEvent, FallbackEvent {
 
-    /** Id of the policy instance: its {@code name}, or the derived {@code <interface>#<method>(<parameter types>)}. */
+    /** Id of the policy instance: its {@code name}, or the derived {@code <type>#<method>(<parameter types>)}. */
     String id();
 
     /**
