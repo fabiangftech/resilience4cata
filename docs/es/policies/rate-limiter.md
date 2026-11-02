@@ -6,7 +6,7 @@
 
 | Anotación | Posición | Tipos de retorno | Valores por defecto |
 |---|---|---|---|
-| `@RateLimiter` | 4 de 7, dentro de CircuitBreaker | sync y `CompletionStage` | 50 permisos por 1 s, sin espera |
+| `@RateLimiter` | capa 4 de 7, dentro de CircuitBreaker | sync, `CompletionStage`, `Mono`, `Flux` | 50 permisos por 1 s, sin espera |
 
 </div>
 

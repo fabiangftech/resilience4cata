@@ -151,6 +151,52 @@ The second call takes up to a few hundred milliseconds: between attempts the ret
 - **The breaker** recorded every attempt, five calls with four failures, but stayed `CLOSED`: by default it judges only once its window holds 100 calls (`minimumCalls`).
 - The policies nest in this order by default, outermost first ([`@PolicyOrder`](../policies/README.md#changing-the-order) changes it): `Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method`. That is why the fallback sees the final outcome and every retry attempt has its own two-second timeout.
 
+## 6. See the breaker open
+
+With the defaults the breaker waits for 100 calls before it judges. Lower that for the `prices` instance only, without touching the annotation, and run the failing service again:
+
+<!-- snippet: quickstart-breaker-opens -->
+```java
+import dev.resilience4cata.ResilienceRegistry;
+import dev.resilience4cata.Resilient;
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class BreakerOpens {
+
+    public static void main(String[] args) throws IOException {
+        ResilienceRegistry registry = ResilienceRegistry.builder()
+                .circuitBreakerInstance("prices", b -> b.windowSize(4).minimumCalls(4))   // judge after 4 calls
+                .build();
+
+        AtomicInteger calls = new AtomicInteger();
+        PriceClient down = Resilient.of(PriceClient.class, sku -> {
+            calls.incrementAndGet();
+            throw new IOException("service down");
+        }, registry);
+
+        down.price("sku-1");   // three attempts, three failures
+        down.price("sku-2");   // the fourth failure opens the breaker, which stops the retry
+        System.out.println(registry.circuitBreaker("prices").state());   // OPEN
+
+        System.out.println(down.price("sku-3"));   // 0: rejected at once, answered by the fallback
+        System.out.println(calls.get());           // 4: the service was not called again
+    }
+}
+```
+
+It prints:
+
+```text
+OPEN
+0
+4
+```
+
+- The first call failed three times. On the second call, the fourth failure filled the window of four with a failure rate of 100%, above the default 50%, so the breaker opened. The retry does not retry a rejection, so the second call stopped there and the fallback answered.
+- The third call was rejected at once with a `CallNotPermittedException`, without reaching the service, and the fallback answered `0` again. After `waitInOpen` (60 s by default) the breaker lets a few probe calls through.
+- `circuitBreakerInstance` is one way to change an instance without editing its annotation; a properties file or environment variables do the same ([Configuration](../guides/configuration.md)).
+
 ## Next steps
 
 - [How it works](how-it-works.md): what the processor generates, instance ids, where configuration comes from.

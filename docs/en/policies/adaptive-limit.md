@@ -6,7 +6,7 @@
 
 | Annotation | Position | Return types | Defaults |
 |---|---|---|---|
-| `@AdaptiveLimit` | 5 of 7, inside RateLimiter | sync and `CompletionStage` | Gradient2, starts at 20, kept between 1 and 200, windows of at least 1 s and 10 calls |
+| `@AdaptiveLimit` | layer 5 of 7, inside RateLimiter | sync, `CompletionStage`, `Mono`, `Flux` | Gradient2, starts at 20, kept between 1 and 200, windows of at least 1 s and 10 calls |
 
 </div>
 

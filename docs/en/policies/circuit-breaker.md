@@ -6,7 +6,7 @@
 
 | Annotation | Position | Return types | Defaults |
 |---|---|---|---|
-| `@CircuitBreaker` | 3 of 7, inside Retry | sync and `CompletionStage` | window of 100 calls, opens at 50% failures after 100 calls, 60 s open, 10 probes, slow-call detection off |
+| `@CircuitBreaker` | layer 3 of 7, inside Retry | sync, `CompletionStage`, `Mono`, `Flux` | window of 100 calls, opens at 50% failures after 100 calls, 60 s open, 10 probes, slow-call detection off |
 
 </div>
 
@@ -37,7 +37,7 @@ public final class PaymentGateway$Resilient implements PaymentGateway {
         this.circuitBreaker0 = dev.resilience4cata.generated.Policies.circuitBreaker(registry, "dev.resilience4cata.examples.docs.circuitbreaker.PaymentGateway#charge(java.lang.String)", "payments", "", r4c$b -> {
             r4c$b.windowSize(10);
             r4c$b.minimumCalls(10);
-            r4c$b.failureRateThreshold(50.0f);
+            r4c$b.failureRateThreshold(50.0);
             r4c$b.waitInOpen(java.time.Duration.ofNanos(30000000000L));
             r4c$b.halfOpenCalls(2);
         }, false);
@@ -242,6 +242,7 @@ On a [`ManualClock`](../guides/testing.md), `waitInOpen`, slow calls and time wi
 - A time window reads the clock on every call. A count window reads it only when slow-call detection is on.
 - With the defaults, the breaker needs 100 calls before it can open. For a low-traffic dependency, lower `minimumCalls` (and `windowSize`), or use a time window.
 - Thresholds are inclusive: 5 failures out of 10 opens a breaker with `failureRateThreshold = 50`.
+- Under concurrency the count window is close to exact, not exact, in exchange for no lock: a success that ends just as another thread's failure is counted may go unrecorded, and when two calls a whole window apart race on the same slot, the slot keeps whichever lands last. Either moves the rate by one call at most per race.
 - `CallNotPermittedException` has no stack trace by design. Log the message or `id()`.
 - Related errors: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (duration syntax), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`windowSize`, `minimumCalls`, `halfOpenCalls` below 1), [`R4C-ATR-005`](../errors.md#r4c-atr-005) (rates outside (0, 100]), [`R4C-ATR-010`](../errors.md#r4c-atr-010) (window size or duration for the other window type), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` with `recordOn`), [`R4C-REG-004`](../errors.md#r4c-reg-004) (unknown `config`), [`R4C-REG-008`](../errors.md#r4c-reg-008) (shared `name`, different config), [`R4C-REG-009`](../errors.md#r4c-reg-009) (unknown id for `registry.circuitBreaker`).
 

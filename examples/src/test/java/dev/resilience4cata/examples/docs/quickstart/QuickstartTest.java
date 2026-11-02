@@ -39,6 +39,19 @@ class QuickstartTest {
     }
 
     @Test
+    void stepSixPrintsWhatThePageSays() throws IOException {
+        PrintStream original = System.out;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        try {
+            BreakerOpens.main(new String[0]);
+        } finally {
+            System.setOut(original);
+        }
+        assertThat(out.toString(StandardCharsets.UTF_8).lines()).containsExactly("OPEN", "0", "4");
+    }
+
+    @Test
     void theBreakerSawFiveCallsAndFourFailures() throws IOException {
         ResilienceRegistry registry = ResilienceRegistry.builder().build();
         PriceClient prices = Resilient.of(PriceClient.class, new FlakyPriceClient(), registry);

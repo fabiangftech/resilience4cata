@@ -85,7 +85,8 @@ class ResilientCreateTest {
         String nativeImage = Resilient.notGenerated(ResilientTarget.Unprocessed.class, generated, true);
 
         assertThat(plain).startsWith("[R4C-RT-003] No generated class " + generated + " found.")
-                .endsWith("annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'");
+                .contains("annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'")
+                .endsWith("<artifactId>resilience4cata-processor</artifactId><version>...</version></path>");
         assertThat(nativeImage).isEqualTo(plain + "\nIn a native image, also check that the image build's class path"
                 + " includes the reachability metadata the processor writes next to the class files,"
                 + " META-INF/native-image/dev.resilience4cata.generated/" + generated + "/reachability-metadata.json,"

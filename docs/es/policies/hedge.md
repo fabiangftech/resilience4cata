@@ -6,7 +6,7 @@
 
 | Anotación | Posición | Tipos de retorno | Valores por defecto |
 |---|---|---|---|
-| `@Hedge` | 2 de 7, en el lugar de Retry (no ambos en un método) | solo `CompletionStage` | 2 intentos, espera de 1 s, cubre `Exception`, presupuesto 10 % + 1/s en 10 s |
+| `@Hedge` | capa 2 de 7, en el lugar de Retry (no ambos en un método) | `CompletionStage` y `Mono` (no `Flux`) | 2 intentos, espera de 1 s, cubre `Exception`, presupuesto 10 % + 1/s en 10 s |
 
 </div>
 

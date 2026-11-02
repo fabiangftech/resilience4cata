@@ -6,7 +6,7 @@
 
 | Annotation | Position | Return types | Defaults |
 |---|---|---|---|
-| `@Fallback` | 1 of 7, outermost | sync and `CompletionStage` | applies to every `Throwable` |
+| `@Fallback` | layer 1 of 7, outermost | sync, `CompletionStage`, `Mono`, `Flux` | applies to every `Throwable` |
 
 </div>
 

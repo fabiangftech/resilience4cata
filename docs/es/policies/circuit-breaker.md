@@ -6,7 +6,7 @@
 
 | Anotación | Posición | Tipos de retorno | Valores por defecto |
 |---|---|---|---|
-| `@CircuitBreaker` | 3 de 7, dentro de Retry | sync y `CompletionStage` | ventana de 100 llamadas, abre con 50% de fallas tras 100 llamadas, 60 s abierto, 10 pruebas, detección de llamadas lentas desactivada |
+| `@CircuitBreaker` | capa 3 de 7, dentro de Retry | sync, `CompletionStage`, `Mono`, `Flux` | ventana de 100 llamadas, abre con 50% de fallas tras 100 llamadas, 60 s abierto, 10 pruebas, detección de llamadas lentas desactivada |
 
 </div>
 
@@ -37,7 +37,7 @@ public final class PaymentGateway$Resilient implements PaymentGateway {
         this.circuitBreaker0 = dev.resilience4cata.generated.Policies.circuitBreaker(registry, "dev.resilience4cata.examples.docs.circuitbreaker.PaymentGateway#charge(java.lang.String)", "payments", "", r4c$b -> {
             r4c$b.windowSize(10);
             r4c$b.minimumCalls(10);
-            r4c$b.failureRateThreshold(50.0f);
+            r4c$b.failureRateThreshold(50.0);
             r4c$b.waitInOpen(java.time.Duration.ofNanos(30000000000L));
             r4c$b.halfOpenCalls(2);
         }, false);
@@ -241,7 +241,7 @@ Con un [`ManualClock`](../guides/testing.md), `waitInOpen`, las llamadas lentas 
 - `windowSize` es para una ventana por conteo y `windowDuration` para una por tiempo; cada ventana ignora el otro, así que los valores por defecto y las configuraciones con nombre pueden poner los dos. En una anotación, que decide por un solo método, un tamaño con `windowType = TIME`, una duración con `windowType = COUNT`, o los dos juntos, es un error de compilación ([`R4C-ATR-010`](../errors.md#r4c-atr-010)).
 - Una ventana por tiempo lee el reloj en cada llamada. Una ventana por conteo solo lo lee si la detección de llamadas lentas está activa.
 - Con los valores por defecto, el breaker necesita 100 llamadas antes de poder abrir. Para una dependencia de poco tráfico, baja `minimumCalls` (y `windowSize`), o usa una ventana por tiempo.
-- Los umbrales son inclusivos: 5 fallas de 10 abren un breaker con `failureRateThreshold = 50`.
+- Con concurrencia, la ventana por conteo es casi exacta, no exacta, a cambio de no usar locks: un éxito que termina justo cuando se cuenta la falla de otro thread puede no registrarse, y cuando dos llamadas separadas por una ventana entera compiten por el mismo slot, el slot se queda con la que llega última. Cada carrera mueve la tasa como mucho en una llamada.
 - `CallNotPermittedException` no tiene stack trace, a propósito. Registra en el log el mensaje o `id()`.
 - Errores relacionados: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (sintaxis de duración), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`windowSize`, `minimumCalls`, `halfOpenCalls` menores que 1), [`R4C-ATR-005`](../errors.md#r4c-atr-005) (tasas fuera de (0, 100]), [`R4C-ATR-010`](../errors.md#r4c-atr-010) (tamaño o duración de ventana para el otro tipo de ventana), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` junto con `recordOn`), [`R4C-REG-004`](../errors.md#r4c-reg-004) (`config` desconocida), [`R4C-REG-008`](../errors.md#r4c-reg-008) (`name` compartido con otra configuración), [`R4C-REG-009`](../errors.md#r4c-reg-009) (id desconocido en `registry.circuitBreaker`).
 

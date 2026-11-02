@@ -12,11 +12,13 @@ El bajo overhead es la razón de ser de resilience4cata: el annotation processor
 - **Diferencias de comportamiento que los números incluyen**: el breaker de Resilience4j siempre mide el tiempo de las llamadas (resilience4cata solo cuando se configura `slowCallDuration`); el `TimeLimiter` de Resilience4j necesita un `Future`, así que una llamada síncrona tiene que ir a otro thread (resilience4cata le aplica el timeout en el thread del llamador).
 - **Dos máquinas, nunca mezcladas**: una AWS `c7g.xlarge` (4 núcleos Graviton3, sin SMT, reloj fijo, Amazon Corretto 21), y una laptop Apple M1 (JDK 21) para rondas anteriores. Los números de máquinas distintas no son comparables.
 - Un benchmark con un solo método decorado es el mejor caso de Resilience4j: el JIT ve un solo tipo en cada call site. Las aplicaciones reales tienen muchos.
+- **Tiempo medio por llamada, en un bucle cerrado** (JMH `AverageTime`): cada thread vuelve a llamar en cuanto termina la llamada anterior. Las colas no se miden: con contención, un rate limiter o un bulkhead aparca los threads que pierden una carrera, así que algunas llamadas esperan mucho más de lo que muestra la media.
+- **Solo ARM por ahora**: Graviton3 y Apple M1. x86-64 todavía no se ha medido; allí los atómicos son barreras completas y el reloj es barato, así que el orden de algunos resultados puede cambiar.
 
 ## Resultados principales :id=headline
 
 > [!MEASURED]
-> AWS `c7g.xlarge` (Graviton3), JDK 21, resilience4cata 0.1.0 vs Resilience4j 2.4.0, nanosegundos y bytes asignados por llamada. De [Cierre del MVP (2026-10-24, AWS Graviton3)](benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3).
+> AWS `c7g.xlarge` (Graviton3), JDK 21, resilience4cata 0.1.0 vs Resilience4j 2.4.0, nanosegundos y bytes asignados por llamada. De [Cierre del MVP (2026-10-24, AWS Graviton3)](benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3), salvo el bulkhead con slots libres: el código posterior a 0.13.0, de [slots devueltos con una suma volátil (2026-11-01)](benchmarks.md#release-counters), donde Resilience4j midió 20.4 ns en un thread y de 348 a 450 ns con cuatro.
 
 | Escenario | Threads | resilience4cata | Resilience4j 2.4.0 |
 |---|---:|---:|---:|
@@ -27,8 +29,8 @@ El bajo overhead es la razón de ser de resilience4cata: el annotation processor
 | Circuit breaker, una de cada diez llamadas falla | 4 | **274 ns**, 0 B | 910 ns, 2 B |
 | Rate limiter, permisos libres | 4 | **187 ns**, 0 B | 275 ns, 40 B |
 | Rate limiter, agotado (todas las llamadas rechazadas) | 4 | **34.7 ns**, 0 B | 1599 ns, 505 B |
-| Bulkhead, slots libres | 1 | 20.5 ns, 0 B | 20.4 ns, 0 B |
-| Bulkhead, slots libres | 4 | **264 ns**, 0 B | 432 ns, 0 B |
+| Bulkhead, slots libres | 1 | **17.3 ns**, 0 B | 20.4 ns, 0 B |
+| Bulkhead, slots libres | 4 | **195.5 ns**, 0 B | 348–450 ns, 0 B |
 | Bulkhead, lleno (todas las llamadas rechazadas) | 1 | **2.3 ns**, 0 B | 139 ns, 416 B |
 | Timeout, llamada síncrona que termina a tiempo (Resilience4j: `TimeLimiter` + executor) | 1 | **22.2 ns**, 0 B | 8842 ns, 176 B |
 | Timeout async, stage todavía pendiente | 1 | **152 ns**, 192 B | 598 ns, 240 B |
@@ -36,8 +38,10 @@ El bajo overhead es la razón de ser de resilience4cata: el annotation processor
 
 Leyendo la tabla con honestidad:
 
-- **El bulkhead con slots libres en un thread es un empate** (20.5 vs 20.4 ns): ambos toman y liberan un permiso con un atómico cada uno.
-- **Los caminos con contención cuestan cientos de nanosegundos en ambas librerías.** El caso mixto del breaker con cuatro threads (274 ns) está dominado por un único cursor de ventana compartido que cada llamada avanza; el bulkhead y el rate limiter con cuatro threads pagan por un contador compartido.
+- **Los 1.9 ns del circuit breaker valen mientras su ventana no tiene fallos.** Entonces una llamada solo lee un campo. En cuanto las últimas `windowSize` llamadas incluyen un fallo o una llamada lenta, cada llamada escribe el cursor compartido de la ventana: con una llamada de cada diez fallando, 274 contra 910 ns con cuatro threads, 3.3× en vez de 440×.
+- **Resilience4j hace trabajo por llamada que resilience4cata no hace**: su retry cuenta cada llamada en sus métricas internas (contadores `LongAdder`), y su breaker siempre mide el tiempo de las llamadas. resilience4cata no mantiene ningún contador por llamada fuera de la ventana del breaker ([por qué no hay métricas de éxito](faq.md#success-metrics)).
+- **El bulkhead con slots libres en un thread era un empate** (20.5 contra 20.4 ns, ambos un atómico para tomar y otro para devolver) hasta que el slot se devolvió con una suma volátil, que resultó más rápida que una solo release en Graviton3: 17.3 ns.
+- **Los caminos con contención cuestan cientos de nanosegundos en ambas librerías.** El caso mixto del breaker con cuatro threads (274 ns) está dominado por un único cursor de ventana compartido que cada llamada avanza; el bulkhead y el rate limiter con cuatro threads pagan por un contador compartido, y aparcan los threads que pierden una carrera sobre él.
 - **El timeout síncrono es la política síncrona más cara** (22.2 ns en un thread; una ejecución posterior midió 23.7 ns sin cambios en el código, un efecto de layout aún abierto, ver [la siguiente ronda](benchmarks.md#clases-anotadas-genéricos-overrides-de-config-bulkhead-con-ticker-2026-10-24-aws-graviton3)). La comparación con Resilience4j no es equivalente: su `TimeLimiter` pasa la llamada a otro thread, que es donde se van la mayoría de sus 8.8 µs.
 - **Las llamadas async asignan memoria en ambas librerías**: cada capa devuelve un future nuevo. Los caminos async de resilience4cata no están libres de allocations; solo los síncronos.
 - **El rate limiter lee el reloj una vez por llamada**, en ambas librerías; esa lectura es la mayor parte de su costo (en Apple Silicon, `System.nanoTime()` por sí solo cuesta unos 21 ns en un thread y 163 ns con cuatro; ver [Rate limiter, 1 y 4 threads](benchmarks.md#rate-limiter-1-y-4-threads-2026-10-24)).
@@ -116,7 +120,7 @@ Los objetivos que el proyecto se impone, y cómo se comprueba cada uno:
 | **0 B/op** en el camino de éxito de cada política y de una pila completa | JMH `-prof gc` en CI: `./gradlew :benchmark:allocationCheck` hace fallar un pull request si un benchmark listado alcanza su presupuesto + 1 B/op (0 para todo camino síncrono; valores medidos para los futures async) |
 | Sin locks ni `synchronized` en los caminos calientes | revisión de código, escenarios de contención en JMH |
 | Código generado monomórfico y en línea recta por método; sin cadenas de lambdas compartidas | JMH con un perfil de JIT contaminado, `-XX:+PrintInlining` |
-| Un par de lecturas de reloj por llamada, sin importar el número de políticas | revisión de código |
+| Ninguna lectura del reloj en un camino de éxito salvo que una funcionalidad la necesite (rate limiting, detección de llamadas lentas, ventanas por tiempo, la latencia del adaptive limit, el `maxDuration` de un retry); cada una de esas políticas lee el reloj por su cuenta, así que una pila de ellas lo lee más de una vez | revisión de código |
 | Excepciones de rechazo preasignadas y sin stack trace; eventos asignados solo si alguien escucha | escenarios de rechazo en JMH (breaker abierto, bulkhead lleno, rate limiter agotado), con gate de 0 B/op en CI |
 | Estructuras lock-free correctas | jcstress, en CI después de cada push a main y cada noche |
 | Comparación publicada y reproducible con Resilience4j 2.4.0 | el módulo `benchmark`, con configuración equivalente de Resilience4j y notas de equidad ([Benchmarks en detalle](benchmarks.md)) |
@@ -127,7 +131,7 @@ La mayoría de las llamadas reales están limitadas por I/O (milisegundos), así
 
 - **Código generado, por método y lineal**: sin una lambda decoradora compartida, así que el JIT hace inline de cada call site con un solo tipo de receptor.
 - **Nada asignado en caso de éxito**, y los rechazos lanzan una única excepción preasignada y sin stack trace por instancia.
-- **Sin locks** en ningún camino de llamada, y el atómico más débil que sea correcto: acquire/release en lugar de fences completos llevó el bulkhead libre de 23.2 a 9.3 ns en Apple M1 ([Bulkhead, 1 y 4 threads](benchmarks.md#bulkhead-1-y-4-threads-2026-10-23)).
+- **Sin locks** en ningún camino de llamada, y atómicos elegidos midiendo: un compare-and-set acquire en lugar de un fence completo para tomar un slot llevó el bulkhead libre de 23.2 a 9.3 ns en Apple M1 ([Bulkhead, 1 y 4 threads](benchmarks.md#bulkhead-1-y-4-threads-2026-10-23)), mientras que devolverlo con una suma volátil resultó más rápido que una suma solo release en Graviton3 ([contadores al devolver](benchmarks.md#release-counters)).
 - **Sin escrituras compartidas mientras todo está sano**: un breaker cuya ventana contiene solo éxitos rápidos se comprueba con una lectura por llamada.
 - **Sin lecturas del reloj** a menos que una funcionalidad las necesite (detección de llamadas lentas, ventanas por tiempo, rate limiting). Los timeouts usan un thread watchdog compartido en lugar de leer el reloj en cada llamada.
 

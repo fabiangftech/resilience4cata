@@ -13,6 +13,7 @@
   - [Bulkhead](/en/policies/bulkhead.md)
   - [Fallback](/en/policies/fallback.md)
 - **Guides**
+  - [Retry and breaker for HTTP](/en/guides/http-calls.md)
   - [Configuration](/en/guides/configuration.md)
   - [Spring Boot](/en/guides/spring.md)
   - [Micronaut](/en/guides/micronaut.md)
@@ -38,7 +39,7 @@
 - [Migrate from Resilience4j](/en/migrate/from-resilience4j.md)
 - [FAQ](/en/faq.md)
 - [Blog](/en/blog/README.md)
-- **Project**
+- **Project (for contributors)**
   - [Design decisions](/en/design.md)
   - [Architecture](/en/architecture.md)
   - [Benchmarks in depth](/en/benchmarks.md)

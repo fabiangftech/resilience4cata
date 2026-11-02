@@ -11,6 +11,8 @@ Cada error que reporta la biblioteca empieza con un código como `[R4C-RT-003]`;
 ```text
 [R4C-RT-003] No generated class com.acme.shop.clients.PriceClient$Resilient found. Make sure that com.acme.shop.clients.PriceClient has at least one resilience annotation, and that the annotation processor runs when it is compiled. With Gradle:
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'
+With Maven, in the maven-compiler-plugin's <annotationProcessorPaths>:
+    <path><groupId>dev.resilience4cata</groupId><artifactId>resilience4cata-processor</artifactId><version>...</version></path>
 ```
 
 El procesador no se ejecutó cuando se compiló la interfaz, o la interfaz no tiene ninguna anotación de resiliencia. El procesador es obligatorio: no hay alternativa por reflexión.
@@ -24,7 +26,7 @@ Consulta [R4C-RT-003](../errors.md#r4c-rt-003) e [Instalación](../start/install
 
 ### `[R4C-RT-004]`: la clase generada no coincide :id=version-mismatch
 
-`resilience4cata-core` y `resilience4cata-processor` tienen versiones distintas. Toma ambos del BOM, o dales la misma versión. Luego haz un build limpio para que desaparezcan las clases generadas antiguas. Consulta [R4C-RT-004](../errors.md#r4c-rt-004).
+La clase generada la hizo un procesador que este `resilience4cata-core` no puede ejecutar: casi siempre clases generadas viejas de un procesador antiguo e incompatible (uno anterior a 1.0, o de otra versión mayor). Un core más nuevo que el procesador no es problema dentro de una misma versión mayor; un core más viejo que el procesador es [R4C-RT-021](../errors.md#r4c-rt-021). Toma todos los artefactos del BOM y haz un build limpio para que desaparezcan las clases generadas antiguas. Consulta [R4C-RT-004](../errors.md#r4c-rt-004).
 
 ### `[R4C-RT-005]` en una aplicación modular :id=jpms
 

@@ -10,6 +10,8 @@ The code tells you which section of this page explains the error. The rest of th
 compiler points at the annotated element; class, method and attribute are named in the text), what is wrong
 and how to fix it.
 
+The page is long: search it for the code (the site search, or your browser's find), or start from the area in the table below. Every code has its own section, so a link such as `errors.md#r4c-atr-001` opens it directly.
+
 | Prefix | Reported by | When |
 |---|---|---|
 | `R4C-APT` | annotation processor | placement of the annotations, general problems |
@@ -20,6 +22,7 @@ and how to fix it.
 | `R4C-CLS` | annotation processor | `classifier` classes and `onExhaustedResult` |
 | `R4C-FB` | annotation processor | `@Fallback` |
 | `R4C-SUB` | annotation processor | annotated classes (generated subclasses) |
+| `R4C-ORD` | annotation processor | `@PolicyOrder` |
 | `R4C-RT` | `resilience4cata-core` at run time | `Resilient.of`, `Resilient.create`, `Pipeline.Builder` |
 | `R4C-REG` | `resilience4cata-core` at run time | `*Config` builders, `ResilienceRegistry` and its builder: named configs, instances |
 | `R4C-CFG` | `resilience4cata-config` at run time | external configuration (`ResilienceConfig`) |
@@ -2414,6 +2417,19 @@ dependencies {
     implementation 'dev.resilience4cata:resilience4cata-core:<version>'
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'
 }
+```
+
+With Maven:
+
+```xml
+<!-- in the maven-compiler-plugin <configuration> -->
+<annotationProcessorPaths>
+  <path>
+    <groupId>dev.resilience4cata</groupId>
+    <artifactId>resilience4cata-processor</artifactId>
+    <version><!-- the same version as resilience4cata-core --></version>
+  </path>
+</annotationProcessorPaths>
 ```
 
 In a GraalVM native image, the same error means the processor ran but the image cannot reach the class by

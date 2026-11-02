@@ -6,7 +6,7 @@
 
 | Anotación | Posición | Tipos de retorno | Valores por defecto |
 |---|---|---|---|
-| `@Retry` | 2 de 7, dentro de Fallback | sync y `CompletionStage` | 3 intentos, backoff exponencial de 200 ms ×2 hasta 10 s, jitter completo, reintenta `Exception` |
+| `@Retry` | capa 2 de 7, dentro de Fallback | sync, `CompletionStage`, `Mono`, `Flux` | 3 intentos, backoff exponencial de 200 ms ×2 hasta 10 s, jitter completo, reintenta `Exception` |
 
 </div>
 
@@ -291,7 +291,7 @@ assertThat(clock.elapsed()).isEqualTo(Duration.ofMillis(300));   // 100 ms, then
 - `maxDuration` decide antes de cada espera; no interrumpe un intento en curso. Combínalo con `@Timeout`.
 - Con `Resilient.of` solo cuentan las anotaciones de la interfaz, y las llamadas que la implementación se hace a sí misma (`this.stock(…)`) no se reintentan. Con [clases anotadas](../guides/annotated-classes.md) sí.
 - La forma sync bloquea el thread de quien llama durante las esperas (barato en un virtual thread). Usa la forma async para liberarlo.
-- Errores relacionados: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (sintaxis de duración), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`maxAttempts` menor que 1), [`R4C-ATR-004`](../errors.md#r4c-atr-004) (`multiplier`), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-ATR-007`](../errors.md#r4c-atr-007) (valores del presupuesto de reintentos), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` junto con `retryOn`), [`R4C-CLS-012`](../errors.md#r4c-cls-012) (`onExhaustedResult` sin classifier), [`R4C-REG-001`](../errors.md#r4c-reg-001)/[`R4C-REG-003`](../errors.md#r4c-reg-003) (combinación inválida), [`R4C-REG-004`](../errors.md#r4c-reg-004) (`config` desconocida), [`R4C-REG-008`](../errors.md#r4c-reg-008) (`name` compartido con otra configuración).
+- Errores relacionados: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (sintaxis de duración), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`maxAttempts` menor que 1), [`R4C-ATR-004`](../errors.md#r4c-atr-004) (`multiplier`), [`R4C-ATR-007`](../errors.md#r4c-atr-007) (valores del presupuesto de reintentos), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` junto con `retryOn`), [`R4C-CLS-012`](../errors.md#r4c-cls-012) (`onExhaustedResult` sin classifier), [`R4C-REG-001`](../errors.md#r4c-reg-001)/[`R4C-REG-003`](../errors.md#r4c-reg-003) (combinación inválida), [`R4C-REG-004`](../errors.md#r4c-reg-004) (`config` desconocida), [`R4C-REG-008`](../errors.md#r4c-reg-008) (`name` compartido con otra configuración).
 
 ## Cuánto cuesta
 

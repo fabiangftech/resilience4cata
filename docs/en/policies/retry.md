@@ -6,7 +6,7 @@
 
 | Annotation | Position | Return types | Defaults |
 |---|---|---|---|
-| `@Retry` | 2 of 7, inside Fallback | sync and `CompletionStage` | 3 attempts, 200 ms exponential backoff ×2 up to 10 s, full jitter, retries `Exception` |
+| `@Retry` | layer 2 of 7, inside Fallback | sync, `CompletionStage`, `Mono`, `Flux` | 3 attempts, 200 ms exponential backoff ×2 up to 10 s, full jitter, retries `Exception` |
 
 </div>
 
@@ -291,7 +291,7 @@ assertThat(clock.elapsed()).isEqualTo(Duration.ofMillis(300));   // 100 ms, then
 - `maxDuration` decides before each delay; it does not interrupt a running attempt. Combine it with `@Timeout`.
 - Only interface annotations count with `Resilient.of`, and calls the implementation makes to itself (`this.stock(…)`) are not retried. With [annotated classes](../guides/annotated-classes.md) they are.
 - The sync form blocks the caller's thread during delays (cheap on a virtual thread). Use the async form to free it.
-- Related errors: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (duration syntax), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`maxAttempts` below 1), [`R4C-ATR-004`](../errors.md#r4c-atr-004) (`multiplier`), [`R4C-ATR-006`](../errors.md#r4c-atr-006) (`enabled`), [`R4C-ATR-007`](../errors.md#r4c-atr-007) (retry budget values), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` with `retryOn`), [`R4C-CLS-012`](../errors.md#r4c-cls-012) (`onExhaustedResult` without a classifier), [`R4C-REG-001`](../errors.md#r4c-reg-001)/[`R4C-REG-003`](../errors.md#r4c-reg-003) (invalid combination), [`R4C-REG-004`](../errors.md#r4c-reg-004) (unknown `config`), [`R4C-REG-008`](../errors.md#r4c-reg-008) (shared `name`, different config).
+- Related errors: [`R4C-ATR-001`](../errors.md#r4c-atr-001) (duration syntax), [`R4C-ATR-003`](../errors.md#r4c-atr-003) (`maxAttempts` below 1), [`R4C-ATR-004`](../errors.md#r4c-atr-004) (`multiplier`), [`R4C-ATR-007`](../errors.md#r4c-atr-007) (retry budget values), [`R4C-CLS-011`](../errors.md#r4c-cls-011) (`classifier` with `retryOn`), [`R4C-CLS-012`](../errors.md#r4c-cls-012) (`onExhaustedResult` without a classifier), [`R4C-REG-001`](../errors.md#r4c-reg-001)/[`R4C-REG-003`](../errors.md#r4c-reg-003) (invalid combination), [`R4C-REG-004`](../errors.md#r4c-reg-004) (unknown `config`), [`R4C-REG-008`](../errors.md#r4c-reg-008) (shared `name`, different config).
 
 ## What it costs
 

@@ -120,6 +120,25 @@ El módulo `resilience4j-hedge` de Resilience4j (2.x) es programático y solo as
 
 La semántica difiere: en Resilience4j gana el primer intento que **termina**, así que una falla rápida de cualquiera de los dos hace fallar la llamada; en resilience4cata gana el primer **éxito**, una falla de `hedgeOn` lanza el siguiente intento enseguida, y la llamada solo falla cuando todos los intentos han fallado (o uno falla con una falla de `abortOn`). El perdedor se cancela, y el circuit breaker, el bulkhead y el timeout dentro del hedge liberan lo que tenía.
 
+## Nombres de las métricas :id=metric-names
+
+Los dashboards y las alertas hechos sobre `resilience4j-micrometer` necesitan consultas nuevas: los meters se llaman `r4c.*` y todos tienen el tag `name`, el id de la instancia ([Nombres de las métricas](../guides/observability.md#metric-names)). Los nombres de Resilience4j 2.4.0 y el meter de resilience4cata más cercano:
+
+| Resilience4j | resilience4cata | Nota |
+|---|---|---|
+| `resilience4j.circuitbreaker.state` | `r4c.circuitbreaker.state` | 1 para el estado actual, 0 para los demás, en los dos |
+| `resilience4j.circuitbreaker.failure.rate`, `.slow.call.rate` | `r4c.circuitbreaker.failure.rate`, `.slow.call.rate` | porcentajes en los dos |
+| `resilience4j.circuitbreaker.not.permitted.calls`, `.calls{kind=not_permitted}` | `r4c.calls.rejected{kind=circuitbreaker}` | |
+| `resilience4j.circuitbreaker.calls{kind=successful\|failed\|ignored}` | ninguno | no hay contadores por llamada ([abajo](#no-success-metrics)) |
+| `resilience4j.circuitbreaker.buffered.calls`, `.slow.calls` | ninguno | `bufferedCalls` y `slowCalls` en el snapshot |
+| `resilience4j.retry.calls{kind=…}` | `r4c.retry.retries`, `r4c.retry.gave.up{reason}` | solo reintentos y abandonos, sin contar éxitos |
+| `resilience4j.timelimiter.calls{kind=timeout}` | `r4c.timeout.timed.out` | |
+| `resilience4j.bulkhead.available.concurrent.calls` | `r4c.bulkhead.concurrent.calls` | el nuestro cuenta los slots ocupados, no los libres |
+| `resilience4j.bulkhead.max.allowed.concurrent.calls` | `r4c.bulkhead.max.concurrent` | |
+| `resilience4j.ratelimiter.available.permissions` | `r4c.ratelimiter.available.permits` | |
+| `resilience4j.ratelimiter.waiting_threads` | ninguno | |
+| `resilience4j.bulkhead.thread.pool.size` y los demás meters del bulkhead con thread pool | ninguno | no hay bulkhead con thread pool |
+
 ## Diferencias de comportamiento :id=differences
 
 ### El orden :id=order
@@ -157,6 +176,18 @@ Una instancia de Resilience4j la comparte todo lo que usa su nombre. En resilien
 ### El procesador es obligatorio :id=processor
 
 Sin el procesador de anotaciones no se genera nada y `Resilient.of` falla con [R4C-RT-003](../errors.md#r4c-rt-003). No hay alternativa por reflexión ni por proxy.
+
+### No hay métricas de éxito ni de latencia :id=no-success-metrics
+
+Resilience4j cuenta cada llamada (los meters `calls` de su retry y de su breaker, y los de su time limiter). resilience4cata no mantiene contadores por llamada, porque cada uno sería una escritura compartida en cada llamada; cuenta lo que sale mal (rechazos, reintentos, abandonos, timeouts, fallbacks) y expone el estado como gauges. Cuenta los éxitos y la latencia donde ya mides las peticiones, por ejemplo con `@Timed` de Micrometer o las métricas de tu servidor HTTP ([por qué](../faq.md#success-metrics)).
+
+### Clases anotadas y `@Transactional` :id=transactions
+
+Con las anotaciones de Spring en una clase, el aspecto de Resilience4j y el proxy de transacciones de Spring se ordenan por la precedencia de los aspectos. En resilience4cata una clase anotada se convierte en una subclase generada, y el proxy de Spring la envuelve, por fuera de las políticas: una transacción abarcaría todos los intentos. Por eso un bean que tiene retry (o hedge) y además es transaccional detiene el arranque con [`R4C-SPR-004`](../errors.md#r4c-spr-004) (en Micronaut `R4C-MN-005`, en Quarkus `R4C-QK-002`). Pon las políticas en una interfaz, o mueve la transacción a otro bean ([Spring: clases anotadas](../guides/spring.md#classes)).
+
+### Los hedges no llevan los thread-locals :id=hedge-context
+
+Un intento de hedge empieza en un virtual thread nuevo, sin los `ThreadLocal` ni el MDC de quien llama, como un retry async ([Hedge](../policies/hedge.md)). El contexto de Reactor sí llega a cada intento de un método `Mono`.
 
 ## El mismo servicio, de las dos formas :id=example
 

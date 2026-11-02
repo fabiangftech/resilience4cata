@@ -175,7 +175,10 @@ public final class Resilient {
         String message = ErrorCode.NOT_GENERATED.message("No generated class " + generatedName
                 + " found. Make sure that " + type.getName() + " has at least one resilience annotation, and that the"
                 + " annotation processor runs when it is compiled. With Gradle:\n"
-                + "    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'");
+                + "    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'\n"
+                + "With Maven, in the maven-compiler-plugin's <annotationProcessorPaths>:\n"
+                + "    <path><groupId>dev.resilience4cata</groupId><artifactId>resilience4cata-processor</artifactId>"
+                + "<version>...</version></path>");
         if (!nativeImage) {
             return message;
         }

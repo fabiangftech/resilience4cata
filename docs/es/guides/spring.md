@@ -7,8 +7,8 @@ El módulo `resilience4cata-spring` (disponible desde 0.4.0) es una autoconfigur
 nada al camino de la llamada: no hay proxies, aspectos ni interceptores. Un bean protegido *es* la clase que
 generó el procesador de anotaciones, así que una llamada cuesta lo mismo que sin Spring.
 
-**Requisitos:** Spring Boot 4.1 o posterior (el módulo se compila contra 4.1.0, y sus tests se ejecutan tanto en 4.1.0
-como en 4.1.2) y Java 21.
+**Requisitos:** Spring Boot 4.1 o posterior (probado en 4.1.0, la más antigua soportada, y en la última versión
+4.1) y Java 21.
 Spring Boot 3 no está soportado.
 
 ## Instalación :id=install
@@ -72,7 +72,10 @@ dependencies {
     <artifactId>resilience4cata-processor</artifactId>
     <version>0.13.0</version>
   </path>
-  <!-- annotationProcessorPaths replaces discovery: list the other processors you use too -->
+  <!-- annotationProcessorPaths replaces discovery: list the other processors you use too,
+       for example Spring Boot's configuration processor if you have @ConfigurationProperties.
+       Its version comes from Spring Boot's dependency management (maven-compiler-plugin 3.12+;
+       older versions of the plugin need a <version>). -->
   <path>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-configuration-processor</artifactId>

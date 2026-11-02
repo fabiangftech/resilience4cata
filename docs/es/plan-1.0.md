@@ -67,13 +67,14 @@ Comprobación de toda la fase: `./gradlew build :stress:compileJava`, `./gradlew
 
 Un pull request, en y es juntos. Casi todo son cifras viejas o frases que contradicen el código.
 
-- [ ] **2.1 Cifras de rendimiento viejas.**
+- [x] **2.1 Cifras de rendimiento viejas.**
   - Las portadas (`docs/{en,es}/README.md`) rotulan su gráfico "resilience4cata 0.1.0" y muestran el bulkhead en 20.5 ns; el `README.md` raíz también. Actual: 17.3 ns (`benchmarks.md#release-counters`).
   - `performance.md`: la fila del bulkhead en el titular (20.5 / 264 ns, "empate") es anterior a 17.3 / 195.5 ns; "acquire/release … 23.2 → 9.3 ns" contradice la devolución con `getAndAdd` volátil; la tabla principal se midió con 0.1.0.
   - `faq.md` "How fast is it?" pone 1.9 ns (4 hilos) junto a los 89.2 ns de Resilience4j (1 hilo). Usar una sola fila.
   - El `README.md` raíz cita el breaker con cuatro hilos (832 ns para Resilience4j) donde la FAQ usa un hilo (89 ns): el README, las portadas, la FAQ y `performance.md` deben citar las mismas filas.
   - Decidir si se vuelve a correr la tabla del titular en AWS con el código de 1.0 (`infra/bench.sh`), para que cada cifra citada tenga una sola fuente.
-- [ ] **2.2 Titulares honestos.**
+  - **Resultado:** (#63) Hecho: las filas del bulkhead vienen de [contadores al devolver](benchmarks.md#release-counters) (17.3 / 195.5 ns) en `performance.md`, las portadas (también la leyenda y la fecha) y el README, que ahora cita además el breaker con un thread. La frase de la FAQ era correcta: el breaker cuesta 1.9 ns con uno y con cuatro threads. Volver a correr la tabla del titular con el código de 1.0 queda para la corrida en AWS de 2.5.
+- [x] **2.2 Titulares honestos.**
   - Los 1.9 ns del breaker con cuatro hilos solo valen mientras la ventana no tiene fallos (el camino `quiet`). Desde alrededor de 1 % de fallos cada llamada escribe el cursor compartido: "mixed", 274 frente a 910 ns. Decirlo junto al titular.
   - Decir que Resilience4j actualiza sus métricas internas en cada llamada y resilience4cata no mantiene contadores por llamada, lo que explica parte de la diferencia.
   - La fila del timeout (22 frente a 8842 ns) compara un watchdog con un traspaso a un executor: sacarla del titular en negrita o matizarla.
@@ -81,8 +82,9 @@ Un pull request, en y es juntos. Casi todo son cifras viejas o frases que contra
   - Los benchmarks miden el tiempo medio en un bucle cerrado, lo que oculta las colas: decirlo donde se citan el rate limiter y el bulkhead con contención (los que pierden se aparcan), hasta que existan las corridas de percentiles.
   - x86 nunca se ha medido: decirlo en `performance.md` ("x86-64 pending" ya está; dejarlo visible junto al titular).
   - La ventana por conteo del circuit breaker es aproximada con contención (una lectura opaca vieja de `quiet` puede no registrar un éxito justo después de un fallo; saltarse el slot con el mismo resultado puede reordenar escrituras cuando la ventana da la vuelta). Escribirlo en `policies/circuit-breaker.md` y `architecture.md`.
+  - **Resultado:** (#63) Hecho: el camino quiet del breaker, los contadores por llamada del retry de Resilience4j (comprobado en su jar 2.4.0: campos `LongAdder` en `RetryImpl`; no se afirma para su breaker), medias en bucle cerrado, solo ARM, la fila de lecturas del reloj y la ventana por conteo aproximada (las dos carreras comprobadas en el código). La fila del timeout ya estaba matizada.
 - [ ] **2.5 Benchmarks detrás de los titulares honestos.** Añadir un caso del breaker con una tasa de fallos realista (0.1 % y 1 %) junto a "success" y "mixed", con uno y cuatro hilos, con Resilience4j a la misma tasa. Correrlo en AWS y citarlo en 2.2.
-- [ ] **2.3 Contradicciones.**
+- [x] **2.3 Contradicciones.**
   - `start/how-it-works.md`, "Policy order": "The order is not configurable yet" (falso desde `@PolicyOrder`).
   - Las tiras de datos de las páginas de políticas dicen "x of 7"; hay 8 políticas.
   - `README.md` raíz "names can still change before 1.0" frente a la FAQ "no more API changes planned". Quedarse con la de la FAQ.
@@ -93,7 +95,8 @@ Un pull request, en y es juntos. Casi todo son cifras viejas o frases que contra
   - El código generado de ejemplo de `policies/circuit-breaker.md` muestra `50.0f`; el código generado emite `50.0`. Regenerarlo desde `examples/build/generated/...`.
   - Las etiquetas de la portada dicen "Sync and CompletionStage": añadir `Mono`/`Flux`.
   - El roadmap de la FAQ dice "YAML configuration: v1" aunque Spring, Micronaut y Quarkus ya leen YAML: aclarar qué significa (archivos YAML en Java puro) o quitarlo.
-- [ ] **2.4 El camino de alguien nuevo.**
+  - **Resultado:** (#63) Hecho. "x de 7" era correcto (Retry y Hedge comparten una capa): ahora dice "capa x de 7", y los tipos de retorno incluyen `Mono` y `Flux`.
+- [x] **2.4 El camino de alguien nuevo.**
   - Paso 6 del quickstart, "See the breaker open": bajar `minimumCalls`, mostrar `OPEN`, la `CallNotPermittedException` y la respuesta del fallback (snippet probado en `examples`).
   - Una guía "Retry and circuit breaker for an HTTP call": qué excepciones reintentar o abortar, un `@Timeout` dentro, un `name` para el breaker, números sensatos, idempotencia. Página nueva en los dos sidebars.
   - Un glosario corto, como definiciones en `policies/README.md` o en su propia página: jitter y "full jitter", half-open y sondas, id de instancia e id derivado, registry, bulkhead, hedge, excepción sin stack trace, código en línea recta, y la comprobación de ABI (`Abi.require` en los ejemplos generados).
@@ -106,6 +109,7 @@ Un pull request, en y es juntos. Casi todo son cifras viejas o frases que contra
   - Valores por defecto que sorprenden a quien viene de Resilience4j: una lista corta en `migrate/from-resilience4j.md` (enlazada desde la FAQ). Candidatos que nombró el revisor: un retry espera de forma exponencial con jitter desde 200 ms por defecto; el rate limiter rechaza al instante (`maxWait = 0`); con clases anotadas `@Transactional` queda fuera de las políticas, y la comprobación de arranque lo rechaza, así que hay que reestructurar el código. También la afirmación del revisor de que un `Error` cuenta como éxito para el breaker: comprobarla primero en `CircuitBreakerPolicy` y en las capas generadas; si es cierta, documentarla (y decidir en la fase 1 si es el comportamiento correcto); si no, no hay nada que hacer.
   - Nombres de métricas: quien migra desde Resilience4j tiene que rehacer dashboards y alertas (`r4c.*`). Añadir a la página de migración una tabla de los nombres de métricas de Resilience4j a los nuestros.
   - Lo que Resilience4j tiene y nosotros no, en un solo sitio de la página de migración (parte ya está en "when to stay"): bulkhead con thread pool, cache, RxJava, Kotlin, reconfiguración en caliente (por decisión), una transición automática de open a half-open, endpoints de eventos, métricas de éxito y latencia, y que los hedges no llevan el contexto de quien llama a los intentos lanzados. Comprobar cada uno contra el código antes de escribirlo.
+  - **Resultado:** (#63) Hecho, con tres cosas que se mantienen a propósito: los bloques de código generado siguen junto a los snippets (la vista lado a lado es la razón del componente `compare`, y su panel ya tiene scroll); los detalles de la guía de Spring siguen donde están (el orden de los post-processors, AOT y el límite en imágenes nativas son para usuarios; solo se simplificó la línea de versiones); el párrafo de transacciones sigue en "Clases anotadas", donde aplica. La afirmación del `Error` es cierta (`recordOn` vale `Exception` por defecto), ya estaba documentada, y ahora se enlaza desde la FAQ.
 
 Comprobación: `./gradlew :examples:test --tests '*DocsTest*' :site:test`, y `./gradlew :site:serve` para mirar las páginas cambiadas. 2.5 es un cambio de benchmark (su propio pull request, con una corrida en AWS).
 

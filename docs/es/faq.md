@@ -27,7 +27,7 @@ En ningún caso hay proxies, AOP ni escaneo de anotaciones en tiempo de ejecuci�
 
 ### ¿Es un fork de Resilience4j? :id=fork
 
-No. Cubre políticas similares con un diseño distinto: código generado en tiempo de compilación en lugar de decoradores, un solo registry para todas las políticas y configuración resuelta una sola vez. Sus benchmarks se comparan con Resilience4j 2.4.0. Consulta [Migrar desde Resilience4j](migrate/from-resilience4j.md).
+No. Cubre políticas similares con un diseño distinto: código generado en tiempo de compilación en lugar de decoradores, un solo registry para todas las políticas y configuración resuelta una sola vez. Sus benchmarks se comparan con Resilience4j 2.4.0. Algunos valores por defecto difieren y sorprenden: un retry espera de forma exponencial con jitter desde 200 ms, un rate limiter rechaza al instante y un `Error` cuenta como éxito para un breaker ([los valores por defecto](migrate/from-resilience4j.md#map-others), [las diferencias](migrate/from-resilience4j.md#differences)). Consulta [Migrar desde Resilience4j](migrate/from-resilience4j.md).
 
 ### ¿De qué depende? :id=dependencies
 
@@ -93,7 +93,7 @@ Un timeout síncrono interrumpe el thread de quien llama; el código que ignora 
 
 ### ¿Qué tan rápido es? :id=performance
 
-En AWS Graviton3, un retry cuyo primer intento tiene éxito cuesta 1.2 ns y un circuit breaker 1.9 ns por llamada, con 0 bytes asignados, frente a 22.9 ns y 89.2 ns de Resilience4j 2.4.0 ([medido](benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3)). Algunos casos son empates, y las rutas con contención cuestan cientos de nanosegundos en ambas bibliotecas. Consulta [Rendimiento](performance.md).
+En AWS Graviton3, un retry cuyo primer intento tiene éxito cuesta 1.2 ns y un circuit breaker 1.9 ns por llamada, con 0 bytes asignados, frente a 22.9 ns y 89.2 ns de Resilience4j 2.4.0 ([medido](benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3)). Los 1.9 ns del breaker valen mientras su ventana no tiene fallos; con una llamada de cada diez fallando y cuatro threads son 274 contra 910 ns. Las rutas con contención cuestan cientos de nanosegundos en ambas bibliotecas, y son medias medidas solo en ARM. Consulta [Rendimiento](performance.md).
 
 ## Proyecto :id=project
 
@@ -114,7 +114,7 @@ Planificado, no prometido; los nombres y el alcance pueden cambiar:
 | Hedging (`@Hedge`) | hecho en 0.4.0 | métodos async y `Pipeline.executeAsync` ([Hedge](policies/hedge.md)); el hedging sincrónico, más adelante. Resilience4j tiene `resilience4j-hedge` (async, solo programático) |
 | Límite de concurrencia adaptativo (`@AdaptiveLimit`) | hecho en 0.6.0 | Gradient2 y AIMD, sync y async ([Adaptive limit](policies/adaptive-limit.md)); Vegas y la espera, más adelante. Resilience4j no tiene |
 | Tracing de OpenTelemetry | más adelante | las métricas están en `resilience4cata-opentelemetry` desde 0.3.0 ([guía](guides/opentelemetry.md)) |
-| Configuración YAML | v1 | módulo separado, para que `core` siga sin dependencias |
+| Archivos YAML para Java puro | más adelante | el módulo `config` lee archivos properties; Spring Boot, Micronaut y Quarkus ya leen su propio YAML. Un módulo separado, para que `core` siga sin dependencias |
 | Orden de ejecución configurable (`@PolicyOrder`) | hecho en 0.10.0 | solo anotaciones; un `Pipeline` mantiene el orden por defecto ([Cambiar el orden](policies/README.md#changing-the-order)) |
 | Atributo `locked` (valores de la anotación que la configuración externa no puede sobrescribir) | hecho en 0.7.0 | `locked = true` en la anotación, `Pipeline.Builder.locked()` ([Bloquear una instancia](guides/configuration.md#bloquear-una-instancia)) |
 | `@Cached`, Mutiny y RxJava, corrutinas de Kotlin, inyección de fallos, propagación de deadlines | más adelante | |
