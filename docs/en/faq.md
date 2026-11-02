@@ -27,7 +27,7 @@ There is no runtime proxy, no AOP and no annotation scanning at runtime in any c
 
 ### Is it a fork of Resilience4j? :id=fork
 
-No. It covers similar policies with a different design: code generated at compile time instead of decorators, one registry for all policies, configuration resolved once. Its benchmarks compare against Resilience4j 2.4.0. See [Migrate from Resilience4j](migrate/from-resilience4j.md).
+No. It covers similar policies with a different design: code generated at compile time instead of decorators, one registry for all policies, configuration resolved once. Its benchmarks compare against Resilience4j 2.4.0. Some defaults differ and catch people out: a retry backs off exponentially with jitter from 200 ms, a rate limiter rejects at once, and an `Error` counts as a success for a breaker ([the defaults](migrate/from-resilience4j.md#map-others), [the differences](migrate/from-resilience4j.md#differences)). See [Migrate from Resilience4j](migrate/from-resilience4j.md).
 
 ### What does it depend on? :id=dependencies
 
@@ -93,7 +93,7 @@ A sync timeout interrupts the caller's thread; code that ignores interrupts (cla
 
 ### How fast is it? :id=performance
 
-On AWS Graviton3, a retry whose first attempt succeeds costs 1.2 ns and a circuit breaker 1.9 ns per call, with 0 bytes allocated, against 22.9 ns and 89.2 ns for Resilience4j 2.4.0 ([measured](benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3)). Some cases are ties, and contended paths cost hundreds of nanoseconds in both libraries. See [Performance](performance.md).
+On AWS Graviton3, a retry whose first attempt succeeds costs 1.2 ns and a circuit breaker 1.9 ns per call, with 0 bytes allocated, against 22.9 ns and 89.2 ns for Resilience4j 2.4.0 ([measured](benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3)). The breaker's 1.9 ns holds while its window has no failure; with one call in ten failing and four threads it is 274 against 910 ns. Contended paths cost hundreds of nanoseconds in both libraries, and these are averages measured on ARM only. See [Performance](performance.md).
 
 ## Project :id=project
 
@@ -114,7 +114,7 @@ Planned, not promised; names and scope can change:
 | Hedging (`@Hedge`) | done in 0.4.0 | async methods and `Pipeline.executeAsync` ([Hedge](policies/hedge.md)); synchronous hedging later. Resilience4j has `resilience4j-hedge` (async, programmatic only) |
 | Adaptive concurrency limit (`@AdaptiveLimit`) | done in 0.6.0 | Gradient2 and AIMD, sync and async ([Adaptive limit](policies/adaptive-limit.md)); Vegas and waiting later. Resilience4j has none |
 | OpenTelemetry tracing | later | metrics are in `resilience4cata-opentelemetry` since 0.3.0 ([guide](guides/opentelemetry.md)) |
-| YAML configuration | v1 | separate module, so `core` stays dependency-free |
+| YAML files for plain Java | later | the `config` module reads properties files; Spring Boot, Micronaut and Quarkus already read their own YAML. A separate module, so `core` stays dependency-free |
 | Configurable execution order (`@PolicyOrder`) | done in 0.10.0 | annotations only; a `Pipeline` keeps the default order ([Changing the order](policies/README.md#changing-the-order)) |
 | `locked` attribute (annotation values that external configuration cannot override) | done in 0.7.0 | `locked = true` on the annotation, `Pipeline.Builder.locked()` ([Locking an instance](guides/configuration.md#locking-an-instance)) |
 | `@Cached`, Mutiny and RxJava, Kotlin coroutines, fault injection, deadline propagation | later | |

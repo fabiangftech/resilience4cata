@@ -11,6 +11,9 @@ Los últimos cambios de API antes de 1.0, de la revisión del [plan hacia 1.0](p
 ### Añadido
 
 - [Compatibilidad](reference/compatibility.md): qué sigue funcionando al actualizar dentro de una misma versión mayor desde 1.0.0 (la API de Java, el código generado, las claves de configuración, los nombres de métricas, el JSON de los endpoints, los códigos de error), y qué puede crecer en una versión menor.
+- [Retry y circuit breaker para una llamada HTTP](guides/http-calls.md): una receta completa (qué fallas reintentar, un breaker que ignora los errores del cliente, un timeout por intento, idempotencia, cómo elegir los números), probada contra un servidor HTTP real.
+- Paso 6 del inicio rápido, *Mira cómo se abre el breaker*; un glosario en el [resumen de las políticas](policies/README.md#glossary); en la [guía de migración](migrate/from-resilience4j.md), una tabla de los nombres de métricas de Resilience4j a los de resilience4cata y tres diferencias más (sin métricas de éxito ni de latencia, `@Transactional` en clases anotadas, thread-locals en los hedges).
+- El mensaje de [R4C-RT-003](errors.md#r4c-rt-003) (sin clase generada) muestra también la línea de Maven, no solo la de Gradle.
 
 ### Cambiado
 

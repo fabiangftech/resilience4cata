@@ -215,3 +215,17 @@ Code that cannot be annotated gets the same policies, in the default order, from
 
 > [!MEASURED]
 > On AWS Graviton3 (`c7g.xlarge`, JDK 21), a successful call through retry, circuit breaker, rate limiter and bulkhead costs 61.6 ns with generated code, against 261 ns and 328 B for Resilience4j 2.4.0; all six policies cost 76.3 ns (Resilience4j has no caller-thread timeout to compare). Generated code allocates nothing on those paths. [Benchmarks: MVP completion](../benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3)
+
+## Glossary :id=glossary
+
+- **Backoff and jitter.** The backoff is how the wait between retries grows (fixed or exponential). Jitter makes each wait random so that many callers do not retry at the same moment; *full jitter*, the default, picks the wait uniformly between zero and the backoff's value.
+- **Bulkhead.** A limit on how many calls run at the same time, so one slow dependency cannot take every thread. Calls over the limit wait (`maxWait`) or are rejected.
+- **Circuit breaker states.** *Closed*: calls go through and their outcomes are counted. *Open*: calls are rejected at once, for `waitInOpen`. *Half-open*: a few probe calls (`halfOpenCalls`) go through, and their outcome decides whether the breaker closes or opens again.
+- **Derived id.** The id of a method's policy instance when its annotation has no `name`: `<type>#<method>(<parameter types>)`, for example `com.acme.CatalogClient#price(java.lang.String,int)`. Used in configuration keys, events, metrics and handles.
+- **Hedge.** Starting the same call again while the first attempt is slow, and keeping whichever succeeds first.
+- **Instance.** One policy object with its own state (a breaker's window, a bulkhead's slots). Methods share an instance when they use the same `name`; otherwise each method has its own.
+- **Registry.** The `ResilienceRegistry`: it holds the configurations and creates the instances, once each. Every generated class and `Pipeline` gets its policies from one.
+- **Rejection.** A call a policy refuses before running it: an open breaker, a full bulkhead or adaptive limit, an exhausted rate limiter. It throws a `CallRejectedException`.
+- **Stackless exception.** An exception created without a stack trace. Rejections are stackless and preallocated, so rejecting a call costs almost nothing; log their message or `id()`.
+- **Straight-line code.** Generated code that calls each policy directly, in order, in the method itself, rather than through a chain of shared lambdas. It is what keeps a call cheap.
+- **ABI check (`Abi.require`).** A call at the start of every generated constructor: it checks that the `resilience4cata-core` on the class path is at least as new as the processor that generated the class, and fails with [`R4C-RT-021`](../errors.md#r4c-rt-021) if not.

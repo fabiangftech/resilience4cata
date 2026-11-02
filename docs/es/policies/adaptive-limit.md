@@ -6,7 +6,7 @@
 
 | Anotación | Posición | Tipos de retorno | Por defecto |
 |---|---|---|---|
-| `@AdaptiveLimit` | 5 de 7, dentro de RateLimiter | sync y `CompletionStage` | Gradient2, empieza en 20, entre 1 y 200, ventanas de al menos 1 s y 10 llamadas |
+| `@AdaptiveLimit` | capa 5 de 7, dentro de RateLimiter | sync, `CompletionStage`, `Mono`, `Flux` | Gradient2, empieza en 20, entre 1 y 200, ventanas de al menos 1 s y 10 llamadas |
 
 </div>
 

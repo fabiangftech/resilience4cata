@@ -151,6 +151,52 @@ La segunda llamada tarda hasta unos cientos de milisegundos: entre intentos, el 
 - **El breaker** registró cada intento, cinco llamadas con cuatro fallas, pero siguió `CLOSED`: por defecto solo evalúa cuando su ventana tiene 100 llamadas (`minimumCalls`).
 - Las políticas se anidan en este orden por defecto, de afuera hacia adentro ([`@PolicyOrder`](../policies/README.md#changing-the-order) lo cambia): `Fallback → Retry → CircuitBreaker → RateLimiter → AdaptiveLimit → Timeout → Bulkhead → method`. Por eso el fallback ve el resultado final y cada intento del retry tiene su propio timeout de dos segundos.
 
+## 6. Mira cómo se abre el breaker
+
+Con los valores por defecto, el breaker espera 100 llamadas antes de juzgar. Bájalo solo para la instancia `prices`, sin tocar la anotación, y vuelve a ejecutar el servicio que falla:
+
+<!-- snippet: quickstart-breaker-opens -->
+```java
+import dev.resilience4cata.ResilienceRegistry;
+import dev.resilience4cata.Resilient;
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class BreakerOpens {
+
+    public static void main(String[] args) throws IOException {
+        ResilienceRegistry registry = ResilienceRegistry.builder()
+                .circuitBreakerInstance("prices", b -> b.windowSize(4).minimumCalls(4))   // judge after 4 calls
+                .build();
+
+        AtomicInteger calls = new AtomicInteger();
+        PriceClient down = Resilient.of(PriceClient.class, sku -> {
+            calls.incrementAndGet();
+            throw new IOException("service down");
+        }, registry);
+
+        down.price("sku-1");   // three attempts, three failures
+        down.price("sku-2");   // the fourth failure opens the breaker, which stops the retry
+        System.out.println(registry.circuitBreaker("prices").state());   // OPEN
+
+        System.out.println(down.price("sku-3"));   // 0: rejected at once, answered by the fallback
+        System.out.println(calls.get());           // 4: the service was not called again
+    }
+}
+```
+
+Imprime:
+
+```text
+OPEN
+0
+4
+```
+
+- La primera llamada falló tres veces. En la segunda, la cuarta falla llenó la ventana de cuatro con una tasa de fallas del 100 %, por encima del 50 % por defecto, así que el breaker se abrió. El retry no reintenta un rechazo, así que la segunda llamada se detuvo ahí y respondió el fallback.
+- La tercera llamada se rechazó al instante con una `CallNotPermittedException`, sin llegar al servicio, y el fallback volvió a responder `0`. Pasado `waitInOpen` (60 s por defecto), el breaker deja pasar algunas llamadas de prueba.
+- `circuitBreakerInstance` es una forma de cambiar una instancia sin editar su anotación; un archivo properties o variables de entorno hacen lo mismo ([Configuración](../guides/configuration.md)).
+
 ## Próximos pasos
 
 - [Cómo funciona](how-it-works.md): qué genera el procesador, los ids de instancia, de dónde viene la configuración.

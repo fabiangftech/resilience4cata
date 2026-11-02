@@ -6,7 +6,7 @@
 
 | Anotación | Posición | Tipos de retorno | Valores por defecto |
 |---|---|---|---|
-| `@Timeout` | 6 de 7, dentro de AdaptiveLimit | sync y `CompletionStage` | 1 s por intento |
+| `@Timeout` | capa 6 de 7, dentro de AdaptiveLimit | sync, `CompletionStage`, `Mono`, `Flux` | 1 s por intento |
 
 </div>
 

@@ -6,7 +6,7 @@
 
 | Anotación | Posición | Tipos de retorno | Valores por defecto |
 |---|---|---|---|
-| `@Fallback` | 1 de 7, la más externa | sync y `CompletionStage` | se aplica a todo `Throwable` |
+| `@Fallback` | capa 1 de 7, la más externa | sync, `CompletionStage`, `Mono`, `Flux` | se aplica a todo `Throwable` |
 
 </div>
 

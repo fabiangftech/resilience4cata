@@ -6,7 +6,7 @@
 
 | Annotation | Position | Return types | Defaults |
 |---|---|---|---|
-| `@RateLimiter` | 4 of 7, inside CircuitBreaker | sync and `CompletionStage` | 50 permits per 1 s, no waiting |
+| `@RateLimiter` | layer 4 of 7, inside CircuitBreaker | sync, `CompletionStage`, `Mono`, `Flux` | 50 permits per 1 s, no waiting |
 
 </div>
 

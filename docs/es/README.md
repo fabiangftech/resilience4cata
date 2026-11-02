@@ -12,7 +12,7 @@
         <ul class="facts">
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Java 21+</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Funciona sin Spring, CDI ni AspectJ</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Síncrono y <code>CompletionStage</code></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Síncrono, <code>CompletionStage</code>, <code>Mono</code> y <code>Flux</code></li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Apache 2.0</li>
         </ul>
       </div>
@@ -184,18 +184,18 @@ at CheckoutService.pay</pre>
   <div class="wrap bench">
     <div class="bench-meta">
       <h2 class="h2" id="bench-h">Medido, siempre</h2>
-      <p class="lead" style="font-size:17px">Cada número de este sitio viene de una corrida de JMH en el repositorio, contra Resilience4j con una configuración equivalente. Donde no ganamos, la tabla lo dice.</p>
+      <p class="lead" style="font-size:17px">Cada número de este sitio viene de una corrida de JMH en el repositorio, contra Resilience4j con una configuración equivalente. Donde no ganamos, los resultados completos lo dicen.</p>
       <dl>
         <dt>Máquina</dt><dd>AWS c7g.xlarge, 4 núcleos Graviton3</dd>
         <dt>JMH</dt><dd>3 forks × 5 × 1 s, <code>-prof gc</code></dd>
         <dt>Comparado con</dt><dd>Resilience4j 2.4.0</dd>
-        <dt>Fecha</dt><dd>2026-10-24</dd>
+        <dt>Fecha</dt><dd>2026-10-24; bulkhead 2026-11-01</dd>
       </dl>
       <a href="/es/benchmarks?id=cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3">Método, todos los resultados y notas de equidad</a>
     </div>
     <figure class="r4c-chart">
       <figcaption class="legend">
-        <span><i style="background:var(--series-r4c)"></i>resilience4cata 0.1.0</span>
+        <span><i style="background:var(--series-r4c)"></i>resilience4cata</span>
         <span><i style="background:var(--series-r4j)"></i>Resilience4j 2.4.0</span>
       </figcaption>
       <div class="row"><div class="row-label">Retry, el primer intento sale bien<small>1 thread</small></div>
@@ -207,8 +207,8 @@ at CheckoutService.pay</pre>
       <div class="row"><div class="row-label">Timeout síncrono, la llamada termina a tiempo<small>1 thread</small></div>
         <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 22.2 ns por llamada, 0 B asignados"><i style="width:33.7%"></i><b>22.2 ns</b></span>
           <span class="bar r4j" tabindex="0" data-tip="Resilience4j TimeLimiter sobre un executor: 8842 ns por llamada, 176 B asignados"><i style="width:98.7%"></i><b>8 842 ns</b></span></div></div>
-      <div class="row"><div class="row-label">Bulkhead con lugares libres<small>1 thread · un empate</small></div>
-        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 20.5 ns por llamada, 0 B asignados"><i style="width:32.8%"></i><b>20.5 ns</b></span>
+      <div class="row"><div class="row-label">Bulkhead con lugares libres<small>1 thread</small></div>
+        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 17.3 ns por llamada, 0 B asignados"><i style="width:31%"></i><b>17.3 ns</b></span>
           <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 20.4 ns por llamada, 0 B asignados"><i style="width:32.7%"></i><b>20.4 ns</b></span></div></div>
       <div class="axis"><span></span><div><span>1 ns</span><span>10</span><span>100</span><span>1 000</span><span>10 000</span></div></div>
       <p class="axis-note">Tiempo por llamada, escala logarítmica. Menos es mejor.</p>
@@ -219,7 +219,7 @@ at CheckoutService.pay</pre>
             <tr><td>Retry, el primer intento sale bien</td><td class="num">1</td><td class="num">1.2 ns, 0 B</td><td class="num">22.9 ns, 0 B</td></tr>
             <tr><td>Circuit breaker, todas las llamadas salen bien</td><td class="num">4</td><td class="num">1.9 ns, 0 B</td><td class="num">832 ns, 2 B</td></tr>
             <tr><td>Timeout síncrono</td><td class="num">1</td><td class="num">22.2 ns, 0 B</td><td class="num">8842 ns, 176 B</td></tr>
-            <tr><td>Bulkhead con lugares libres</td><td class="num">1</td><td class="num">20.5 ns, 0 B</td><td class="num">20.4 ns, 0 B</td></tr>
+            <tr><td>Bulkhead con lugares libres</td><td class="num">1</td><td class="num">17.3 ns, 0 B</td><td class="num">20.4 ns, 0 B</td></tr>
           </tbody></table></div>
       </details>
       <div class="r4c-chart-tip" hidden></div>

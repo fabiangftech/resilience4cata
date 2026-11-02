@@ -8,7 +8,7 @@ Annotation-driven resilience for **plain Java 21+**: retry, hedging, circuit bre
 
 Sync and async (`CompletionStage`, and Reactor's `Mono` and `Flux` with `resilience4cata-reactor`), interfaces and annotated classes, composed annotations, named configurations with external overrides, typed events and snapshots, a programmatic `Pipeline` for code you cannot annotate, and a `testkit` with a manual clock.
 
-**Documentation: [resilience4cata.dev](https://resilience4cata.dev)** (English and Spanish). Status: 0.13.0 on Maven Central; names can still change before 1.0.
+**Documentation: [resilience4cata.dev](https://resilience4cata.dev)** (English and Spanish). Status: 0.13.0 on Maven Central; the API is reviewed for 1.0 and no more changes are planned.
 
 ## Install
 
@@ -77,11 +77,13 @@ Measured with JMH against Resilience4j 2.4.0 under equivalent configuration, on 
 | Scenario | Threads | resilience4cata | Resilience4j |
 |---|---:|---:|---:|
 | Retry, first attempt succeeds | 1 | **1.2 ns**, 0 B | 22.9 ns, 0 B |
+| Circuit breaker, every call succeeds | 1 | **1.9 ns**, 0 B | 89.2 ns, 0 B |
 | Circuit breaker, every call succeeds | 4 | **1.9 ns**, 0 B | 832 ns, 2 B |
+| Circuit breaker, one call in ten fails | 4 | **274 ns**, 0 B | 910 ns, 2 B |
 | Sync timeout | 1 | **22.2 ns**, 0 B | 8842 ns, 176 B |
-| Bulkhead with free slots | 1 | 20.5 ns, 0 B | 20.4 ns, 0 B |
+| Bulkhead with free slots | 1 | **17.3 ns**, 0 B | 20.4 ns, 0 B |
 
-Not every case is a win (the free bulkhead is a tie), and most real calls take milliseconds, so the point is near-zero overhead that keeps scaling with threads. The sync timeout measured 23.7 ns in a later run, a difference still under investigation. Methods, every result (also on an Apple M1), regressions and fairness adjustments are in [benchmarks](docs/en/benchmarks.md). An allocation gate (`./gradlew :benchmark:allocationCheck`, run in CI on every pull request) fails the build if a sync success or rejection path starts allocating.
+The breaker's 1.9 ns holds while its window holds no failure; once calls fail, every call writes a shared cursor and the gap narrows (274 against 910 ns). Resilience4j's retry also counts every call in its built-in metrics (`LongAdder` counters), which resilience4cata does not keep. These are average times in a closed loop on ARM: x86 has not been measured yet, and tails (the slowest calls under contention) are not measured. Most real calls take milliseconds, so the point is near-zero overhead that keeps scaling with threads. The sync timeout measured 23.7 ns in a later run, a difference still under investigation. Methods, every result (also on an Apple M1), regressions and fairness adjustments are in [benchmarks](docs/en/benchmarks.md). An allocation gate (`./gradlew :benchmark:allocationCheck`, run in CI on every pull request) fails the build if a sync success or rejection path starts allocating.
 
 ## Documentation
 

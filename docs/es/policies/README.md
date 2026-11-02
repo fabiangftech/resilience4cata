@@ -217,3 +217,17 @@ El código que no se puede anotar obtiene las mismas políticas, en el orden por
 
 > [!MEASURED]
 > En AWS Graviton3 (`c7g.xlarge`, JDK 21), una llamada exitosa a través de retry, circuit breaker, rate limiter y bulkhead cuesta 61,6 ns con código generado, contra 261 ns y 328 B de Resilience4j 2.4.0; las seis políticas cuestan 76,3 ns (Resilience4j no tiene timeout en el thread de quien llama para comparar). El código generado no asigna memoria en esos caminos. [Benchmarks: cierre del MVP](../benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3)
+
+## Glosario :id=glossary
+
+- **Backoff y jitter.** El backoff es cómo crece la espera entre reintentos (fija o exponencial). El jitter hace aleatoria cada espera para que muchos llamadores no reintenten en el mismo instante; *full jitter*, el valor por defecto, elige la espera de forma uniforme entre cero y el valor del backoff.
+- **Bulkhead.** Un límite de cuántas llamadas corren a la vez, para que una dependencia lenta no se quede con todos los threads. Las llamadas que pasan el límite esperan (`maxWait`) o se rechazan.
+- **Estados del circuit breaker.** *Closed* (cerrado): las llamadas pasan y se cuentan sus resultados. *Open* (abierto): las llamadas se rechazan al instante, durante `waitInOpen`. *Half-open* (semiabierto): pasan unas pocas llamadas de prueba (`halfOpenCalls`), y su resultado decide si el breaker se cierra o vuelve a abrirse.
+- **Id derivado.** El id de la instancia de política de un método cuando su anotación no tiene `name`: `<tipo>#<método>(<tipos de parámetros>)`, por ejemplo `com.acme.CatalogClient#price(java.lang.String,int)`. Se usa en las claves de configuración, los eventos, las métricas y los handles.
+- **Hedge.** Lanzar otra vez la misma llamada mientras el primer intento va lento, y quedarse con el primero que tenga éxito.
+- **Instancia.** Un objeto de política con su propio estado (la ventana de un breaker, los slots de un bulkhead). Los métodos comparten instancia cuando usan el mismo `name`; si no, cada método tiene la suya.
+- **Registry.** El `ResilienceRegistry`: guarda las configuraciones y crea las instancias, una vez cada una. Cada clase generada y cada `Pipeline` toma sus políticas de uno.
+- **Rechazo.** Una llamada que una política rechaza antes de ejecutarla: un breaker abierto, un bulkhead o un adaptive limit llenos, un rate limiter agotado. Lanza una `CallRejectedException`.
+- **Excepción sin stack trace.** Una excepción creada sin stack trace. Los rechazos no tienen stack trace y están preasignados, así que rechazar una llamada casi no cuesta nada; registra en el log su mensaje o `id()`.
+- **Código en línea recta.** Código generado que llama a cada política directamente, en orden, dentro del propio método, en vez de pasar por una cadena de lambdas compartidas. Es lo que mantiene barata una llamada.
+- **Comprobación de ABI (`Abi.require`).** Una llamada al principio de cada constructor generado: comprueba que el `resilience4cata-core` del class path sea al menos tan nuevo como el procesador que generó la clase, y si no falla con [`R4C-RT-021`](../errors.md#r4c-rt-021).

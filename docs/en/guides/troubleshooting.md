@@ -11,6 +11,8 @@ Every error the library reports starts with a code such as `[R4C-RT-003]`; the [
 ```text
 [R4C-RT-003] No generated class com.acme.shop.clients.PriceClient$Resilient found. Make sure that com.acme.shop.clients.PriceClient has at least one resilience annotation, and that the annotation processor runs when it is compiled. With Gradle:
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'
+With Maven, in the maven-compiler-plugin's <annotationProcessorPaths>:
+    <path><groupId>dev.resilience4cata</groupId><artifactId>resilience4cata-processor</artifactId><version>...</version></path>
 ```
 
 The processor did not run when the interface was compiled, or the interface has no resilience annotation. The processor is mandatory: there is no reflection fallback.
@@ -24,7 +26,7 @@ See [R4C-RT-003](../errors.md#r4c-rt-003) and [Installation](../start/installati
 
 ### `[R4C-RT-004]`: the generated class does not match :id=version-mismatch
 
-`resilience4cata-core` and `resilience4cata-processor` have different versions. Take both from the BOM, or give them the same version. Then rebuild cleanly so the old generated classes go away. See [R4C-RT-004](../errors.md#r4c-rt-004).
+The generated class was made by a processor that this `resilience4cata-core` cannot run: usually stale generated classes from an older, incompatible processor (one from before 1.0, or from another major version). A core newer than the processor is fine within a major version; a core older than the processor is [R4C-RT-021](../errors.md#r4c-rt-021) instead. Take every artifact from the BOM, then rebuild from clean so the old generated classes go away. See [R4C-RT-004](../errors.md#r4c-rt-004).
 
 ### `[R4C-RT-005]` in a modular application :id=jpms
 

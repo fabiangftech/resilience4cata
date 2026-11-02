@@ -161,4 +161,4 @@ flowchart LR
 - **El timeout se aplica a cada intento**; `@Retry(maxDuration = …)` limita la operación completa.
 - **El slot del bulkhead se ocupa solo mientras corre el método**, no durante el backoff del retry.
 
-El orden todavía no es configurable. La [introducción a las políticas](../policies/README.md) explica cómo interactúan.
+El orden de arriba es el que se usa por defecto; `@PolicyOrder` lo cambia por método, tipo o bundle (el fallback sigue siendo la más externa). La [introducción a las políticas](../policies/README.md) explica cómo interactúan.

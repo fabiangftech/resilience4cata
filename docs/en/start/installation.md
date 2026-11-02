@@ -11,7 +11,7 @@ Two lines are enough to start: `resilience4cata-all` and the annotation processo
 | `resilience4cata-bom` | Aligns the versions of every artifact below | `platform(...)` (Gradle), `import` (Maven) |
 | `resilience4cata-all` | From 0.8.0. One dependency for `core`, `annotations` and `config`, with no code of its own ([the short way](#the-short-way)) | `implementation` (Gradle), default `compile` (Maven) |
 | `resilience4cata-core` | Policies, `ResilienceRegistry`, `Resilient`, `Pipeline`, events, snapshots. Its only dependency is JSpecify (`org.jspecify:jspecify`) | `implementation` (Gradle), default `compile` (Maven) |
-| `resilience4cata-annotations` | `@Retry`, `@CircuitBreaker`, `@RateLimiter`, `@Timeout`, `@Bulkhead`, `@Fallback`, `@ResiliencePolicy`. `CLASS` retention, so not needed at runtime | `compileOnly` (Gradle), `provided` (Maven) |
+| `resilience4cata-annotations` | `@Retry`, `@Hedge`, `@CircuitBreaker`, `@RateLimiter`, `@AdaptiveLimit`, `@Timeout`, `@Bulkhead`, `@Fallback`, `@ResiliencePolicy`, `@PolicyOrder`. `CLASS` retention, so not needed at runtime | `compileOnly` (Gradle), `provided` (Maven) |
 | `resilience4cata-processor` | The annotation processor that generates the code. **Mandatory** when you use the annotations: there is no reflection fallback | `annotationProcessor` (Gradle), `annotationProcessorPaths` (Maven). Never on the runtime class path |
 | `resilience4cata-config` | Optional. External configuration: properties files, environment variables, system properties ([configuration guide](../guides/configuration.md)) | `implementation` / default scope |
 | `resilience4cata-micrometer` | Optional, from 0.3.0. Micrometer metrics: counters from events, gauges for breakers, bulkheads and rate limiters ([Micrometer guide](../guides/micrometer.md)). Brings in `micrometer-core` | `implementation` / default scope |
@@ -68,6 +68,8 @@ dependencies {
 ```
 
 <!-- tabs:end -->
+
+With Maven, `annotationProcessorPaths` replaces the discovery of every other processor: if you use Lombok, MapStruct or another one, list it there too ([With other annotation processors](#with-other-annotation-processors)).
 
 Write the same version on both lines: `core` must be at least as new as `processor`, and keeping them equal is simplest. The annotations end up on the runtime class path too; they are a small jar that nothing reads at run time. To keep them compile-only, or to leave out `config`, add the modules one by one as below.
 
@@ -344,6 +346,8 @@ If the processor did not run, the first `Resilient.of(...)` fails fast, before a
 ```text
 [R4C-RT-003] No generated class com.acme.shop.clients.PriceClient$Resilient found. Make sure that com.acme.shop.clients.PriceClient has at least one resilience annotation, and that the annotation processor runs when it is compiled. With Gradle:
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'
+With Maven, in the maven-compiler-plugin's <annotationProcessorPaths>:
+    <path><groupId>dev.resilience4cata</groupId><artifactId>resilience4cata-processor</artifactId><version>...</version></path>
 ```
 
 ## IDEs

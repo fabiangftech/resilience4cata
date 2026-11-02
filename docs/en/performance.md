@@ -12,11 +12,13 @@ Low overhead is the reason resilience4cata exists: the annotation processor gene
 - **Differences in behaviour that the numbers include**: Resilience4j's breaker always times calls (resilience4cata only when `slowCallDuration` is set); Resilience4j's `TimeLimiter` needs a `Future`, so a synchronous call must go to another thread (resilience4cata times it out on the caller's thread).
 - **Two machines, never mixed**: an AWS `c7g.xlarge` (4 Graviton3 cores, no SMT, fixed clock, Amazon Corretto 21), and an Apple M1 laptop (JDK 21) for earlier rounds. Numbers from different machines are not comparable.
 - A benchmark with one decorated method is Resilience4j's best case: the JIT sees one type at every call site. Real applications have many.
+- **Average time per call, in a closed loop** (JMH `AverageTime`): every thread calls again as soon as the last call returns. Tails are not measured: under contention a rate limiter or a bulkhead parks the threads that lose a race, so some calls wait far longer than the average shows.
+- **ARM only so far**: Graviton3 and Apple M1. x86-64 has not been measured yet; its atomics are full fences and its clock is cheap, so the order of some results may differ there.
 
 ## Headline results :id=headline
 
 > [!MEASURED]
-> AWS `c7g.xlarge` (Graviton3), JDK 21, resilience4cata 0.1.0 vs Resilience4j 2.4.0, nanoseconds and bytes allocated per call. From [MVP completion (2026-10-24, AWS Graviton3)](benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3).
+> AWS `c7g.xlarge` (Graviton3), JDK 21, resilience4cata 0.1.0 vs Resilience4j 2.4.0, nanoseconds and bytes allocated per call. From [MVP completion (2026-10-24, AWS Graviton3)](benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3), except the bulkhead with free slots: the code after 0.13.0, from [slots given back with a volatile add (2026-11-01)](benchmarks.md#release-counters), where Resilience4j measured 20.4 ns on one thread and 348 to 450 ns with four.
 
 | Scenario | Threads | resilience4cata | Resilience4j 2.4.0 |
 |---|---:|---:|---:|
@@ -27,8 +29,8 @@ Low overhead is the reason resilience4cata exists: the annotation processor gene
 | Circuit breaker, one call in ten fails | 4 | **274 ns**, 0 B | 910 ns, 2 B |
 | Rate limiter, permits free | 4 | **187 ns**, 0 B | 275 ns, 40 B |
 | Rate limiter, exhausted (every call rejected) | 4 | **34.7 ns**, 0 B | 1599 ns, 505 B |
-| Bulkhead, slots free | 1 | 20.5 ns, 0 B | 20.4 ns, 0 B |
-| Bulkhead, slots free | 4 | **264 ns**, 0 B | 432 ns, 0 B |
+| Bulkhead, slots free | 1 | **17.3 ns**, 0 B | 20.4 ns, 0 B |
+| Bulkhead, slots free | 4 | **195.5 ns**, 0 B | 348–450 ns, 0 B |
 | Bulkhead, full (every call rejected) | 1 | **2.3 ns**, 0 B | 139 ns, 416 B |
 | Timeout, sync call that finishes in time (Resilience4j: `TimeLimiter` + executor) | 1 | **22.2 ns**, 0 B | 8842 ns, 176 B |
 | Async timeout, stage still pending | 1 | **152 ns**, 192 B | 598 ns, 240 B |
@@ -36,8 +38,10 @@ Low overhead is the reason resilience4cata exists: the annotation processor gene
 
 Reading the table honestly:
 
-- **Bulkhead with free slots on one thread is a tie** (20.5 vs 20.4 ns): both take and release a permit with one atomic each.
-- **Contended paths cost hundreds of nanoseconds in both libraries.** The breaker's mixed case at four threads (274 ns) is dominated by one shared window cursor that every call advances; the bulkhead and rate limiter at four threads pay for one shared counter.
+- **The circuit breaker's 1.9 ns holds while its window holds no failure.** Then a call only reads one field. Once the last `windowSize` calls include a failure or a slow call, every call writes the shared window cursor: with one call in ten failing, 274 against 910 ns with four threads, 3.3× rather than 440×.
+- **Resilience4j does work per call that resilience4cata does not**: its retry counts every call in its built-in metrics (`LongAdder` counters), and its breaker always times calls. resilience4cata keeps no per-call counter outside the breaker's window ([why there are no success metrics](faq.md#success-metrics)).
+- **The bulkhead with free slots on one thread was a tie** (20.5 against 20.4 ns, both one atomic to take and one to give back) until the slot was given back with a volatile add, which measured faster than a release-only one on Graviton3: 17.3 ns.
+- **Contended paths cost hundreds of nanoseconds in both libraries.** The breaker's mixed case at four threads (274 ns) is dominated by one shared window cursor that every call advances; the bulkhead and rate limiter at four threads pay for one shared counter, and park the threads that lose a race on it.
 - **The sync timeout is the most expensive sync policy** (22.2 ns on one thread; a later run measured 23.7 ns with no code change, an open layout effect, see [the next round](benchmarks.md#annotated-classes-generics-config-overrides-ticker-bulkhead-2026-10-24-aws-graviton3)). Resilience4j's comparison is not like for like: its `TimeLimiter` hands the call to another thread, which is where most of its 8.8 µs goes.
 - **Async calls allocate in both libraries**: every layer returns a new future. resilience4cata's async paths are not allocation-free; only the sync ones are.
 - **The rate limiter reads the clock once per call**, in both libraries; that read is most of its cost (on Apple Silicon, `System.nanoTime()` alone costs about 21 ns on one thread and 163 ns with four; see [Rate limiter, 1 and 4 threads](benchmarks.md#rate-limiter-1-and-4-threads-2026-10-24)).
@@ -116,7 +120,7 @@ The targets the project holds itself to, and how each one is checked:
 | **0 B/op** on the success path of every policy and of a full stack | JMH `-prof gc` in CI: `./gradlew :benchmark:allocationCheck` fails a pull request if a listed benchmark reaches its budget + 1 B/op (0 for every sync path; measured values for async futures) |
 | No locks and no `synchronized` on hot paths | code review, JMH contention scenarios |
 | Monomorphic, straight-line generated code per method; no shared lambda chains | JMH with a polluted JIT profile, `-XX:+PrintInlining` |
-| One clock-read pair per call, whatever the number of policies | code review |
+| No clock read on a success path unless a feature needs it (rate limiting, slow-call detection, time windows, the adaptive limit's latency, a retry's `maxDuration`); each such policy reads the clock itself, so a stack of them reads it more than once | code review |
 | Preallocated, stackless rejection exceptions; events allocated only if someone listens | JMH rejection scenarios (open breaker, full bulkhead, exhausted rate limiter), gated at 0 B/op in CI |
 | Correct lock-free structures | jcstress, in CI after every push to main and nightly |
 | Published, reproducible comparison against Resilience4j 2.4.0 | the `benchmark` module, with equivalent Resilience4j configuration and fairness notes ([Benchmarks in depth](benchmarks.md)) |
@@ -127,7 +131,7 @@ Most real calls are I/O-bound (milliseconds), so the point is overhead close to 
 
 - **Generated, per-method, straight-line code**: no shared decorator lambda, so the JIT inlines each call site with one receiver type.
 - **Nothing allocated on success**, and rejections throw one preallocated, stackless exception per instance.
-- **No locks** on any call path, and the weakest atomic that is correct: acquire/release instead of full fences took the free bulkhead from 23.2 to 9.3 ns on Apple M1 ([Bulkhead, 1 and 4 threads](benchmarks.md#bulkhead-1-and-4-threads-2026-10-23)).
+- **No locks** on any call path, and atomics chosen by measurement: an acquire compare-and-set instead of a full fence to take a slot took the free bulkhead from 23.2 to 9.3 ns on Apple M1 ([Bulkhead, 1 and 4 threads](benchmarks.md#bulkhead-1-and-4-threads-2026-10-23)), while giving it back with a volatile add measured faster than a release-only add on Graviton3 ([release counters](benchmarks.md#release-counters)).
 - **No shared writes while healthy**: a breaker whose window holds only fast successes is checked with one read per call.
 - **No clock reads** unless a feature needs them (slow-call detection, time windows, rate limiting). Timeouts use a shared watchdog thread instead of reading the clock per call.
 

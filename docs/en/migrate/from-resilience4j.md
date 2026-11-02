@@ -120,6 +120,25 @@ Resilience4j's `resilience4j-hedge` module (2.x) is programmatic and async only,
 
 The semantics differ: in Resilience4j the first attempt to **complete** wins, so a fast failure of either attempt fails the call; in resilience4cata the first **success** wins, a failure in `hedgeOn` starts the next attempt at once, and the call fails only when every attempt has failed (or one fails with an `abortOn` failure). The loser is cancelled, and the circuit breaker, bulkhead and timeout inside the hedge release what it held.
 
+## Metric names :id=metric-names
+
+Dashboards and alerts built on `resilience4j-micrometer` need new queries: the meters are named `r4c.*` and every one has the `name` tag, the instance id ([Metric names](../guides/observability.md#metric-names)). Resilience4j 2.4.0's names and the closest resilience4cata meter:
+
+| Resilience4j | resilience4cata | Note |
+|---|---|---|
+| `resilience4j.circuitbreaker.state` | `r4c.circuitbreaker.state` | 1 for the current state, 0 for the others, in both |
+| `resilience4j.circuitbreaker.failure.rate`, `.slow.call.rate` | `r4c.circuitbreaker.failure.rate`, `.slow.call.rate` | percentages in both |
+| `resilience4j.circuitbreaker.not.permitted.calls`, `.calls{kind=not_permitted}` | `r4c.calls.rejected{kind=circuitbreaker}` | |
+| `resilience4j.circuitbreaker.calls{kind=successful\|failed\|ignored}` | none | no per-call counters ([below](#no-success-metrics)) |
+| `resilience4j.circuitbreaker.buffered.calls`, `.slow.calls` | none | `bufferedCalls` and `slowCalls` in the snapshot |
+| `resilience4j.retry.calls{kind=…}` | `r4c.retry.retries`, `r4c.retry.gave.up{reason}` | retries and give-ups only, no success counts |
+| `resilience4j.timelimiter.calls{kind=timeout}` | `r4c.timeout.timed.out` | |
+| `resilience4j.bulkhead.available.concurrent.calls` | `r4c.bulkhead.concurrent.calls` | ours counts the slots in use, not the free ones |
+| `resilience4j.bulkhead.max.allowed.concurrent.calls` | `r4c.bulkhead.max.concurrent` | |
+| `resilience4j.ratelimiter.available.permissions` | `r4c.ratelimiter.available.permits` | |
+| `resilience4j.ratelimiter.waiting_threads` | none | |
+| `resilience4j.bulkhead.thread.pool.size` and the other thread-pool bulkhead meters | none | there is no thread-pool bulkhead |
+
 ## Behavioural differences :id=differences
 
 ### The order :id=order
@@ -157,6 +176,18 @@ A Resilience4j instance is shared by everything that uses its name. In resilienc
 ### The processor is mandatory :id=processor
 
 Without the annotation processor nothing is generated and `Resilient.of` fails with [R4C-RT-003](../errors.md#r4c-rt-003). There is no reflection or proxy fallback.
+
+### No success or latency metrics :id=no-success-metrics
+
+Resilience4j counts every call (its retry's and breaker's `calls` meters, and its time limiter's). resilience4cata keeps no per-call counter, because one would be a shared write on every call; it counts what goes wrong (rejections, retries, give-ups, timeouts, fallbacks) and exposes state as gauges. Count successes and latency where you already measure requests, for example with Micrometer's `@Timed` or your HTTP server's metrics ([why](../faq.md#success-metrics)).
+
+### Annotated classes and `@Transactional` :id=transactions
+
+With Spring's annotations on a class, Resilience4j's aspect and Spring's transaction proxy are ordered by aspect precedence. In resilience4cata an annotated class becomes a generated subclass, and Spring's proxy goes around it, outside the policies: one transaction would span every attempt. A bean that is both retried (or hedged) and transactional therefore stops the startup with [`R4C-SPR-004`](../errors.md#r4c-spr-004) (Micronaut `R4C-MN-005`, Quarkus `R4C-QK-002`). Put the policies on an interface, or move the transaction to another bean ([Spring: annotated classes](../guides/spring.md#classes)).
+
+### Hedges do not carry thread-locals :id=hedge-context
+
+A hedged attempt starts on a new virtual thread without the caller's `ThreadLocal`s or MDC, like an async retry ([Hedge](../policies/hedge.md)). Reactor's context does reach every attempt of a `Mono` method.
 
 ## The same service, both ways :id=example
 
