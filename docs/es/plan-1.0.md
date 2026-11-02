@@ -135,8 +135,8 @@ Un pull request por bug confirmado. Para cada uno: primero escribir un test que 
 
 ## Fase 4: release
 
-- [ ] Los arreglos de documentación de la segunda revisión: la primera llamada con timeout de un thread nuevo asigna memoria (`performance.md`), el rate limiter (no el bulkhead) aparca, las funcionalidades que leen el reloj, la frase del paso 6 del inicio rápido y un enlace a la guía HTTP, un test para la fila del timeout de la guía, el enlace de la FAQ a los valores por defecto, la media aproximada del adaptive limit, este estado.
-- [ ] `SECURITY.md`: versiones soportadas y cómo reportar una vulnerabilidad en privado.
+- [x] (#66) Los arreglos de documentación de la segunda revisión: la primera llamada con timeout de un thread nuevo asigna memoria (`performance.md`), el rate limiter (no el bulkhead) aparca, las funcionalidades que leen el reloj, la frase del paso 6 del inicio rápido y un enlace a la guía HTTP, un test para la fila del timeout de la guía, el enlace de la FAQ a los valores por defecto, la media aproximada del adaptive limit, este estado.
+- [x] (#66) `SECURITY.md`: versiones soportadas y cómo reportar una vulnerabilidad en privado.
 - [ ] Una corrida completa de jcstress en ARM (AWS Graviton), ya que el CI solo la corre en x86.
 - [ ] Decidir si la falta del procesador debe hacer fallar el arranque en Spring, Micronaut y Quarkus antes de 1.0 (decisión del dueño; quien evalúa adoptarla argumenta que añadirlo después cambia el comportamiento dentro de la versión mayor).
 - [ ] Decidir si hay release candidate: `1.0.0-RC1` en Central, una o dos semanas de uso, luego 1.0.0. (Decisión del dueño.)

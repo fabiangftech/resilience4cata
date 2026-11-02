@@ -135,8 +135,8 @@ One pull request per confirmed bug. For each: first write a test that reproduces
 
 ## Phase 4: release
 
-- [ ] The second review's documentation fixes: the first timed call of a new thread allocates (`performance.md`), the rate limiter (not the bulkhead) parks, the clock-reading features, quickstart step 6's wording and a link to the HTTP guide, a test for the guide's timeout row, the FAQ's defaults link, the adaptive limit's approximate average, this status.
-- [ ] `SECURITY.md`: supported versions and how to report a vulnerability privately.
+- [x] (#66) The second review's documentation fixes: the first timed call of a new thread allocates (`performance.md`), the rate limiter (not the bulkhead) parks, the clock-reading features, quickstart step 6's wording and a link to the HTTP guide, a test for the guide's timeout row, the FAQ's defaults link, the adaptive limit's approximate average, this status.
+- [x] (#66) `SECURITY.md`: supported versions and how to report a vulnerability privately.
 - [ ] One full jcstress run on ARM (AWS Graviton), since CI runs it only on x86.
 - [ ] Decide whether a missing processor must fail the startup in Spring, Micronaut and Quarkus before 1.0 (owner's decision; the adopter argues that adding it later changes behaviour within the major).
 - [ ] Decide on a release candidate: `1.0.0-RC1` on Central, one or two weeks of use, then 1.0.0. (Owner's decision.)
