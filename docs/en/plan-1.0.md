@@ -1,0 +1,139 @@
+# Plan to 1.0
+
+What is left before 1.0.0 is released, from a review of 0.13.0 by four independent reviewers, and what waits until after it.
+
+This page is the working plan: each task says what to change, where, and how to check it, so work can resume from here without any other context. Mark a task done (`[x]`) in the same pull request that does it, and add its pull request number.
+
+## Status
+
+- Version on Maven Central: 0.13.0. `main` is 0.14.0-SNAPSHOT.
+- The performance plan from the AWS runs is done (pull requests #53–#59, see [benchmarks](benchmarks.md)).
+- Javadoc titles carry the artifact name (#60); javadoc.io was synced for all 11 modules.
+- Next: phase 1 (API), then phases 2 and 3, then the release (phase 4).
+
+## The review
+
+Four reviewers read the repository on 2026-11-02, each from one point of view. None ran the build. Their findings are claims to check, not facts: every task below starts by confirming the finding.
+
+| Reviewer | Verdict |
+|---|---|
+| A Resilience4j user deciding whether to adopt | Not yet for general production; yes for a pilot on one service. Strong engineering; the risk is the project's age and a single maintainer. |
+| An API designer | Close to ready for the freeze; five cheap fixes now that would be permanent later. |
+| A performance and concurrency skeptic | Careful engineering, no confirmed bug; the headlines are best cases; x86 never measured; four suspected gaps. |
+| A newcomer to resilience libraries | A call protected in about 15 minutes; a few stale or contradictory statements; some pages too internal. |
+
+What they valued, to keep while changing the rest:
+
+- Errors at compile time with stable `R4C-…` codes, each documented with a wrong example and its fix, where Resilience4j resolves `fallbackMethod` by reflection at run time.
+- A near-zero cost per call, measured openly: ties and regressions are shown, fairness adjustments are written in each benchmark's Javadoc, Resilience4j gets stackless exceptions and no dead code, and the allocation gate runs in CI.
+- Generated code that is plain Java: stack traces go through `X$Resilient`, not proxy chains, and self-invocation is intercepted in the subclass style.
+- A serious migration guide (configuration tables, differing defaults, when to stay on Resilience4j) and an explicit compatibility promise backed by japicmp and the generated-code rule.
+- An API that can grow: configs are final classes with builders, `ResilienceSnapshot` is a class, handles and `FallbackContext` are library-implemented, rejections share a sealed stackless base, enums document that they grow, `@Internal`/`@Experimental` are enforced, `PipelineCall` keeps a precise checked exception.
+- Sound lock-free code, as far as the reviewer read: the breaker's `quiet` handshake, the timeout's `RUNNING → IDLE` acquire CAS, `BulkheadSemaphore`'s release and re-check, the waiters' `count++ → offer → drain` order, the `LinkedFuture` cancel mark, and the retry budget erring towards fewer retries.
+- The quickstart (one tested program, its output, "What just happened") and the installation page (BOM on `annotationProcessor`, old Maven, JDK 23 discovery, IDEs, Lombok order). The en/es trees match and the Spanish reads naturally.
+
+## Phase 1: API, before the freeze
+
+One pull request. Everything here changes the public API, which is free before 1.0 and impossible after it. Each change gets a changelog line (en/es) and, where it touches generated code, a check that `examples` still passes.
+
+- [ ] **1.1 Nullable type parameters.** Under `@NullMarked`, `Pipeline<T>`, `PipelineCall<T, X>`, `FallbackHandler<T>` and `Classifier<T>` bound `T` to non-null, though `PipelineRunnable extends PipelineCall<@Nullable Void, X>` already breaks that bound and fallbacks of `void` methods return null. Declare `<T extends @Nullable Object>` on all four, and on whatever else takes a user's result type (`AsyncCall`, `Recovery`, `PipelineRunnable`: check). Check: `./gradlew build`; the processor's tests compile generated code with `-Werror`.
+- [ ] **1.2 Records that grow.** `reference/compatibility.md` says event and snapshot records may get components, but adding one removes the canonical constructor (binary incompatible, japicmp fails). Decide: either constructing events and snapshots is not supported (say so in `compatibility.md` and the records' Javadoc), or every new component keeps the old constructor (say so, and add the rule to CLAUDE.md). The second is friendlier to users' listener tests; prefer it.
+- [ ] **1.3 Sealed types that grow.** Add `PolicyConfig` and `CallRejectedException` (their `permits` grow with each new policy) to the "may grow" list in `compatibility.md` and in their Javadoc, as for events: an exhaustive `switch` over them needs a default branch.
+- [ ] **1.4 One name for a rejection event.** `CircuitBreakerEvent.CallNotPermitted` → `Rejected`, like the bulkhead, rate limiter and adaptive limit events. The exception keeps its name. Also align the annotation enum `LimitAlgorithm` with `AdaptiveLimitConfig.Algorithm` (the other enums, `Backoff`, `Jitter`, `WindowType`, match their config enum). Update the metrics modules, the events table in `guides/observability.md` (en/es) and the snippets under `examples/src/test/.../docs/`.
+- [ ] **1.5 Constants that inline.** `HedgeConfig.MIN_ATTEMPTS`/`MAX_ATTEMPTS` are compile-time constants: they are copied into callers' class files, so raising the cap of 10 would not reach code compiled earlier. Make them private (the bounds are documented), or not constant.
+- [ ] **1.6 Small renames.** `ResilienceRegistry.Builder.listen(String instance, …)` → `id`. `Resilient.create(type, registry, Object... args)`: the arguments may be null, so `@Nullable Object...`. The derived-id format is `<interface>#…` in `ResilienceRegistry` and `ResilienceEvent` but `<type>#…` in the handles: use `<type>` (annotated classes).
+- [ ] **1.7 Decide, do not necessarily change.** Write each decision in `design.md`:
+  - `@Timeout` has no `name` (the six others do). Adding it later is additive.
+  - Builder list parameters (`retryOn(List<Class<? extends Throwable>>)`) reject `List<Class<? extends Exception>>`; `Collection<? extends Class<? extends Throwable>>` would accept it, but only before 1.0.
+  - Argument order: `Resilient.of(type, delegate, registry)`, `create(type, registry, args…)`, `Pipeline.builder(registry, id)`.
+  - Micronaut's `ResilienceHealthIndicator` and `ResilienceEndpoint` have public constructors: mark them `@Internal`.
+  - `AdaptiveLimitConfig.Builder` tuning setters have one-line Javadoc with no main description: write it.
+  - Snapshot shapes differ: retry, timeout and hedge snapshots embed `config`; bulkhead, rate limiter and adaptive limit copy a few fields (`maxConcurrent`, `permits`, `minLimit`/`maxLimit`); the circuit breaker's carries neither. Choose one shape, or write down why they differ.
+  - `CircuitBreakerSnapshot` uses `-1` for "no rate yet": keep the sentinel (documented) or plan a `hasRates()` accessor.
+  - `Pipeline.Builder.retry(String)` next to `retry(Consumer)` (and the same pairs for every policy): `retry(null)` is ambiguous. Accept it or rename one of the pair.
+  - `LockedOverride.policy` is a `String` with a closed set of values: an enum would be safer; the string matches the configuration keys.
+  - Two enums named `ExhaustedResult` (`Pipeline.ExhaustedResult` and the annotation's, which also has `INHERIT`): importing both is clumsy. Accept or rename.
+
+Check for the whole phase: `./gradlew build :stress:compileJava`, `./gradlew :quarkus:it:check`, `./gradlew :core:apiCompatibility` (the report lists the intended changes and nothing else).
+
+## Phase 2: documentation
+
+One pull request, en and es together. Most of these are stale numbers or sentences that contradict the code.
+
+- [ ] **2.1 Stale performance numbers.**
+  - The landing pages (`docs/{en,es}/README.md`) label their chart "resilience4cata 0.1.0" and show the bulkhead at 20.5 ns; the root `README.md` too. Current: 17.3 ns (`benchmarks.md#release-counters`).
+  - `performance.md`: the headline bulkhead row (20.5 / 264 ns, "tie") predates 17.3 / 195.5 ns; "acquire/release … 23.2 → 9.3 ns" contradicts the volatile `getAndAdd` release; the main table was measured with 0.1.0.
+  - `faq.md` "How fast is it?" puts 1.9 ns (4 threads) next to Resilience4j's 89.2 ns (1 thread). Use one row.
+  - The root `README.md` cites the breaker with four threads (832 ns for Resilience4j) where the FAQ uses one thread (89 ns): the README, the landing pages, the FAQ and `performance.md` must cite the same rows.
+  - Decide whether to rerun the headline table on AWS with the 1.0 code (`infra/bench.sh`), so that every cited number has one source.
+- [ ] **2.2 Honest headlines.**
+  - The breaker's 1.9 ns with four threads holds only while the window holds no failure (the `quiet` path). From about 1 % failures every call writes the shared cursor: "mixed", 274 vs 910 ns. Say so next to the headline.
+  - Say that Resilience4j updates its built-in metrics on every call and resilience4cata keeps no per-call counters, which is part of the difference.
+  - The timeout row (22 vs 8842 ns) compares a watchdog with an executor hand-off: move it out of the bold headline or qualify it.
+  - "One clock-read pair per call, whatever the number of policies" is false for stacks (rate limiter, adaptive limit, timed breaker, retry with `maxDuration` each read the clock). Correct it.
+  - The benchmarks measure average time in a closed loop, which hides tails: say so where the contended rate limiter and bulkhead are cited (their losers park), until the percentile runs exist.
+  - x86 has never been timed: say so in `performance.md` ("x86-64 pending" is there; keep it visible next to the headline).
+  - The circuit breaker's count window is approximate under contention (a stale opaque `quiet` read can skip recording one success right after a failure; the same-outcome slot skip can reorder writes after the window wraps). Write that in `policies/circuit-breaker.md` and `architecture.md`.
+- [ ] **2.5 Benchmarks behind the honest headlines.** Add a breaker case at a realistic failure rate (0.1 % and 1 %) next to "success" and "mixed", one and four threads, with Resilience4j at the same rate. Run it on AWS and cite it in 2.2.
+- [ ] **2.3 Contradictions.**
+  - `start/how-it-works.md`, "Policy order": "The order is not configurable yet" (wrong since `@PolicyOrder`).
+  - Policy pages' fact strips say "x of 7"; there are 8 policies.
+  - Root `README.md` "names can still change before 1.0" vs the FAQ "no more API changes planned". Keep the FAQ's.
+  - `policies/retry.md` "Small print" cites R4C-ATR-006 for `enabled`: retired.
+  - `errors.md` prefix table has no `R4C-ORD` row.
+  - `guides/troubleshooting.md` [R4C-RT-004]: rewrite with the current rule (core may be newer than the processor; an older core is RT-021).
+  - `start/installation.md` artifact table: the annotations row lacks `@Hedge`, `@AdaptiveLimit`, `@PolicyOrder`.
+  - `policies/circuit-breaker.md` generated sample shows `50.0f`; generated code emits `50.0`. Refresh it from `examples/build/generated/...`.
+  - The landing chips say "Sync and CompletionStage": add `Mono`/`Flux`.
+  - The FAQ roadmap says "YAML configuration: v1" though Spring, Micronaut and Quarkus read YAML already: say what is meant (plain Java YAML files) or drop it.
+- [ ] **2.4 Newcomer path.**
+  - Quickstart step 6, "See the breaker open": lower `minimumCalls`, show `OPEN`, the `CallNotPermittedException` and the fallback answering (snippet tested in `examples`).
+  - A guide "Retry and circuit breaker for an HTTP call": which exceptions to retry or abort on, a `@Timeout` inside, a breaker `name`, sensible numbers, idempotency. New page in both sidebars.
+  - A short glossary, as definitions in `policies/README.md` or its own page: jitter and "full jitter", half-open and probes, instance id and derived id, registry, bulkhead, hedge, stackless exception, straight-line code, and the ABI check (`Abi.require` in generated samples).
+  - Policy pages: move the generated-code block below "How it behaves" (or collapse it).
+  - R4C-RT-003: the message, `errors.md` and installation's "Verify that it works" show only Gradle; add Maven.
+  - `guides/spring.md`: the Maven tab adds `spring-boot-configuration-processor` with no version or reason; explain it or drop it. Move maintainer detail (versions tested on 4.1.0 and 4.1.2, AOT internals, the bytecode-reading transaction check) to a final "Under the hood" section. The transactions section (R4C-SPR-004) comes before "Configuration": put "Configuration" first.
+  - Sidebar: label the "Project" group as for contributors.
+  - `errors.md` is about 3,200 lines on one page: add a hint at the top (search with the code, the prefix table links to each area), or split it per area if the site generator and `ErrorCodeTest` allow it.
+  - Maven: `annotationProcessorPaths` replaces the discovery of every other processor (Lombok, MapStruct), so adding ours can silently drop theirs. Check that `start/installation.md` says so clearly next to the Maven snippet, with the fix (list them all).
+  - Defaults that surprise someone coming from Resilience4j: one short list in `migrate/from-resilience4j.md` (and linked from the FAQ). Candidates the reviewer named: a retry backs off exponentially with jitter from 200 ms by default; the rate limiter rejects at once (`maxWait = 0`); with annotated classes `@Transactional` is outside the policies, and the startup check refuses it, so the code must be restructured. Also the reviewer's claim that an `Error` counts as a success for the breaker: check it in `CircuitBreakerPolicy` and the generated layers first; if true, document it (and decide in phase 1 whether that is the right behaviour); if false, nothing to do.
+  - Metric names: users migrating from Resilience4j must redo dashboards and alerts (`r4c.*`). Add a table from Resilience4j's metric names to ours in the migration page.
+  - What Resilience4j has and we do not, in one place in the migration page (some is already there under "when to stay"): thread-pool bulkhead, cache, RxJava, Kotlin, hot reconfiguration (by decision), an automatic open → half-open transition, event endpoints, success and latency metrics, and that hedges do not carry the caller's context to the hedged attempts. Check each against the code before writing it.
+
+Check: `./gradlew :examples:test --tests '*DocsTest*' :site:test`, and `./gradlew :site:serve` to look at the changed pages. 2.5 is a benchmark change (its own pull request, with an AWS run).
+
+## Phase 3: suspected bugs
+
+One pull request per confirmed bug. For each: first write a test that reproduces it (deterministic seam or jcstress, never timing), see it fail, then fix, then mutation-check the test. If it does not reproduce, write down why in this page and close the task.
+
+- [ ] **3.1 Bulkhead: a free slot with an async waiter left queued.** `BulkheadPolicy.exit` (around line 323): when `hasQueuedThreads()` and `yieldToSync()`, it releases and returns without draining the async waiters. If the sync thread it yielded to then times out, is interrupted, or loses to a barging caller, the slot stays free while an async waiter waits, until the next call; with no traffic that waiter is rejected at `maxWait`. Test through `enqueueForTest`/`drainForTest` and the semaphore. Possible fix: after the yield, drain if the semaphore still has a permit and no queued thread took it. jcstress does not cover the yield-to-sync hand-off today: add a case to `BulkheadWaitersStress` (or a new class) and mutation-check it.
+- [ ] **3.2 Adaptive limit: inconsistent samples.** `AdaptiveLimitPolicy` (around line 281): `SUM` and `COUNT` of a stripe are separate lossy writes, so a race can keep one and lose the other; a stripe that goes back (a thread preempted between read and write) can make `sum - usedSum` negative, clamped to an RTT of 1 ns, which pushes Gradient2 up. Minimum fix: a negative or zero delta skips the window instead of becoming 1 ns; better, write sum and count consistently (one packed write, or a sequence number). Test with the `(id, config, env, stripes)` constructor and seams; add the stripe race to `AdaptiveLimitStress`, which does not cover it today.
+- [ ] **3.3 Rate limiter: a stale `now` after the park.** `RateLimiterPolicy` (around line 134): `now` is read once before the loop; after a lost CAS and the 1 ns park (tens of µs on Linux), the wait is computed from an old time: the caller sleeps too long, or with `maxWait = 0` may be rejected when a permit is due. Check whether re-reading the clock after a park changes the benchmark (measure single and four threads). The same park gives the losing callers a long tail (about 50 µs of timer slack on Linux) that average-time benchmarks do not show: measure it with the percentile runs (after 1.0, or here if 3.3 changes the loop).
+- [ ] **3.4 Timeout: the user's own interrupt is cleared.** `TimeoutPolicy` (around line 218): after the watchdog interrupts, `Thread.interrupted()` also clears an interrupt the caller had set before. Decide the semantics (keep a prior interrupt: re-set the flag if it was set before the call?) and test it with `Watchdog(0)`.
+- [ ] **3.5 Retry budget: unbounded lost update.** `RetryBudget` (around line 125): a thread preempted between its opaque read and write can erase other threads' calls on its stripe; stripes are shared when threads outnumber 2 × CPUs. The direction is safe (fewer retries). Probably document, not fix: write the bound (or its absence) in the class Javadoc and `architecture.md`.
+- [ ] **3.6 Timeout with virtual threads.** Every new thread's first timed call registers a `ThreadScopes` in a shared queue and the watchdog walks every registered thread each tick. With one virtual thread per request that is an allocation per request and a scan proportional to live threads. Benchmark it (a JMH case starting a virtual thread per call); then decide whether to fix or document.
+
+## Phase 4: release
+
+- [ ] Decide on a release candidate: `1.0.0-RC1` on Central, one or two weeks of use, then 1.0.0. (Owner's decision.)
+- [ ] Follow [releasing](releasing.md): `./gradlew :examples:check -Pr4c.generatedBy=0.13.0`, version bump in build snippets (not the blog), tag, `release.yml`, publish by hand in the Central portal.
+- [ ] After the release: `r4c.apiBaseline` = the release; sync javadoc.io for every module (the sync and upload buttons on each artifact's versions page).
+
+## After 1.0
+
+Additive, so not blocking the freeze. Roughly in order of value. Items marked *(asked before 1.0)* are ones a reviewer wanted before the release: the owner decides whether to pull them forward.
+
+- Run the Resilience4j comparison on x86 (`c7i`) and publish it next to Graviton; on x86 every atomic is a full fence and `nanoTime` is cheap, so the ARM-tuned choices may rank differently. *(asked before 1.0)*
+- jcstress in default mode on an ARM runner (`ubuntu-24.04-arm` or Graviton) on a schedule, and the mutants rerun there: today the `stress` workflow runs quick mode on x86 only, which is TSO, so weakened orderings cannot fail there. *(asked before 1.0)*
+- Percentile and open-loop benchmarks (`SampleTime`) for the contended rate limiter and bulkhead. *(asked before 1.0)*
+- A loud failure in Spring, Micronaut and Quarkus when annotated classes have no generated class: today the beans are silently unprotected and only an empty `/actuator/resilience4cata` shows it. *(asked before 1.0)*
+- Optional success and latency metrics, measured before adding (per-call shared writes), for parity with Resilience4j dashboards. *(asked before 1.0)*
+- Spring Boot 3 support, or a documented reason and migration path. *(asked before 1.0)*
+- Project health: a second maintainer with release rights, a security policy (`SECURITY.md`) and a support policy. *(asked before 1.0)*
+- Additive API gaps the API reviewer listed:
+  - `Ticker.onAdvance` has no way to unregister.
+  - Events carry only `nanoTime`, no wall-clock time.
+  - `ConfigException.problems()` returns `List<String>`, not structured problems (code, key, origin).
+  - Only circuit breakers have a list method on the registry; retry, hedge and timeout have no handles.
+- Features Resilience4j has, each to decide (build, or document why not): thread-pool bulkhead, cache, RxJava, Kotlin support, an automatic open → half-open transition, event endpoints, carrying the caller's context into hedged attempts.
+- Reassess adoption signals in about six months, as the adopting reviewer would: activity, maintainers, issues closed. A pilot on one high-traffic plain Java service is what they would recommend first.

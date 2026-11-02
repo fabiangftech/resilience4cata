@@ -43,6 +43,7 @@
   - [Arquitectura](/es/architecture.md)
   - [Benchmarks en detalle](/es/benchmarks.md)
   - [Publicar una versión](/es/releasing.md)
+  - [Plan hacia 1.0](/es/plan-1.0.md)
   - [Investigación: panorama](/es/research/01-landscape.md)
   - [Investigación: mecanismos de anotaciones](/es/research/02-annotation-mechanisms.md)
   - [Investigación: rendimiento interno](/es/research/03-performance-internals.md)
