@@ -18,7 +18,7 @@ El bajo overhead es la razón de ser de resilience4cata: el annotation processor
 ## Resultados principales :id=headline
 
 > [!MEASURED]
-> AWS `c7g.xlarge` (Graviton3), JDK 21, resilience4cata 0.1.0 vs Resilience4j 2.4.0, nanosegundos y bytes asignados por llamada. De [Cierre del MVP (2026-10-24, AWS Graviton3)](benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3), salvo el bulkhead con slots libres: el código posterior a 0.13.0, de [slots devueltos con una suma volátil (2026-11-01)](benchmarks.md#release-counters), donde Resilience4j midió 20.4 ns en un thread y de 348 a 450 ns con cuatro.
+> AWS `c7g.xlarge` (Graviton3), JDK 21, resilience4cata 0.1.0 vs Resilience4j 2.4.0, nanosegundos y bytes asignados por llamada. De [Cierre del MVP (2026-10-24, AWS Graviton3)](benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3), salvo el bulkhead con slots libres: el código posterior a 0.13.0, de [slots devueltos con una suma volátil (2026-11-01)](benchmarks.md#release-counters), donde Resilience4j midió 20.4 ns en un thread y de 348 a 450 ns con cuatro; y el breaker que hace fallar una llamada de cada 1 000 o de cada 100, de [tasas de fallos realistas (2026-11-02)](benchmarks.md#failure-rates).
 
 | Escenario | Threads | resilience4cata | Resilience4j 2.4.0 |
 |---|---:|---:|---:|
@@ -26,6 +26,8 @@ El bajo overhead es la razón de ser de resilience4cata: el annotation processor
 | Retry, falla una vez y luego tiene éxito (Resilience4j sin su `sleep(0)`) | 1 | **6.5 ns**, 0 B | 61.6 ns, 16 B |
 | Circuit breaker, todas las llamadas tienen éxito | 1 | **1.9 ns**, 0 B | 89.2 ns, 0 B |
 | Circuit breaker, todas las llamadas tienen éxito | 4 | **1.9 ns**, 0 B | 832 ns, 2 B |
+| Circuit breaker, una de cada 1 000 llamadas falla | 4 | **11.2 ns**, 0 B | 1025 ns, 26 B |
+| Circuit breaker, una de cada 100 llamadas falla | 4 | **65.4 ns**, 0 B | 1006 ns, 22–26 B |
 | Circuit breaker, una de cada diez llamadas falla | 4 | **274 ns**, 0 B | 910 ns, 2 B |
 | Rate limiter, permisos libres | 4 | **187 ns**, 0 B | 275 ns, 40 B |
 | Rate limiter, agotado (todas las llamadas rechazadas) | 4 | **34.7 ns**, 0 B | 1599 ns, 505 B |
@@ -38,7 +40,7 @@ El bajo overhead es la razón de ser de resilience4cata: el annotation processor
 
 Leyendo la tabla con honestidad:
 
-- **Los 1.9 ns del circuit breaker valen mientras su ventana no tiene fallos.** Entonces una llamada solo lee un campo. En cuanto las últimas `windowSize` llamadas incluyen un fallo o una llamada lenta, cada llamada escribe el cursor compartido de la ventana: con una llamada de cada diez fallando, 274 contra 910 ns con cuatro threads, 3.3× en vez de 440×.
+- **Los 1.9 ns del circuit breaker valen mientras su ventana no tiene fallos.** Entonces una llamada solo lee un campo. En cuanto las últimas `windowSize` llamadas incluyen un fallo o una llamada lenta, cada llamada escribe el cursor compartido de la ventana. Con cuatro threads eso cuesta 11.2 ns con un 0.1 % de fallos, 65.4 ns con un 1 % y 274 ns con un 10 %, frente a unos 1 000 ns de Resilience4j con cualquier tasa: 91×, 15× y 3.3× en vez de 440× ([tasas de fallos realistas](benchmarks.md#failure-rates)).
 - **Resilience4j hace trabajo por llamada que resilience4cata no hace**: su retry cuenta cada llamada en sus métricas internas (contadores `LongAdder`), y su breaker siempre mide el tiempo de las llamadas. resilience4cata no mantiene ningún contador por llamada fuera de la ventana del breaker ([por qué no hay métricas de éxito](faq.md#success-metrics)).
 - **El bulkhead con slots libres en un thread era un empate** (20.5 contra 20.4 ns, ambos un atómico para tomar y otro para devolver) hasta que el slot se devolvió con una suma volátil, que resultó más rápida que una solo release en Graviton3: 17.3 ns.
 - **Los caminos con contención cuestan cientos de nanosegundos en ambas librerías.** El caso mixto del breaker con cuatro threads (274 ns) está dominado por un único cursor de ventana compartido que cada llamada avanza; el bulkhead y el rate limiter con cuatro threads pagan por un contador compartido, y aparcan los threads que pierden una carrera sobre él.

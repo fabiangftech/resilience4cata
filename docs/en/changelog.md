@@ -14,6 +14,7 @@ The last API changes before 1.0, from the review in the [plan to 1.0](plan-1.0.m
 - [Retry and circuit breaker for an HTTP call](guides/http-calls.md): a complete recipe (which failures to retry, a breaker that ignores client errors, a timeout per attempt, idempotency, choosing the numbers), tested against a real HTTP server.
 - Quickstart step 6, *See the breaker open*; a glossary in the [policies overview](policies/README.md#glossary); in the [migration guide](migrate/from-resilience4j.md), a table from Resilience4j's metric names to resilience4cata's and three more differences (no success or latency metrics, `@Transactional` on annotated classes, thread-locals in hedges).
 - The [R4C-RT-003](errors.md#r4c-rt-003) message (no generated class) shows the Maven line too, not only Gradle's.
+- `CircuitBreakerFailureRateBenchmark`: the breaker failing one call in 1 000 or in 100. With four threads on Graviton3, 11.2 and 65.4 ns per call against about 1 000 ns for Resilience4j ([realistic failure rates](benchmarks.md#failure-rates)); in the allocation gate at 0 B.
 
 ### Changed
 

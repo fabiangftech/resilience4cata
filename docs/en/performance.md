@@ -18,7 +18,7 @@ Low overhead is the reason resilience4cata exists: the annotation processor gene
 ## Headline results :id=headline
 
 > [!MEASURED]
-> AWS `c7g.xlarge` (Graviton3), JDK 21, resilience4cata 0.1.0 vs Resilience4j 2.4.0, nanoseconds and bytes allocated per call. From [MVP completion (2026-10-24, AWS Graviton3)](benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3), except the bulkhead with free slots: the code after 0.13.0, from [slots given back with a volatile add (2026-11-01)](benchmarks.md#release-counters), where Resilience4j measured 20.4 ns on one thread and 348 to 450 ns with four.
+> AWS `c7g.xlarge` (Graviton3), JDK 21, resilience4cata 0.1.0 vs Resilience4j 2.4.0, nanoseconds and bytes allocated per call. From [MVP completion (2026-10-24, AWS Graviton3)](benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3), except the bulkhead with free slots: the code after 0.13.0, from [slots given back with a volatile add (2026-11-01)](benchmarks.md#release-counters), where Resilience4j measured 20.4 ns on one thread and 348 to 450 ns with four; and the breaker failing one call in 1 000 or 100, from [realistic failure rates (2026-11-02)](benchmarks.md#failure-rates).
 
 | Scenario | Threads | resilience4cata | Resilience4j 2.4.0 |
 |---|---:|---:|---:|
@@ -26,6 +26,8 @@ Low overhead is the reason resilience4cata exists: the annotation processor gene
 | Retry, fails once then succeeds (Resilience4j without its `sleep(0)`) | 1 | **6.5 ns**, 0 B | 61.6 ns, 16 B |
 | Circuit breaker, every call succeeds | 1 | **1.9 ns**, 0 B | 89.2 ns, 0 B |
 | Circuit breaker, every call succeeds | 4 | **1.9 ns**, 0 B | 832 ns, 2 B |
+| Circuit breaker, one call in 1 000 fails | 4 | **11.2 ns**, 0 B | 1025 ns, 26 B |
+| Circuit breaker, one call in 100 fails | 4 | **65.4 ns**, 0 B | 1006 ns, 22–26 B |
 | Circuit breaker, one call in ten fails | 4 | **274 ns**, 0 B | 910 ns, 2 B |
 | Rate limiter, permits free | 4 | **187 ns**, 0 B | 275 ns, 40 B |
 | Rate limiter, exhausted (every call rejected) | 4 | **34.7 ns**, 0 B | 1599 ns, 505 B |
@@ -38,7 +40,7 @@ Low overhead is the reason resilience4cata exists: the annotation processor gene
 
 Reading the table honestly:
 
-- **The circuit breaker's 1.9 ns holds while its window holds no failure.** Then a call only reads one field. Once the last `windowSize` calls include a failure or a slow call, every call writes the shared window cursor: with one call in ten failing, 274 against 910 ns with four threads, 3.3× rather than 440×.
+- **The circuit breaker's 1.9 ns holds while its window holds no failure.** Then a call only reads one field. Once the last `windowSize` calls include a failure or a slow call, every call writes the shared window cursor. With four threads that costs 11.2 ns at 0.1 % failures, 65.4 ns at 1 % and 274 ns at 10 %, against about 1 000 ns for Resilience4j at every rate: 91×, 15× and 3.3× rather than 440× ([realistic failure rates](benchmarks.md#failure-rates)).
 - **Resilience4j does work per call that resilience4cata does not**: its retry counts every call in its built-in metrics (`LongAdder` counters), and its breaker always times calls. resilience4cata keeps no per-call counter outside the breaker's window ([why there are no success metrics](faq.md#success-metrics)).
 - **The bulkhead with free slots on one thread was a tie** (20.5 against 20.4 ns, both one atomic to take and one to give back) until the slot was given back with a volatile add, which measured faster than a release-only one on Graviton3: 17.3 ns.
 - **Contended paths cost hundreds of nanoseconds in both libraries.** The breaker's mixed case at four threads (274 ns) is dominated by one shared window cursor that every call advances; the bulkhead and rate limiter at four threads pay for one shared counter, and park the threads that lose a race on it.
