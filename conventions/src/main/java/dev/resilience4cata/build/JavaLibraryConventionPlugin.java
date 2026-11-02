@@ -75,8 +75,12 @@ public final class JavaLibraryConventionPlugin implements Plugin<Project> {
             task.getOptions().getCompilerArgs().addAll(List.of("-Xlint:all", "-Xlint:-processing", "-Werror"));
         });
 
-        project.getTasks().withType(Javadoc.class).configureEach(task ->
-                ((StandardJavadocDocletOptions) task.getOptions()).addBooleanOption("Xdoclint:all,-missing", true));
+        project.getTasks().withType(Javadoc.class).configureEach(task -> {
+            ((StandardJavadocDocletOptions) task.getOptions()).addBooleanOption("Xdoclint:all,-missing", true);
+            // Gradle's default title is "<project name> <version> API": "core", or "runtime" for the Quarkus
+            // extension. Pages such as javadoc.io show it, so name the artifact instead.
+            task.setTitle(artifactName(project) + " " + project.getVersion() + " API");
+        });
 
         JavaToolchainService toolchains = project.getExtensions().getByType(JavaToolchainService.class);
         Provider<JavaLauncher> testLauncher = project.getProviders().gradleProperty("testJdk")
