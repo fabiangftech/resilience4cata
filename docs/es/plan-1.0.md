@@ -37,17 +37,17 @@ Lo que valoraron, para conservarlo mientras se cambia lo demás:
 Un pull request. Todo esto cambia la API pública, lo que es gratis antes de 1.0 e imposible después. Cada cambio lleva una línea en el changelog (en/es) y, si toca el código generado, una comprobación de que `examples` sigue pasando.
 
 - [x] **1.1 Parámetros de tipo que admiten null.** Con `@NullMarked`, `Pipeline<T>`, `PipelineCall<T, X>`, `FallbackHandler<T>` y `Classifier<T>` limitan `T` a no nulo, aunque `PipelineRunnable extends PipelineCall<@Nullable Void, X>` ya rompe ese límite y los fallbacks de métodos `void` devuelven null. Declarar `<T extends @Nullable Object>` en los cuatro, y en lo demás que reciba el tipo del resultado del usuario (`AsyncCall`, `Recovery`, `PipelineRunnable`: comprobar). Comprobación: `./gradlew build`; los tests del procesador compilan el código generado con `-Werror`.
-  - **Resultado:** Hecho: los cuatro tipos, más `AsyncCall`, `Recovery` y los `executeAsync` de las políticas; los tipos `Mono`/`Flux` de reactor siguen sin admitir null (Reactor prohíbe elementos null).
+  - **Resultado:** (#62) Hecho: los cuatro tipos, más `AsyncCall`, `Recovery` y los `executeAsync` de las políticas; los tipos `Mono`/`Flux` de reactor siguen sin admitir null (Reactor prohíbe elementos null).
 - [x] **1.2 Records que crecen.** `reference/compatibility.md` dice que los records de eventos y snapshots pueden recibir componentes, pero añadir uno elimina el constructor canónico (incompatible en binario, japicmp falla). Decidir: o construir eventos y snapshots no está soportado (decirlo en `compatibility.md` y en el Javadoc de los records), o cada componente nuevo conserva el constructor viejo (decirlo, y añadir la regla a CLAUDE.md). La segunda es más amable con los tests de listeners de los usuarios; preferirla.
-  - **Resultado:** Hecho: se conserva el constructor viejo (`compatibility.md`, `ResilienceEvent`, CLAUDE.md).
+  - **Resultado:** (#62) Hecho: se conserva el constructor viejo (`compatibility.md`, `ResilienceEvent`, CLAUDE.md).
 - [x] **1.3 Tipos sealed que crecen.** Añadir `PolicyConfig` y `CallRejectedException` (sus `permits` crecen con cada política nueva) a la lista de "puede crecer" de `compatibility.md` y a su Javadoc, como con los eventos: un `switch` exhaustivo sobre ellos necesita una rama por defecto.
-  - **Resultado:** Hecho (`compatibility.md`, Javadoc de las dos clases).
+  - **Resultado:** (#62) Hecho (`compatibility.md`, Javadoc de las dos clases).
 - [x] **1.4 Un nombre para el evento de rechazo.** `CircuitBreakerEvent.CallNotPermitted` → `Rejected`, como en los eventos del bulkhead, el rate limiter y el adaptive limit. La excepción conserva su nombre. Alinear también el enum de la anotación `LimitAlgorithm` con `AdaptiveLimitConfig.Algorithm` (los otros enums, `Backoff`, `Jitter`, `WindowType`, coinciden con el de su config). Actualizar los módulos de métricas, la tabla de eventos de `guides/observability.md` (en/es) y los snippets de `examples/src/test/.../docs/`.
-  - **Resultado:** Hecho para el evento. `LimitAlgorithm` se mantiene: ver [diseño](design.md#api-decisions).
+  - **Resultado:** (#62) Hecho para el evento. `LimitAlgorithm` se mantiene: ver [diseño](design.md#api-decisions).
 - [x] **1.5 Constantes que se copian.** `HedgeConfig.MIN_ATTEMPTS`/`MAX_ATTEMPTS` son constantes de compilación: se copian en los class files de quien las usa, así que subir el tope de 10 no llegaría al código compilado antes. Hacerlas privadas (los límites están documentados) o no constantes.
-  - **Resultado:** Hecho: privadas.
+  - **Resultado:** (#62) Hecho: privadas.
 - [x] **1.6 Renombres pequeños.** `ResilienceRegistry.Builder.listen(String instance, …)` → `id`. `Resilient.create(type, registry, Object... args)`: los argumentos pueden ser null, así que `@Nullable Object...`. El formato del id derivado es `<interface>#…` en `ResilienceRegistry` y `ResilienceEvent` pero `<type>#…` en los handles: usar `<type>` (clases anotadas).
-  - **Resultado:** Hecho.
+  - **Resultado:** (#62) Hecho.
 - [x] **1.7 Decidir, no necesariamente cambiar.** Escribir cada decisión en `design.md`:
   - `@Timeout` no tiene `name` (las otras seis sí). Añadirlo después es aditivo.
   - Los parámetros de lista de los builders (`retryOn(List<Class<? extends Throwable>>)`) rechazan `List<Class<? extends Exception>>`; `Collection<? extends Class<? extends Throwable>>` lo aceptaría, pero solo antes de 1.0.
@@ -59,7 +59,7 @@ Un pull request. Todo esto cambia la API pública, lo que es gratis antes de 1.0
   - `Pipeline.Builder.retry(String)` junto a `retry(Consumer)` (y los mismos pares en cada política): `retry(null)` es ambiguo. Aceptarlo o renombrar uno del par.
   - `LockedOverride.policy` es un `String` con un conjunto cerrado de valores: un enum sería más seguro; el string coincide con las claves de configuración.
   - Dos enums llamados `ExhaustedResult` (`Pipeline.ExhaustedResult` y el de la anotación, que además tiene `INHERIT`): importar los dos es incómodo. Aceptarlo o renombrar.
-  - **Resultado:** Hecho: cada punto decidido en [diseño](design.md#api-decisions); los constructores de Micronaut son `@Internal` y los 51 setters de los builders tienen descripción principal.
+  - **Resultado:** (#62) Hecho: cada punto decidido en [diseño](design.md#api-decisions); los constructores de Micronaut son `@Internal` y los 51 setters de los builders tienen descripción principal.
 
 Comprobación de toda la fase: `./gradlew build :stress:compileJava`, `./gradlew :quarkus:it:check`, `./gradlew :core:apiCompatibility` (el informe lista los cambios buscados y nada más).
 
