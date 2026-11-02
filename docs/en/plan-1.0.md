@@ -9,7 +9,9 @@ This page is the working plan: each task says what to change, where, and how to 
 - Version on Maven Central: 0.13.0. `main` is 0.14.0-SNAPSHOT.
 - The performance plan from the AWS runs is done (pull requests #53–#59, see [benchmarks](benchmarks.md)).
 - Javadoc titles carry the artifact name (#60); javadoc.io was synced for all 11 modules.
-- Next: phase 1 (API), then phases 2 and 3, then the release (phase 4).
+- Phases 1 to 3 are done (#62 to #65).
+- A second review by the same four reviewers (2026-11-02, after #65): the API designer, the performance reviewer and the newcomer say ready for 1.0; the adopter asks for a 1.0.0-RC1 first, and for three things before 1.0 (a loud failure when the processor is missing, one jcstress run on ARM, a security policy). Their small documentation fixes are in phase 4.
+- Next: phase 4.
 
 ## The review
 
@@ -133,6 +135,10 @@ One pull request per confirmed bug. For each: first write a test that reproduces
 
 ## Phase 4: release
 
+- [ ] The second review's documentation fixes: the first timed call of a new thread allocates (`performance.md`), the rate limiter (not the bulkhead) parks, the clock-reading features, quickstart step 6's wording and a link to the HTTP guide, a test for the guide's timeout row, the FAQ's defaults link, the adaptive limit's approximate average, this status.
+- [ ] `SECURITY.md`: supported versions and how to report a vulnerability privately.
+- [ ] One full jcstress run on ARM (AWS Graviton), since CI runs it only on x86.
+- [ ] Decide whether a missing processor must fail the startup in Spring, Micronaut and Quarkus before 1.0 (owner's decision; the adopter argues that adding it later changes behaviour within the major).
 - [ ] Decide on a release candidate: `1.0.0-RC1` on Central, one or two weeks of use, then 1.0.0. (Owner's decision.)
 - [ ] Follow [releasing](releasing.md): `./gradlew :examples:check -Pr4c.generatedBy=0.13.0`, version bump in build snippets (not the blog), tag, `release.yml`, publish by hand in the Central portal.
 - [ ] After the release: `r4c.apiBaseline` = the release; sync javadoc.io for every module (the sync and upload buttons on each artifact's versions page).

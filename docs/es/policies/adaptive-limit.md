@@ -256,6 +256,7 @@ El adaptive limit no programa nada, así que nunca deja tareas pendientes en el 
 ## Letra chica
 
 - **Solo rechazo inmediato.** Un límite lleno rechaza enseguida; todavía no hay `maxWait`. Pon un `@Retry` afuera si los llamadores deben volver a intentar un poco después.
+- **La latencia media de la ventana es aproximada con contención.** Las muestras van a franjas por thread con escrituras con pérdida, así que una carrera puede perder la latencia de una llamada pero conservar su conteo (o al revés) y sesgar un poco la media de esa ventana; el suavizado del límite lo amortigua. Una franja que una carrera deja por debajo de lo ya usado hace que la ventana se descarte, no que se lea como 1 ns.
 - **Todavía no hay `VEGAS`.** El tercer algoritmo de Netflix no está implementado; `LimitAlgorithm` le deja lugar.
 - **Dos lecturas del reloj por llamada**, cuando la llamada toma su lugar y cuando termina, a través del ticker del registry. Es el costo de medir la latencia; un `@CircuitBreaker` con `slowCallDuration` lee el reloj para su propia medición.
 - **Gradient2 no baja mucho de dos veces `queueSize`** (8 por defecto) solo por la latencia: con su gradiente en el piso de un medio, cada ventana lleva el límite a 0,9 × límite + 0,2 × `queueSize`. Para límites chicos, usa un `queueSize` menor o `AIMD`.

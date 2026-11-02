@@ -43,7 +43,7 @@ Reading the table honestly:
 - **The circuit breaker's 1.9 ns holds while its window holds no failure.** Then a call only reads one field. Once the last `windowSize` calls include a failure or a slow call, every call writes the shared window cursor. With four threads that costs 11.2 ns at 0.1 % failures, 65.4 ns at 1 % and 274 ns at 10 %, against about 1 000 ns for Resilience4j at every rate: 91×, 15× and 3.3× rather than 440× ([realistic failure rates](benchmarks.md#failure-rates)).
 - **Resilience4j does work per call that resilience4cata does not**: its retry counts every call in its built-in metrics (`LongAdder` counters), and its breaker always times calls. resilience4cata keeps no per-call counter outside the breaker's window ([why there are no success metrics](faq.md#success-metrics)).
 - **The bulkhead with free slots on one thread was a tie** (20.5 against 20.4 ns, both one atomic to take and one to give back) until the slot was given back with a volatile add, which measured faster than a release-only one on Graviton3: 17.3 ns.
-- **Contended paths cost hundreds of nanoseconds in both libraries.** The breaker's mixed case at four threads (274 ns) is dominated by one shared window cursor that every call advances; the bulkhead and rate limiter at four threads pay for one shared counter, and park the threads that lose a race on it.
+- **Contended paths cost hundreds of nanoseconds in both libraries.** The breaker's mixed case at four threads (274 ns) is dominated by one shared window cursor that every call advances; the bulkhead and rate limiter at four threads pay for one shared counter, and the rate limiter parks the threads that lose a race on it.
 - **The sync timeout is the most expensive sync policy** (22.2 ns on one thread; a later run measured 23.7 ns with no code change, an open layout effect, see [the next round](benchmarks.md#annotated-classes-generics-config-overrides-ticker-bulkhead-2026-10-24-aws-graviton3)). Resilience4j's comparison is not like for like: its `TimeLimiter` hands the call to another thread, which is where most of its 8.8 µs goes.
 - **Async calls allocate in both libraries**: every layer returns a new future. resilience4cata's async paths are not allocation-free; only the sync ones are.
 - **The rate limiter reads the clock once per call**, in both libraries; that read is most of its cost (on Apple Silicon, `System.nanoTime()` alone costs about 21 ns on one thread and 163 ns with four; see [Rate limiter, 1 and 4 threads](benchmarks.md#rate-limiter-1-and-4-threads-2026-10-24)).
@@ -109,7 +109,7 @@ With four decorated suppliers sharing Resilience4j's call site, its success path
 
 ## The zero-allocation gate :id=allocation-gate
 
-Allocation is checked on every pull request. `./gradlew :benchmark:allocationCheck` runs the benchmarks listed in `benchmark/allocation-budgets.properties` with `-prof gc` and fails if one allocates its budget + 1 B per call. **Every sync success and rejection path has a budget of 0 B**: retry, circuit breaker (count and time windows, open), rate limiter, bulkhead, timeout, classifiers, generated code and `Pipeline` (also with a capturing lambda). Async paths have budgets for their futures (48 B for a retry, 24 B for another policy whose stage is already complete). Details in [Allocation gate](benchmarks.md#allocation-gate).
+Allocation is checked on every pull request. `./gradlew :benchmark:allocationCheck` runs the benchmarks listed in `benchmark/allocation-budgets.properties` with `-prof gc` and fails if one allocates its budget + 1 B per call. **Every sync success and rejection path has a budget of 0 B**: retry, circuit breaker (count and time windows, open), rate limiter, bulkhead, timeout, classifiers, generated code and `Pipeline` (also with a capturing lambda). Async paths have budgets for their futures (48 B for a retry, 24 B for another policy whose stage is already complete). One exception the gate does not see: the first timed call on a new thread registers that thread with the timeout's watchdog, about 270 B, which matters with one new virtual thread per request ([a timeout per new virtual thread](benchmarks.md#review-fixes)). Details in [Allocation gate](benchmarks.md#allocation-gate).
 
 Events allocate only when someone listens: an event type without listeners costs one null check on the failure or rejection path, which measured as 0.3 ns on a full bulkhead.
 
@@ -119,7 +119,7 @@ The targets the project holds itself to, and how each one is checked:
 
 | Target | How it is checked |
 |---|---|
-| **0 B/op** on the success path of every policy and of a full stack | JMH `-prof gc` in CI: `./gradlew :benchmark:allocationCheck` fails a pull request if a listed benchmark reaches its budget + 1 B/op (0 for every sync path; measured values for async futures) |
+| **0 B/op** on the success path of every policy and of a full stack (a thread's first timed call: about 270 B, once) | JMH `-prof gc` in CI: `./gradlew :benchmark:allocationCheck` fails a pull request if a listed benchmark reaches its budget + 1 B/op (0 for every sync path; measured values for async futures) |
 | No locks and no `synchronized` on hot paths | code review, JMH contention scenarios |
 | Monomorphic, straight-line generated code per method; no shared lambda chains | JMH with a polluted JIT profile, `-XX:+PrintInlining` |
 | No clock read on a success path unless a feature needs it (rate limiting, slow-call detection, time windows, the adaptive limit's latency, a retry's `maxDuration`); each such policy reads the clock itself, so a stack of them reads it more than once | code review |
@@ -135,7 +135,7 @@ Most real calls are I/O-bound (milliseconds), so the point is overhead close to 
 - **Nothing allocated on success**, and rejections throw one preallocated, stackless exception per instance.
 - **No locks** on any call path, and atomics chosen by measurement: an acquire compare-and-set instead of a full fence to take a slot took the free bulkhead from 23.2 to 9.3 ns on Apple M1 ([Bulkhead, 1 and 4 threads](benchmarks.md#bulkhead-1-and-4-threads-2026-10-23)), while giving it back with a volatile add measured faster than a release-only add on Graviton3 ([release counters](benchmarks.md#release-counters)).
 - **No shared writes while healthy**: a breaker whose window holds only fast successes is checked with one read per call.
-- **No clock reads** unless a feature needs them (slow-call detection, time windows, rate limiting). Timeouts use a shared watchdog thread instead of reading the clock per call.
+- **No clock reads** unless a feature needs them (slow-call detection, time windows, rate limiting, the adaptive limit's latency, a retry's `maxDuration`). Timeouts use a shared watchdog thread instead of reading the clock per call.
 
 ## Reproduce it :id=reproduce
 

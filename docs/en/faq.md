@@ -27,7 +27,7 @@ There is no runtime proxy, no AOP and no annotation scanning at runtime in any c
 
 ### Is it a fork of Resilience4j? :id=fork
 
-No. It covers similar policies with a different design: code generated at compile time instead of decorators, one registry for all policies, configuration resolved once. Its benchmarks compare against Resilience4j 2.4.0. Some defaults differ and catch people out: a retry backs off exponentially with jitter from 200 ms, a rate limiter rejects at once, and an `Error` counts as a success for a breaker ([the defaults](migrate/from-resilience4j.md#map-others), [the differences](migrate/from-resilience4j.md#differences)). See [Migrate from Resilience4j](migrate/from-resilience4j.md).
+No. It covers similar policies with a different design: code generated at compile time instead of decorators, one registry for all policies, configuration resolved once. Its benchmarks compare against Resilience4j 2.4.0. Some defaults differ and catch people out: a retry backs off exponentially with jitter from 200 ms, a rate limiter rejects at once, and an `Error` counts as a success for a breaker ([the defaults](migrate/from-resilience4j.md#config-mapping), [the differences](migrate/from-resilience4j.md#differences)). See [Migrate from Resilience4j](migrate/from-resilience4j.md).
 
 ### What does it depend on? :id=dependencies
 
