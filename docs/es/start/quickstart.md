@@ -193,12 +193,13 @@ OPEN
 4
 ```
 
-- La primera llamada falló tres veces. En la segunda, la cuarta falla llenó la ventana de cuatro con una tasa de fallas del 100 %, por encima del 50 % por defecto, así que el breaker se abrió. El retry no reintenta un rechazo, así que la segunda llamada se detuvo ahí y respondió el fallback.
+- La primera llamada falló tres veces. En la segunda, la cuarta falla llenó la ventana de cuatro con una tasa de fallas del 100 %, por encima del 50 % por defecto, así que el breaker se abrió. El retry esperó su backoff, su siguiente intento fue rechazado y, como el retry nunca reintenta un rechazo, se rindió y respondió el fallback.
 - La tercera llamada se rechazó al instante con una `CallNotPermittedException`, sin llegar al servicio, y el fallback volvió a responder `0`. Pasado `waitInOpen` (60 s por defecto), el breaker deja pasar algunas llamadas de prueba.
 - `circuitBreakerInstance` es una forma de cambiar una instancia sin editar su anotación; un archivo properties o variables de entorno hacen lo mismo ([Configuración](../guides/configuration.md)).
 
 ## Próximos pasos
 
+- [Retry y circuit breaker para una llamada HTTP](../guides/http-calls.md): las mismas políticas ajustadas para una dependencia HTTP real.
 - [Cómo funciona](how-it-works.md): qué genera el procesador, los ids de instancia, de dónde viene la configuración.
 - [Políticas](../policies/README.md): cada atributo de cada política, con sus valores por defecto.
 - [Configuración](../guides/configuration.md): ajusta el mismo código desde un archivo properties, variables de entorno o propiedades del sistema.

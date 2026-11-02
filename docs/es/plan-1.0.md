@@ -9,7 +9,9 @@ Esta página es el plan de trabajo: cada tarea dice qué cambiar, dónde y cómo
 - Versión en Maven Central: 0.13.0. `main` es 0.14.0-SNAPSHOT.
 - El plan de rendimiento de las corridas en AWS está terminado (pull requests #53–#59, ver [benchmarks](benchmarks.md)).
 - Los títulos del Javadoc llevan el nombre del artefacto (#60); javadoc.io se sincronizó para los 11 módulos.
-- Siguiente: fase 1 (API), luego las fases 2 y 3, luego el release (fase 4).
+- Las fases 1 a 3 están terminadas (#62 a #65).
+- Una segunda revisión de los mismos cuatro revisores (2026-11-02, después de #65): el diseñador de APIs, el revisor de rendimiento y quien empieza dicen que está listo para 1.0; quien evalúa adoptarla pide primero una 1.0.0-RC1, y tres cosas antes de 1.0 (un fallo visible si falta el procesador, una corrida de jcstress en ARM, una política de seguridad). Sus arreglos pequeños de documentación están en la fase 4.
+- Siguiente: fase 4.
 
 ## La revisión
 
@@ -133,6 +135,10 @@ Un pull request por bug confirmado. Para cada uno: primero escribir un test que 
 
 ## Fase 4: release
 
+- [x] (#66) Los arreglos de documentación de la segunda revisión: la primera llamada con timeout de un thread nuevo asigna memoria (`performance.md`), el rate limiter (no el bulkhead) aparca, las funcionalidades que leen el reloj, la frase del paso 6 del inicio rápido y un enlace a la guía HTTP, un test para la fila del timeout de la guía, el enlace de la FAQ a los valores por defecto, la media aproximada del adaptive limit, este estado.
+- [x] (#66) `SECURITY.md`: versiones soportadas y cómo reportar una vulnerabilidad en privado.
+- [ ] Una corrida completa de jcstress en ARM (AWS Graviton), ya que el CI solo la corre en x86.
+- [ ] Decidir si la falta del procesador debe hacer fallar el arranque en Spring, Micronaut y Quarkus antes de 1.0 (decisión del dueño; quien evalúa adoptarla argumenta que añadirlo después cambia el comportamiento dentro de la versión mayor).
 - [ ] Decidir si hay release candidate: `1.0.0-RC1` en Central, una o dos semanas de uso, luego 1.0.0. (Decisión del dueño.)
 - [ ] Seguir [publicar una versión](releasing.md): `./gradlew :examples:check -Pr4c.generatedBy=0.13.0`, subir la versión en los snippets de build (no en el blog), tag, `release.yml`, publicar a mano en el portal de Central.
 - [ ] Después del release: `r4c.apiBaseline` = la versión publicada; sincronizar javadoc.io para cada módulo (los botones de sync y upload en la página de versiones de cada artefacto).

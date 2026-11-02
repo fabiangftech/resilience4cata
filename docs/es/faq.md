@@ -27,7 +27,7 @@ En ningún caso hay proxies, AOP ni escaneo de anotaciones en tiempo de ejecuci�
 
 ### ¿Es un fork de Resilience4j? :id=fork
 
-No. Cubre políticas similares con un diseño distinto: código generado en tiempo de compilación en lugar de decoradores, un solo registry para todas las políticas y configuración resuelta una sola vez. Sus benchmarks se comparan con Resilience4j 2.4.0. Algunos valores por defecto difieren y sorprenden: un retry espera de forma exponencial con jitter desde 200 ms, un rate limiter rechaza al instante y un `Error` cuenta como éxito para un breaker ([los valores por defecto](migrate/from-resilience4j.md#map-others), [las diferencias](migrate/from-resilience4j.md#differences)). Consulta [Migrar desde Resilience4j](migrate/from-resilience4j.md).
+No. Cubre políticas similares con un diseño distinto: código generado en tiempo de compilación en lugar de decoradores, un solo registry para todas las políticas y configuración resuelta una sola vez. Sus benchmarks se comparan con Resilience4j 2.4.0. Algunos valores por defecto difieren y sorprenden: un retry espera de forma exponencial con jitter desde 200 ms, un rate limiter rechaza al instante y un `Error` cuenta como éxito para un breaker ([los valores por defecto](migrate/from-resilience4j.md#config-mapping), [las diferencias](migrate/from-resilience4j.md#differences)). Consulta [Migrar desde Resilience4j](migrate/from-resilience4j.md).
 
 ### ¿De qué depende? :id=dependencies
 

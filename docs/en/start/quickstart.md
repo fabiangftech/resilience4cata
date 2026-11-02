@@ -193,12 +193,13 @@ OPEN
 4
 ```
 
-- The first call failed three times. On the second call, the fourth failure filled the window of four with a failure rate of 100%, above the default 50%, so the breaker opened. The retry does not retry a rejection, so the second call stopped there and the fallback answered.
+- The first call failed three times. On the second call, the fourth failure filled the window of four with a failure rate of 100%, above the default 50%, so the breaker opened. The retry waited its backoff, its next attempt was rejected, and since the retry never retries a rejection it gave up and the fallback answered.
 - The third call was rejected at once with a `CallNotPermittedException`, without reaching the service, and the fallback answered `0` again. After `waitInOpen` (60 s by default) the breaker lets a few probe calls through.
 - `circuitBreakerInstance` is one way to change an instance without editing its annotation; a properties file or environment variables do the same ([Configuration](../guides/configuration.md)).
 
 ## Next steps
 
+- [Retry and circuit breaker for an HTTP call](../guides/http-calls.md): the same policies tuned for a real HTTP dependency.
 - [How it works](how-it-works.md): what the processor generates, instance ids, where configuration comes from.
 - [Policies](../policies/README.md): every attribute of every policy, with their defaults.
 - [Configuration](../guides/configuration.md): retune the same code from a properties file, environment variables or system properties.

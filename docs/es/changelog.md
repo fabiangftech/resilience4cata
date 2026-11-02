@@ -15,6 +15,7 @@ Los últimos cambios de API antes de 1.0, de la revisión del [plan hacia 1.0](p
 - Paso 6 del inicio rápido, *Mira cómo se abre el breaker*; un glosario en el [resumen de las políticas](policies/README.md#glossary); en la [guía de migración](migrate/from-resilience4j.md), una tabla de los nombres de métricas de Resilience4j a los de resilience4cata y tres diferencias más (sin métricas de éxito ni de latencia, `@Transactional` en clases anotadas, thread-locals en los hedges).
 - El mensaje de [R4C-RT-003](errors.md#r4c-rt-003) (sin clase generada) muestra también la línea de Maven, no solo la de Gradle.
 - `CircuitBreakerFailureRateBenchmark`: el breaker con una falla de cada 1 000 o de cada 100 llamadas. Con cuatro threads en Graviton3, 11.2 y 65.4 ns por llamada frente a unos 1 000 ns de Resilience4j ([tasas de fallos realistas](benchmarks.md#failure-rates)); en el gate de allocations con 0 B.
+- `SECURITY.md`: versiones soportadas y cómo reportar una vulnerabilidad en privado (el reporte privado de vulnerabilidades de GitHub).
 
 ### Cambiado
 

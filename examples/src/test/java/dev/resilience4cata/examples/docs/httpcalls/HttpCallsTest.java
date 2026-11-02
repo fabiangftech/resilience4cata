@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpServer;
 import dev.resilience4cata.CallRejectedException;
+import dev.resilience4cata.CallTimeoutException;
 import dev.resilience4cata.CircuitBreakerState;
 import dev.resilience4cata.ResilienceRegistry;
 import dev.resilience4cata.Resilient;
@@ -19,6 +20,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +31,9 @@ import org.junit.jupiter.api.Test;
  * the statuses each test queues (the last one repeats).
  */
 class HttpCallsTest {
+
+    /** Queued instead of a status: answer 200, but only after two seconds. */
+    private static final int SLOW = -1;
 
     private final Queue<Integer> statuses = new ConcurrentLinkedQueue<>();
     private final AtomicInteger requests = new AtomicInteger();
@@ -44,12 +49,21 @@ class HttpCallsTest {
             Integer next = statuses.poll();
             int status = next != null ? next : last;
             last = status;
+            if (status == SLOW) {
+                try {
+                    Thread.sleep(2_000); // longer than the 1 s @Timeout: the client gives up first
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                status = 200;
+            }
             byte[] body = (status == 200 ? "7" : "error").getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(status, body.length);
             try (OutputStream out = exchange.getResponseBody()) {
                 out.write(body);
             }
         });
+        server.setExecutor(Executors.newVirtualThreadPerTaskExecutor()); // a slow answer must not block the next request
         server.start();
         base = URI.create("http://localhost:" + server.getAddress().getPort());
     }
@@ -98,5 +112,14 @@ class HttpCallsTest {
         assertThatThrownBy(() -> inventory.stock("sku-1")).isInstanceOf(CallRejectedException.class);
         assertThat(requests).as("the third attempt was rejected without a request").hasValue(2);
         assertThat(registry.circuitBreaker("inventory").state()).isEqualTo(CircuitBreakerState.OPEN);
+    }
+
+    @Test
+    void aSlowAnswerIsInterruptedAndRetriedUntilTheAttemptsOrTheBudgetRunOut() {
+        statuses.add(SLOW);
+        InventoryClient inventory = connect(base, ResilienceRegistry.builder().build());
+
+        assertThatThrownBy(() -> inventory.stock("sku-1")).isInstanceOf(CallTimeoutException.class);
+        assertThat(requests.get()).as("three attempts, or fewer if the 3 s budget ran out first").isBetween(2, 3);
     }
 }

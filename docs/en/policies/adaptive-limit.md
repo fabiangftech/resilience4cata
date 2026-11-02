@@ -256,6 +256,7 @@ The adaptive limit schedules nothing, so it never leaves tasks pending on the cl
 ## Small print
 
 - **Fail-fast only.** A full limit rejects at once; there is no `maxWait` yet. Put a `@Retry` outside if callers should try again a little later.
+- **The window's average latency is approximate under contention.** Samples go to per-thread stripes with lossy writes, so a race can drop one call's latency but keep its count (or the reverse) and skew that window's average a little; the limit's smoothing damps it. A stripe that a race takes back below what was already used makes the window be dropped, not read as 1 ns.
 - **No `VEGAS` yet.** Netflix's third algorithm is not implemented; `LimitAlgorithm` leaves room for it.
 - **Two clock reads per call**, when the call takes its slot and when it ends, through the registry's ticker. That is the cost of measuring latency; a `@CircuitBreaker` with `slowCallDuration` reads the clock for its own measurement.
 - **Gradient2 does not go much below twice `queueSize`** (8 by default) on latency alone: with its gradient at the floor of one half, each window moves the limit to 0.9 × limit + 0.2 × `queueSize`. For small limits, set a smaller `queueSize` or use `AIMD`.
