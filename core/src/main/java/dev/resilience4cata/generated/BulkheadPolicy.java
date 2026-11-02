@@ -420,6 +420,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
             return false; // full: nothing was written
         }
 
+        /** Volatile, not release: it measured faster on Graviton3 (benchmarks.md#release-counters). */
         void decrement() {
             VALUE.getAndAdd(this, -1);
         }
