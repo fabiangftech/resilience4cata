@@ -599,6 +599,31 @@ resilience4cata allocates 0 B in every row; Resilience4j 0 to 26 B (`SYNCHRONIZE
 - **The gap to Resilience4j at four threads**: 91× at 0.1 %, 15× at 1 %, 3.4× at 10 %. Resilience4j's cost barely moves with the failure rate: it records every call either way.
 - The one row with spread: 1 % with four threads, 63.1 and 67.6 ns in the two halves (forks from 57 to 74 ns), which is the shared cursor under contention.
 
+## Fixes from the pre-1.0 review, and a timeout per new virtual thread (2026-11-02, AWS Graviton3) :id=review-fixes
+
+The [plan to 1.0](plan-1.0.md) (phase 3) fixed four races found in review: a bulkhead slot left free while an asynchronous caller waited, an adaptive-limit window read as 1 ns after a stripe went back, the rate limiter computing its wait from a clock read made before it parked, and a sync timeout clearing an interrupt the caller already had. Base `9184cc5` against `a307d4b`, 10 machines, `-f 6`, nanoseconds per call for one and four threads:
+
+| Benchmark | Base | New |
+|---|---:|---:|
+| `RateLimiterBenchmark`, permits free | 41.7 / 187.0 | 41.7 / **183.6** |
+| `RateLimiterBenchmark`, exhausted | 34.6 / 34.8 | 34.6 / 34.8 |
+| `BulkheadBenchmark`, waiting mode, free | 18.7 / 204.8 | 18.6 / 209.9 |
+| `BulkheadBenchmark`, free | 17.3 / 205.9 | 17.3 / 208.1 |
+| `AdaptiveLimitBenchmark` | 83.6 / 306.7 | 83.1 / 290.9 |
+| `TimeoutBenchmark` | 23.8 / 23.6 | 23.8 / 23.5 |
+
+- **The rate limiter now reads the clock again after a lost race**, so a contended caller no longer waits from a stale time. The extra read is only on the path that already parked: with four threads, 183.6 against 187.0 ns (forks 182.9–184.0 against 185.5–188.8).
+- The other fixes are on cold paths (a sync wait that gives up, a window that ends, a timeout that fires). The bulkhead rows with four threads moved by +1 % and +3 %, the size of the noise in the same run: Resilience4j's own bulkhead, unchanged, moved by +3 % and +9 %.
+
+**A sync timeout with one new virtual thread per call** (`VirtualThreadTimeoutBenchmark`, new): each call starts a virtual thread, makes the timed call on it and joins it, so every call is its thread's first and registers the thread with the watchdog (a `ThreadScopes` object and one add to the watchdog's shared queue; a dead thread is forgotten on the next tick).
+
+| Threads | Thread, plain call | Thread, `@Timeout` call | Difference |
+|---:|---:|---:|---:|
+| 1 | 9291 ns, 487 B | 9254 ns, 760 B | none measurable, +273 B |
+| 4 | 9274 ns, 443 B | 10069 ns, 711 B | +795 ns (+8.6 %), +268 B |
+
+Starting a virtual thread dominates. With four threads starting at once, the timeout adds about 0.8 µs to each, most likely the shared queue the registrations go through (inferred, not profiled). On a thread that makes several timed calls only the first one pays.
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings in three forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) and fails if the fork that allocates least reaches its budget + 1 B/op, or if a benchmark is missing from the results. Three forks because C2 decides once per JVM whether it scalar-replaces an object: a fork keeps the same bytes in every iteration, and the next one can allocate an object or two more. On the CI runner (x86), 21 runs of the one-fork gate measured `FluxBenchmark.resilience4cataPipelineStack` at 696, 728, 752 and 776 B and `resilience4cataTimeout` at 384 to 440 B, so the gate failed now and then on changes that allocate nothing; a longer warm-up put every fork on the higher value instead (Apple M1). An allocation the code starts making shows in every fork, so the lowest fork still catches it. The table shows every fork's bytes. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.

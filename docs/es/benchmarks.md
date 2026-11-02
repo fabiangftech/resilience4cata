@@ -599,6 +599,31 @@ resilience4cata asigna 0 B en todas las filas; Resilience4j de 0 a 26 B (`SYNCHR
 - **La diferencia con Resilience4j con cuatro threads**: 91× al 0.1 %, 15× al 1 %, 3.4× al 10 %. El costo de Resilience4j casi no cambia con la tasa de fallos: registra cada llamada en cualquier caso.
 - La única fila con dispersión: 1 % con cuatro threads, 63.1 y 67.6 ns en las dos mitades (forks de 57 a 74 ns), que es el cursor compartido con contención.
 
+## Arreglos de la revisión previa a 1.0, y un timeout por virtual thread nuevo (2026-11-02, AWS Graviton3) :id=review-fixes
+
+El [plan hacia 1.0](plan-1.0.md) (fase 3) arregló cuatro carreras encontradas en la revisión: un slot del bulkhead que quedaba libre mientras una llamada async esperaba, una ventana del adaptive limit leída como 1 ns cuando una franja retrocedía, el rate limiter que calculaba su espera con una lectura del reloj hecha antes de aparcar, y un timeout síncrono que borraba una interrupción que quien llama ya tenía. Base `9184cc5` contra `a307d4b`, 10 máquinas, `-f 6`, nanosegundos por llamada con uno y cuatro threads:
+
+| Benchmark | Base | Nuevo |
+|---|---:|---:|
+| `RateLimiterBenchmark`, permisos libres | 41.7 / 187.0 | 41.7 / **183.6** |
+| `RateLimiterBenchmark`, agotado | 34.6 / 34.8 | 34.6 / 34.8 |
+| `BulkheadBenchmark`, modo con espera, libre | 18.7 / 204.8 | 18.6 / 209.9 |
+| `BulkheadBenchmark`, libre | 17.3 / 205.9 | 17.3 / 208.1 |
+| `AdaptiveLimitBenchmark` | 83.6 / 306.7 | 83.1 / 290.9 |
+| `TimeoutBenchmark` | 23.8 / 23.6 | 23.8 / 23.5 |
+
+- **El rate limiter vuelve a leer el reloj tras perder una carrera**, así que una llamada con contención ya no espera desde un tiempo viejo. La lectura extra solo está en el camino que ya aparcó: con cuatro threads, 183.6 contra 187.0 ns (forks 182.9–184.0 contra 185.5–188.8).
+- Los demás arreglos están en caminos fríos (una espera síncrona que se rinde, una ventana que termina, un timeout que salta). Las filas del bulkhead con cuatro threads se movieron +1 % y +3 %, el tamaño del ruido en la misma corrida: el bulkhead de Resilience4j, sin cambios, se movió +3 % y +9 %.
+
+**Un timeout síncrono con un virtual thread nuevo por llamada** (`VirtualThreadTimeoutBenchmark`, nuevo): cada llamada arranca un virtual thread, hace la llamada con timeout en él y lo espera, así que cada llamada es la primera de su thread y lo registra en el watchdog (un objeto `ThreadScopes` y una inserción en la cola compartida del watchdog; un thread muerto se olvida en el siguiente tick).
+
+| Threads | Thread, llamada directa | Thread, llamada con `@Timeout` | Diferencia |
+|---:|---:|---:|---:|
+| 1 | 9291 ns, 487 B | 9254 ns, 760 B | ninguna medible, +273 B |
+| 4 | 9274 ns, 443 B | 10069 ns, 711 B | +795 ns (+8.6 %), +268 B |
+
+Arrancar un virtual thread domina. Con cuatro threads arrancando a la vez, el timeout añade unos 0.8 µs a cada uno, muy probablemente por la cola compartida por la que pasan los registros (deducido, no perfilado). En un thread que hace varias llamadas con timeout solo paga la primera.
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos en tres forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) y falla si el fork que menos asigna llega a su presupuesto + 1 B/op, o si un benchmark falta en los resultados. Tres forks porque C2 decide una vez por JVM si elimina un objeto (scalar replacement): un fork mantiene los mismos bytes en todas sus iteraciones, y el siguiente puede asignar uno o dos objetos más. En el runner de CI (x86), 21 ejecuciones del gate con un fork midieron `FluxBenchmark.resilience4cataPipelineStack` en 696, 728, 752 y 776 B y `resilience4cataTimeout` entre 384 y 440 B, así que el gate fallaba de vez en cuando en cambios que no asignan nada; un calentamiento más largo llevó todos los forks al valor más alto (Apple M1). Una allocation nueva en el código aparece en todos los forks, así que el fork más bajo la sigue detectando. La tabla muestra los bytes de cada fork. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.

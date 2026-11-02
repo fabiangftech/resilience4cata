@@ -154,4 +154,46 @@ public final class BulkheadWaitersStress {
             r.r2 = younger.isClaimed() ? 1 : 0;
         }
     }
+
+    /**
+     * The release yields to a blocked synchronous caller (every other hand-off does when one is queued), and
+     * that caller's own short {@code maxWait} ends at the same time, so it may give up without taking the slot.
+     * The asynchronous waiter queued since the setup must not be left waiting while the slot is free. Results:
+     * the synchronous caller entered (1), the waiter was served (1), a permit is free (1).
+     */
+    @JCStressTest
+    @Outcome(id = "1, 0, 0", expect = ACCEPTABLE, desc = "The synchronous caller took the slot.")
+    @Outcome(id = "0, 1, 0", expect = ACCEPTABLE, desc = "The synchronous caller gave up; the waiter got the slot.")
+    @Outcome(id = "0, 0, 1", expect = FORBIDDEN, desc = "Lost hand-off: a free slot and a waiter still queued.")
+    @Outcome(expect = FORBIDDEN, desc = "Unexpected.")
+    @State
+    public static class YieldToSyncThatGivesUp {
+        final BulkheadPolicy bulkhead = new BulkheadPolicy("stress",
+                BulkheadConfig.builder().maxConcurrent(1).maxWait(Duration.ofNanos(50_000)).build());
+        final BulkheadWaiters.Waiter<String> waiter;
+        int entered;
+
+        public YieldToSyncThatGivesUp() {
+            bulkhead.tryAcquireForTest(); // the holder
+            waiter = bulkhead.enqueueForTest(CompletableFuture::new); // no timer: it waits until served
+            bulkhead.yieldNextHandOffForTest();
+        }
+
+        @Actor
+        public void synchronousCaller() {
+            entered = bulkhead.tryEnter() ? 1 : 0;
+        }
+
+        @Actor
+        public void holderExits() {
+            bulkhead.exit();
+        }
+
+        @Arbiter
+        public void after(III_Result r) {
+            r.r1 = entered;
+            r.r2 = waiter.isClaimed() ? 1 : 0;
+            r.r3 = freePermit(bulkhead);
+        }
+    }
 }

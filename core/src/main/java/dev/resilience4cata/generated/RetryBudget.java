@@ -30,6 +30,10 @@ import java.time.Duration;
  * longer than the window they have all expired, and the budget starts again from its reserve plus the
  * calls that follow: it errs on the side of fewer retries. Counts are approximate under concurrency (a
  * stripe read while being incremented, or a call lost to a race on a shared stripe), always on the low side.
+ * The loss on a shared stripe has no fixed bound: a thread paused between its read and its write writes back
+ * the older count and erases every call that other threads added to that stripe in between. It still only
+ * lowers the budget, never raises it, and stripes are shared only when more threads call than there are
+ * stripes (2 × CPUs, at most 64), as with a large thread pool or one virtual thread per request.
  */
 final class RetryBudget {
 

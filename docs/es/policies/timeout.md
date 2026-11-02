@@ -180,3 +180,6 @@ Con un [`ManualClock`](../guides/testing.md), los timeouts sync saltan exactamen
 
 > [!MEASURED]
 > En AWS Graviton3 (`c7g.xlarge`, JDK 21), una llamada sync a través de `@Timeout` que termina a tiempo cuesta 22,2 ns con 1 thread y no asigna memoria (una corrida posterior midió 23,7 ns, una pregunta abierta); Resilience4j 2.4.0 no tiene timeout en el thread de quien llama, y su `TimeLimiter` con un executor tarda 8842 ns y 176 B. Una llamada async cuyo stage sigue pendiente cuesta 152 ns y 192 B, contra 598 ns y 240 B. [Benchmarks: cierre del MVP](../benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3), [corrida posterior](../benchmarks.md#clases-anotadas-genéricos-overrides-de-config-bulkhead-con-ticker-2026-10-24-aws-graviton3)
+
+> [!MEASURED]
+> Con un virtual thread nuevo por petición, cada llamada con timeout es la primera de su thread y registra el thread en el watchdog: unos 270 B más por thread, y con cuatro threads arrancando a la vez unos 0,8 µs sobre los 9,3 µs que tarda un virtual thread en arrancar y terminar. Las llamadas siguientes con timeout en el mismo thread no lo pagan. [Benchmarks: un timeout por virtual thread nuevo](../benchmarks.md#review-fixes)

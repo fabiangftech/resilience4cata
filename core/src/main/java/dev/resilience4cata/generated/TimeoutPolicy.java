@@ -213,7 +213,11 @@ public final class TimeoutPolicy {
         while (((long) STATE.getAcquire(scope) & STATE_BITS) == INTERRUPTING) {
             Thread.onSpinWait();
         }
-        Thread.interrupted();
+        if (scope.callerInterrupted) {
+            scope.callerInterrupted = false; // the caller's own interrupt, pending before the watchdog's: keep it
+        } else {
+            Thread.interrupted();
+        }
         STATE.setRelease(scope, call | IDLE);
         scope.owner.pop();
         publishTimedOut();
@@ -244,6 +248,12 @@ public final class TimeoutPolicy {
         // Only touched by the owner thread.
         private long calls;
         private long running;
+        /**
+         * Whether the thread was already interrupted when the watchdog came to interrupt it: that interrupt is
+         * the caller's (or a canceller's), so the timeout must not clear it. Written by the watchdog before its
+         * release of {@code TIMED_OUT}, read by the caller after its acquire of it.
+         */
+        boolean callerInterrupted;
 
         Scope(Watchdog.ThreadScopes owner) {
             this.owner = owner;
@@ -261,6 +271,7 @@ public final class TimeoutPolicy {
                 long call = seen & ~STATE_BITS;
                 // Fails if this call ended, or another call started, since the stamp was read.
                 if (STATE.compareAndSet(this, seen, call | INTERRUPTING)) {
+                    callerInterrupted = thread.isInterrupted();
                     thread.interrupt();
                     // Release: the caller reads TIMED_OUT with an acquire, then sees the interrupt.
                     STATE.setRelease(this, call | TIMED_OUT);

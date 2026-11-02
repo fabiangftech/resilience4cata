@@ -54,6 +54,23 @@ class TimeoutPolicyTest {
     }
 
     @Test
+    void anInterruptTheCallerAlreadyHadSurvivesTheTimeout() {
+        TimeoutPolicy timeout = timeout(Duration.ofMillis(100));
+        Thread.currentThread().interrupt(); // the caller's own, pending when the call starts
+        TimeoutPolicy.Scope scope = timeout.enter();
+        long slack = watchdog.tick();
+        watchdog.tick(100 * MS + slack);
+
+        assertThatThrownBy(() -> timeout.succeeded(scope)).isInstanceOf(CallTimeoutException.class);
+        assertThat(Thread.interrupted()).as("the caller's interrupt is kept").isTrue();
+
+        TimeoutPolicy.Scope next = timeout.enter();
+        watchdog.tick(2 * (100 * MS + slack));
+        assertThatThrownBy(() -> timeout.succeeded(next)).isInstanceOf(CallTimeoutException.class);
+        assertThat(Thread.currentThread().isInterrupted()).as("the watchdog's own interrupt is cleared").isFalse();
+    }
+
+    @Test
     void neverInterruptsBeforeTimeoutPlusOneTick() {
         TimeoutPolicy timeout = timeout(Duration.ofMillis(100));
         TimeoutPolicy.Scope scope = timeout.enter();

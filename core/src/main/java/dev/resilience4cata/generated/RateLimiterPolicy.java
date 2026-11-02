@@ -148,6 +148,10 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
             // for the cache line: with four threads it cut the cost per call from 660 to 130 ns, where
             // spinning or yielding did not help (see docs/en/benchmarks.md).
             LockSupport.parkNanos(1);
+            // The park may have lasted tens of microseconds: compute the next try from the time now, not from
+            // the time before the race, or the wait is too long (a needless rejection with maxWait = 0) and a
+            // permit can be dated before its time.
+            now = ticker.getAsLong();
             current = cell.getOpaque();
         }
     }

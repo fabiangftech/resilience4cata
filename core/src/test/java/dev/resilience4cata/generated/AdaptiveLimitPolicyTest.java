@@ -84,6 +84,25 @@ class AdaptiveLimitPolicyTest {
     }
 
     @Test
+    void aStripeThatWentBackIsNotReadAsAOneNanosecondWindow() {
+        AdaptiveLimitPolicy policy = policy(AdaptiveLimitConfig.builder().minWindowSamples(1));
+        window(policy, 10, 1_000_000);
+        assertThat(policy.windowsForTest()).isEqualTo(1);
+        assertThat(policy.snapshot().windowLatency()).isEqualTo(Duration.ofMillis(1));
+        int limit = policy.snapshot().limit();
+
+        policy.loseLatencyForTest(20_000_000); // more than the next window adds: the stripe's sum went back
+        window(policy, 10, 1_000_000);
+        assertThat(policy.windowsForTest()).as("the window is skipped, not read as 1 ns").isEqualTo(1);
+        assertThat(policy.snapshot().windowLatency()).isEqualTo(Duration.ofMillis(1));
+        assertThat(policy.snapshot().limit()).isEqualTo(limit);
+
+        window(policy, 10, 1_000_000);
+        assertThat(policy.windowsForTest()).as("the next window counts from where the stripes are now").isEqualTo(2);
+        assertThat(policy.snapshot().windowLatency()).isEqualTo(Duration.ofMillis(1));
+    }
+
+    @Test
     void aWindowEndsAtItsDeadlineOnceItHasEnoughSamples() {
         AdaptiveLimitPolicy policy = policy(AdaptiveLimitConfig.builder().minWindowSamples(3));
         now.set(deadline - 1);
