@@ -322,6 +322,16 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
             dropCount += (long) CELL.getOpaque(stripes, base + DROPS);
         }
         long samples = count - usedCount;
+        if (samples < 0 || sum - usedSum < 0) {
+            // A sample write that lost a race took a stripe back (it wrote the sum or count it had read before
+            // other threads added to theirs). This window cannot be trusted: drop it and count the next one from
+            // what the stripes hold now, rather than read a negative latency as 1 ns and raise the limit.
+            usedCount = count;
+            usedSum = sum;
+            usedDrops = dropCount;
+            current.setDeadline(end + windowNanos);
+            return;
+        }
         if (samples < minWindowSamples) {
             // Not enough calls yet: check again one window from now, so that a quiet limiter takes the lock and
             // scans the stripes once per window, not on every completion. The samples are kept (usedCount and
@@ -376,6 +386,21 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
     /** Test seam: windows ended so far. */
     long windowsForTest() {
         return windows;
+    }
+
+    /**
+     * Test seam: takes {@code nanos} of latency back from the stripe with the most, as a sample write that lost a
+     * race does (it writes back the sum it read before other threads added to it).
+     */
+    void loseLatencyForTest(long nanos) {
+        long[] stripes = cells;
+        int fullest = STRIDE;
+        for (int base = STRIDE; base < stripes.length - STRIDE; base += STRIDE) {
+            if ((long) CELL.getOpaque(stripes, base + SUM) > (long) CELL.getOpaque(stripes, fullest + SUM)) {
+                fullest = base;
+            }
+        }
+        CELL.setOpaque(stripes, fullest + SUM, (long) CELL.getOpaque(stripes, fullest + SUM) - nanos);
     }
 
     /** Caches, per exception class, whether it is a drop. {@code ignoreOn} wins over {@code dropOn}. */

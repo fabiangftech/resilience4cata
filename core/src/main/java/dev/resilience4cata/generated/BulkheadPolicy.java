@@ -145,14 +145,33 @@ public final class BulkheadPolicy implements BulkheadHandle {
             return true;
         }
         if (waitsOnTicker) {
-            return awaitOnTicker(waiting);
+            return awaitOnTicker(waiting) || gaveUp(waiting, false);
         }
         try {
-            return waiting.tryAcquire(maxWaitNanos, TimeUnit.NANOSECONDS) || rejected();
+            if (waiting.tryAcquire(maxWaitNanos, TimeUnit.NANOSECONDS)) {
+                return true;
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return rejected();
         }
+        return gaveUp(waiting, true);
+    }
+
+    /**
+     * A synchronous wait ended without a slot. A release may have left the slot to this caller (every other
+     * hand-off does while a synchronous caller is queued) just as its wait ended, so the slot can be free with
+     * asynchronous callers still queued: hand it to them now, or they would wait for the next release, or until
+     * their own {@code maxWait} rejects them. Only on the rejection path.
+     *
+     * @param reject whether to publish the rejection here ({@link #awaitOnTicker} already did)
+     * @return {@code false}
+     */
+    private boolean gaveUp(BulkheadSemaphore waiting, boolean reject) {
+        BulkheadWaiters queued = waiters;
+        if (queued != null && queued.count() > 0) {
+            drain(waiting, queued);
+        }
+        return reject && rejected();
     }
 
     /**
@@ -479,6 +498,14 @@ public final class BulkheadPolicy implements BulkheadHandle {
     /** Test seam: what a granted waiter runs on its new virtual thread, on the caller's thread. */
     <T> void runGrantedForTest(BulkheadWaiters.Waiter<T> waiter) {
         runGranted(waiter);
+    }
+
+    /** Test seam: makes the next hand-off with a blocked synchronous caller leave the slot to it. */
+    void yieldNextHandOffForTest() {
+        if (!Objects.requireNonNull(waiters).yieldToSync()) {
+            return; // the turn was even: it is odd now, so the next hand-off yields
+        }
+        Objects.requireNonNull(waiters).yieldToSync();
     }
 
     /** Test seam: the drain that ends a queued {@link #executeAsync}. */
