@@ -578,6 +578,27 @@ The bulkhead without waiting and the adaptive limit gave a slot back with `getAn
 - **The `Flux` bulkhead with four threads**, ahead only within the error after [the Flux change](#flux-ended), is now 1.4× faster (537.5 against 729.3 ns).
 - Rows within the error: the async bulkhead with four threads (+4%, ± 57 ns), and with four threads the `Pipeline` rows that hold a bulkhead (+6 to +8%, ± 12 to ± 38 ns, in the run with the other base). Resilience4j's own rows moved by up to 30% with four threads between the two revisions, with the same code.
 
+## Circuit breaker at realistic failure rates (2026-11-02, AWS Graviton3) :id=failure-rates
+
+The headline breaker numbers are the two ends: every call succeeds (1.9 ns with four threads) and one call in ten fails (274 ns). Most healthy services sit in between, so `CircuitBreakerFailureRateBenchmark` fails one call in 1 000 (0.1 %) or one in 100 (1 %), with the configuration of the `*Mixed` benchmarks (a count window of 100 calls, judged after 100, opening at 50 %, the same preallocated stackless failure in both libraries). The success and one-in-ten rows below come from the same run (`CircuitBreakerBenchmark`). Code after 0.13.0 (`1ea4fc6`), run as both halves of every machine (8 machines, `-f 6`; the halves agree within the error, so the table gives their mean), nanoseconds per call:
+
+| Failures | Threads | resilience4cata | Resilience4j `SYNCHRONIZED` | Resilience4j `LOCK_FREE` |
+|---|---:|---:|---:|---:|
+| none | 1 | **1.9** | 89.9 | 134.6 |
+| none | 4 | **1.9** | 807.8 | 1708.3 |
+| 0.1 % | 1 | **4.6** | 103.6 | 146.3 |
+| 0.1 % | 4 | **11.2** | 1024.8 | 1596.8 |
+| 1 % | 1 | **16.2** | 104.6 | 147.4 |
+| 1 % | 4 | **65.4** | 1005.5 | 1592.0 |
+| 10 % | 1 | **17.2** | 98.3 | 136.3 |
+| 10 % | 4 | **278.0** | 939.6 | 1615.2 |
+
+resilience4cata allocates 0 B in every row; Resilience4j 0 to 26 B (`SYNCHRONIZED`) and 208 to 816 B (`LOCK_FREE`).
+
+- **The cost follows how often the window holds a failure** (inferred from the code, not profiled). With one failure in 1 000 calls, the window of 100 holds it for a tenth of the calls; the other nine tenths are quiet, one field read each. With one in 100, the window always holds a failure, so every call advances the shared window cursor; most calls then find their slot already holding a success and write nothing else. With one in ten, failures move between slots on almost every lap, so more calls rewrite a slot and the shared counters.
+- **The gap to Resilience4j at four threads**: 91× at 0.1 %, 15× at 1 %, 3.4× at 10 %. Resilience4j's cost barely moves with the failure rate: it records every call either way.
+- The one row with spread: 1 % with four threads, 63.1 and 67.6 ns in the two halves (forks from 57 to 74 ns), which is the shared cursor under contention.
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings in three forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) and fails if the fork that allocates least reaches its budget + 1 B/op, or if a benchmark is missing from the results. Three forks because C2 decides once per JVM whether it scalar-replaces an object: a fork keeps the same bytes in every iteration, and the next one can allocate an object or two more. On the CI runner (x86), 21 runs of the one-fork gate measured `FluxBenchmark.resilience4cataPipelineStack` at 696, 728, 752 and 776 B and `resilience4cataTimeout` at 384 to 440 B, so the gate failed now and then on changes that allocate nothing; a longer warm-up put every fork on the higher value instead (Apple M1). An allocation the code starts making shows in every fork, so the lowest fork still catches it. The table shows every fork's bytes. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.
