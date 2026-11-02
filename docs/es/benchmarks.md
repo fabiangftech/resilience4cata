@@ -556,6 +556,28 @@ Base: `410a649` (main). Nuevo: `6395eb1`: con `maxWait > 0` el bulkhead usaba `j
 - **El bulkhead con espera ahora es más rápido que el sin espera** (18.6 contra 20.5 ns, 210 contra 257 ns), aunque los dos toman un slot igual. La única diferencia que queda es cómo lo devuelven: un `getAndAdd` volátil con espera, un `getAndAddRelease` sin ella.
 - Los bytes no cambian (0 B síncrono). Los bulkheads sin espera no cambian, dentro del error.
 
+## Slots devueltos con una suma volátil (2026-11-01, AWS Graviton3) :id=release-counters
+
+El bulkhead sin espera y el adaptive limit devolvían un slot con `getAndAddRelease`, el atómico más débil que es correcto ahí; ahora usan un `getAndAdd` volátil (`95aa67a`). El atómico más fuerte resultó más rápido. Salió del [bulkhead con espera](#bulkhead-semaphore), que devuelve con una suma volátil y se había vuelto más rápido que el bulkhead sin espera. Por qué la variante release es más lenta en Graviton3 no se verificó. Dos ejecuciones (`infra/bench.sh`, `c7g.xlarge`, 6 forks): las filas async, `Mono`, `Flux` y de framework contra `a0139b2` en 8 máquinas on-demand; las filas síncronas, del adaptive limit y de `Pipeline` de una ejecución cuya base fue `410a649`, cuyo código solo difiere de `a0139b2` en los atajos de `Flux` y async, que esas filas no usan. El benchmark de calibración es este bulkhead, así que ahora mide 17.3 ns en vez de 20.5. ns/op con 1 / 4 hilos:
+
+| Benchmark | Base | Nuevo | Resilience4j |
+|---|---:|---:|---:|
+| `BulkheadBenchmark`, sin espera | 20.5 / 259.0 | **17.3 / 195.5** | 20.4 / 347.6–450.3 |
+| bulkhead de `QuarkusBenchmark` | 20.4 / 264.1 | **17.2 / 198.6** | 20.3 / 381.4–467.5 |
+| bulkhead de `SpringBenchmark` | 20.4 / 278.8 | **17.2 / 197.4** | 1696.8 / 3934.1 |
+| bulkhead de `MicronautBenchmark` | 20.8 / 276.5 | **17.3 / 264.3** | 496.2 / 2760.2 |
+| bulkhead de `FluxBenchmark` | 195.2 / 737.4 | **191.3 / 537.5** | 257.2 / 729.3 |
+| bulkhead de `ReactorBenchmark` | 126.3 / 518.2 | **122.8 / 464.3** | 157.2 / 686.0 |
+| bulkhead de `AsyncBenchmark` | 28.4 / 346.0 | **25.4** / 359.5 | 40.9 / 510.5 |
+| pila de `AsyncBenchmark` | 91.8 / 410.6 | **87.8 / 343.5** | 990.9 / 1766.5 |
+| `AdaptiveLimitBenchmark` síncrono | 86.1 / 345.3 | **83.2 / 289.8** | 118.0 / 1068.6 (Netflix) |
+| `AdaptiveLimitBenchmark` async | 94.7 / 441.9 | **92.2 / 369.5** | — |
+| `PipelineBenchmark` cuatro políticas, generado | 62.2 / 339.3 | **59.7 / 268.1** | 259.7 / 1253.0 |
+
+- **Los dos últimos empates ahora son victorias**: el bulkhead con un slot libre con un hilo, llamado directamente (17.3 contra 20.4 ns) y en Quarkus (17.2 contra 20.3 ns), que [la comparación completa](#frameworks) contaba como empates en el suelo del hardware. El suelo no era el del hardware.
+- **El bulkhead de `Flux` con cuatro hilos**, que solo iba por delante dentro del error tras [el cambio de Flux](#flux-ended), ahora es 1.4× más rápido (537.5 contra 729.3 ns).
+- Filas dentro del error: el bulkhead async con cuatro hilos (+4%, ± 57 ns), y con cuatro hilos las filas de `Pipeline` que tienen un bulkhead (+6 a +8%, ± 12 a ± 38 ns, en la ejecución con la otra base). Las propias filas de Resilience4j se movieron hasta un 30% con cuatro hilos entre las dos revisiones, con el mismo código.
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos en tres forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) y falla si el fork que menos asigna llega a su presupuesto + 1 B/op, o si un benchmark falta en los resultados. Tres forks porque C2 decide una vez por JVM si elimina un objeto (scalar replacement): un fork mantiene los mismos bytes en todas sus iteraciones, y el siguiente puede asignar uno o dos objetos más. En el runner de CI (x86), 21 ejecuciones del gate con un fork midieron `FluxBenchmark.resilience4cataPipelineStack` en 696, 728, 752 y 776 B y `resilience4cataTimeout` entre 384 y 440 B, así que el gate fallaba de vez en cuando en cambios que no asignan nada; un calentamiento más largo llevó todos los forks al valor más alto (Apple M1). Una allocation nueva en el código aparece en todos los forks, así que el fork más bajo la sigue detectando. La tabla muestra los bytes de cada fork. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.

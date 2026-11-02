@@ -496,9 +496,12 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
             return false; // full: nothing was written
         }
 
-        /** Frees one slot; returns the count before, this call included. */
+        /**
+         * Frees one slot; returns the count before, this call included. Volatile, not release: it measured faster on
+         * Graviton3 (benchmarks.md#release-counters).
+         */
         int decrement() {
-            return (int) VALUE.getAndAddRelease(this, -1);
+            return (int) VALUE.getAndAdd(this, -1);
         }
 
         int get() {

@@ -57,14 +57,18 @@ La columna de resilience4cata es igual en los tres frameworks, e igual que en lo
 
 - **Spring:** los aspectos de resilience4j-spring-boot4 cuestan de 1.3 a 6 µs y de 1.6 a 6.3 KB por llamada. Su pointcut es dinámico, y evaluarlo carga una clase por nombre (`Class.forName`) en cada llamada.
 - **Micronaut:** su AOP en tiempo de compilación es mucho más barato, de 100 ns a 1.1 µs para los interceptores de resilience4j-micronaut. Los `@Retryable` y `@CircuitBreaker` propios de Micronaut cuestan de 1.0 a 1.8 µs y de 2.3 a 3.6 KB.
-- **Quarkus:** los interceptores de Fault Tolerance cuestan de 0.3 a 1.9 µs por llamada. Los decoradores de Resilience4j, llamados a mano sin interceptor, son ahí el rival más rápido. Ese es además el único caso de la tabla que resilience4cata no gana: un bulkhead con huecos libres, 20.4 ns contra 20.3 ns. Los dos toman y devuelven un permiso con dos operaciones atómicas, y por debajo de eso no llega el hardware.
+- **Quarkus:** los interceptores de Fault Tolerance cuestan de 0.3 a 1.9 µs por llamada. Los decoradores de Resilience4j, llamados a mano sin interceptor, son ahí el rival más rápido. Ese es además el único caso de la tabla que resilience4cata no gana: un bulkhead con huecos libres, 20.4 ns contra 20.3 ns. Los dos toman y devuelven un permiso con dos operaciones atómicas, que tomé por el suelo del hardware; no lo era (ver la actualización más abajo).
 
 ## Los casos que no fueron victorias
 
 La misma ejecución repitió cada benchmark de core contra la variante más rápida de Resilience4j. De 156 casos comparables, incluidos los de framework, resilience4cata ganó 150. Dije que mostraría los empates y las derrotas, así que aquí están los otros seis:
 
 - **Un hedge con una espera de 1 ms perdía por 2×**, con un hilo y con cuatro: 2.1 ms contra 1.07 ms. El timer compartido trabaja en ticks de un dieciseisavo de la espera, al menos 1 ms, y una espera podía empezar hasta unos dos ticks tarde. Ahora los hedges cuentan su espera desde el inicio de la llamada, a cambio de una lectura del reloj, y el timer despierta en el plazo. El hedge sale en 1060 µs contra 1067 µs de Resilience4j ([Esperas del hedge a su hora](../benchmarks.md#hedge-precision)). Ninguna de las dos librerías puede bajar mucho más, porque las dos esperan a que el sistema operativo despierte un thread.
-- **Dos casos de bulkhead con un hilo empatan en el suelo del hardware**: el de Quarkus de arriba, y el mismo bulkhead llamado directamente (20.5 ns contra 20.4 ns).
+- **Dos casos de bulkhead con un hilo empataban**: el de Quarkus de arriba, y el mismo bulkhead llamado directamente (20.5 ns contra 20.4 ns).
+
+> [!NOTE]
+> Actualización, más tarde el mismo día: no era el suelo del hardware. Devolver el slot con una suma volátil en vez de una solo-release resultó más rápido en Graviton3, y el bulkhead ahora cuesta 17.3 ns contra 20.4 ns de Resilience4j ([Slots devueltos con una suma volátil](../benchmarks.md#release-counters)).
+
 - **Dos casos de `Flux` quedan dentro del error**: el bulkhead con cuatro hilos y el rate limiter con uno, donde resilience4cata asigna más por stream que los operadores de resilience4j-reactor. En eso se está trabajando.
 
 Perder un benchmark fue útil. El retraso del hedge estaba en la documentación desde 0.4.0 ("hasta unos dos ticks tarde"), pero solo una comparación con un timer preciso lo mostró como lo que era.
