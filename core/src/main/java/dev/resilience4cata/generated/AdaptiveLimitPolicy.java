@@ -498,7 +498,7 @@ public final class AdaptiveLimitPolicy implements AdaptiveLimitHandle {
 
         /** Frees one slot; returns the count before, this call included. */
         int decrement() {
-            return (int) VALUE.getAndAddRelease(this, -1);
+            return (int) VALUE.getAndAdd(this, -1);
         }
 
         int get() {

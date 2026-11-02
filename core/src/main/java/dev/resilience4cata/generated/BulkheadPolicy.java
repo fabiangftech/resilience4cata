@@ -421,7 +421,7 @@ public final class BulkheadPolicy implements BulkheadHandle {
         }
 
         void decrement() {
-            VALUE.getAndAddRelease(this, -1);
+            VALUE.getAndAdd(this, -1);
         }
 
         int get() {
