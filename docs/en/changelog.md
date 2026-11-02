@@ -14,6 +14,7 @@ No API changes.
 
 ### Changed
 
+- The bulkhead without waiting and the adaptive limit give a slot back with a volatile add, which measured faster than the release-only add on Graviton3: a bulkhead call with a free slot costs 17.3 ns instead of 20.5 ns, 196 ns instead of 259 ns with four threads ([benchmarks](benchmarks.md#release-counters)).
 - A bulkhead with `maxWait` takes and gives back a free slot with its own counter instead of `java.util.concurrent.Semaphore`'s full-fence atomics: with four threads, 385 → 210 ns per call ([benchmarks](benchmarks.md#bulkhead-semaphore)).
 - `Flux` methods allocate less per stream: an attempt is one object instead of two, and a stream that ended during its subscription passes through every policy as one shared stage instead of a completed copy per policy (24 B less for one policy, 104 B for a retry, breaker, timeout and bulkhead), and run up to 9% faster ([benchmarks](benchmarks.md#flux-ended)).
 
