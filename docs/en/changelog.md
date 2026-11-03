@@ -4,9 +4,9 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
-## [Unreleased] :id=unreleased
+## [1.0.0-RC1] - 2026-11-02 :id=1.0.0-rc1
 
-The last API changes before 1.0, from the review in the [plan to 1.0](plan-1.0.md): two small incompatible changes (an event renamed, two constants no longer public) and clearer promises about what may grow.
+The first release candidate for 1.0.0, after the review in the [plan to 1.0](plan-1.0.md): the last API changes before the freeze (two small incompatible ones: an event renamed, two constants no longer public), clearer promises about what may grow, documentation checked against the measurements, and four races fixed. Try it before 1.0.0: unless something has to change, 1.0.0 follows with the same API, and from then on the [compatibility](reference/compatibility.md) promise applies.
 
 ### Added
 
