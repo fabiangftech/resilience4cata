@@ -29,7 +29,8 @@ class ErrorCodeTest {
             ErrorCode.PRODUCER_ON_ANNOTATED_CLASS, ProducerOnAnnotatedClassTest.class,
             ErrorCode.UNPROXYABLE_ANNOTATED_CLASS, UnproxyableAnnotatedClassTest.class,
             ErrorCode.LOOKUP_CONDITION, LookupConditionTest.class,
-            ErrorCode.REST_RESOURCE, RestResourceTest.class);
+            ErrorCode.REST_RESOURCE, RestResourceTest.class,
+            ErrorCode.NOT_GENERATED, MissingProcessorTest.class);
 
     @Test
     void codesAreUniqueAndWellFormed() {

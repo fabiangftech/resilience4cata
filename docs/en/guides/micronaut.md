@@ -110,9 +110,10 @@ annotations and ours claims only its own, so each sees everything (the module's 
 with both orders and compares the output). Lombok, if you use it, goes first, as Micronaut's own documentation
 says ([with Lombok](annotated-classes.md#with-lombok)).
 
-> Without the annotation processor nothing is generated and the beans stay unprotected: the annotations have
-> `CLASS` retention, so nothing at run time can notice they are there. `GET /resilience4cata` lists the policy
-> instances; an empty list means the processor did not run.
+> Without the annotation processor nothing is generated, so creating a bean of an annotated class fails with
+> [`R4C-MN-007`](../errors.md#r4c-mn-007), and a `@ResilientBean` with [`R4C-RT-003`](../errors.md#r4c-rt-003), instead
+> of running them unprotected. The check reads class files (the annotations have `CLASS` retention), so it does not
+> run in a native image. `resilience4cata.micronaut.allow-missing-processor=true` turns it off.
 
 ## Annotated classes :id=classes
 
@@ -436,6 +437,7 @@ the configuration with `config.applyTo(builder)`.
 | `resilience4cata.micronaut.verify-instances` | `warn` (`fail` with eager singletons) | `fail`, `warn` or `off` for instance keys that match no instance at startup |
 | `resilience4cata.micronaut.exclude` | empty | Fully qualified class names of beans to leave alone: not wrapped, and R4C-MN-004 and R4C-MN-005 are not checked. Unlike Spring's and Quarkus's `exclude`, it cannot keep an annotated class from being replaced by its generated subclass when it is compiled with `-Ar4c.inject=micronaut` (Micronaut picks the bean definitions before it reads the configuration). To run a class without its policies in every framework, switch them off: `resilience4cata.instances.<id>.<policy>.enabled=false` |
 | `resilience4cata.micronaut.allow-retry-inside-transaction` | `false` | Allow `@Retry`/`@Hedge` on transactional methods of annotated classes (one transaction for every attempt) instead of failing with R4C-MN-005 |
+| `resilience4cata.micronaut.allow-missing-processor` | `false` | Create a bean of an annotated class that has no generated subclass (its policies do not run) instead of failing with R4C-MN-007 |
 | `resilience4cata.micronaut.health.enabled` | `true` | The health indicator |
 | `resilience4cata.micronaut.health.down-when-open` | empty | Breaker ids (or `*`) that turn the health DOWN while open |
 | `resilience4cata.micronaut.metrics.enabled` | `true` | Register the Micrometer meters |

@@ -175,7 +175,7 @@ Una instancia de Resilience4j la comparte todo lo que usa su nombre. En resilien
 
 ### El procesador es obligatorio :id=processor
 
-Sin el procesador de anotaciones no se genera nada y `Resilient.of` falla con [R4C-RT-003](../errors.md#r4c-rt-003). No hay alternativa por reflexión ni por proxy.
+Sin el procesador de anotaciones no se genera nada y `Resilient.of` falla con [R4C-RT-003](../errors.md#r4c-rt-003). En Spring Boot, Micronaut y Quarkus, un bean cuya clase o interfaz tiene anotaciones pero no tiene clase generada hace fallar el arranque (o el build de Quarkus) con [R4C-SPR-006](../errors.md#r4c-spr-006), [R4C-MN-007](../errors.md#r4c-mn-007) o [R4C-QK-008](../errors.md#r4c-qk-008), en vez de ejecutarse sin protección. No hay alternativa por reflexión ni por proxy.
 
 ### No hay métricas de éxito ni de latencia :id=no-success-metrics
 

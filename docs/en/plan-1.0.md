@@ -141,7 +141,13 @@ One pull request per confirmed bug. For each: first write a test that reproduces
 - [x] (#66) `SECURITY.md`: supported versions and how to report a vulnerability privately.
 - [x] One full jcstress run on ARM (AWS Graviton), since CI runs it only on x86.
   - **Outcome:** 2026-11-02, one `c7g.4xlarge` (16 Graviton3 cores), `-m default`, about 40 minutes: 65 tests, 2598 configurations, none failed, no errors. One test is "interesting", as expected: `RetryBudgetStress.CallsAreNeverOvercounted` lost calls in 10.9 % of its samples, never counted one too many. That is the documented loss of task 3.5, seen far more often on ARM than on x86. The run used a throwaway Terraform configuration outside the repository; running it on a schedule is in "After 1.0".
-- [ ] Decide whether a missing processor must fail the startup in Spring, Micronaut and Quarkus before 1.0 (owner's decision; the adopter argues that adding it later changes behaviour within the major).
+- [x] Decide whether a missing processor must fail the startup in Spring, Micronaut and Quarkus before 1.0 (owner's decision; the adopter argues that adding it later changes behaviour within the major).
+  - **Outcome:** yes, before 1.0.0, in a 1.0.0-RC2. A bean whose class (or a superclass), or an interface it implements, declares policies but has no generated class now fails:
+    - the Spring startup with R4C-SPR-006;
+    - the creation of a Micronaut bean of an annotated class with R4C-MN-007 (an annotated interface is wrapped only through `@ResilientBean`, which already fails with R4C-RT-003);
+    - the Quarkus build with R4C-QK-008.
+
+    Each has a switch to turn it off (`allow-missing-processor`), and excluded beans are not checked. Spring and Micronaut read the class files (`PolicyAnnotations`, one copy in each, kept in sync), so the check does not run in a native image; Quarkus uses the Jandex index. Tests load the annotated fixtures without their `$Resilient`: a class loader that hides it (Spring, Micronaut), or an application root without it (Quarkus). Each check was mutation-checked.
 - [x] Decide on a release candidate: `1.0.0-RC1` on Central, one or two weeks of use, then 1.0.0. (Owner's decision.)
   - **Outcome:** yes. The install snippets stay at 0.13.0 until 1.0.0 (owner's decision).
 - [x] Release 1.0.0-RC1 following [releasing](releasing.md).
@@ -162,7 +168,7 @@ Additive, so not blocking the freeze. Roughly in order of value. Items marked *(
 - Run the Resilience4j comparison on x86 (`c7i`) and publish it next to Graviton; on x86 every atomic is a full fence and `nanoTime` is cheap, so the ARM-tuned choices may rank differently. *(asked before 1.0)*
 - jcstress in default mode on an ARM runner (`ubuntu-24.04-arm` or Graviton) on a schedule, and the mutants rerun there: today the `stress` workflow runs quick mode on x86 only, which is TSO, so weakened orderings cannot fail there. *(asked before 1.0)*
 - Percentile and open-loop benchmarks (`SampleTime`) for the contended rate limiter and bulkhead. *(asked before 1.0)*
-- A loud failure in Spring, Micronaut and Quarkus when annotated classes have no generated class: today the beans are silently unprotected and only an empty `/actuator/resilience4cata` shows it. *(asked before 1.0)*
+- ~~A loud failure in Spring, Micronaut and Quarkus when annotated classes have no generated class.~~ Done before 1.0: see phase 4.
 - Optional success and latency metrics, measured before adding (per-call shared writes), for parity with Resilience4j dashboards. *(asked before 1.0)*
 - Spring Boot 3 support, or a documented reason and migration path. *(asked before 1.0)*
 - Project health: a second maintainer with release rights, a security policy (`SECURITY.md`) and a support policy. *(asked before 1.0)*

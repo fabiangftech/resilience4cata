@@ -81,9 +81,11 @@ dependencies {
 
 <!-- tabs:end -->
 
-> Without the annotation processor nothing is generated and the beans stay unprotected: the annotations have
-> `CLASS` retention, so nothing at run time can notice they are there. With the extension's debug logging
-> (`quarkus.log.category."dev.resilience4cata".level=DEBUG`) the build lists every bean it wires.
+> Without the annotation processor nothing is generated, so the build fails with
+> [`R4C-QK-008`](../errors.md#r4c-qk-008) for every bean whose class or interface has resilience4cata annotations but
+> no generated class, instead of running it unprotected. `quarkus.resilience4cata.allow-missing-processor=true` turns
+> it off. With the extension's debug logging (`quarkus.log.category."dev.resilience4cata".level=DEBUG`) the build
+> lists every bean it wires.
 
 Generated classes are found in the application's index, like beans: a library jar with annotated classes needs a
 Jandex index (or `quarkus.index-dependency`), as for its beans.
@@ -457,6 +459,7 @@ by design.
 | `quarkus.resilience4cata.beans.enabled` | build | `true` | Make the generated classes the beans (subclasses replace annotated classes, wrappers stand for interface beans) |
 | `quarkus.resilience4cata.beans.exclude` | build | empty | Bean classes (fully qualified) to leave alone |
 | `quarkus.resilience4cata.allow-retry-inside-transaction` | build | `false` | Allow `@Retry`/`@Hedge` on `@Transactional` methods of annotated classes instead of failing with R4C-QK-002 |
+| `quarkus.resilience4cata.allow-missing-processor` | build | `false` | Build even when a bean has resilience4cata annotations but no generated class (its policies do not run) instead of failing with R4C-QK-008 |
 | `quarkus.resilience4cata.health.enabled` | build | `true` | The readiness check, when SmallRye Health is present |
 | `quarkus.resilience4cata.metrics.enabled` | build | `true` | Bind the registry to Micrometer or OpenTelemetry |
 | `quarkus.resilience4cata.verify-instances` | run time | `warn` | `fail`, `warn` or `off` for instance keys that match nothing at startup |

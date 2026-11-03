@@ -141,7 +141,13 @@ Un pull request por bug confirmado. Para cada uno: primero escribir un test que 
 - [x] (#66) `SECURITY.md`: versiones soportadas y cómo reportar una vulnerabilidad en privado.
 - [x] Una corrida completa de jcstress en ARM (AWS Graviton), ya que el CI solo la corre en x86.
   - **Resultado:** 2026-11-02, una `c7g.4xlarge` (16 núcleos Graviton3), `-m default`, unos 40 minutos: 65 tests, 2598 configuraciones, ninguna falló, sin errores. Un test sale "interesting", como se esperaba: `RetryBudgetStress.CallsAreNeverOvercounted` perdió llamadas en el 10,9 % de sus muestras y nunca contó una de más. Es la pérdida documentada en la tarea 3.5, que en ARM se ve mucho más que en x86. La corrida usó una configuración de Terraform desechable fuera del repositorio; correrla de forma periódica está en "Después de 1.0".
-- [ ] Decidir si la falta del procesador debe hacer fallar el arranque en Spring, Micronaut y Quarkus antes de 1.0 (decisión del dueño; quien evalúa adoptarla argumenta que añadirlo después cambia el comportamiento dentro de la versión mayor).
+- [x] Decidir si la falta del procesador debe hacer fallar el arranque en Spring, Micronaut y Quarkus antes de 1.0 (decisión del dueño; quien evalúa adoptarla argumenta que añadirlo después cambia el comportamiento dentro de la versión mayor).
+  - **Resultado:** sí, antes de 1.0.0, en una 1.0.0-RC2. Un bean cuya clase (o una superclase), o una interfaz que implementa, declara políticas pero no tiene clase generada ahora hace fallar:
+    - el arranque de Spring con R4C-SPR-006;
+    - la creación de un bean de una clase anotada en Micronaut con R4C-MN-007 (una interfaz anotada solo se envuelve con `@ResilientBean`, que ya falla con R4C-RT-003);
+    - el build de Quarkus con R4C-QK-008.
+
+    Cada uno tiene un interruptor para desactivarlo (`allow-missing-processor`), y los beans excluidos no se comprueban. Spring y Micronaut leen los archivos de clase (`PolicyAnnotations`, una copia en cada uno, que se mantienen iguales), así que la comprobación no se ejecuta en una imagen nativa; Quarkus usa el índice Jandex. Los tests cargan los fixtures anotados sin su `$Resilient`: con un class loader que lo esconde (Spring, Micronaut) o con una raíz de aplicación sin él (Quarkus). Cada comprobación tiene su mutation check.
 - [x] Decidir si hay release candidate: `1.0.0-RC1` en Central, una o dos semanas de uso, luego 1.0.0. (Decisión del dueño.)
   - **Resultado:** sí. Los snippets de instalación siguen en 0.13.0 hasta 1.0.0 (decisión del dueño).
 - [x] Publicar 1.0.0-RC1 siguiendo [publicar una versión](releasing.md).
@@ -162,7 +168,7 @@ Aditivo, así que no bloquea congelar la API. Más o menos en orden de valor. Lo
 - Correr la comparación con Resilience4j en x86 (`c7i`) y publicarla junto a Graviton; en x86 cada atómico es una barrera completa y `nanoTime` es barato, así que las decisiones afinadas para ARM pueden quedar en otro orden. *(pedido antes de 1.0)*
 - jcstress en modo por defecto en un runner ARM (`ubuntu-24.04-arm` o Graviton) de forma periódica, y repetir allí los mutantes: hoy el workflow `stress` corre el modo quick solo en x86, que es TSO, así que un orden debilitado no puede fallar allí. *(pedido antes de 1.0)*
 - Benchmarks de percentiles y de bucle abierto (`SampleTime`) para el rate limiter y el bulkhead con contención. *(pedido antes de 1.0)*
-- Un fallo visible en Spring, Micronaut y Quarkus cuando hay clases anotadas sin clase generada: hoy los beans quedan sin protección y sin aviso, y solo un `/actuator/resilience4cata` vacío lo delata. *(pedido antes de 1.0)*
+- ~~Un fallo visible en Spring, Micronaut y Quarkus cuando hay clases anotadas sin clase generada.~~ Hecho antes de 1.0: ver la fase 4.
 - Métricas opcionales de éxito y latencia, medidas antes de añadirlas (escrituras compartidas por llamada), para tener paridad con los dashboards de Resilience4j. *(pedido antes de 1.0)*
 - Soporte de Spring Boot 3, o una razón documentada y una ruta de migración. *(pedido antes de 1.0)*
 - Salud del proyecto: un segundo mantenedor con permisos de release, una política de seguridad (`SECURITY.md`) y una política de soporte. *(pedido antes de 1.0)*

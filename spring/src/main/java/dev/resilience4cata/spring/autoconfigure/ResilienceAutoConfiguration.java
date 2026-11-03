@@ -48,7 +48,8 @@ public final class ResilienceAutoConfiguration {
     static ResilientBeansPostProcessor resilientBeansPostProcessor(Environment environment,
             ObjectProvider<ResilienceRegistry> registry) {
         ResilienceSpringProperties settings = settings(environment);
-        return new ResilientBeansPostProcessor(registry::getObject, settings.wrap(), Set.copyOf(settings.exclude()));
+        return new ResilientBeansPostProcessor(registry::getObject, settings.wrap(), Set.copyOf(settings.exclude()),
+                settings.allowMissingProcessor());
     }
 
     /** Fails the startup when a transaction proxy goes around a retried method of an annotated class (R4C-SPR-004). */

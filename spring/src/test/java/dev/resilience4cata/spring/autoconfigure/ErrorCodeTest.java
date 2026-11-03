@@ -62,6 +62,16 @@ class ErrorCodeTest {
                 .withBean(RetriedLedger.class)));
         reported.addAll(codes(runner.withBean(Backend.class).withBean(BackendEarlyClient.class)
                 .withBean(ClientUsingPostProcessor.class)));
+        dev.resilience4cata.spring.unprocessed.WithoutGeneratedClasses unprocessed =
+                new dev.resilience4cata.spring.unprocessed.WithoutGeneratedClasses();
+        reported.addAll(codes(runner.withClassLoader(unprocessed).withBean("prices", Object.class, () -> {
+            try { // R4C-SPR-006: an annotated class compiled without the processor
+                return unprocessed.loadClass("dev.resilience4cata.spring.unprocessed.PriceService")
+                        .getConstructor().newInstance();
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+        })));
 
         assertThat(reported).containsExactlyInAnyOrderElementsOf(
                 Arrays.stream(ErrorCode.values()).map(ErrorCode::code).toList());

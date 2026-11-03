@@ -50,6 +50,8 @@ final class ResilientBeansListener implements BeanCreatedEventListener<Object> {
     private final GeneratedClasses generated = new GeneratedClasses();
     private final Map<Class<?>, Optional<Class<?>>> unprotected = new ConcurrentHashMap<>();
     private final @Nullable RetryInsideTransactionCheck transactions;
+    private final @Nullable PolicyAnnotations policies;
+    private final Map<Class<?>, Optional<Class<?>>> notGenerated = new ConcurrentHashMap<>();
 
     /**
      * A listener of every bean cannot depend on other beans (it would be notified of their creation): a provider
@@ -57,10 +59,12 @@ final class ResilientBeansListener implements BeanCreatedEventListener<Object> {
      */
     ResilientBeansListener(BeanProvider<ResilienceRegistry> registry,
             @Property(name = MicronautSettings.PREFIX + ".exclude") @Nullable List<String> excluded,
-            @Property(name = MicronautSettings.PREFIX + ".allow-retry-inside-transaction") @Nullable Boolean allowRetryInsideTransaction) {
+            @Property(name = MicronautSettings.PREFIX + ".allow-retry-inside-transaction") @Nullable Boolean allowRetryInsideTransaction,
+            @Property(name = MicronautSettings.PREFIX + ".allow-missing-processor") @Nullable Boolean allowMissingProcessor) {
         this.registry = registry;
         this.excluded = excluded == null ? Set.of() : excluded.stream().map(String::strip).collect(Collectors.toUnmodifiableSet());
         this.transactions = Boolean.TRUE.equals(allowRetryInsideTransaction) ? null : new RetryInsideTransactionCheck(generated);
+        this.policies = Boolean.TRUE.equals(allowMissingProcessor) ? null : new PolicyAnnotations();
     }
 
     @Override
@@ -84,6 +88,12 @@ final class ResilientBeansListener implements BeanCreatedEventListener<Object> {
         Optional<Class<?>> annotated = unprotected.computeIfAbsent(bean.getClass(), this::annotatedSuperclass);
         if (annotated.isPresent() && !definition.hasStereotype(MOCK_BEAN)) {
             throw unprotected(definition, bean, annotated.get());
+        }
+        if (policies != null && !definition.hasStereotype(MOCK_BEAN)) {
+            Optional<Class<?>> withoutSubclass = notGenerated.computeIfAbsent(bean.getClass(), this::withoutGeneratedSubclass);
+            if (withoutSubclass.isPresent()) {
+                throw notGenerated(definition, bean, withoutSubclass.get());
+            }
         }
         if (transactions != null) {
             transactions.check(definition, bean);
@@ -140,6 +150,37 @@ final class ResilientBeansListener implements BeanCreatedEventListener<Object> {
                     + " only, so injecting the bean by another type would fail or bypass the policies.",
                     "Remove @Bean(typed = ...) or @Type from the bean, and inject " + type.getSimpleName() + ".");
         }
+    }
+
+    /**
+     * The class among the bean's class and superclasses that declares policies but has no generated subclass: the
+     * annotation processor did not run on it. None if the bean is a generated subclass, which applies them.
+     */
+    private Optional<Class<?>> withoutGeneratedSubclass(Class<?> beanClass) {
+        PolicyAnnotations reader = policies;
+        for (Class<?> c = beanClass; reader != null && c != null && c != Object.class; c = c.getSuperclass()) {
+            if (generated.isGeneratedSubclass(c) || generated.subclassOf(c) != null) {
+                return Optional.empty(); // the processor ran; R4C-MN-004 handles a bean that is not the subclass
+            }
+            if (reader.declaresPolicies(c)) {
+                return Optional.of(c);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static ResilienceBeanException notGenerated(BeanDefinition<?> definition, Object bean, Class<?> annotated) {
+        Class<?> type = definition.getBeanType();
+        String name = type == Object.class || type.isInterface() ? bean.getClass().getName() : type.getName();
+        String extending = name.equals(annotated.getName()) ? "" : " (it extends " + annotated.getName() + ")";
+        return ErrorCode.NOT_GENERATED.exception("Bean " + name + extending + " has resilience4cata annotations, but"
+                + " there is no generated " + annotated.getName()
+                + Resilient.GENERATED_SUFFIX + ": the annotation processor did not run when " + annotated.getSimpleName()
+                + " was compiled, so its policies would not run.", "Add resilience4cata-processor to the annotation"
+                + " processor path, after micronaut-inject-java, with -Ar4c.inject=micronaut (Gradle: annotationProcessor"
+                + " 'dev.resilience4cata:resilience4cata-processor'; Maven: annotationProcessorPaths in the"
+                + " maven-compiler-plugin) and rebuild; or set resilience4cata.micronaut.allow-missing-processor=true"
+                + " to start without the policies; or list the class in resilience4cata.micronaut.exclude.");
     }
 
     /** The annotated class among the bean's class and superclasses, unless the bean is its generated subclass. */

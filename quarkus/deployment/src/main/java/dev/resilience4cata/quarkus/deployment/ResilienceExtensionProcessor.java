@@ -77,6 +77,10 @@ public class ResilienceExtensionProcessor {
     private static final DotName REGISTRY = DotName.createSimple("dev.resilience4cata.ResilienceRegistry");
     private static final String POLICY_ANNOTATIONS = "dev.resilience4cata.annotation.";
     private static final DotName RESILIENCE_POLICY = DotName.createSimple(POLICY_ANNOTATIONS + "ResiliencePolicy");
+    /** The policy annotations; {@code @PolicyOrder} and the markers declare no policy. */
+    private static final Set<String> POLICIES = Set.of("Retry", "Hedge", "CircuitBreaker", "RateLimiter",
+            "AdaptiveLimit", "Timeout", "Bulkhead", "Fallback").stream().map(n -> POLICY_ANNOTATIONS + n)
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
     private static final List<String> FAULT_TOLERANCE = List.of("org.eclipse.microprofile.faulttolerance.",
             "io.smallrye.faulttolerance.api.");
     private static final DotName VETOED = DotName.createSimple("jakarta.enterprise.inject.Vetoed");
@@ -647,6 +651,101 @@ public class ResilienceExtensionProcessor {
      * can add only when the annotated class has one; ArC's own message would name the generated class, which the
      * application cannot change.
      */
+    /**
+     * R4C-QK-008: a class bean whose class, a superclass or an interface has resilience4cata annotations but no
+     * generated class (the annotation processor did not run when that type was compiled), so its policies would not
+     * run. The annotations have {@code CLASS} retention; Jandex indexes them anyway.
+     */
+    @BuildStep
+    void checkMissingProcessor(ResilienceBuildTimeConfig config, ValidationPhaseBuildItem validation,
+            GeneratedTypesBuildItem generated, CombinedIndexBuildItem combined,
+            BuildProducer<ValidationErrorBuildItem> errors) {
+        if (config.allowMissingProcessor() || !config.beans().enabled()) {
+            return;
+        }
+        IndexView index = combined.getIndex();
+        Set<String> excluded = Set.copyOf(config.beans().exclude().orElse(List.of()));
+        Set<String> missing = new java.util.TreeSet<>();
+        for (BeanInfo bean : allBeans(validation)) {
+            ClassInfo type = bean.isClassBean() ? index.getClassByName(bean.getBeanClass()) : null;
+            if (type != null && !excluded.contains(type.name().toString())) {
+                String annotated = withoutGeneratedClass(type, index, generated);
+                if (annotated != null) {
+                    missing.add(annotated);
+                }
+            }
+        }
+        if (!missing.isEmpty()) {
+            errors.produce(new ValidationErrorBuildItem(new DeploymentException(ErrorCode.NOT_GENERATED.message("Beans"
+                    + " have resilience4cata annotations but no generated class: the annotation processor did not run"
+                    + " when these types were compiled, so their policies would not run: " + missing.stream()
+                    .map(name -> name + " (no " + name + SUFFIX + ")").collect(java.util.stream.Collectors.joining(", "))
+                    + ". Add resilience4cata-processor to the annotation processor path (Gradle: annotationProcessor"
+                    + " 'dev.resilience4cata:resilience4cata-processor'; Maven: annotationProcessorPaths in the"
+                    + " maven-compiler-plugin) and rebuild; or set quarkus.resilience4cata.allow-missing-processor=true"
+                    + " to build without the policies; or list the bean classes in"
+                    + " quarkus.resilience4cata.beans.exclude."))));
+        }
+    }
+
+    /**
+     * The type among a bean class, its superclasses and its interfaces that declares policies but has no generated
+     * class, or {@code null}. A class chain that reaches a generated subclass, or a class that has one, was processed.
+     */
+    private static @Nullable String withoutGeneratedClass(ClassInfo bean, IndexView index,
+            GeneratedTypesBuildItem generated) {
+        Set<DotName> interfaces = new java.util.LinkedHashSet<>();
+        boolean processed = false;
+        for (ClassInfo c = bean; c != null && !c.name().equals(OBJECT); c = superclass(c, index)) {
+            String name = c.name().toString();
+            interfaces.addAll(c.interfaceNames());
+            processed = processed || generated.isGenerated(name) || generated.subclasses().containsKey(name);
+            if (!processed && declaresPolicies(c, index)) {
+                return name;
+            }
+        }
+        java.util.Deque<DotName> pending = new java.util.ArrayDeque<>(interfaces);
+        Set<DotName> seen = new java.util.HashSet<>();
+        while (!pending.isEmpty()) {
+            DotName name = pending.poll();
+            ClassInfo type = seen.add(name) ? index.getClassByName(name) : null;
+            if (type == null) {
+                continue;
+            }
+            if (!generated.wrappers().containsKey(name.toString()) && declaresPolicies(type, index)) {
+                return name.toString();
+            }
+            pending.addAll(type.interfaceNames());
+        }
+        return null;
+    }
+
+    private static @Nullable ClassInfo superclass(ClassInfo type, IndexView index) {
+        DotName superName = type.superName();
+        return superName == null ? null : index.getClassByName(superName);
+    }
+
+    /** Whether a policy annotation or a bundle is on {@code type} itself or on one of its methods. */
+    private static boolean declaresPolicies(ClassInfo type, IndexView index) {
+        for (AnnotationInstance annotation : type.annotations()) {
+            AnnotationTarget.Kind kind = annotation.target() == null ? null : annotation.target().kind();
+            if ((kind == AnnotationTarget.Kind.CLASS || kind == AnnotationTarget.Kind.METHOD)
+                    && (POLICIES.contains(annotation.name().toString())
+                    || isBundle(annotation.name(), index))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isBundle(DotName name, IndexView index) {
+        if (name.toString().startsWith(POLICY_ANNOTATIONS)) {
+            return false;
+        }
+        ClassInfo annotation = index.getClassByName(name);
+        return annotation != null && annotation.isAnnotation() && annotation.hasDeclaredAnnotation(RESILIENCE_POLICY);
+    }
+
     @BuildStep
     void checkProxyable(ValidationPhaseBuildItem validation, GeneratedTypesBuildItem generated,
             CombinedIndexBuildItem combined, BuildProducer<ValidationErrorBuildItem> errors) {

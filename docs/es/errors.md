@@ -2990,6 +2990,24 @@ para que se cree más tarde, pasando por todos los post-procesadores; o anota la
 subclase generada se instancia en lugar de la clase, pronto o no). Para dejar el bean sin protección a propósito,
 añade su nombre a `resilience4cata.spring.exclude`.
 
+### R4C-SPR-006
+
+**Causa:** la clase de un bean, una de sus superclases o una interfaz que implementa tiene anotaciones de
+resilience4cata, pero la clase que el procesador de anotaciones genera para ella (`C$Resilient`) no existe: el
+procesador no se ejecutó cuando se compiló ese tipo, así que sus políticas no se aplicarían. Las anotaciones tienen
+retención `CLASS`, así que nada más lo notaría (`ResilienceBeanException`, al crear el bean). La comprobación lee los
+archivos de clase, así que no se ejecuta en una imagen nativa.
+
+```text
+[R4C-SPR-006] Bean 'prices' is an instance of com.acme.PriceService, which has resilience4cata annotations, but there is no generated com.acme.PriceService$Resilient: the annotation processor did not run when PriceService was compiled, so its policies would not run. ...
+```
+
+**Corrección:** añade `resilience4cata-processor` a la ruta de procesadores de anotaciones y vuelve a compilar desde
+cero ([instalación](start/installation.md)): `annotationProcessor` con Gradle (y `testAnnotationProcessor` para las
+fuentes de test), `annotationProcessorPaths` del `maven-compiler-plugin` con Maven, donde también hay que listar todos
+los demás procesadores. Para arrancar sin las políticas a propósito, pon
+`resilience4cata.spring.allow-missing-processor=true`, o añade el bean a `resilience4cata.spring.exclude`.
+
 ## Ejecución: integración con Micronaut (R4C-MN)
 
 `resilience4cata-micronaut` revisa los beans y falla con estos códigos cuando un bean perdería su protección sin
@@ -3077,6 +3095,24 @@ reportan. La revisión lee el archivo de clase generado, así que una imagen nat
 ```
 
 **Corrección:** usa uno de los valores que indica el mensaje.
+
+### R4C-MN-007
+
+**Causa:** la clase de un bean o una de sus superclases tiene anotaciones de resilience4cata, pero la subclase que
+el procesador de anotaciones genera para ella (`C$Resilient`) no existe: el procesador no se ejecutó cuando se compiló
+esa clase, así que sus políticas no se aplicarían. Las anotaciones tienen retención `CLASS`, así que nada más lo
+notaría (`ResilienceBeanException`, al crear el bean). La comprobación lee los archivos de clase, así que no se
+ejecuta en una imagen nativa. Una interfaz anotada solo se envuelve con `@ResilientBean`, que falla con
+[R4C-RT-003](#r4c-rt-003) si falta el wrapper.
+
+```text
+[R4C-MN-007] Bean com.acme.PriceService has resilience4cata annotations, but there is no generated com.acme.PriceService$Resilient: the annotation processor did not run when PriceService was compiled, so its policies would not run. ...
+```
+
+**Corrección:** añade `resilience4cata-processor` a la ruta de procesadores de anotaciones después de
+`micronaut-inject-java`, con `-Ar4c.inject=micronaut`, y vuelve a compilar desde cero ([Micronaut](guides/micronaut.md)).
+Para arrancar sin las políticas a propósito, pon `resilience4cata.micronaut.allow-missing-processor=true`, o añade la
+clase a `resilience4cata.micronaut.exclude`.
 
 ## Compilación: extensión de Quarkus (R4C-QK)
 
@@ -3176,6 +3212,22 @@ endpoints y las políticas no se ejecutarían.
 
 **Corrección:** mueve las llamadas protegidas a un bean que el recurso inyecte (una clase anotada, o un bean que
 implemente una interfaz anotada), o protege la interfaz del cliente REST que el recurso llama.
+
+### R4C-QK-008
+
+**Causa:** la clase de un bean de clase, una de sus superclases o una interfaz que implementa tiene anotaciones de
+resilience4cata, pero la clase que el procesador de anotaciones genera para ella (`C$Resilient`) no está en la
+aplicación: el procesador no se ejecutó cuando se compiló ese tipo, así que sus políticas no se aplicarían. Las
+anotaciones tienen retención `CLASS`, así que nada en ejecución lo notaría (`DeploymentException`, durante el build).
+
+```text
+[R4C-QK-008] Beans have resilience4cata annotations but no generated class: the annotation processor did not run when these types were compiled, so their policies would not run: com.acme.PriceService (no com.acme.PriceService$Resilient). ...
+```
+
+**Corrección:** añade `resilience4cata-processor` a la ruta de procesadores de anotaciones y vuelve a compilar desde
+cero ([Quarkus](guides/quarkus.md)). Para compilar sin las políticas a propósito, pon
+`quarkus.resilience4cata.allow-missing-processor=true`, o añade las clases de los beans a
+`quarkus.resilience4cata.beans.exclude`.
 
 ## Pruebas: testkit (R4C-TK)
 
