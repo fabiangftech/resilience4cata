@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 class EachBeanTest {
 
     @Test
+    @SuppressWarnings("java:S1872") // the generated subclass is checked by its name, Backend$Resilient, on purpose
     void everyConfiguredBackendIsAProtectedBean() {
         try (ApplicationContext context = ApplicationContext.run(Map.of("test.usability", "each-bean",
                 "usability-backends.a.url", "http://a", "usability-backends.b.url", "http://b"))) {

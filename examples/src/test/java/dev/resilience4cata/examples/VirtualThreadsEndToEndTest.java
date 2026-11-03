@@ -155,7 +155,7 @@ class VirtualThreadsEndToEndTest {
         List<Object> outcomes = run(2_000, client::slow);
         Duration took = Duration.ofNanos(System.nanoTime() - started);
 
-        assertThat(outcomes).allSatisfy(o -> assertThat(o).isInstanceOf(CallTimeoutException.class));
+        assertThat(outcomes).hasSize(2_000).allSatisfy(o -> assertThat(o).isInstanceOf(CallTimeoutException.class));
         assertThat(took).as("2000 calls of five seconds, 100 ms timeout").isLessThan(Duration.ofSeconds(4));
         assertThat(interrupted).hasValue(2_000);
         assertThat(inside).hasValue(0);
@@ -165,7 +165,7 @@ class VirtualThreadsEndToEndTest {
     void aBulkheadWithMaxWaitQueuesVirtualThreadsAndLetsThemAllInInTurn() throws Exception {
         List<Object> outcomes = run(1_000, client::queued);
 
-        assertThat(outcomes).allSatisfy(o -> assertThat(o).asString().startsWith("ok "));
+        assertThat(outcomes).hasSize(1_000).allSatisfy(o -> assertThat(o).asString().startsWith("ok "));
         assertThat(maxInside.get()).isLessThanOrEqualTo(8);
         assertThat(registry.bulkhead("vt-bulkhead").concurrentCalls()).isZero();
         assertThat(registry.bulkhead("vt-bulkhead").waitingCalls()).isZero();
@@ -177,7 +177,7 @@ class VirtualThreadsEndToEndTest {
         List<Object> outcomes = run(1_500, client::limited);
         Duration took = Duration.ofNanos(System.nanoTime() - started);
 
-        assertThat(outcomes).allSatisfy(o -> assertThat(o).asString().startsWith("ok "));
+        assertThat(outcomes).hasSize(1_500).allSatisfy(o -> assertThat(o).asString().startsWith("ok "));
         assertThat(took).as("500 at once, then 500 a second").isGreaterThanOrEqualTo(Duration.ofMillis(1_900));
     }
 
@@ -187,7 +187,7 @@ class VirtualThreadsEndToEndTest {
         List<Object> outcomes = run(5_000, client::retried);
         Duration took = Duration.ofNanos(System.nanoTime() - started);
 
-        assertThat(outcomes).allSatisfy(o -> assertThat(o).asString().startsWith("ok "));
+        assertThat(outcomes).hasSize(5_000).allSatisfy(o -> assertThat(o).asString().startsWith("ok "));
         assertThat(attempts.values()).allSatisfy(a -> assertThat(a).hasValue(3));
         assertThat(took).as("5000 calls pausing 2 × 20 ms at once, not one carrier at a time")
                 .isLessThan(Duration.ofSeconds(10));
@@ -197,7 +197,7 @@ class VirtualThreadsEndToEndTest {
     void aStackOfPoliciesWorksOnVirtualThreads() throws Exception {
         List<Object> outcomes = run(2_000, client::stacked);
 
-        assertThat(outcomes).allSatisfy(o -> assertThat(o).asString().startsWith("ok "));
+        assertThat(outcomes).hasSize(2_000).allSatisfy(o -> assertThat(o).asString().startsWith("ok "));
         assertThat(attempts.values()).allSatisfy(a -> assertThat(a).hasValue(2));
         assertThat(maxInside.get()).isLessThanOrEqualTo(16);
         assertThat(registry.bulkhead("vt-stack").concurrentCalls()).isZero();

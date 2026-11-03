@@ -28,6 +28,7 @@ import org.jspecify.annotations.Nullable;
  */
 public abstract class RegistryAccess {
 
+    @SuppressWarnings("java:S3077") // set once by ResilienceRegistry's initializer; volatile publishes the reference
     private static volatile @Nullable RegistryAccess installed;
 
     /** For the registry's own implementation only. */

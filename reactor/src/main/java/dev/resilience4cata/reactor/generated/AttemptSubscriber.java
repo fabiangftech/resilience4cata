@@ -58,7 +58,7 @@ class AttemptSubscriber<T> extends CompletableFuture<Void> implements CoreSubscr
     @Nullable ElementListener second;
     private final Context context;
 
-    @SuppressWarnings("unused") // accessed through UPSTREAM
+    @SuppressWarnings({"unused", "java:S3077"}) // S3077: swapped atomically; accessed through UPSTREAM
     private volatile @Nullable Subscription upstream;
 
     // Only touched by onNext, which Reactive Streams calls one element at a time.

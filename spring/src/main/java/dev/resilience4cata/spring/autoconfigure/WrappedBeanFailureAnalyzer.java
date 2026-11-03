@@ -91,6 +91,8 @@ final class WrappedBeanFailureAnalyzer implements FailureAnalyzer, Ordered {
     }
 
     /** The annotated interface of a generated wrapper class, or {@code null}. */
+    // java:S1872: the generated class is recognised by its name, X$Resilient, by definition; there is no type to test.
+    @SuppressWarnings("java:S1872")
     private static @Nullable Class<?> wrapped(Class<?> type) {
         for (Class<?> implemented : type.getInterfaces()) {
             if ((implemented.getName() + Resilient.GENERATED_SUFFIX).equals(type.getName())) {

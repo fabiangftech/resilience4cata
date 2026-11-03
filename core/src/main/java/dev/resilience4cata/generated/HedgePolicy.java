@@ -675,6 +675,7 @@ public final class HedgePolicy {
         private final HedgeCall<?> call;
         final int armedFor;
         /** The ticker's task, on a manual ticker. */
+        @SuppressWarnings("java:S3077") // a reference published to the cancelling thread; Future is thread-safe
         volatile @Nullable Future<?> task;
 
         Next(HedgeCall<?> call, int armedFor) {
