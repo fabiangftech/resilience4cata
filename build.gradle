@@ -16,10 +16,18 @@ sonar {
                 "${rootDir}/examples/build/reports/jacoco/testCodeCoverageReport/testCodeCoverageReport.xml"
         // Annotation types are declarations only: nothing in them runs.
         property 'sonar.coverage.exclusions', '**/dev/resilience4cata/annotation/**'
+        // Only the library is analysed: test code is not. Coverage still counts every test, through the JaCoCo
+        // report above.
+        property 'sonar.test.exclusions', '**/*'
     }
 }
 
-// Benchmarks and jcstress tests are measurement harnesses, not library code.
-['benchmark', 'stress'].each { name ->
-    project(":${name}").sonar { skipProject = true }
+// Only the published modules are analysed. Benchmarks, jcstress tests, examples, the site generator and the Quarkus
+// extension's test application are harnesses, not library code.
+subprojects {
+    afterEvaluate {
+        if (!pluginManager.hasPlugin('r4c.publish')) {
+            sonar { skipProject = true }
+        }
+    }
 }
