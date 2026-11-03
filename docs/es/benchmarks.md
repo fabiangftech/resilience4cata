@@ -624,6 +624,25 @@ El [plan hacia 1.0](plan-1.0.md) (fase 3) arregló cuatro carreras encontradas e
 
 Arrancar un virtual thread domina. Con cuatro threads arrancando a la vez, el timeout añade unos 0.8 µs a cada uno, muy probablemente por la cola compartida por la que pasan los registros (deducido, no perfilado). En un thread que hace varias llamadas con timeout solo paga la primera.
 
+## Las filas de la portada sobre la release candidate (2026-11-02, AWS Graviton3) :id=release-candidate
+
+Las cuatro comparaciones de la portada, medidas otra vez sobre el código de 1.0.0-RC1 (`439ba5c`; el commit del release solo cambia la versión), para que salgan todas de una misma corrida. Cada benchmark se ejecutó como las dos mitades de cada máquina (8 máquinas, `-f 6`); la tabla da la media de las mitades, nanosegundos y bytes por llamada:
+
+| Escenario | Threads | resilience4cata | Resilience4j 2.4.0 |
+|---|---:|---:|---:|
+| Retry, el primer intento sale bien | 1 | **1.4 ns**, 0 B | 22.9 ns, 0 B |
+| Retry, el primer intento sale bien | 4 | **1.3 ns**, 0 B | 23.0 ns, 0 B |
+| Circuit breaker, todas las llamadas salen bien (`SYNCHRONIZED` en Resilience4j) | 1 | **1.9 ns**, 0 B | 89.9 ns, 0 B |
+| Circuit breaker, todas las llamadas salen bien | 4 | **1.9 ns**, 0 B | 849.5 ns, 2 B |
+| Timeout síncrono (Resilience4j: `TimeLimiter` + executor) | 1 | **23.6 ns**, 0 B | 8907.6 ns, 183 B |
+| Timeout síncrono | 4 | **23.6 ns**, 0 B | 9976.8 ns, 151 B |
+| Bulkhead, slots libres | 1 | **17.3 ns**, 0 B | 20.1 ns, 0 B |
+| Bulkhead, slots libres | 4 | **192.3 ns**, 0 B | 410.8 ns, 0 B |
+
+- El retry en un thread difirió entre las dos mitades, con el mismo código: de 1.42 a 1.54 ns en una, de 1.25 a 1.28 ns en la otra, cada una estable en sus seis forks. Un efecto de layout entre ejecuciones de la JVM; la tabla da la media, 1.4 ns. El titular de 0.1.0 midió 1.2 ns.
+- El timeout síncrono mide 23.6 ns, como en [la corrida posterior al MVP](#clases-anotadas-genéricos-overrides-de-config-bulkhead-con-ticker-2026-10-24-aws-graviton3) (23.7 ns); los 22.2 ns del titular de 0.1.0 no se han vuelto a ver.
+- Con cuatro threads, el bulkhead (192.3 ns) y el de Resilience4j (forks de 361 a 528 ns) tienen la dispersión habitual de la contención.
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos en tres forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) y falla si el fork que menos asigna llega a su presupuesto + 1 B/op, o si un benchmark falta en los resultados. Tres forks porque C2 decide una vez por JVM si elimina un objeto (scalar replacement): un fork mantiene los mismos bytes en todas sus iteraciones, y el siguiente puede asignar uno o dos objetos más. En el runner de CI (x86), 21 ejecuciones del gate con un fork midieron `FluxBenchmark.resilience4cataPipelineStack` en 696, 728, 752 y 776 B y `resilience4cataTimeout` entre 384 y 440 B, así que el gate fallaba de vez en cuando en cambios que no asignan nada; un calentamiento más largo llevó todos los forks al valor más alto (Apple M1). Una allocation nueva en el código aparece en todos los forks, así que el fork más bajo la sigue detectando. La tabla muestra los bytes de cada fork. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.

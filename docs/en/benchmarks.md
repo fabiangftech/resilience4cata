@@ -624,6 +624,25 @@ The [plan to 1.0](plan-1.0.md) (phase 3) fixed four races found in review: a bul
 
 Starting a virtual thread dominates. With four threads starting at once, the timeout adds about 0.8 µs to each, most likely the shared queue the registrations go through (inferred, not profiled). On a thread that makes several timed calls only the first one pays.
 
+## The landing page's rows on the release candidate (2026-11-02, AWS Graviton3) :id=release-candidate
+
+The four comparisons on the landing page, measured again on the code of 1.0.0-RC1 (`439ba5c`; the release commit only changes the version), so that they all come from one run. Each benchmark ran as both halves of every machine (8 machines, `-f 6`); the table gives the mean of the halves, nanoseconds and bytes per call:
+
+| Scenario | Threads | resilience4cata | Resilience4j 2.4.0 |
+|---|---:|---:|---:|
+| Retry, first attempt succeeds | 1 | **1.4 ns**, 0 B | 22.9 ns, 0 B |
+| Retry, first attempt succeeds | 4 | **1.3 ns**, 0 B | 23.0 ns, 0 B |
+| Circuit breaker, every call succeeds (`SYNCHRONIZED` for Resilience4j) | 1 | **1.9 ns**, 0 B | 89.9 ns, 0 B |
+| Circuit breaker, every call succeeds | 4 | **1.9 ns**, 0 B | 849.5 ns, 2 B |
+| Sync timeout (Resilience4j: `TimeLimiter` + executor) | 1 | **23.6 ns**, 0 B | 8907.6 ns, 183 B |
+| Sync timeout | 4 | **23.6 ns**, 0 B | 9976.8 ns, 151 B |
+| Bulkhead, slots free | 1 | **17.3 ns**, 0 B | 20.1 ns, 0 B |
+| Bulkhead, slots free | 4 | **192.3 ns**, 0 B | 410.8 ns, 0 B |
+
+- The retry on one thread differed between the two halves, with the same code: 1.42 to 1.54 ns in one, 1.25 to 1.28 ns in the other, each stable across its six forks. A layout effect between JVM runs; the table gives the mean, 1.4 ns. The 0.1.0 headline measured 1.2 ns.
+- The sync timeout measures 23.6 ns, as in [the run after the MVP](#annotated-classes-generics-config-overrides-ticker-bulkhead-2026-10-24-aws-graviton3) (23.7 ns); the 22.2 ns of the 0.1.0 headline has not been seen since.
+- With four threads, the bulkhead (192.3 ns) and Resilience4j's (forks from 361 to 528 ns) carry the usual contention spread.
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings in three forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) and fails if the fork that allocates least reaches its budget + 1 B/op, or if a benchmark is missing from the results. Three forks because C2 decides once per JVM whether it scalar-replaces an object: a fork keeps the same bytes in every iteration, and the next one can allocate an object or two more. On the CI runner (x86), 21 runs of the one-fork gate measured `FluxBenchmark.resilience4cataPipelineStack` at 696, 728, 752 and 776 B and `resilience4cataTimeout` at 384 to 440 B, so the gate failed now and then on changes that allocate nothing; a longer warm-up put every fork on the higher value instead (Apple M1). An allocation the code starts making shows in every fork, so the lowest fork still catches it. The table shows every fork's bytes. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.
