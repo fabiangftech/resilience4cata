@@ -11,7 +11,9 @@ This page is the working plan: each task says what to change, where, and how to 
 - Javadoc titles carry the artifact name (#60); javadoc.io was synced for all 11 modules.
 - Phases 1 to 3 are done (#62 to #65).
 - A second review by the same four reviewers (2026-11-02, after #65): the API designer, the performance reviewer and the newcomer say ready for 1.0; the adopter asks for a 1.0.0-RC1 first, and for three things before 1.0 (a loud failure when the processor is missing, one jcstress run on ARM, a security policy). Their small documentation fixes are in phase 4.
-- Next: phase 4.
+- 1.0.0-RC1 is on Maven Central (2026-11-02). `main` is 1.0.0-SNAPSHOT, with the API baseline at 1.0.0-RC1, so the API is frozen: an incompatible change against the release candidate fails the build.
+- SonarCloud's main branch was still called `master`, so the analyses of `main` never reached the project overview. It is `main` now; its 21 reliability issues were reviewed (#68), and only the published library is analysed (#69).
+- Next: one or two weeks of use, the decision on a missing processor, then 1.0.0.
 
 ## The review
 
@@ -137,11 +139,21 @@ One pull request per confirmed bug. For each: first write a test that reproduces
 
 - [x] (#66) The second review's documentation fixes: the first timed call of a new thread allocates (`performance.md`), the rate limiter (not the bulkhead) parks, the clock-reading features, quickstart step 6's wording and a link to the HTTP guide, a test for the guide's timeout row, the FAQ's defaults link, the adaptive limit's approximate average, this status.
 - [x] (#66) `SECURITY.md`: supported versions and how to report a vulnerability privately.
-- [ ] One full jcstress run on ARM (AWS Graviton), since CI runs it only on x86.
+- [x] One full jcstress run on ARM (AWS Graviton), since CI runs it only on x86.
+  - **Outcome:** 2026-11-02, one `c7g.4xlarge` (16 Graviton3 cores), `-m default`, about 40 minutes: 65 tests, 2598 configurations, none failed, no errors. One test is "interesting", as expected: `RetryBudgetStress.CallsAreNeverOvercounted` lost calls in 10.9 % of its samples, never counted one too many. That is the documented loss of task 3.5, seen far more often on ARM than on x86. The run used a throwaway Terraform configuration outside the repository; running it on a schedule is in "After 1.0".
 - [ ] Decide whether a missing processor must fail the startup in Spring, Micronaut and Quarkus before 1.0 (owner's decision; the adopter argues that adding it later changes behaviour within the major).
-- [ ] Decide on a release candidate: `1.0.0-RC1` on Central, one or two weeks of use, then 1.0.0. (Owner's decision.)
-- [ ] Follow [releasing](releasing.md): `./gradlew :examples:check -Pr4c.generatedBy=0.13.0`, version bump in build snippets (not the blog), tag, `release.yml`, publish by hand in the Central portal.
-- [ ] After the release: `r4c.apiBaseline` = the release; sync javadoc.io for every module (the sync and upload buttons on each artifact's versions page).
+- [x] Decide on a release candidate: `1.0.0-RC1` on Central, one or two weeks of use, then 1.0.0. (Owner's decision.)
+  - **Outcome:** yes. The install snippets stay at 0.13.0 until 1.0.0 (owner's decision).
+- [x] Release 1.0.0-RC1 following [releasing](releasing.md).
+  - **Outcome:** released 2026-11-02 (commit `release 1.0.0-RC1`, tag `v1.0.0-RC1`, `release.yml` run 41553226849, published in the Central portal by the owner).
+    - `apiCompatibility` against 0.13.0 showed only the intended changes: the renamed event, the two Micronaut constructors, and `FluxCall$Attempt` (source only).
+    - The generated-code check (`-Pr4c.generatedBy=0.13.0`) does not apply: 0.x to 1.0 crosses a major version, and the tests already use `CircuitBreakerEvent.Rejected`.
+    - The landing page's four comparisons were measured again on the release candidate's code ([benchmarks](benchmarks.md#release-candidate), #67).
+- [x] After the release candidate: `version=1.0.0-SNAPSHOT`, `r4c.apiBaseline=1.0.0-RC1`, javadoc.io synced and generated for 1.0.0-RC1 in all 11 modules.
+- [ ] Release 1.0.0 after one or two weeks of use, unless something has to change:
+  - version, tag `v1.0.0`, `release.yml`, Publish in the portal;
+  - then the install snippets to 1.0.0 (not the blog), `r4c.apiBaseline=1.0.0`, javadoc.io;
+  - from then on, the generated-code check (`-Pr4c.generatedBy=<release>`) is step 1 of every release.
 
 ## After 1.0
 
