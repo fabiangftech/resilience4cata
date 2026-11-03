@@ -187,39 +187,39 @@ at CheckoutService.pay</pre>
       <p class="lead" style="font-size:17px">Cada número de este sitio viene de una corrida de JMH en el repositorio, contra Resilience4j con una configuración equivalente. Donde no ganamos, los resultados completos lo dicen.</p>
       <dl>
         <dt>Máquina</dt><dd>AWS c7g.xlarge, 4 núcleos Graviton3</dd>
-        <dt>JMH</dt><dd>3 forks × 5 × 1 s, <code>-prof gc</code></dd>
+        <dt>JMH</dt><dd>6 forks × 5 × 1 s, <code>-prof gc</code></dd>
         <dt>Comparado con</dt><dd>Resilience4j 2.4.0</dd>
-        <dt>Fecha</dt><dd>2026-10-24; bulkhead 2026-11-01</dd>
+        <dt>Fecha</dt><dd>2026-11-02</dd>
       </dl>
-      <a href="/es/benchmarks?id=cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3">Método, todos los resultados y notas de equidad</a>
+      <a href="/es/benchmarks?id=release-candidate">Método, todos los resultados y notas de equidad</a>
     </div>
     <figure class="r4c-chart">
       <figcaption class="legend">
-        <span><i style="background:var(--series-r4c)"></i>resilience4cata</span>
+        <span><i style="background:var(--series-r4c)"></i>resilience4cata 1.0.0-RC1</span>
         <span><i style="background:var(--series-r4j)"></i>Resilience4j 2.4.0</span>
       </figcaption>
       <div class="row"><div class="row-label">Retry, el primer intento sale bien<small>1 thread</small></div>
-        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 1.2 ns por llamada, 0 B asignados"><i style="width:1.98%"></i><b>1.2 ns</b></span>
+        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 1.4 ns por llamada, 0 B asignados"><i style="width:3.65%"></i><b>1.4 ns</b></span>
           <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 22.9 ns por llamada, 0 B asignados"><i style="width:34.0%"></i><b>22.9 ns</b></span></div></div>
       <div class="row"><div class="row-label">Circuit breaker, todas las llamadas salen bien<small>4 threads, un breaker compartido</small></div>
         <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 1.9 ns por llamada, 0 B asignados"><i style="width:6.97%"></i><b>1.9 ns</b></span>
-          <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 832 ns por llamada, 2 B asignados"><i style="width:73.0%"></i><b>832 ns</b></span></div></div>
+          <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 850 ns por llamada, 2 B asignados"><i style="width:73.2%"></i><b>850 ns</b></span></div></div>
       <div class="row"><div class="row-label">Timeout síncrono, la llamada termina a tiempo<small>1 thread</small></div>
-        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 22.2 ns por llamada, 0 B asignados"><i style="width:33.7%"></i><b>22.2 ns</b></span>
-          <span class="bar r4j" tabindex="0" data-tip="Resilience4j TimeLimiter sobre un executor: 8842 ns por llamada, 176 B asignados"><i style="width:98.7%"></i><b>8 842 ns</b></span></div></div>
+        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 23.6 ns por llamada, 0 B asignados"><i style="width:34.3%"></i><b>23.6 ns</b></span>
+          <span class="bar r4j" tabindex="0" data-tip="Resilience4j TimeLimiter sobre un executor: 8908 ns por llamada, 183 B asignados"><i style="width:98.7%"></i><b>8 908 ns</b></span></div></div>
       <div class="row"><div class="row-label">Bulkhead con lugares libres<small>1 thread</small></div>
         <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 17.3 ns por llamada, 0 B asignados"><i style="width:31%"></i><b>17.3 ns</b></span>
-          <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 20.4 ns por llamada, 0 B asignados"><i style="width:32.7%"></i><b>20.4 ns</b></span></div></div>
+          <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 20.1 ns por llamada, 0 B asignados"><i style="width:32.6%"></i><b>20.1 ns</b></span></div></div>
       <div class="axis"><span></span><div><span>1 ns</span><span>10</span><span>100</span><span>1 000</span><span>10 000</span></div></div>
       <p class="axis-note">Tiempo por llamada, escala logarítmica. Menos es mejor.</p>
       <details><summary>Ver como tabla</summary>
         <div class="tablewrap"><table>
           <thead><tr><th>Escenario</th><th class="num">Threads</th><th class="num">resilience4cata</th><th class="num">Resilience4j</th></tr></thead>
           <tbody>
-            <tr><td>Retry, el primer intento sale bien</td><td class="num">1</td><td class="num">1.2 ns, 0 B</td><td class="num">22.9 ns, 0 B</td></tr>
-            <tr><td>Circuit breaker, todas las llamadas salen bien</td><td class="num">4</td><td class="num">1.9 ns, 0 B</td><td class="num">832 ns, 2 B</td></tr>
-            <tr><td>Timeout síncrono</td><td class="num">1</td><td class="num">22.2 ns, 0 B</td><td class="num">8842 ns, 176 B</td></tr>
-            <tr><td>Bulkhead con lugares libres</td><td class="num">1</td><td class="num">17.3 ns, 0 B</td><td class="num">20.4 ns, 0 B</td></tr>
+            <tr><td>Retry, el primer intento sale bien</td><td class="num">1</td><td class="num">1.4 ns, 0 B</td><td class="num">22.9 ns, 0 B</td></tr>
+            <tr><td>Circuit breaker, todas las llamadas salen bien</td><td class="num">4</td><td class="num">1.9 ns, 0 B</td><td class="num">850 ns, 2 B</td></tr>
+            <tr><td>Timeout síncrono</td><td class="num">1</td><td class="num">23.6 ns, 0 B</td><td class="num">8908 ns, 183 B</td></tr>
+            <tr><td>Bulkhead con lugares libres</td><td class="num">1</td><td class="num">17.3 ns, 0 B</td><td class="num">20.1 ns, 0 B</td></tr>
           </tbody></table></div>
       </details>
       <div class="r4c-chart-tip" hidden></div>
