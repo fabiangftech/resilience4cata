@@ -482,12 +482,12 @@ class SoakTest {
         if (!samples.isEmpty()) {
             out.append("\nLibrary threads: ").append(samples.getLast().libraryThreads()).append('\n');
         }
-        for (Throwable failure : unexpected.isEmpty() ? dropped : unexpected) {
+        List<Throwable> failures = unexpected.isEmpty() ? dropped : unexpected;
+        if (!failures.isEmpty()) { // the first one's stack trace
             java.io.StringWriter trace = new java.io.StringWriter();
-            failure.printStackTrace(new java.io.PrintWriter(trace));
+            failures.getFirst().printStackTrace(new java.io.PrintWriter(trace));
             out.append("\n```\n").append(trace.toString().lines().limit(40).collect(Collectors.joining("\n")))
                     .append("\n```\n");
-            break;
         }
         Files.createDirectories(REPORT_DIR);
         Files.writeString(REPORT_DIR.resolve("report.md"), out);

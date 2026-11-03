@@ -79,7 +79,7 @@ public final class FluxCall<T> implements Subscription {
     private volatile int wip;
     @SuppressWarnings("unused") // accessed through MISSED_REQUESTED
     private volatile long missedRequested;
-    @SuppressWarnings("unused") // accessed through MISSED_SUBSCRIBER
+    @SuppressWarnings({"unused", "java:S3077"}) // S3077: swapped atomically; accessed through MISSED_SUBSCRIBER
     private volatile @Nullable AttemptSubscriber<T> missedSubscriber;
     private long requested;
     private @Nullable AttemptSubscriber<T> current;
@@ -93,16 +93,17 @@ public final class FluxCall<T> implements Subscription {
     private volatile int gate;
 
     // Elements against the end.
-    @SuppressWarnings("unused") // accessed through EMITTER
+    @SuppressWarnings({"unused", "java:S3077"}) // S3077: swapped atomically; accessed through EMITTER
     private volatile @Nullable Thread emitter; // the thread delivering an element, or null
     private boolean endDeferred; // the end arrived on the delivering thread, from inside onNext
-    @SuppressWarnings("unused") // accessed through TERMINAL
+    @SuppressWarnings({"unused", "java:S3077"}) // S3077: swapped atomically; accessed through TERMINAL
     private volatile @Nullable Object terminal;
 
-    @SuppressWarnings("unused") // accessed through FUTURE
+    @SuppressWarnings({"unused", "java:S3077"}) // S3077: swapped atomically; accessed through FUTURE
     private volatile @Nullable CompletableFuture<Void> future;
 
     // A failure after the commit, kept for the subscriber while the policies above the boundary see a success.
+    @SuppressWarnings("java:S3077") // written once, then read: volatile publishes the reference
     private volatile @Nullable Throwable committedFailure;
 
     FluxCall(CoreSubscriber<? super T> actual) {

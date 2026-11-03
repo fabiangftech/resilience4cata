@@ -267,6 +267,8 @@ final class RepeatingMethods {
      * The parts of the constant pool this reader needs: UTF-8 entries, field and method references and their names
      * and types, method handles and {@code invokedynamic} entries.
      */
+    // java:S6218: never compared, hashed or printed; a record only for its accessor and constructor.
+    @SuppressWarnings("java:S6218")
     private record ConstantPool(Object[] entries) {
 
         private static final int UTF8 = 1;

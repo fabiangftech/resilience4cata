@@ -51,7 +51,7 @@ final class StageSubscriber<T> extends CompletableFuture<T> implements CoreSubsc
     private final Context context;
 
     /** Null before {@link #onSubscribe}, then the subscription, or {@link #CANCELLED}. */
-    @SuppressWarnings("unused") // accessed through UPSTREAM
+    @SuppressWarnings({"unused", "java:S3077"}) // S3077: swapped atomically; accessed through UPSTREAM
     private volatile @Nullable Subscription upstream;
 
     StageSubscriber(Context context) {

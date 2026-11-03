@@ -30,6 +30,7 @@ import org.jspecify.annotations.Nullable;
 public class ResilienceJsonRpcService {
 
     @Inject
+    @SuppressWarnings("java:S2637") // set by ArC right after the constructor, before any call
     ResilienceRegistry registry;
 
     /** Created by ArC. */
