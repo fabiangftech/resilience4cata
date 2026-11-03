@@ -11,7 +11,9 @@ Esta página es el plan de trabajo: cada tarea dice qué cambiar, dónde y cómo
 - Los títulos del Javadoc llevan el nombre del artefacto (#60); javadoc.io se sincronizó para los 11 módulos.
 - Las fases 1 a 3 están terminadas (#62 a #65).
 - Una segunda revisión de los mismos cuatro revisores (2026-11-02, después de #65): el diseñador de APIs, el revisor de rendimiento y quien empieza dicen que está listo para 1.0; quien evalúa adoptarla pide primero una 1.0.0-RC1, y tres cosas antes de 1.0 (un fallo visible si falta el procesador, una corrida de jcstress en ARM, una política de seguridad). Sus arreglos pequeños de documentación están en la fase 4.
-- Siguiente: fase 4.
+- 1.0.0-RC1 está en Maven Central (2026-11-02). `main` es 1.0.0-SNAPSHOT, con la base de API en 1.0.0-RC1, así que la API queda congelada: un cambio incompatible frente a la release candidate hace fallar el build.
+- La rama principal de SonarCloud seguía llamándose `master`, así que los análisis de `main` nunca llegaban al resumen del proyecto. Ahora es `main`; sus 21 issues de fiabilidad se revisaron (#68), y solo se analiza la librería publicada (#69).
+- Siguiente: una o dos semanas de uso, la decisión sobre la falta del procesador, y luego 1.0.0.
 
 ## La revisión
 
@@ -137,11 +139,21 @@ Un pull request por bug confirmado. Para cada uno: primero escribir un test que 
 
 - [x] (#66) Los arreglos de documentación de la segunda revisión: la primera llamada con timeout de un thread nuevo asigna memoria (`performance.md`), el rate limiter (no el bulkhead) aparca, las funcionalidades que leen el reloj, la frase del paso 6 del inicio rápido y un enlace a la guía HTTP, un test para la fila del timeout de la guía, el enlace de la FAQ a los valores por defecto, la media aproximada del adaptive limit, este estado.
 - [x] (#66) `SECURITY.md`: versiones soportadas y cómo reportar una vulnerabilidad en privado.
-- [ ] Una corrida completa de jcstress en ARM (AWS Graviton), ya que el CI solo la corre en x86.
+- [x] Una corrida completa de jcstress en ARM (AWS Graviton), ya que el CI solo la corre en x86.
+  - **Resultado:** 2026-11-02, una `c7g.4xlarge` (16 núcleos Graviton3), `-m default`, unos 40 minutos: 65 tests, 2598 configuraciones, ninguna falló, sin errores. Un test sale "interesting", como se esperaba: `RetryBudgetStress.CallsAreNeverOvercounted` perdió llamadas en el 10,9 % de sus muestras y nunca contó una de más. Es la pérdida documentada en la tarea 3.5, que en ARM se ve mucho más que en x86. La corrida usó una configuración de Terraform desechable fuera del repositorio; correrla de forma periódica está en "Después de 1.0".
 - [ ] Decidir si la falta del procesador debe hacer fallar el arranque en Spring, Micronaut y Quarkus antes de 1.0 (decisión del dueño; quien evalúa adoptarla argumenta que añadirlo después cambia el comportamiento dentro de la versión mayor).
-- [ ] Decidir si hay release candidate: `1.0.0-RC1` en Central, una o dos semanas de uso, luego 1.0.0. (Decisión del dueño.)
-- [ ] Seguir [publicar una versión](releasing.md): `./gradlew :examples:check -Pr4c.generatedBy=0.13.0`, subir la versión en los snippets de build (no en el blog), tag, `release.yml`, publicar a mano en el portal de Central.
-- [ ] Después del release: `r4c.apiBaseline` = la versión publicada; sincronizar javadoc.io para cada módulo (los botones de sync y upload en la página de versiones de cada artefacto).
+- [x] Decidir si hay release candidate: `1.0.0-RC1` en Central, una o dos semanas de uso, luego 1.0.0. (Decisión del dueño.)
+  - **Resultado:** sí. Los snippets de instalación siguen en 0.13.0 hasta 1.0.0 (decisión del dueño).
+- [x] Publicar 1.0.0-RC1 siguiendo [publicar una versión](releasing.md).
+  - **Resultado:** publicada el 2026-11-02 (commit `release 1.0.0-RC1`, tag `v1.0.0-RC1`, corrida 41553226849 de `release.yml`, publicada en el portal de Central por el dueño).
+    - `apiCompatibility` frente a 0.13.0 mostró solo los cambios buscados: el evento renombrado, los dos constructores de Micronaut y `FluxCall$Attempt` (solo de código fuente).
+    - La comprobación del código generado (`-Pr4c.generatedBy=0.13.0`) no aplica: de 0.x a 1.0 se cambia de versión mayor, y los tests ya usan `CircuitBreakerEvent.Rejected`.
+    - Las cuatro comparaciones de la portada se midieron otra vez sobre el código de la release candidate ([benchmarks](benchmarks.md#release-candidate), #67).
+- [x] Después de la release candidate: `version=1.0.0-SNAPSHOT`, `r4c.apiBaseline=1.0.0-RC1`, javadoc.io sincronizado y generado para 1.0.0-RC1 en los 11 módulos.
+- [ ] Publicar 1.0.0 tras una o dos semanas de uso, salvo que algo tenga que cambiar:
+  - versión, tag `v1.0.0`, `release.yml`, Publish en el portal;
+  - después, los snippets de instalación a 1.0.0 (no en el blog), `r4c.apiBaseline=1.0.0`, javadoc.io;
+  - desde entonces, la comprobación del código generado (`-Pr4c.generatedBy=<release>`) es el paso 1 de cada release.
 
 ## Después de 1.0
 
