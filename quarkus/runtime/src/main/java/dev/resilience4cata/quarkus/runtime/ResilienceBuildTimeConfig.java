@@ -43,6 +43,15 @@ public interface ResilienceBuildTimeConfig {
     @WithDefault("false")
     boolean allowRetryInsideTransaction();
 
+    /**
+     * Whether a bean may have resilience4cata annotations without the class the annotation processor generates for
+     * them: its policies then do not run. By default this fails the build (R4C-QK-008).
+     *
+     * @return whether beans without their generated class are intended
+     */
+    @WithDefault("false")
+    boolean allowMissingProcessor();
+
     /** Beans and the generated classes. */
     interface Beans {
 

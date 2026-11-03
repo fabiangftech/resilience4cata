@@ -52,6 +52,7 @@ class ErrorCodeTest {
         reported.addAll(codes("R4C-MN-003", context -> { }));
         reported.addAll(codes("R4C-MN-004", context -> context.getBean(Catalog.class)));
         reported.addAll(codes("R4C-MN-005", context -> context.getBean(TransactionalLedger.class)));
+        reported.addAll(codes("R4C-MN-007", ErrorCodeTest::prices));
         reported.addAll(codes(Map.of("resilience4cata.micronaut.verify-instances", "strict"), context -> { }));
 
         assertThat(reported).containsExactlyInAnyOrderElementsOf(
@@ -67,6 +68,24 @@ class ErrorCodeTest {
                 "resilience4cata.micronaut.allow-retry-inside-transaction", "true"))) {
             assertThat(context.getBean(TransactionalLedger.class)).isNotNull();
         }
+    }
+
+    @Test
+    void aMissingProcessorFailsTheBeanUnlessAllowed() {
+        Set<String> messages = messages("R4C-MN-007", ErrorCodeTest::prices);
+        assertThat(messages).anySatisfy(message -> assertThat(message)
+                .startsWith("[R4C-MN-007] Bean dev.resilience4cata.micronaut.unprocessed.PriceService has"
+                        + " resilience4cata annotations, but there is no generated"
+                        + " dev.resilience4cata.micronaut.unprocessed.PriceService$Resilient"))
+                .anySatisfy(message -> assertThat(message).contains("resilience4cata.micronaut.allow-missing-processor"));
+        try (ApplicationContext context = ApplicationContext.run(Map.of("test.broken", "R4C-MN-007",
+                "resilience4cata.micronaut.allow-missing-processor", "true"))) {
+            assertThat(prices(context).getClass().getName()).isEqualTo("dev.resilience4cata.micronaut.unprocessed.PriceService");
+        }
+    }
+
+    private static Object prices(ApplicationContext context) {
+        return context.getBean(Object.class, io.micronaut.inject.qualifiers.Qualifiers.byName("prices"));
     }
 
     @Test

@@ -56,15 +56,19 @@ final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPo
     private final Supplier<ResilienceRegistry> registry;
     private final boolean wrap;
     private final Set<String> excluded;
+    private final boolean allowMissingProcessor;
     private final GeneratedClasses generated = new GeneratedClasses();
+    private final PolicyAnnotations policies = new PolicyAnnotations();
     private final Map<Class<?>, Plan> plans = new ConcurrentHashMap<>();
     private final Map<String, Object> earlyReferences = new ConcurrentHashMap<>();
     private @Nullable ConfigurableListableBeanFactory beanFactory;
 
-    ResilientBeansPostProcessor(Supplier<ResilienceRegistry> registry, boolean wrap, Set<String> excluded) {
+    ResilientBeansPostProcessor(Supplier<ResilienceRegistry> registry, boolean wrap, Set<String> excluded,
+            boolean allowMissingProcessor) {
         this.registry = registry;
         this.wrap = wrap;
         this.excluded = Set.copyOf(excluded);
+        this.allowMissingProcessor = allowMissingProcessor;
     }
 
     /** What to do with the beans of one class. */
@@ -81,6 +85,10 @@ final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPo
     }
 
     private record Several(List<Class<?>> interfaces) implements Plan {
+    }
+
+    /** {@code annotated} declares policies but has no generated class: the processor did not run on it. */
+    private record NotGenerated(Class<?> annotated) implements Plan {
     }
 
     private static final Keep KEEP = new Keep();
@@ -154,6 +162,7 @@ final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPo
             case Wrap(Class<?> type) -> wrap && !Spies.isSpy(bean) ? wrap(type, bean, beanName) : bean;
             case Unprotected(Class<?> annotated, Class<?> subclass) -> throw unprotected(beanName, bean, annotated, subclass);
             case Several(List<Class<?>> interfaces) -> throw several(beanName, bean, interfaces);
+            case NotGenerated(Class<?> annotated) -> throw notGenerated(beanName, bean, annotated);
         };
     }
 
@@ -194,6 +203,7 @@ final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPo
                 }
                 case Unprotected(Class<?> annotated, Class<?> subclass) -> throw unprotected(name, bean, annotated, subclass);
                 case Several(List<Class<?>> interfaces) -> throw several(name, bean, interfaces);
+                case NotGenerated(Class<?> annotated) -> throw notGenerated(name, bean, annotated);
             }
         }
     }
@@ -235,12 +245,21 @@ final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPo
                 return new Unprotected(c, subclass);
             }
         }
+        if (!allowMissingProcessor && !target.isInterface()) { // an interface scoped proxy's target is its interface
+            for (Class<?> c = target; c != null && c != Object.class; c = c.getSuperclass()) {
+                if (policies.declaresPolicies(c)) {
+                    return new NotGenerated(c); // annotated, and the loop above found no generated subclass
+                }
+            }
+        }
         Set<Class<?>> interfaces = new LinkedHashSet<>(ClassUtils.getAllInterfacesForClassAsSet(target));
         interfaces.addAll(ClassUtils.getAllInterfacesForClassAsSet(beanClass));
         List<Class<?>> annotated = new ArrayList<>();
         for (Class<?> type : interfaces) {
             if (generated.wrapperOf(type) != null) {
                 annotated.add(type);
+            } else if (!allowMissingProcessor && policies.declaresPolicies(type)) {
+                return new NotGenerated(type);
             }
         }
         if (annotated.isEmpty()) {
@@ -252,6 +271,20 @@ final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPo
             }
         }
         return new Several(List.copyOf(annotated));
+    }
+
+    private static ResilienceBeanException notGenerated(String beanName, Object bean, Class<?> annotated) {
+        String what = annotated.isInterface() ? "implements " + annotated.getName()
+                : AopUtils.getTargetClass(bean) == annotated ? "is an instance of " + annotated.getName()
+                : "is an instance of " + AopUtils.getTargetClass(bean).getName() + ", which extends " + annotated.getName();
+        return new ResilienceBeanException(ErrorCode.NOT_GENERATED, "Bean '" + beanName + "' " + what
+                + ", which has resilience4cata annotations, but there is no generated " + annotated.getName()
+                + "$Resilient: the annotation processor did not run when " + annotated.getSimpleName()
+                + " was compiled, so its policies would not run.", "Add resilience4cata-processor to the annotation"
+                + " processor path (Gradle: annotationProcessor 'dev.resilience4cata:resilience4cata-processor';"
+                + " Maven: annotationProcessorPaths in the maven-compiler-plugin) and rebuild; or set"
+                + " resilience4cata.spring.allow-missing-processor=true to start without the policies; or list the"
+                + " bean in resilience4cata.spring.exclude.");
     }
 
     private static ResilienceBeanException unprotected(String beanName, Object bean, Class<?> annotated,

@@ -85,9 +85,11 @@ dependencies {
 
 <!-- tabs:end -->
 
-> Without the annotation processor nothing is generated and the beans stay unprotected: the annotations have
-> `CLASS` retention, so nothing at run time can notice they are there. `GET /actuator/resilience4cata` lists
-> the policy instances; an empty list means the processor did not run.
+> Without the annotation processor nothing is generated, so the startup fails with
+> [`R4C-SPR-006`](../errors.md#r4c-spr-006): a bean whose class or interface has resilience4cata annotations but no
+> generated class would run unprotected. The check reads the class files of the beans' types (the annotations have
+> `CLASS` retention), so it does not run in a native image, where the build has already compiled everything.
+> `resilience4cata.spring.allow-missing-processor=true` turns it off.
 
 ## Annotated classes :id=classes
 
@@ -352,6 +354,7 @@ applied); the `ResilienceConfig` bean is still there to build it with `config.ap
 | `resilience4cata.spring.wrap` | `true` | Replace beans of annotated interfaces by their wrapper |
 | `resilience4cata.spring.exclude` | empty | Bean names to leave alone: no subclass, no wrapper, no checks |
 | `resilience4cata.spring.allow-retry-inside-transaction` | `false` | Allow `@Retry`/`@Hedge` on transactional methods of annotated classes (one transaction for every attempt) instead of failing with R4C-SPR-004 |
+| `resilience4cata.spring.allow-missing-processor` | `false` | Start even when a bean has resilience4cata annotations but no generated class (its policies do not run) instead of failing with R4C-SPR-006 |
 | `resilience4cata.spring.verify-instances` | `fail` (`warn` with lazy initialization) | `fail`, `warn` or `off` for instance keys that match nothing |
 | `resilience4cata.spring.health.down-when-open` | empty | Breaker ids (or `*`) that turn the health DOWN while open |
 | `resilience4cata.spring.metrics.enabled` | `true` | Register the Micrometer meters |

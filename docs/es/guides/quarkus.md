@@ -82,9 +82,11 @@ dependencies {
 
 <!-- tabs:end -->
 
-> Sin el procesador de anotaciones no se genera nada y los beans quedan sin protección: las anotaciones tienen
-> retención `CLASS`, así que nada en ejecución puede notar que están ahí. Con el registro de depuración de la
-> extensión (`quarkus.log.category."dev.resilience4cata".level=DEBUG`) la construcción lista cada bean que conecta.
+> Sin el procesador de anotaciones no se genera nada, así que el build falla con
+> [`R4C-QK-008`](../errors.md#r4c-qk-008) por cada bean cuya clase o interfaz tiene anotaciones de resilience4cata pero
+> no tiene clase generada, en vez de ejecutarlo sin protección. `quarkus.resilience4cata.allow-missing-processor=true`
+> la desactiva. Con el registro de depuración de la extensión (`quarkus.log.category."dev.resilience4cata".level=DEBUG`)
+> la construcción lista cada bean que conecta.
 
 Las clases generadas se buscan en el índice de la aplicación, como los beans: un jar de biblioteca con clases
 anotadas necesita un índice de Jandex (o `quarkus.index-dependency`), igual que para sus beans.
@@ -468,6 +470,7 @@ configuración una sola vez, por diseño.
 | `quarkus.resilience4cata.beans.enabled` | construcción | `true` | Convertir las clases generadas en los beans (las subclases sustituyen a las clases anotadas, los envoltorios representan a los beans de interfaces) |
 | `quarkus.resilience4cata.beans.exclude` | construcción | vacío | Clases de beans (con nombre completo) que se dejan como están |
 | `quarkus.resilience4cata.allow-retry-inside-transaction` | construcción | `false` | Permitir `@Retry`/`@Hedge` en métodos `@Transactional` de clases anotadas en lugar de fallar con R4C-QK-002 |
+| `quarkus.resilience4cata.allow-missing-processor` | construcción | `false` | Compilar aunque un bean tenga anotaciones de resilience4cata sin clase generada (sus políticas no se aplican) en lugar de fallar con R4C-QK-008 |
 | `quarkus.resilience4cata.health.enabled` | construcción | `true` | La comprobación de preparación, cuando SmallRye Health está presente |
 | `quarkus.resilience4cata.metrics.enabled` | construcción | `true` | Vincular el registro a Micrometer u OpenTelemetry |
 | `quarkus.resilience4cata.verify-instances` | ejecución | `warn` | `fail`, `warn` u `off` para claves de instancia que no coinciden con nada al arrancar |

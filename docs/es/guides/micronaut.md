@@ -109,9 +109,10 @@ reclama anotaciones y el nuestro solo reclama las suyas, así que cada uno lo ve
 las mismas fuentes en los dos órdenes y compara el resultado). Lombok, si lo usas, va primero, como dice la propia
 documentación de Micronaut ([con Lombok](annotated-classes.md#con-lombok)).
 
-> Sin el procesador de anotaciones no se genera nada y los beans quedan sin protección: las anotaciones tienen
-> retención `CLASS`, así que nada en tiempo de ejecución puede notar que están. `GET /resilience4cata` lista las
-> instancias de políticas; una lista vacía significa que el procesador no se ejecutó.
+> Sin el procesador de anotaciones no se genera nada, así que crear un bean de una clase anotada falla con
+> [`R4C-MN-007`](../errors.md#r4c-mn-007), y un `@ResilientBean` con [`R4C-RT-003`](../errors.md#r4c-rt-003), en vez de
+> ejecutarlos sin protección. La comprobación lee los archivos de clase (las anotaciones tienen retención `CLASS`),
+> así que no se ejecuta en una imagen nativa. `resilience4cata.micronaut.allow-missing-processor=true` la desactiva.
 
 ## Clases anotadas :id=classes
 
@@ -440,6 +441,7 @@ aplicar la configuración con `config.applyTo(builder)`.
 | `resilience4cata.micronaut.verify-instances` | `warn` (`fail` con singletons anticipados) | `fail`, `warn` u `off` para claves de instancia que no corresponden a ninguna instancia al arrancar |
 | `resilience4cata.micronaut.exclude` | vacío | Nombres completos de clases de beans que se dejan en paz: no se envuelven, y no se revisan R4C-MN-004 ni R4C-MN-005. A diferencia del `exclude` de Spring y de Quarkus, no puede evitar que una clase anotada se reemplace por su subclase generada cuando se compila con `-Ar4c.inject=micronaut` (Micronaut elige las definiciones de beans antes de leer la configuración). Para correr una clase sin sus políticas en cualquier framework, apágalas: `resilience4cata.instances.<id>.<policy>.enabled=false` |
 | `resilience4cata.micronaut.allow-retry-inside-transaction` | `false` | Permite `@Retry`/`@Hedge` en métodos transaccionales de clases anotadas (una transacción para todos los intentos) en lugar de fallar con R4C-MN-005 |
+| `resilience4cata.micronaut.allow-missing-processor` | `false` | Crea un bean de una clase anotada que no tiene subclase generada (sus políticas no se aplican) en lugar de fallar con R4C-MN-007 |
 | `resilience4cata.micronaut.health.enabled` | `true` | El indicador de salud |
 | `resilience4cata.micronaut.health.down-when-open` | vacío | Ids de breakers (o `*`) que ponen la salud en DOWN mientras están abiertos |
 | `resilience4cata.micronaut.metrics.enabled` | `true` | Registrar los medidores de Micrometer |

@@ -175,7 +175,7 @@ A Resilience4j instance is shared by everything that uses its name. In resilienc
 
 ### The processor is mandatory :id=processor
 
-Without the annotation processor nothing is generated and `Resilient.of` fails with [R4C-RT-003](../errors.md#r4c-rt-003). There is no reflection or proxy fallback.
+Without the annotation processor nothing is generated and `Resilient.of` fails with [R4C-RT-003](../errors.md#r4c-rt-003). In Spring Boot, Micronaut and Quarkus, a bean whose class or interface has annotations but no generated class fails the startup (or the Quarkus build) with [R4C-SPR-006](../errors.md#r4c-spr-006), [R4C-MN-007](../errors.md#r4c-mn-007) or [R4C-QK-008](../errors.md#r4c-qk-008), rather than running unprotected. There is no reflection or proxy fallback.
 
 ### No success or latency metrics :id=no-success-metrics
 

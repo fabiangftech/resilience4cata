@@ -4,6 +4,12 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
+## [Unreleased] :id=unreleased
+
+### Changed
+
+- **A missing annotation processor fails the startup instead of leaving beans unprotected.** In Spring Boot, a bean whose class (or a superclass), or an interface it implements, has resilience4cata annotations but no generated class fails the startup with [R4C-SPR-006](errors.md#r4c-spr-006); in Micronaut, a bean of such a class with [R4C-MN-007](errors.md#r4c-mn-007); in Quarkus, the build with [R4C-QK-008](errors.md#r4c-qk-008). The annotations have `CLASS` retention, so until now nothing noticed. `resilience4cata.spring.allow-missing-processor`, `resilience4cata.micronaut.allow-missing-processor` and `quarkus.resilience4cata.allow-missing-processor` turn the check off; excluded beans are not checked. Spring and Micronaut read class files, so the check does not run in a native image.
+
 ## [1.0.0-RC1] - 2026-11-02 :id=1.0.0-rc1
 
 The first release candidate for 1.0.0, after the review in the [plan to 1.0](plan-1.0.md): the last API changes before the freeze (two small incompatible ones: an event renamed, two constants no longer public), clearer promises about what may grow, documentation checked against the measurements, and four races fixed. Try it before 1.0.0: unless something has to change, 1.0.0 follows with the same API, and from then on the [compatibility](reference/compatibility.md) promise applies.

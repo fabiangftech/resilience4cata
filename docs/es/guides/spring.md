@@ -85,9 +85,11 @@ dependencies {
 
 <!-- tabs:end -->
 
-> Sin el procesador de anotaciones no se genera nada y los beans quedan sin protección: las anotaciones tienen
-> retención `CLASS`, así que nada en tiempo de ejecución puede notar que están. `GET /actuator/resilience4cata`
-> lista las instancias de políticas; una lista vacía significa que el procesador no se ejecutó.
+> Sin el procesador de anotaciones no se genera nada, así que el arranque falla con
+> [`R4C-SPR-006`](../errors.md#r4c-spr-006): un bean cuya clase o interfaz tiene anotaciones de resilience4cata pero
+> no tiene clase generada se ejecutaría sin protección. La comprobación lee los archivos de clase de los tipos de los
+> beans (las anotaciones tienen retención `CLASS`), así que no se ejecuta en una imagen nativa, donde el build ya
+> compiló todo. `resilience4cata.spring.allow-missing-processor=true` la desactiva.
 
 ## Clases anotadas :id=classes
 
@@ -356,6 +358,7 @@ listener); el bean `ResilienceConfig` sigue disponible para construirlo con `con
 | `resilience4cata.spring.wrap` | `true` | Reemplaza los beans de interfaces anotadas por su envoltorio |
 | `resilience4cata.spring.exclude` | vacío | Nombres de beans que dejar tal cual: sin subclase, sin envoltorio, sin comprobaciones |
 | `resilience4cata.spring.allow-retry-inside-transaction` | `false` | Permite `@Retry`/`@Hedge` en métodos transaccionales de clases anotadas (una transacción para todos los intentos) en lugar de fallar con R4C-SPR-004 |
+| `resilience4cata.spring.allow-missing-processor` | `false` | Arranca aunque un bean tenga anotaciones de resilience4cata sin clase generada (sus políticas no se aplican) en lugar de fallar con R4C-SPR-006 |
 | `resilience4cata.spring.verify-instances` | `fail` (`warn` con inicialización perezosa) | `fail`, `warn` u `off` para claves de instancia que no corresponden a nada |
 | `resilience4cata.spring.health.down-when-open` | vacío | Ids de breakers (o `*`) que ponen la salud en DOWN mientras están abiertos |
 | `resilience4cata.spring.metrics.enabled` | `true` | Registra los medidores de Micrometer |
