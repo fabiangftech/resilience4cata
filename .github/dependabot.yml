@@ -34,6 +34,11 @@ updates:
       - dependency-name: 'io.micronaut:micronaut-inject'
       - dependency-name: 'io.micronaut:micronaut-inject-java'
       - dependency-name: 'io.micronaut:micronaut-management'
+      # minimumMicronautTest forces core to micronautMinimum through this BOM (micronaut-core-bom-minimum).
+      - dependency-name: 'io.micronaut:micronaut-core-bom'
+      # Not ignorable: springBootMinimum's spring-boot-dependencies and micronautPlatformMinimum's micronaut-platform
+      # share their artifact with springBoot and micronautPlatform, which must keep being updated. Close the PRs that
+      # bump the minimum versions by hand.
       # The oldest Quarkus that resilience4cata-quarkus supports (quarkusMinimum): the extension's runtime and
       # deployment modules compile against these artifacts. Its tests get Quarkus through the quarkus-bom entry and
       # the io.quarkus plugin (quarkus), which these rules do not touch.
