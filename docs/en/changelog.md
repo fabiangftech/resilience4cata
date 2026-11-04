@@ -4,7 +4,9 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
-## [Unreleased] :id=unreleased
+## [1.0.0-RC2] - 2026-11-04 :id=1.0.0-rc2
+
+The second release candidate for 1.0.0. The API is the same as in 1.0.0-RC1; the one change is that a missing annotation processor is now reported instead of leaving beans unprotected.
 
 ### Changed
 

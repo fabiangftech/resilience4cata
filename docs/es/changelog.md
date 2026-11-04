@@ -4,7 +4,9 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
-## [Unreleased] :id=unreleased
+## [1.0.0-RC2] - 2026-11-04 :id=1.0.0-rc2
+
+El segundo candidato a release de 1.0.0. La API es la misma que en 1.0.0-RC1; el único cambio es que la falta del procesador de anotaciones ahora se reporta en vez de dejar beans sin protección.
 
 ### Cambiado
 
