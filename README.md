@@ -8,7 +8,7 @@ Annotation-driven resilience for **plain Java 21+**: retry, hedging, circuit bre
 
 Sync and async (`CompletionStage`, and Reactor's `Mono` and `Flux` with `resilience4cata-reactor`), interfaces and annotated classes, composed annotations, named configurations with external overrides, typed events and snapshots, a programmatic `Pipeline` for code you cannot annotate, and a `testkit` with a manual clock.
 
-**Documentation: [resilience4cata.dev](https://resilience4cata.dev)** (English and Spanish). Status: 0.13.0 on Maven Central; [1.0.0-RC2](docs/en/blog/release-candidate.md) is there too for testing, with the API frozen for 1.0.
+**Documentation: [resilience4cata.dev](https://resilience4cata.dev)** (English and Spanish). Status: 1.0.0-RC3 on Maven Central, a [release candidate](docs/en/blog/release-candidate.md) with the API frozen for 1.0.
 
 ## Install
 
@@ -18,8 +18,8 @@ Gradle:
 
 ```groovy
 dependencies {
-    implementation 'dev.resilience4cata:resilience4cata-all:0.13.0'
-    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:0.13.0'
+    implementation 'dev.resilience4cata:resilience4cata-all:1.0.0-RC3'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:1.0.0-RC3'
 }
 ```
 
@@ -29,7 +29,7 @@ Maven:
 <dependency>
   <groupId>dev.resilience4cata</groupId>
   <artifactId>resilience4cata-all</artifactId>
-  <version>0.13.0</version>
+  <version>1.0.0-RC3</version>
 </dependency>
 
 <!-- in the maven-compiler-plugin <configuration> -->
@@ -37,7 +37,7 @@ Maven:
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>0.13.0</version>
+    <version>1.0.0-RC3</version>
   </path>
 </annotationProcessorPaths>
 ```

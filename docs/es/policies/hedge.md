@@ -15,7 +15,7 @@
 
 **Úsalo cuando** una llamada idempotente, de solo lectura, a un backend replicado (varias réplicas, un clúster de caché, un índice de búsqueda) suele ser rápida pero sus llamadas más lentas (p99, p99.9) son mucho más lentas que la mediana, y un poco más de carga es un precio razonable por recortar esa cola. *The Tail at Scale* (Dean y Barroso, 2013) bajó un p99.9 de 1.800 ms a 74 ms con cerca de un 2 % más de peticiones, cubriendo a los 10 ms.
 
-**No lo uses cuando** la operación no es idempotente, cuando la dependencia está lenta porque está saturada (más peticiones la hacen más lenta, para todos; el [presupuesto](#el-presupuesto-de-hedge) limita el daño, no lo deshace), cuando todas las réplicas comparten el mismo camino lento (el hedge entonces espera dos veces), o cuando el método es sincrónico (todavía no soportado: devuelve un `CompletableFuture`).
+**No lo uses cuando** la operación no es idempotente, cuando la dependencia está lenta porque está saturada (más peticiones la hacen más lenta, para todos; el [presupuesto](#el-presupuesto-de-hedge) limita el daño, no lo deshace; [una simulación](../blog/hedging-under-contention.md) muestra cuánto), cuando todas las réplicas comparten el mismo camino lento (el hedge entonces espera dos veces), o cuando el método es sincrónico (todavía no soportado: devuelve un `CompletableFuture`).
 
 ## Ejemplo mínimo
 

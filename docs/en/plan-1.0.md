@@ -6,7 +6,7 @@ This page is the working plan: each task says what to change, where, and how to 
 
 ## Status
 
-- Versions on Maven Central: 0.13.0, and the release candidates 1.0.0-RC1 and 1.0.0-RC2. `main` is 1.0.0-SNAPSHOT.
+- Versions on Maven Central: 0.13.0, and the release candidates 1.0.0-RC1, 1.0.0-RC2 and 1.0.0-RC3. `main` is 1.0.0-SNAPSHOT.
 - The performance plan from the AWS runs is done (pull requests #53–#59, see [benchmarks](benchmarks.md)).
 - Javadoc titles carry the artifact name (#60); javadoc.io was synced for all 11 modules.
 - Phases 1 to 3 are done (#62 to #65).
@@ -15,7 +15,8 @@ This page is the working plan: each task says what to change, where, and how to 
 - SonarCloud's main branch was still called `master`, so the analyses of `main` never reached the project overview. It is `main` now; its 21 reliability issues were reviewed (#68), and only the published library is analysed (#69).
 - 1.0.0-RC2 (2026-11-04) fails the startup or build when the processor did not run.
 - A [third review](#third-review) of RC2 (2026-11-05): three reviewers say ship 1.0.0; its fixes change two behaviours, so a 1.0.0-RC3 comes first.
-- Next: 1.0.0-RC3, then 1.0.0.
+- 1.0.0-RC3 (2026-11-05) has the third review's fixes. The install snippets now show it (owner's decision).
+- Next: 1.0.0.
 
 ## The review
 
@@ -151,7 +152,7 @@ One pull request per confirmed bug. For each: first write a test that reproduces
 
     Each has a switch to turn it off (`allow-missing-processor`), and excluded beans are not checked. Spring and Micronaut read the class files (`PolicyAnnotations`, one copy in each, kept in sync), so the check does not run in a native image; Quarkus uses the Jandex index. Tests load the annotated fixtures without their `$Resilient`: a class loader that hides it (Spring, Micronaut), or an application root without it (Quarkus). Each check was mutation-checked.
 - [x] Decide on a release candidate: `1.0.0-RC1` on Central, one or two weeks of use, then 1.0.0. (Owner's decision.)
-  - **Outcome:** yes. The install snippets stay at 0.13.0 until 1.0.0 (owner's decision).
+  - **Outcome:** yes. The install snippets stayed at 0.13.0 until RC3; since then they show the latest release candidate (owner's decisions).
 - [x] Release 1.0.0-RC1 following [releasing](releasing.md).
   - **Outcome:** released 2026-11-02 (commit `release 1.0.0-RC1`, tag `v1.0.0-RC1`, `release.yml` run 41553226849, published in the Central portal by the owner).
     - `apiCompatibility` against 0.13.0 showed only the intended changes: the renamed event, the two Micronaut constructors, and `FluxCall$Attempt` (source only).
@@ -178,7 +179,8 @@ The same four reviewers read 1.0.0-RC2 on 2026-11-05. None ran the whole build; 
 - [x] The breaker counted an `Error` as a success (`recordOn = Exception`), unlike Resilience4j. Owner's decision: `recordOn` defaults to `Throwable`.
 - [x] The Quarkus jars had no `Automatic-Module-Name`; the missing-processor messages named the processor without a version.
 - [x] Documentation: the landing page, FAQ, installation, troubleshooting, annotated classes, timeout, compatibility and performance pages, and the RC2 blog post (see the changelog's Unreleased entry).
-- [ ] Release 1.0.0-RC3 with these changes (the breaker default and the new compile error change behaviour), then 1.0.0.
+- [x] Release 1.0.0-RC3 with these changes (the breaker default and the new compile error change behaviour), then 1.0.0.
+  - **Outcome:** released 2026-11-05 (commit `release 1.0.0-RC3`, tag `v1.0.0-RC3`, `release.yml` run 42052831462, published in the Central portal by the owner). The install snippets show 1.0.0-RC3.
 
 Left for after 1.0 (below): the Spring and Micronaut missing-processor checks in a native image (Spring could run it in its AOT step), `Ticker.onAdvance` without a way to unregister, `onInstanceCreated` without the new instance, no way to stop the shared daemon threads (a leak in a reloadable web application), the watchdog's tick that only shrinks, and the different switch names of the three integrations (deliberate; to be written in [design](design.md)). Outside the code: no outside feedback yet, no branch protection on `main`, and no GitHub releases for the release candidates.
 

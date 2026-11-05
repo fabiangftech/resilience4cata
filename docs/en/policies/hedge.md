@@ -15,7 +15,7 @@
 
 **Use it when** an idempotent, read-only call to a replicated backend (several replicas, a cache cluster, a search index) is usually fast but its slowest calls (p99, p99.9) are far slower than its median, and a little extra load is a fair price for cutting that tail. *The Tail at Scale* (Dean and Barroso, 2013) cut a p99.9 from 1,800 ms to 74 ms with about 2 % more requests by hedging after 10 ms.
 
-**Don't use it when** the operation is not idempotent, when the dependency is slow because it is saturated (more requests make it slower, for everybody; the [budget](#the-hedge-budget) limits the damage, it does not undo it), when every replica shares the same slow path (a hedge then waits twice), or when the method is synchronous (not supported yet: return a `CompletableFuture`).
+**Don't use it when** the operation is not idempotent, when the dependency is slow because it is saturated (more requests make it slower, for everybody; the [budget](#the-hedge-budget) limits the damage, it does not undo it; [a simulation](../blog/hedging-under-contention.md) shows how much), when every replica shares the same slow path (a hedge then waits twice), or when the method is synchronous (not supported yet: return a `CompletableFuture`).
 
 ## Minimal example
 

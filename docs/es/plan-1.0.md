@@ -6,7 +6,7 @@ Esta página es el plan de trabajo: cada tarea dice qué cambiar, dónde y cómo
 
 ## Estado
 
-- Versiones en Maven Central: 0.13.0, y los release candidates 1.0.0-RC1 y 1.0.0-RC2. `main` es 1.0.0-SNAPSHOT.
+- Versiones en Maven Central: 0.13.0, y los release candidates 1.0.0-RC1, 1.0.0-RC2 y 1.0.0-RC3. `main` es 1.0.0-SNAPSHOT.
 - El plan de rendimiento de las corridas en AWS está terminado (pull requests #53–#59, ver [benchmarks](benchmarks.md)).
 - Los títulos del Javadoc llevan el nombre del artefacto (#60); javadoc.io se sincronizó para los 11 módulos.
 - Las fases 1 a 3 están terminadas (#62 a #65).
@@ -15,7 +15,8 @@ Esta página es el plan de trabajo: cada tarea dice qué cambiar, dónde y cómo
 - La rama principal de SonarCloud seguía llamándose `master`, así que los análisis de `main` nunca llegaban al resumen del proyecto. Ahora es `main`; sus 21 issues de fiabilidad se revisaron (#68), y solo se analiza la librería publicada (#69).
 - 1.0.0-RC2 (2026-11-04) hace fallar el arranque o el build cuando el procesador no corrió.
 - Una [tercera revisión](#third-review) de RC2 (2026-11-05): tres revisores dicen sacar 1.0.0; sus arreglos cambian dos comportamientos, así que antes viene una 1.0.0-RC3.
-- Siguiente: 1.0.0-RC3, y luego 1.0.0.
+- 1.0.0-RC3 (2026-11-05) trae los arreglos de la tercera revisión. Los snippets de instalación ahora la muestran (decisión del dueño).
+- Siguiente: 1.0.0.
 
 ## La revisión
 
@@ -151,7 +152,7 @@ Un pull request por bug confirmado. Para cada uno: primero escribir un test que 
 
     Cada uno tiene un interruptor para desactivarlo (`allow-missing-processor`), y los beans excluidos no se comprueban. Spring y Micronaut leen los archivos de clase (`PolicyAnnotations`, una copia en cada uno, que se mantienen iguales), así que la comprobación no se ejecuta en una imagen nativa; Quarkus usa el índice Jandex. Los tests cargan los fixtures anotados sin su `$Resilient`: con un class loader que lo esconde (Spring, Micronaut) o con una raíz de aplicación sin él (Quarkus). Cada comprobación tiene su mutation check.
 - [x] Decidir si hay release candidate: `1.0.0-RC1` en Central, una o dos semanas de uso, luego 1.0.0. (Decisión del dueño.)
-  - **Resultado:** sí. Los snippets de instalación siguen en 0.13.0 hasta 1.0.0 (decisión del dueño).
+  - **Resultado:** sí. Los snippets de instalación siguieron en 0.13.0 hasta RC3; desde entonces muestran la última release candidate (decisiones del dueño).
 - [x] Publicar 1.0.0-RC1 siguiendo [publicar una versión](releasing.md).
   - **Resultado:** publicada el 2026-11-02 (commit `release 1.0.0-RC1`, tag `v1.0.0-RC1`, corrida 41553226849 de `release.yml`, publicada en el portal de Central por el dueño).
     - `apiCompatibility` frente a 0.13.0 mostró solo los cambios buscados: el evento renombrado, los dos constructores de Micronaut y `FluxCall$Attempt` (solo de código fuente).
@@ -178,7 +179,8 @@ Los mismos cuatro revisores leyeron 1.0.0-RC2 el 2026-11-05. Ninguno corrió el 
 - [x] El breaker contaba un `Error` como éxito (`recordOn = Exception`), al revés que Resilience4j. Decisión del dueño: `recordOn` vale `Throwable` por defecto.
 - [x] Los jars de Quarkus no tenían `Automatic-Module-Name`; los mensajes de procesador ausente nombraban el procesador sin versión.
 - [x] Documentación: la portada, el FAQ, la instalación, problemas frecuentes, clases anotadas, timeout, compatibilidad, rendimiento y el artículo de RC2 (ver la entrada Unreleased del changelog).
-- [ ] Publicar 1.0.0-RC3 con estos cambios (el valor por defecto del breaker y el nuevo error de compilación cambian el comportamiento), y luego 1.0.0.
+- [x] Publicar 1.0.0-RC3 con estos cambios (el valor por defecto del breaker y el nuevo error de compilación cambian el comportamiento), y luego 1.0.0.
+  - **Resultado:** publicada el 2026-11-05 (commit `release 1.0.0-RC3`, tag `v1.0.0-RC3`, run 42052831462 de `release.yml`, publicada en el portal de Central por el dueño). Los snippets de instalación muestran 1.0.0-RC3.
 
 Queda para después de 1.0 (abajo): los chequeos de procesador ausente de Spring y Micronaut en una imagen nativa (Spring podría correrlo en su paso AOT), `Ticker.onAdvance` sin forma de desregistrarse, `onInstanceCreated` sin la instancia nueva, ninguna forma de detener los hilos daemon compartidos (una fuga en una aplicación web recargable), el tick del watchdog que solo se achica, y los nombres distintos de los interruptores de las tres integraciones (deliberado; a escribir en [diseño](design.md)). Fuera del código: todavía sin feedback externo, sin protección de rama en `main`, y sin releases de GitHub para los release candidates.
 

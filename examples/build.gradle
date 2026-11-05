@@ -122,3 +122,32 @@ tasks.register('soakTest', Test) {
         showStandardStreams = true
     }
 }
+
+// HedgeTailSimulation: tail latency of hedged calls that compete for one simulated dependency (ManualClock).
+// Not in `check`: ./gradlew :examples:hedgeSimulation [-Phedge.calls=200000] [-Phedge.seed=1].
+tasks.named('test') {
+    exclude '**/hedgesim/HedgeTailSimulation*'
+}
+
+def hedgeCalls = providers.gradleProperty('hedge.calls').orElse('200000')
+def hedgeSeed = providers.gradleProperty('hedge.seed').orElse('1')
+
+tasks.register('hedgeSimulation', Test) {
+    description = 'Simulates hedged calls competing for one dependency and writes build/hedge-sim/report.md.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    include '**/hedgesim/HedgeTailSimulation.class'
+    maxHeapSize = '1g'
+    def reportDir = layout.buildDirectory.dir('hedge-sim')
+    inputs.property('calls', hedgeCalls)
+    inputs.property('seed', hedgeSeed)
+    outputs.dir(reportDir).withPropertyName('report')
+    systemProperty 'test.hedge.calls', hedgeCalls.get()
+    systemProperty 'test.hedge.seed', hedgeSeed.get()
+    systemProperty 'test.hedge.reportDir', reportDir.get().asFile.absolutePath
+    testLogging {
+        showStandardStreams = true
+    }
+}

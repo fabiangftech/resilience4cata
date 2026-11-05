@@ -20,9 +20,9 @@ Agrega el módulo junto a los demás; el procesador no necesita nada nuevo.
 
 ```groovy
 dependencies {
-    implementation 'dev.resilience4cata:resilience4cata-all:0.13.0'
-    implementation 'dev.resilience4cata:resilience4cata-reactor:0.13.0'
-    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:0.13.0'
+    implementation 'dev.resilience4cata:resilience4cata-all:1.0.0-RC3'
+    implementation 'dev.resilience4cata:resilience4cata-reactor:1.0.0-RC3'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:1.0.0-RC3'
 }
 ```
 
@@ -30,9 +30,9 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("dev.resilience4cata:resilience4cata-all:0.13.0")
-    implementation("dev.resilience4cata:resilience4cata-reactor:0.13.0")
-    annotationProcessor("dev.resilience4cata:resilience4cata-processor:0.13.0")
+    implementation("dev.resilience4cata:resilience4cata-all:1.0.0-RC3")
+    implementation("dev.resilience4cata:resilience4cata-reactor:1.0.0-RC3")
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor:1.0.0-RC3")
 }
 ```
 
@@ -42,7 +42,7 @@ dependencies {
 <dependency>
   <groupId>dev.resilience4cata</groupId>
   <artifactId>resilience4cata-reactor</artifactId>
-  <version>0.13.0</version>
+  <version>1.0.0-RC3</version>
 </dependency>
 ```
 
