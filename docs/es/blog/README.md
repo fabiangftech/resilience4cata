@@ -2,6 +2,12 @@
 
 Artículos sobre cómo está construido resilience4cata, qué mide y cómo usarlo bien.
 
+## resilience4cata 1.0.0-RC2: pruébalo antes de la 1.0
+
+*4 de noviembre de 2026*
+
+La API está congelada para la 1.0: qué significa aquí un release candidate, qué cambió en el camino, cómo probarlo y qué feedback todavía puede cambiar la 1.0.0. [Leer el artículo](release-candidate.md)
+
 ## Lo que cuesta una anotación de resiliencia en Spring, Micronaut y Quarkus
 
 *1 de noviembre de 2026*
