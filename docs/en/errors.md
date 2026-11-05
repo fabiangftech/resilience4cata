@@ -205,6 +205,49 @@ tasks.withType(JavaCompile).configureEach {
 }
 ```
 
+### R4C-APT-007
+
+**Trigger:** a type carries resilience annotations at type level, but they reach no method, so nothing would be
+generated. An interface that declares and inherits no abstract or default method (type-level annotations do not
+reach the methods of interfaces that extend it), or an annotated class whose methods are all final, static or
+private. Without this error the annotations would do nothing, and the Spring Boot, Micronaut and Quarkus
+integrations would report the type as compiled without the processor ([R4C-SPR-006](#r4c-spr-006)).
+
+**Wrong:**
+
+```java
+// com/acme/RemoteDefaults.java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+@Retry(maxAttempts = 3)
+public interface RemoteDefaults {
+}
+
+// com/acme/PriceClient.java
+package com.acme;
+
+public interface PriceClient extends RemoteDefaults {
+    String price(String sku);
+}
+```
+
+**Fix:** put the annotations on the interface that declares the methods, or share them with a
+[`@ResiliencePolicy` bundle](guides/bundles.md) used there. For a class, make the methods to protect overridable.
+
+```java
+// com/acme/PriceClient.java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+@Retry(maxAttempts = 3)
+public interface PriceClient {
+    String price(String sku);
+}
+```
+
 ## Annotation processor: attribute values (R4C-ATR)
 
 ### R4C-ATR-001

@@ -117,7 +117,7 @@ Atributos de `@CircuitBreaker`. Ver [Circuit breaker](../policies/circuit-breake
 | `defaults.circuitBreaker.waitInOpen` | `R4C_DEFAULTS_CIRCUITBREAKER_WAITINOPEN` | duración | `60s` | ≥ 0 | Cuánto tiempo queda abierto el breaker; la siguiente llamada después es una sonda semiabierta. |
 | `defaults.circuitBreaker.halfOpenCalls` | `R4C_DEFAULTS_CIRCUITBREAKER_HALFOPENCALLS` | int | `10` | ≥ 1 | Llamadas de sonda permitidas en estado semiabierto. |
 | `defaults.circuitBreaker.maxWaitInHalfOpen` | `R4C_DEFAULTS_CIRCUITBREAKER_MAXWAITINHALFOPEN` | duración | `0` | ≥ 0; `0` = sin límite | Cuánto puede seguir semiabierto antes de volver a abrirse si sus sondas no terminaron. |
-| `defaults.circuitBreaker.recordOn` | `R4C_DEFAULTS_CIRCUITBREAKER_RECORDON` | lista de clases | `java.lang.Exception` | clases de excepción | Fallos que se registran como fallos. Todo lo demás, incluidos los `Error`, cuenta como éxito. |
+| `defaults.circuitBreaker.recordOn` | `R4C_DEFAULTS_CIRCUITBREAKER_RECORDON` | lista de clases | `java.lang.Throwable` | clases de excepción | Fallos que se registran como fallos. Todo lo demás cuenta como éxito. |
 | `defaults.circuitBreaker.ignoreOn` | `R4C_DEFAULTS_CIRCUITBREAKER_IGNOREON` | lista de clases | — | clases de excepción | Fallos que no cuentan ni como éxito ni como fallo; ganan sobre `recordOn` y sobre un clasificador. |
 
 ## Rate limiter :id=rate-limiter

@@ -6,13 +6,13 @@ La API de resilience4cata está congelada: 1.0.0-RC2 está en Maven Central y, s
 
 ## Qué significa aquí un release candidate
 
-Hasta ahora, cada versión menor podía cambiar la API, y el [changelog](../changelog.md) listaba lo que se rompía. Desde 1.0.0 eso se acaba: las versiones menores y de parche de una misma versión mayor mantienen funcionando lo que lista la [página de compatibilidad](../reference/compatibility.md), que es la API Java, el código generado por un procesador más antiguo, las claves de configuración, los nombres de métricas, el JSON de los endpoints y los códigos de error.
+Hasta ahora, cada versión menor podía cambiar la API, y el [changelog](../changelog.md) listaba lo que se rompía. Desde 1.0.0 eso se acaba: las versiones menores y de parche de una misma versión mayor mantienen funcionando todo lo que lista la [página de compatibilidad](../reference/compatibility.md), que es la API Java, el código generado por un procesador más antiguo, las claves de configuración, los nombres de métricas, el JSON de los endpoints y los códigos de error.
 
 Los release candidates son la última oportunidad de cambiar algo de eso a bajo costo. El build ya trata la API como congelada: cada módulo publicado se compara con 1.0.0-RC2 en Maven Central, y un cambio incompatible hace fallar el build. Si pruebas el candidato y algo resulta incómodo, un nombre, un valor por defecto, un mensaje de error o un punto de extensión que falta, ahora es cuando todavía se puede arreglar.
 
 ## Qué es resilience4cata
 
-resilience4cata es una librería de resiliencia para Java 21+: retry, circuit breaker, rate limiter, timeout, bulkhead, fallback, además de hedging y un límite de concurrencia adaptativo. Pones anotaciones en una interfaz o una clase, y un procesador de anotaciones escribe una clase Java normal junto a ella al compilar. No hay proxy, aspecto ni agente. El método generado llama a cada política directamente, y una llamada exitosa no asigna memoria.
+resilience4cata es una librería de resiliencia para Java 21+: retry, circuit breaker, rate limiter, timeout, bulkhead, fallback, además de hedging y un límite de concurrencia adaptativo. Pones anotaciones en una interfaz o una clase, y un procesador de anotaciones escribe una clase Java normal junto a ella al compilar. No hay proxy, aspecto ni agente. El método generado llama a cada política directamente, y una llamada síncrona exitosa no asigna memoria.
 
 > [!MEASURED]
 > AWS `c7g.xlarge` (Graviton3), un hilo, ns por llamada, sobre el código de 1.0.0-RC1 (RC2 solo cambia las integraciones con frameworks), contra Resilience4j 2.4.0 con la misma configuración. De [las filas de la portada sobre el release candidate](../benchmarks.md#release-candidate).
@@ -24,7 +24,7 @@ resilience4cata es una librería de resiliencia para Java 21+: retry, circuit br
 | Timeout síncrono | **23.6 ns**, 0 B | 8907.6 ns, 183 B |
 | Bulkhead, con espacios libres | **17.3 ns**, 0 B | 20.1 ns, 0 B |
 
-Con cuatro hilos el circuit breaker se mantiene en 1.9 ns, mientras que el de Resilience4j sube a 849.5 ns. El [primer artículo](compile-time-resilience.md) explica de dónde sale la diferencia.
+Con cuatro hilos, cuando todas las llamadas tienen éxito, el circuit breaker se mantiene en 1.9 ns, mientras que el de Resilience4j sube a 849.5 ns. El [primer artículo](compile-time-resilience.md) explica de dónde sale la diferencia.
 
 ## Qué cambió en el camino a la 1.0
 
@@ -36,7 +36,7 @@ Antes de congelar la API, cuatro revisores recorrieron la librería: alguien que
 - **Documentación.** Hay una [receta para una llamada HTTP](../guides/http-calls.md) con retry y circuit breaker, probada contra un servidor real, y un paso en el quickstart que muestra el breaker abierto. La [guía de migración](../migrate/from-resilience4j.md) ahora traduce los nombres de métricas de Resilience4j a los nuestros.
 - **RC2: la falta del procesador de anotaciones es un error.** Las anotaciones tienen retención `CLASS`, así que si el procesador no corría, nada lo notaba y los beans corrían sin protección. Ahora Spring Boot hace fallar el arranque con [R4C-SPR-006](../errors.md#r4c-spr-006), Micronaut hace fallar el bean con [R4C-MN-007](../errors.md#r4c-mn-007) y Quarkus hace fallar el build con [R4C-QK-008](../errors.md#r4c-qk-008). Cada mensaje nombra el tipo y la dependencia que hay que añadir.
 
-El [changelog](../changelog.md#1.0.0-rc1) tiene la lista completa.
+El changelog tiene la lista completa: [RC2](../changelog.md#1.0.0-rc2) y [RC1](../changelog.md#1.0.0-rc1).
 
 ## Pruébalo
 

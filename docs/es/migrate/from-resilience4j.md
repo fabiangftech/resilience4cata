@@ -67,7 +67,7 @@ Los métodos de los builders de Resilience4j (las properties de Spring Boot usan
 | `waitDurationInOpenState` | 60 s | `waitInOpen` | 60 s |
 | `permittedNumberOfCallsInHalfOpenState` | 10 | `halfOpenCalls` | 10 |
 | `maxWaitDurationInHalfOpenState` | 0 | `maxWaitInHalfOpen` | 0 |
-| `recordExceptions` / `recordException(predicate)` | todas las excepciones | `recordOn` (clases) o `classifier` | `Exception` |
+| `recordExceptions` / `recordException(predicate)` | todas las excepciones | `recordOn` (clases) o `classifier` | `Throwable` |
 | `ignoreExceptions` | ninguna | `ignoreOn` | ninguna |
 | `automaticTransitionFromOpenToHalfOpenEnabled` | `false` | sin equivalente: pasa a semiabierto en la siguiente llamada | — |
 | `waitIntervalFunctionInOpenState`, `transitionOnResult`, `initialState`, `slidingWindowSynchronizationStrategy` | | sin equivalente | — |
@@ -149,9 +149,9 @@ Fallback → Retry (o Hedge) → CircuitBreaker → RateLimiter → AdaptiveLimi
 
 Un retry nunca reintenta `CallNotPermittedException`, diga lo que diga su `abortOn`, así que en cuanto el breaker se abre, el retry se rinde de inmediato en lugar de seguir reintentando contra él. En Resilience4j tienes que agregar tú mismo esa excepción a `ignoreExceptions`.
 
-### Los errores no se registran ni se reintentan de forma predeterminada :id=errors
+### Los errores no se reintentan de forma predeterminada :id=errors
 
-`recordOn` y `retryOn` tienen como valor predeterminado `Exception`: un `Error` (por ejemplo `OutOfMemoryError`, `AssertionError`) no se reintenta y cuenta como **éxito** para el breaker. `@Fallback(applyOn)` tiene como valor predeterminado `Throwable`, así que un fallback sí captura los `Error`s a menos que los agregues a `skipOn`.
+`retryOn` tiene como valor predeterminado `Exception`: un `Error` (por ejemplo `OutOfMemoryError`, `AssertionError`) no se reintenta. El breaker lo registra como falla, igual que Resilience4j (`recordOn` tiene como valor predeterminado `Throwable`). `@Fallback(applyOn)` tiene como valor predeterminado `Throwable`, así que un fallback sí captura los `Error`s a menos que los agregues a `skipOn`.
 
 ### Los timeouts interrumpen el thread de quien llama :id=timeouts
 

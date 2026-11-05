@@ -299,6 +299,29 @@ public final class ResilienceProcessor extends AbstractProcessor {
         }
     }
 
+    /**
+     * A type whose annotations reach no method: without this error nothing would be generated and nothing reported,
+     * and the framework integrations would then report the processor as missing.
+     */
+    private void reportProtectsNothing(TypeElement type) {
+        List<String> names = new ArrayList<>();
+        attributes.values().forEach(policy -> {
+            if (policy.on(type).isPresent()) {
+                names.add("@" + policy.simpleName());
+            }
+        });
+        String annotations = names.isEmpty() ? "Its resilience annotations" : String.join(", ", names);
+        String detail = type.getKind() == ElementKind.INTERFACE
+                ? type.getSimpleName() + " declares and inherits no abstract or default method, so " + annotations
+                        + " on it protect nothing: type-level annotations do not reach the methods of interfaces that"
+                        + " extend it. Put them on the interface that declares the methods, or share them with a"
+                        + " @ResiliencePolicy bundle used there."
+                : type.getSimpleName() + " has no method the generated subclass can override (final, static and private"
+                        + " methods are skipped), so " + annotations + " on it protect nothing. Make the methods to"
+                        + " protect overridable, or remove the annotations.";
+        error(type, ProcessorError.PROTECTS_NOTHING, detail);
+    }
+
     private boolean usesAnyPolicy(Element element) {
         for (PolicyAttributes policy : attributes.values()) {
             if (policy.on(element).isPresent()) {
@@ -391,6 +414,10 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     asyncResult == null || asyncResult.getKind() == TypeKind.NONE ? null : asyncResult,
                     layers == null ? List.copyOf(policies.keySet()) : layers));
             }
+        }
+        if (!anyPolicy && valid && usesAnyPolicy(iface)) {
+            reportProtectsNothing(iface);
+            return;
         }
         if (!anyPolicy || !valid) {
             return;

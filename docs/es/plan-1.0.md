@@ -6,14 +6,16 @@ Esta página es el plan de trabajo: cada tarea dice qué cambiar, dónde y cómo
 
 ## Estado
 
-- Versión en Maven Central: 0.13.0. `main` es 0.14.0-SNAPSHOT.
+- Versiones en Maven Central: 0.13.0, y los release candidates 1.0.0-RC1 y 1.0.0-RC2. `main` es 1.0.0-SNAPSHOT.
 - El plan de rendimiento de las corridas en AWS está terminado (pull requests #53–#59, ver [benchmarks](benchmarks.md)).
 - Los títulos del Javadoc llevan el nombre del artefacto (#60); javadoc.io se sincronizó para los 11 módulos.
 - Las fases 1 a 3 están terminadas (#62 a #65).
 - Una segunda revisión de los mismos cuatro revisores (2026-11-02, después de #65): el diseñador de APIs, el revisor de rendimiento y quien empieza dicen que está listo para 1.0; quien evalúa adoptarla pide primero una 1.0.0-RC1, y tres cosas antes de 1.0 (un fallo visible si falta el procesador, una corrida de jcstress en ARM, una política de seguridad). Sus arreglos pequeños de documentación están en la fase 4.
 - 1.0.0-RC1 está en Maven Central (2026-11-02). `main` es 1.0.0-SNAPSHOT, con la base de API en 1.0.0-RC1, así que la API queda congelada: un cambio incompatible frente a la release candidate hace fallar el build.
 - La rama principal de SonarCloud seguía llamándose `master`, así que los análisis de `main` nunca llegaban al resumen del proyecto. Ahora es `main`; sus 21 issues de fiabilidad se revisaron (#68), y solo se analiza la librería publicada (#69).
-- Siguiente: una o dos semanas de uso, la decisión sobre la falta del procesador, y luego 1.0.0.
+- 1.0.0-RC2 (2026-11-04) hace fallar el arranque o el build cuando el procesador no corrió.
+- Una [tercera revisión](#third-review) de RC2 (2026-11-05): tres revisores dicen sacar 1.0.0; sus arreglos cambian dos comportamientos, así que antes viene una 1.0.0-RC3.
+- Siguiente: 1.0.0-RC3, y luego 1.0.0.
 
 ## La revisión
 
@@ -161,6 +163,25 @@ Un pull request por bug confirmado. Para cada uno: primero escribir un test que 
   - después, los snippets de instalación a 1.0.0 (no en el blog), `r4c.apiBaseline=1.0.0`, javadoc.io;
   - desde entonces, la comprobación del código generado (`-Pr4c.generatedBy=<release>`) es el paso 1 de cada release.
 
+## Tercera revisión :id=third-review
+
+Los mismos cuatro revisores leyeron 1.0.0-RC2 el 2026-11-05. Ninguno corrió el build completo; quien empieza corrió el quickstart contra los jars de RC2 de Maven Central.
+
+| Revisor | Veredicto |
+|---|---|
+| Un diseñador de APIs | Sacar 1.0.0 con esta API; nada sería un error permanente. |
+| Un escéptico de rendimiento y concurrencia | Sacar 1.0.0: ningún bug de orden de memoria, wake-up perdido, ABA o exactamente-una-vez en core; los arreglos de la fase 3 se sostienen. Un falso positivo en el chequeo de RC2. |
+| Alguien que empieza | Una llamada protegida en unos 10 minutos; la salida del quickstart coincidió exactamente con RC2. Afirmaciones desactualizadas sobre el release candidate. |
+| Un usuario de Resilience4j que evalúa adoptarla | Un piloto en dos o tres servicios, todavía no producción: ningún usuario externo por ahora, una sola persona manteniéndola, y solo Spring Boot 4.1. |
+
+- [x] Un tipo cuyas anotaciones no llegan a ningún método (una interfaz anotada vacía, una clase con solo métodos final) no generaba nada ni avisaba, y Spring y Quarkus informaban entonces que faltaba el procesador. Ahora es [R4C-APT-007](errors.md#r4c-apt-007); un bundle con solo `@PolicyOrder` ya no cuenta como política en los chequeos de las integraciones.
+- [x] El breaker contaba un `Error` como éxito (`recordOn = Exception`), al revés que Resilience4j. Decisión del dueño: `recordOn` vale `Throwable` por defecto.
+- [x] Los jars de Quarkus no tenían `Automatic-Module-Name`; los mensajes de procesador ausente nombraban el procesador sin versión.
+- [x] Documentación: la portada, el FAQ, la instalación, problemas frecuentes, clases anotadas, timeout, compatibilidad, rendimiento y el artículo de RC2 (ver la entrada Unreleased del changelog).
+- [ ] Publicar 1.0.0-RC3 con estos cambios (el valor por defecto del breaker y el nuevo error de compilación cambian el comportamiento), y luego 1.0.0.
+
+Queda para después de 1.0 (abajo): los chequeos de procesador ausente de Spring y Micronaut en una imagen nativa (Spring podría correrlo en su paso AOT), `Ticker.onAdvance` sin forma de desregistrarse, `onInstanceCreated` sin la instancia nueva, ninguna forma de detener los hilos daemon compartidos (una fuga en una aplicación web recargable), el tick del watchdog que solo se achica, y los nombres distintos de los interruptores de las tres integraciones (deliberado; a escribir en [diseño](design.md)). Fuera del código: todavía sin feedback externo, sin protección de rama en `main`, y sin releases de GitHub para los release candidates.
+
 ## Después de 1.0
 
 Aditivo, así que no bloquea congelar la API. Más o menos en orden de valor. Los puntos marcados *(pedido antes de 1.0)* son los que algún revisor quería antes del release: el dueño decide si adelantarlos.
@@ -179,3 +200,4 @@ Aditivo, así que no bloquea congelar la API. Más o menos en orden de valor. Lo
   - Solo los circuit breakers tienen un método de listado en el registry; retry, hedge y timeout no tienen handles.
 - Funciones que Resilience4j tiene, cada una por decidir (construirla, o documentar por qué no): bulkhead con thread pool, cache, RxJava, soporte de Kotlin, una transición automática de open a half-open, endpoints de eventos, llevar el contexto de quien llama a los intentos de un hedge.
 - Revisar las señales de adopción en unos seis meses, como haría el revisor que evaluó adoptarla: actividad, mantenedores, issues cerrados. Un piloto en un servicio Java puro con mucho tráfico es lo que recomendaría primero.
+- De la tercera revisión: el chequeo de procesador ausente en una imagen nativa de Spring o Micronaut (Spring podría correrlo en su paso AOT, en la JVM); que `Ticker.onAdvance` devuelva una forma de desregistrarse; que `onInstanceCreated` pase la instancia nueva; una forma de detener los hilos daemon compartidos, o documentar que `core` va en el class path del servidor en una aplicación web recargable; que el tick del watchdog vuelva a crecer cuando no quedan timeouts cortos; dejar escritos en [diseño](design.md#api-decisions) los nombres de los interruptores de las tres integraciones como deliberados; protección de rama en `main` y releases de GitHub para cada versión.

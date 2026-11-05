@@ -4,6 +4,19 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Unreleased]
+
+Después de una tercera revisión de 1.0.0-RC2 por los mismos cuatro revisores ([plan hacia la 1.0](plan-1.0.md#third-review)).
+
+### Cambiado
+
+- **El circuit breaker registra los `Error` como fallas por defecto**: `recordOn` vale `Throwable` por defecto en vez de `Exception`, como en Resilience4j, así que un `StackOverflowError` o un `NoClassDefFoundError` repetido abre el breaker en vez de contar como éxito. Usa `recordOn = Exception.class` (o `defaults.circuitBreaker.recordOn=java.lang.Exception`) para el comportamiento anterior. Los reintentos no cambian: `retryOn` sigue valiendo `Exception` por defecto.
+- **Las anotaciones a nivel de tipo que no llegan a ningún método son un error de compilación**, [R4C-APT-007](errors.md#r4c-apt-007): una interfaz que no declara ni hereda ningún método abstracto o default, o una clase anotada cuyos métodos son todos final, static o private. Hasta ahora no se generaba nada ni se avisaba, y Spring Boot y Quarkus informaban entonces que el tipo se había compilado sin el procesador.
+- Un bundle `@ResiliencePolicy` que solo lleva `@PolicyOrder` ya no cuenta como política en los chequeos del procesador ausente ([R4C-SPR-006](errors.md#r4c-spr-006), [R4C-MN-007](errors.md#r4c-mn-007), [R4C-QK-008](errors.md#r4c-qk-008)): el procesador no genera nada para él, así que un bean que lo usaba fallaba sin motivo.
+- Los mensajes de R4C-SPR-006, R4C-MN-007 y R4C-QK-008 muestran las coordenadas del procesador con `:<version>`, que hace falta sin el BOM en `annotationProcessor`.
+- Los jars de la extensión de Quarkus nombran sus módulos automáticos `dev.resilience4cata.quarkus` y `dev.resilience4cata.quarkus.deployment` (`Automatic-Module-Name`), como los demás módulos, en vez de nombres derivados del nombre del archivo.
+- Documentación: el release candidate y la API congelada en la portada y en el FAQ; los errores de procesador ausente de cada framework en el FAQ, la instalación y la página de problemas; qué builds nativos se prueban; qué escribe `-Ar4c.inject=micronaut`; una sola fuente para las cifras principales, con sus matices (solo ARM, la fila del breaker sin fallos, las llamadas síncronas no asignan memoria); la interrupción de un timeout cierra la E/S interrumpible; qué paquetes de los módulos de Spring, Micronaut y Quarkus son API.
+
 ## [1.0.0-RC2] - 2026-11-04 :id=1.0.0-rc2
 
 El segundo candidato a release de 1.0.0. La API es la misma que en 1.0.0-RC1; el único cambio es que la falta del procesador de anotaciones ahora se reporta en vez de dejar beans sin protección.

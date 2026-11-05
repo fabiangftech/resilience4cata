@@ -140,7 +140,7 @@ class CircuitBreakerModelTest {
                 breaker.onFailure(token, started, new IllegalStateException("ignored"));
             }
             case 6 -> {
-                name = "error (not recorded as a failure)";
+                name = "error (outside recordOn)";
                 outcome = Outcome.SUCCESS;
                 breaker.onFailure(token, started, new AssertionError("error"));
             }
@@ -210,6 +210,7 @@ class CircuitBreakerModelTest {
                 .waitInOpen(Duration.ofMillis(random.nextInt(1, 4_000)))
                 .halfOpenCalls(random.nextInt(1, 5))
                 .maxWaitInHalfOpen(random.nextBoolean() ? Duration.ZERO : Duration.ofMillis(random.nextInt(1, 4_000)))
+                .recordOn(List.of(Exception.class)) // so that an Error is a throwable outside recordOn
                 .ignoreOn(List.of(IllegalStateException.class));
         return builder.build();
     }

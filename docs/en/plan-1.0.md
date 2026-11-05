@@ -6,14 +6,16 @@ This page is the working plan: each task says what to change, where, and how to 
 
 ## Status
 
-- Version on Maven Central: 0.13.0. `main` is 0.14.0-SNAPSHOT.
+- Versions on Maven Central: 0.13.0, and the release candidates 1.0.0-RC1 and 1.0.0-RC2. `main` is 1.0.0-SNAPSHOT.
 - The performance plan from the AWS runs is done (pull requests #53–#59, see [benchmarks](benchmarks.md)).
 - Javadoc titles carry the artifact name (#60); javadoc.io was synced for all 11 modules.
 - Phases 1 to 3 are done (#62 to #65).
 - A second review by the same four reviewers (2026-11-02, after #65): the API designer, the performance reviewer and the newcomer say ready for 1.0; the adopter asks for a 1.0.0-RC1 first, and for three things before 1.0 (a loud failure when the processor is missing, one jcstress run on ARM, a security policy). Their small documentation fixes are in phase 4.
 - 1.0.0-RC1 is on Maven Central (2026-11-02). `main` is 1.0.0-SNAPSHOT, with the API baseline at 1.0.0-RC1, so the API is frozen: an incompatible change against the release candidate fails the build.
 - SonarCloud's main branch was still called `master`, so the analyses of `main` never reached the project overview. It is `main` now; its 21 reliability issues were reviewed (#68), and only the published library is analysed (#69).
-- Next: one or two weeks of use, the decision on a missing processor, then 1.0.0.
+- 1.0.0-RC2 (2026-11-04) fails the startup or build when the processor did not run.
+- A [third review](#third-review) of RC2 (2026-11-05): three reviewers say ship 1.0.0; its fixes change two behaviours, so a 1.0.0-RC3 comes first.
+- Next: 1.0.0-RC3, then 1.0.0.
 
 ## The review
 
@@ -161,6 +163,25 @@ One pull request per confirmed bug. For each: first write a test that reproduces
   - then the install snippets to 1.0.0 (not the blog), `r4c.apiBaseline=1.0.0`, javadoc.io;
   - from then on, the generated-code check (`-Pr4c.generatedBy=<release>`) is step 1 of every release.
 
+## Third review :id=third-review
+
+The same four reviewers read 1.0.0-RC2 on 2026-11-05. None ran the whole build; the newcomer ran the quickstart against the RC2 jars from Maven Central.
+
+| Reviewer | Verdict |
+|---|---|
+| An API designer | Ship 1.0.0 with this API; nothing would be a permanent mistake. |
+| A performance and concurrency skeptic | Ship 1.0.0: no ordering, lost wake-up, ABA or exactly-once bug found in core; the phase-3 fixes hold. One false positive in the RC2 check. |
+| A newcomer | A call protected in about 10 minutes; the quickstart's output matched exactly on RC2. Stale statements about the release candidate. |
+| A Resilience4j user deciding whether to adopt | A pilot on two or three services, not production yet: no outside user so far, a single maintainer, and Spring Boot 4.1 only. |
+
+- [x] A type whose annotations reach no method (an empty annotated interface, a class with only final methods) generated nothing and reported nothing, and Spring and Quarkus then reported the processor as missing. Now [R4C-APT-007](errors.md#r4c-apt-007); a bundle with only `@PolicyOrder` no longer counts as a policy in the integrations' checks.
+- [x] The breaker counted an `Error` as a success (`recordOn = Exception`), unlike Resilience4j. Owner's decision: `recordOn` defaults to `Throwable`.
+- [x] The Quarkus jars had no `Automatic-Module-Name`; the missing-processor messages named the processor without a version.
+- [x] Documentation: the landing page, FAQ, installation, troubleshooting, annotated classes, timeout, compatibility and performance pages, and the RC2 blog post (see the changelog's Unreleased entry).
+- [ ] Release 1.0.0-RC3 with these changes (the breaker default and the new compile error change behaviour), then 1.0.0.
+
+Left for after 1.0 (below): the Spring and Micronaut missing-processor checks in a native image (Spring could run it in its AOT step), `Ticker.onAdvance` without a way to unregister, `onInstanceCreated` without the new instance, no way to stop the shared daemon threads (a leak in a reloadable web application), the watchdog's tick that only shrinks, and the different switch names of the three integrations (deliberate; to be written in [design](design.md)). Outside the code: no outside feedback yet, no branch protection on `main`, and no GitHub releases for the release candidates.
+
 ## After 1.0
 
 Additive, so not blocking the freeze. Roughly in order of value. Items marked *(asked before 1.0)* are ones a reviewer wanted before the release: the owner decides whether to pull them forward.
@@ -179,3 +200,4 @@ Additive, so not blocking the freeze. Roughly in order of value. Items marked *(
   - Only circuit breakers have a list method on the registry; retry, hedge and timeout have no handles.
 - Features Resilience4j has, each to decide (build, or document why not): thread-pool bulkhead, cache, RxJava, Kotlin support, an automatic open → half-open transition, event endpoints, carrying the caller's context into hedged attempts.
 - Reassess adoption signals in about six months, as the adopting reviewer would: activity, maintainers, issues closed. A pilot on one high-traffic plain Java service is what they would recommend first.
+- From the third review: the missing-processor check in a Spring or Micronaut native image (Spring could run it in its AOT step, on the JVM); `Ticker.onAdvance` returning a way to unregister; `onInstanceCreated` passing the new instance; a way to stop the shared daemon threads, or documentation that `core` belongs on the server's class path in a reloadable web application; the watchdog's tick growing again when no short timeout is left; the three integrations' switch names written down as deliberate in [design](design.md#api-decisions); branch protection on `main` and GitHub releases for each release.

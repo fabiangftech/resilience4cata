@@ -185,7 +185,7 @@
   }, {
     "name" : "resilience4cata.defaults.circuit-breaker.record-on",
     "type" : "java.util.List<java.lang.Class<? extends java.lang.Throwable>>",
-    "defaultValue" : [ "java.lang.Exception" ],
+    "defaultValue" : [ "java.lang.Throwable" ],
     "description" : "Default recordOn of every circuit breaker (exception class names)."
   }, {
     "name" : "resilience4cata.defaults.circuit-breaker.ignore-on",

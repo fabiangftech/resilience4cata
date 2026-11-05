@@ -174,6 +174,14 @@ class CircuitBreakerPolicyTest {
     }
 
     @Test
+    void errorsAreRecordedAsFailuresByDefault() {
+        CircuitBreakerPolicy cb = breaker(window(2));
+        fail(cb, new StackOverflowError());
+        fail(cb, new AssertionError());
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.OPEN);
+    }
+
+    @Test
     void slowCallsOpenTheBreaker() {
         CircuitBreakerPolicy cb = breaker(window(2).slowCallDuration(Duration.ofMillis(100)).slowCallRateThreshold(100));
         for (int i = 0; i < 2; i++) {

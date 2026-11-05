@@ -83,7 +83,8 @@ sequenceDiagram
 
 - What happens next depends on your code. Blocking calls that respond to interrupts (`Thread.sleep`, `Object.wait`, `BlockingQueue.take`, `java.net.http.HttpClient.send`, most I/O on virtual threads, NIO interruptible channels) stop and throw; the timeout then throws `CallTimeoutException` with that exception as its cause.
 - **Code that ignores interrupts runs to completion first**: a busy loop, classic blocking `java.net.Socket` I/O on a platform thread, a library that swallows `InterruptedException`. The call keeps going until it returns; only then does the caller get `CallTimeoutException` (with no cause), and the result is discarded.
-- The interrupt is cleared before `CallTimeoutException` is thrown, so it never leaks into later work on that thread.
+- The watchdog's interrupt is cleared before `CallTimeoutException` is thrown, so it never leaks into later work on that thread. An interrupt the thread already had before the timeout passed is the caller's, so it is kept.
+- **Interrupting I/O can cost a connection.** A thread blocked on an interruptible channel (`InterruptibleChannel`, or socket I/O on a virtual thread) has that channel closed by the interrupt, so a pooled connection it was using is lost and the pool has to open a new one. Set the client's own timeouts shorter than `@Timeout` when that matters.
 - **Precision.** A call is never interrupted early, and at most about two watchdog ticks late. A tick is a sixteenth of the shortest timeout in use, between 1 ms and 50 ms: with `@Timeout("2s")` alone, about 100 ms late at most.
 - A call that finishes in time is untouched. Timed calls read no clock: the watchdog keeps a coarse clock for them.
 

@@ -681,7 +681,8 @@ public class ResilienceExtensionProcessor {
                     + " when these types were compiled, so their policies would not run: " + missing.stream()
                     .map(name -> name + " (no " + name + SUFFIX + ")").collect(java.util.stream.Collectors.joining(", "))
                     + ". Add resilience4cata-processor to the annotation processor path (Gradle: annotationProcessor"
-                    + " 'dev.resilience4cata:resilience4cata-processor'; Maven: annotationProcessorPaths in the"
+                    + " 'dev.resilience4cata:resilience4cata-processor:<version>', or no version with the BOM on"
+                    + " annotationProcessor; Maven: annotationProcessorPaths in the"
                     + " maven-compiler-plugin) and rebuild; or set quarkus.resilience4cata.allow-missing-processor=true"
                     + " to build without the policies; or list the bean classes in"
                     + " quarkus.resilience4cata.beans.exclude."))));
@@ -739,11 +740,28 @@ public class ResilienceExtensionProcessor {
     }
 
     private static boolean isBundle(DotName name, IndexView index) {
-        if (name.toString().startsWith(POLICY_ANNOTATIONS)) {
+        return isBundle(name, index, 0);
+    }
+
+    /**
+     * Whether an annotation is a bundle that brings at least one policy, directly or through another bundle: a
+     * bundle with only {@code @PolicyOrder} protects nothing, so the processor generates nothing for it. Bundles may
+     * contain bundles, and annotations may annotate each other, so the walk stops after a few levels.
+     */
+    private static boolean isBundle(DotName name, IndexView index, int depth) {
+        if (depth > 8 || name.toString().startsWith(POLICY_ANNOTATIONS)) {
             return false;
         }
         ClassInfo annotation = index.getClassByName(name);
-        return annotation != null && annotation.isAnnotation() && annotation.hasDeclaredAnnotation(RESILIENCE_POLICY);
+        if (annotation == null || !annotation.isAnnotation() || !annotation.hasDeclaredAnnotation(RESILIENCE_POLICY)) {
+            return false;
+        }
+        for (AnnotationInstance meta : annotation.declaredAnnotations()) {
+            if (POLICIES.contains(meta.name().toString()) || isBundle(meta.name(), index, depth + 1)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @BuildStep

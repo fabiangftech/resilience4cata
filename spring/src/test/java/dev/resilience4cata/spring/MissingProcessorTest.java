@@ -31,7 +31,7 @@ class MissingProcessorTest {
                             + "dev.resilience4cata.spring.unprocessed.PriceService, which has resilience4cata"
                             + " annotations, but there is no generated "
                             + "dev.resilience4cata.spring.unprocessed.PriceService$Resilient")
-                    .hasMessageContaining("annotationProcessor 'dev.resilience4cata:resilience4cata-processor'")
+                    .hasMessageContaining("annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>'")
                     .hasMessageContaining("resilience4cata.spring.allow-missing-processor=true");
         });
     }
@@ -58,6 +58,14 @@ class MissingProcessorTest {
         runner.withPropertyValues("resilience4cata.spring.exclude=prices")
                 .withBean("prices", Object.class, () -> newInstance(service))
                 .run(context -> assertThat(context).hasNotFailed());
+    }
+
+    @Test
+    void aBundleWithOnlyAnOrderDeclaresNoPolicy() throws Exception {
+        Class<?> service = load("OrderedService");
+
+        runner.withBean("ordered", Object.class, () -> newInstance(service))
+                .run(context -> assertThat(context).hasNotFailed().getBean("ordered").isInstanceOf(service));
     }
 
     @Test

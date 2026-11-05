@@ -103,7 +103,7 @@ class CircuitBreakerPageTest {
     }
 
     @Test
-    void errorsCountAsSuccesses() {
+    void errorsCountAsFailures() {
         PaymentGateway failing = orderId -> {
             throw new AssertionError("an Error, not an Exception");
         };
@@ -112,9 +112,8 @@ class CircuitBreakerPageTest {
             assertThatThrownBy(() -> payments.charge("x")).isInstanceOf(AssertionError.class);
         }
         CircuitBreakerSnapshot snapshot = registry.circuitBreaker("payments").snapshot();
-        assertThat(snapshot.state()).isEqualTo(CircuitBreakerState.CLOSED);
-        assertThat(snapshot.failedCalls()).isZero();
-        assertThat(snapshot.failureRate()).isZero();
+        assertThat(snapshot.state()).isEqualTo(CircuitBreakerState.OPEN);
+        assertThatThrownBy(() -> payments.charge("x")).isInstanceOf(CallNotPermittedException.class);
     }
 
     @Test

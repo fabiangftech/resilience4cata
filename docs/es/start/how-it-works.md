@@ -79,7 +79,7 @@ Lo que se desprende de este diseño:
 - **El wrapper es thread-safe.** Créalo una vez y compártelo, igual que el registry.
 
 > [!MEASURED]
-> Un retry cuyo primer intento tiene éxito cuesta 1.2 ns y no asigna memoria, contra 22.9 ns de Resilience4j 2.4.0 (AWS Graviton3 `c7g.xlarge`, un thread). [Benchmarks](../benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3)
+> Un retry cuyo primer intento tiene éxito cuesta 1.4 ns y no asigna memoria, contra 22.9 ns de Resilience4j 2.4.0 (AWS Graviton3 `c7g.xlarge`, un thread, el código de 1.0.0-RC1). [Benchmarks: la release candidate](../benchmarks.md#release-candidate)
 
 ## Dos estilos, más una API programática
 
