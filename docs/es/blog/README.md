@@ -2,6 +2,12 @@
 
 Artículos sobre cómo está construido resilience4cata, qué mide y cómo usarlo bien.
 
+## Hedging cuando los hedges compiten por el mismo servicio
+
+*5 de noviembre de 2026*
+
+Una simulación de `@Hedge` contra un único servicio compartido, con cargas del 30 % al 95 %: cuándo el hedging recorta la cola, cuándo colapsa el servicio, y qué cambian el presupuesto, el límite adaptativo y la cancelación. [Leer el artículo](hedging-under-contention.md)
+
 ## resilience4cata 1.0.0-RC2: pruébalo antes de la 1.0
 
 *4 de noviembre de 2026*

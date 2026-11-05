@@ -94,6 +94,7 @@ Start with `docs/en/design.md` (decisions and open questions), then `docs/en/pol
 ./gradlew centralBundle -Pversion=0.1.0 --no-configuration-cache   # signed, checked bundle in build/central-bundle.zip (needs signingInMemoryKey)
 ./gradlew centralUpload -x centralBundle          # upload as USER_MANAGED deployment (needs centralPortalUsername/Password); release by hand in the portal
 ./gradlew :testkit:test                           # ManualClock and the policies on a manual clock
+./gradlew :examples:hedgeSimulation               # hedges competing for one simulated service (ManualClock); report in examples/build/hedge-sim/report.md; -Phedge.calls, -Phedge.seed; not in check
 ./gradlew :spring:test                            # Spring Boot integration: context runners, @SpringBootTest, AOT on the JVM
 ./gradlew :micronaut:test                         # Micronaut 5 integration (Java 25 toolchain): contexts, both processors, endpoint over HTTP
 ./gradlew :quarkus:it:check                       # Quarkus extension: @QuarkusTest (test) and QuarkusExtensionTest (extensionTest)
