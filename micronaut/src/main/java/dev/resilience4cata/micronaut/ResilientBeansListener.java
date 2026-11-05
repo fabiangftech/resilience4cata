@@ -178,7 +178,8 @@ final class ResilientBeansListener implements BeanCreatedEventListener<Object> {
                 + Resilient.GENERATED_SUFFIX + ": the annotation processor did not run when " + annotated.getSimpleName()
                 + " was compiled, so its policies would not run.", "Add resilience4cata-processor to the annotation"
                 + " processor path, after micronaut-inject-java, with -Ar4c.inject=micronaut (Gradle: annotationProcessor"
-                + " 'dev.resilience4cata:resilience4cata-processor'; Maven: annotationProcessorPaths in the"
+                + " 'dev.resilience4cata:resilience4cata-processor:<version>', or no version with the BOM on"
+                + " annotationProcessor; Maven: annotationProcessorPaths in the"
                 + " maven-compiler-plugin) and rebuild; or set resilience4cata.micronaut.allow-missing-processor=true"
                 + " to start without the policies; or list the class in resilience4cata.micronaut.exclude.");
     }

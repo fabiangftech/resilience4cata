@@ -28,6 +28,8 @@ final class PolicyAnnotations {
             PACKAGE + "CircuitBreaker;", PACKAGE + "RateLimiter;", PACKAGE + "AdaptiveLimit;", PACKAGE + "Timeout;",
             PACKAGE + "Bulkhead;", PACKAGE + "Fallback;");
     private static final String BUNDLE = PACKAGE + "ResiliencePolicy;";
+    /** Bundles may contain bundles; annotations may annotate each other, so the walk stops here. */
+    private static final int MAX_BUNDLE_DEPTH = 8;
 
     private final Map<Class<?>, Boolean> declares = new ConcurrentHashMap<>();
     private final Map<String, Boolean> bundles = new ConcurrentHashMap<>();
@@ -49,11 +51,34 @@ final class PolicyAnnotations {
     }
 
     private boolean isBundle(ClassLoader loader, String descriptor) {
-        if (descriptor.startsWith(PACKAGE) || !descriptor.startsWith("L") || !descriptor.endsWith(";")) {
+        return isBundle(loader, descriptor, 0);
+    }
+
+    /**
+     * Whether an annotation is a bundle that brings at least one policy, directly or through another bundle: a
+     * bundle with only {@code @PolicyOrder} protects nothing, so the processor generates nothing for it.
+     */
+    private boolean isBundle(ClassLoader loader, String descriptor, int depth) {
+        if (depth > MAX_BUNDLE_DEPTH || descriptor.startsWith(PACKAGE) || descriptor.startsWith("Ljava/")
+                || !descriptor.startsWith("L") || !descriptor.endsWith(";")) {
             return false;
         }
-        String internalName = descriptor.substring(1, descriptor.length() - 1);
-        return bundles.computeIfAbsent(descriptor, d -> annotations(loader, internalName, false).contains(BUNDLE));
+        Boolean known = bundles.get(descriptor);
+        if (known != null) {
+            return known;
+        }
+        Set<String> meta = annotations(loader, descriptor.substring(1, descriptor.length() - 1), false);
+        boolean bundle = false;
+        if (meta.contains(BUNDLE)) {
+            for (String annotation : meta) {
+                if (POLICIES.contains(annotation) || isBundle(loader, annotation, depth + 1)) {
+                    bundle = true;
+                    break;
+                }
+            }
+        }
+        bundles.put(descriptor, bundle);
+        return bundle;
     }
 
     /** The descriptors of the annotations on a class (and on its methods, if asked); empty if it cannot be read. */

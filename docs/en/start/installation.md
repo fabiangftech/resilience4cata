@@ -350,6 +350,8 @@ With Maven, in the maven-compiler-plugin's <annotationProcessorPaths>:
     <path><groupId>dev.resilience4cata</groupId><artifactId>resilience4cata-processor</artifactId><version>...</version></path>
 ```
 
+In Spring Boot, Micronaut and Quarkus the same mistake is reported at startup instead, before any call: [R4C-SPR-006](../errors.md#r4c-spr-006) in Spring Boot, [R4C-MN-007](../errors.md#r4c-mn-007) for an annotated class in Micronaut, and [R4C-QK-008](../errors.md#r4c-qk-008) in Quarkus, where it fails the build.
+
 ## IDEs
 
 The processor is plain `javac` annotation processing, so an IDE generates the classes as long as annotation processing is on for the project.
@@ -471,11 +473,11 @@ GraalVM Native Image needs no configuration of your own; the jars bring it:
 - **`core` initializes its background threads at run time.** The timeout watchdog, the async timeout timer and the async delay timer are started by lazy holder classes; `core` ships `META-INF/native-image/dev.resilience4cata/resilience4cata-core/native-image.properties` with `--initialize-at-run-time` for those holders, so a framework that initializes classes at build time (Quarkus does by default) never puts a started thread in the image. Create the `ResilienceRegistry` and the wrapped services at run time, not in a static initializer that runs during the image build.
 - Calling the generated constructor directly (`new StockService$Resilient(registry, warehouse)`) uses no reflection at all.
 
-The metadata uses the single-file format of GraalVM for JDK 23 and later (see [Reachability Metadata](https://www.graalvm.org/latest/reference-manual/native-image/metadata/)). With an older GraalVM, register each `…$Resilient` class with its public constructors in your own `reflect-config.json`. Native builds are not part of the test suite yet.
+The metadata uses the single-file format of GraalVM for JDK 23 and later (see [Reachability Metadata](https://www.graalvm.org/latest/reference-manual/native-image/metadata/)). With an older GraalVM, register each `…$Resilient` class with its public constructors in your own `reflect-config.json`. The project's CI builds a native image of the Quarkus extension's test application and tests it ([Quarkus guide](../guides/quarkus.md#native)). For Spring Boot only AOT processing is tested, on the JVM ([Spring Boot guide](../guides/spring.md#aot)); a Micronaut native image was built and run by hand ([Micronaut guide](../guides/micronaut.md#native)); a plain Java native image is not tested.
 
 ## Troubleshooting
 
-- [`R4C-RT-003`](../errors.md#r4c-rt-003): no generated class. The processor did not run on the type, or the type has no resilience annotation.
+- [`R4C-RT-003`](../errors.md#r4c-rt-003): no generated class. The processor did not run on the type, or the type has no resilience annotation. The same mistake is [R4C-SPR-006](../errors.md#r4c-spr-006) in Spring Boot, [R4C-MN-007](../errors.md#r4c-mn-007) in Micronaut (annotated classes) and [R4C-QK-008](../errors.md#r4c-qk-008) in Quarkus (at build time).
 - [`R4C-RT-004`](../errors.md#r4c-rt-004): `core` and `processor` have different versions. Use the BOM.
 - [`R4C-RT-005`](../errors.md#r4c-rt-005): a named module does not export the package to `dev.resilience4cata.core`.
 - Compile errors start with a code such as `[R4C-ATR-001]`; each one has a section with a wrong example and the fix in the [error reference](../errors.md).

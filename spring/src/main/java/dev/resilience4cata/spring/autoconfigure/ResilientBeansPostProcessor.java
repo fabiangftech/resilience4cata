@@ -281,7 +281,8 @@ final class ResilientBeansPostProcessor implements SmartInstantiationAwareBeanPo
                 + ", which has resilience4cata annotations, but there is no generated " + annotated.getName()
                 + "$Resilient: the annotation processor did not run when " + annotated.getSimpleName()
                 + " was compiled, so its policies would not run.", "Add resilience4cata-processor to the annotation"
-                + " processor path (Gradle: annotationProcessor 'dev.resilience4cata:resilience4cata-processor';"
+                + " processor path (Gradle: annotationProcessor 'dev.resilience4cata:resilience4cata-processor:<version>',"
+                + " or no version with the BOM on annotationProcessor;"
                 + " Maven: annotationProcessorPaths in the maven-compiler-plugin) and rebuild; or set"
                 + " resilience4cata.spring.allow-missing-processor=true to start without the policies; or list the"
                 + " bean in resilience4cata.spring.exclude.");

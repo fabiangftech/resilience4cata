@@ -30,7 +30,7 @@ public final class CircuitBreakerConfig implements PolicyConfig {
      */
     public static final CircuitBreakerConfig DEFAULTS = new CircuitBreakerConfig(
             true, WindowType.COUNT, 100, Duration.ofSeconds(60), 100, 50, 100, Duration.ZERO, Duration.ofSeconds(60), 10,
-            Duration.ZERO, List.of(Exception.class), List.of());
+            Duration.ZERO, List.of(Throwable.class), List.of());
 
     /**
      * How the sliding window is measured. Constants may be added in minor versions: keep a {@code default} branch

@@ -6,7 +6,7 @@ Short answers to the questions people ask first, with links to the details.
 
 ### What is resilience4cata? :id=what
 
-An annotation-driven resilience library for plain Java 21+: retry, circuit breaker, rate limiter, timeout, bulkhead and fallback. An annotation processor turns the annotations into ordinary Java source at compile time, so there are no proxies, no bytecode generation and no agents at runtime. See [How it works](start/how-it-works.md).
+An annotation-driven resilience library for plain Java 21+: retry, hedging, circuit breaker, rate limiter, adaptive concurrency limit, timeout, bulkhead and fallback. An annotation processor turns the annotations into ordinary Java source at compile time, so there are no proxies, no bytecode generation and no agents at runtime. See [How it works](start/how-it-works.md).
 
 ### Which Java versions are supported? :id=java
 
@@ -37,7 +37,7 @@ No. It covers similar policies with a different design: code generated at compil
 
 ### Do I have to use the annotation processor? :id=processor
 
-Yes, with annotations: the processor is mandatory and there is no reflection fallback. If it did not run, `Resilient.of` fails with [R4C-RT-003](errors.md#r4c-rt-003), whose message shows the dependency to add. Without annotations, the [`Pipeline`](guides/pipeline.md) API needs no processor.
+Yes, with annotations: the processor is mandatory and there is no reflection fallback. If it did not run, `Resilient.of` fails with [R4C-RT-003](errors.md#r4c-rt-003), whose message shows the dependency to add. In the framework integrations the same mistake is reported at startup instead: [R4C-SPR-006](errors.md#r4c-spr-006) in Spring Boot, [R4C-MN-007](errors.md#r4c-mn-007) for an annotated class in Micronaut, and [R4C-QK-008](errors.md#r4c-qk-008) in Quarkus, at build time. Without annotations, the [`Pipeline`](guides/pipeline.md) API needs no processor.
 
 ### Interface or annotated class? :id=style
 
@@ -59,7 +59,7 @@ Reactor's `Mono` and `Flux`, yes, with `resilience4cata-reactor`: every policy a
 
 Yes. Call paths take no locks and use no `synchronized`, so they do not pin a virtual thread to its carrier. The library's own delayed callbacks (async retries, async timeouts) run on new virtual threads.
 
-Synchronous policies are made for a thread per request: a timeout interrupts a blocked virtual thread and clears the interrupt before it throws, a bulkhead's or rate limiter's wait and a retry's pause park the virtual thread and free its carrier, and the timeout's bookkeeping for a thread goes away with the thread. The test suite runs thousands of virtual threads through every blocking policy while a JFR recording checks that none is pinned, and runs the frameworks' load tests with requests on virtual threads: Spring Boot with `spring.threads.virtual.enabled=true`, Micronaut's blocking executor (virtual threads on Java 21 and newer), and Quarkus endpoints with `@RunOnVirtualThread`.
+Synchronous policies are made for a thread per request: a timeout interrupts a blocked virtual thread and clears that interrupt before it throws (an interrupt the thread already had is kept), a bulkhead's or rate limiter's wait and a retry's pause park the virtual thread and free its carrier, and the timeout's bookkeeping for a thread goes away with the thread. The test suite runs thousands of virtual threads through every blocking policy while a JFR recording checks that none is pinned, and runs the frameworks' load tests with requests on virtual threads: Spring Boot with `spring.threads.virtual.enabled=true`, Micronaut's blocking executor (virtual threads on Java 21 and newer), and Quarkus endpoints with `@RunOnVirtualThread`.
 
 ### Can I change a configuration at runtime? :id=reload
 
@@ -93,13 +93,13 @@ A sync timeout interrupts the caller's thread; code that ignores interrupts (cla
 
 ### How fast is it? :id=performance
 
-On AWS Graviton3, a retry whose first attempt succeeds costs 1.2 ns and a circuit breaker 1.9 ns per call, with 0 bytes allocated, against 22.9 ns and 89.2 ns for Resilience4j 2.4.0 ([measured](benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3)). The breaker's 1.9 ns holds while its window has no failure; with one call in ten failing and four threads it is 274 against 910 ns. Contended paths cost hundreds of nanoseconds in both libraries, and these are averages measured on ARM only. See [Performance](performance.md).
+On AWS Graviton3, a retry whose first attempt succeeds costs 1.4 ns and a circuit breaker 1.9 ns per call, with 0 bytes allocated, against 22.9 ns and 89.9 ns for Resilience4j 2.4.0 ([measured on the release candidate](benchmarks.md#release-candidate)). The breaker's 1.9 ns holds while its window has no failure; with one call in ten failing and four threads it is 278 against 940 ns ([realistic failure rates](benchmarks.md#failure-rates)). Contended paths cost hundreds of nanoseconds in both libraries, and these are averages measured on ARM only. See [Performance](performance.md).
 
 ## Project :id=project
 
 ### Is it production-ready? :id=production
 
-Every policy has unit and end-to-end tests, the lock-free ones also concurrency tests (jcstress), allocation is gated in CI, and a weekly two-hour soak test runs every policy under load. The API has been reviewed for 1.0 and no more changes are planned, but until 1.0.0 a minor version may still change it; the [Changelog](changelog.md) lists every incompatible change. What 1.0.0 will keep compatible is in [Compatibility](reference/compatibility.md).
+Every policy has unit and end-to-end tests, the lock-free ones also concurrency tests (jcstress), allocation is gated in CI, and a weekly two-hour soak test runs every policy under load. The API is frozen since the 1.0.0 release candidates: 1.0.0 ships it as it is unless feedback on a release candidate forces a change, and the [Changelog](changelog.md) would list it. What 1.0.0 will keep compatible is in [Compatibility](reference/compatibility.md).
 
 ### What is not supported yet? :id=not-supported
 
@@ -119,7 +119,7 @@ Planned, not promised; names and scope can change:
 | `locked` attribute (annotation values that external configuration cannot override) | done in 0.7.0 | `locked = true` on the annotation, `Pipeline.Builder.locked()` ([Locking an instance](guides/configuration.md#locking-an-instance)) |
 | `@Cached`, Mutiny and RxJava, Kotlin coroutines, fault injection, deadline propagation | later | |
 
-Until then, [testkit](guides/testing.md) covers tests.
+Until fault injection exists, make failures happen in tests with a stub of the protected interface or class, and drive delays and timeouts with [testkit](guides/testing.md)'s `ManualClock`.
 
 ### Where do I report a bug? :id=bugs
 

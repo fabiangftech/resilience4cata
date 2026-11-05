@@ -4,6 +4,19 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
+## [Unreleased]
+
+After a third review of 1.0.0-RC2 by the same four reviewers ([plan to 1.0](plan-1.0.md#third-review)).
+
+### Changed
+
+- **The circuit breaker records `Error`s as failures by default**: `recordOn` defaults to `Throwable` instead of `Exception`, as in Resilience4j, so a repeated `StackOverflowError` or `NoClassDefFoundError` opens the breaker instead of counting as a success. Set `recordOn = Exception.class` (or `defaults.circuitBreaker.recordOn=java.lang.Exception`) for the old behaviour. Retries are unchanged: `retryOn` still defaults to `Exception`.
+- **Type-level annotations that reach no method are a compile error**, [R4C-APT-007](errors.md#r4c-apt-007): an interface that declares and inherits no abstract or default method, or an annotated class whose methods are all final, static or private. Until now nothing was generated and nothing reported, and Spring Boot and Quarkus then reported the type as compiled without the processor.
+- A `@ResiliencePolicy` bundle that holds only `@PolicyOrder` no longer counts as a policy in the missing-processor checks ([R4C-SPR-006](errors.md#r4c-spr-006), [R4C-MN-007](errors.md#r4c-mn-007), [R4C-QK-008](errors.md#r4c-qk-008)): the processor generates nothing for it, so a bean using it failed for no reason.
+- The messages of R4C-SPR-006, R4C-MN-007 and R4C-QK-008 show the processor's coordinates with `:<version>`, which is needed without the BOM on `annotationProcessor`.
+- The Quarkus extension's jars name their automatic modules `dev.resilience4cata.quarkus` and `dev.resilience4cata.quarkus.deployment` (`Automatic-Module-Name`), like the other modules, instead of names derived from the file names.
+- Documentation: the release candidate and the frozen API on the landing page and in the FAQ; the missing-processor errors of each framework in the FAQ, installation and troubleshooting pages; which native builds are tested; what `-Ar4c.inject=micronaut` writes; one source for the headline numbers, with their caveats (ARM only, the breaker row without failures, synchronous calls allocate nothing); a timeout's interrupt closes interruptible I/O; which packages of the Spring, Micronaut and Quarkus modules are API.
+
 ## [1.0.0-RC2] - 2026-11-04 :id=1.0.0-rc2
 
 The second release candidate for 1.0.0. The API is the same as in 1.0.0-RC1; the one change is that a missing annotation processor is now reported instead of leaving beans unprotected.

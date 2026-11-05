@@ -27,3 +27,8 @@ tasks.named('compileJava') {
 // No module-info: the API package that apiCompatibility compares (dev.resilience4cata.quarkus.runtime holds the
 // extension's beans and config roots, not API).
 r4cApi.packages = ['dev.resilience4cata.quarkus']
+
+tasks.named('jar') {
+    // Quarkus is not modular: an automatic module, named like the other resilience4cata modules.
+    manifest.attributes('Automatic-Module-Name': 'dev.resilience4cata.quarkus')
+}

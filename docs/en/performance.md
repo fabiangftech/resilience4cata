@@ -18,33 +18,33 @@ Low overhead is the reason resilience4cata exists: the annotation processor gene
 ## Headline results :id=headline
 
 > [!MEASURED]
-> AWS `c7g.xlarge` (Graviton3), JDK 21, resilience4cata 0.1.0 vs Resilience4j 2.4.0, nanoseconds and bytes allocated per call. From [MVP completion (2026-10-24, AWS Graviton3)](benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3), except the bulkhead with free slots: the code after 0.13.0, from [slots given back with a volatile add (2026-11-01)](benchmarks.md#release-counters), where Resilience4j measured 20.4 ns on one thread and 348 to 450 ns with four; and the breaker failing one call in 1 000 or 100, from [realistic failure rates (2026-11-02)](benchmarks.md#failure-rates).
+> AWS `c7g.xlarge` (Graviton3), JDK 21, against Resilience4j 2.4.0, nanoseconds and bytes allocated per call. The retry whose first attempt succeeds, the breaker where every call succeeds and the sync timeout are the code of 1.0.0-RC1, from [the release candidate (2026-11-02)](benchmarks.md#release-candidate); the breaker with failing calls, from [realistic failure rates (2026-11-02)](benchmarks.md#failure-rates); the bulkhead with free slots, the code after 0.13.0, from [slots given back with a volatile add (2026-11-01)](benchmarks.md#release-counters), where Resilience4j measured 20.4 ns on one thread and 348 to 450 ns with four; every other row, resilience4cata 0.1.0, from [MVP completion (2026-10-24, AWS Graviton3)](benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3).
 
 | Scenario | Threads | resilience4cata | Resilience4j 2.4.0 |
 |---|---:|---:|---:|
-| Retry, first attempt succeeds | 1 | **1.2 ns**, 0 B | 22.9 ns, 0 B |
+| Retry, first attempt succeeds | 1 | **1.4 ns**, 0 B | 22.9 ns, 0 B |
 | Retry, fails once then succeeds (Resilience4j without its `sleep(0)`) | 1 | **6.5 ns**, 0 B | 61.6 ns, 16 B |
-| Circuit breaker, every call succeeds | 1 | **1.9 ns**, 0 B | 89.2 ns, 0 B |
-| Circuit breaker, every call succeeds | 4 | **1.9 ns**, 0 B | 832 ns, 2 B |
+| Circuit breaker, every call succeeds | 1 | **1.9 ns**, 0 B | 89.9 ns, 0 B |
+| Circuit breaker, every call succeeds | 4 | **1.9 ns**, 0 B | 850 ns, 2 B |
 | Circuit breaker, one call in 1 000 fails | 4 | **11.2 ns**, 0 B | 1025 ns, 26 B |
 | Circuit breaker, one call in 100 fails | 4 | **65.4 ns**, 0 B | 1006 ns, 22–26 B |
-| Circuit breaker, one call in ten fails | 4 | **274 ns**, 0 B | 910 ns, 2 B |
+| Circuit breaker, one call in ten fails | 4 | **278 ns**, 0 B | 940 ns, 2 B |
 | Rate limiter, permits free | 4 | **187 ns**, 0 B | 275 ns, 40 B |
 | Rate limiter, exhausted (every call rejected) | 4 | **34.7 ns**, 0 B | 1599 ns, 505 B |
 | Bulkhead, slots free | 1 | **17.3 ns**, 0 B | 20.4 ns, 0 B |
 | Bulkhead, slots free | 4 | **195.5 ns**, 0 B | 348–450 ns, 0 B |
 | Bulkhead, full (every call rejected) | 1 | **2.3 ns**, 0 B | 139 ns, 416 B |
-| Timeout, sync call that finishes in time (Resilience4j: `TimeLimiter` + executor) | 1 | **22.2 ns**, 0 B | 8842 ns, 176 B |
+| Timeout, sync call that finishes in time (Resilience4j: `TimeLimiter` + executor) | 1 | **23.6 ns**, 0 B | 8908 ns, 183 B |
 | Async timeout, stage still pending | 1 | **152 ns**, 192 B | 598 ns, 240 B |
 | Async timeout, stage still pending | 4 | **369 ns**, 192 B | 1563 ns, 234 B |
 
 Reading the table honestly:
 
-- **The circuit breaker's 1.9 ns holds while its window holds no failure.** Then a call only reads one field. Once the last `windowSize` calls include a failure or a slow call, every call writes the shared window cursor. With four threads that costs 11.2 ns at 0.1 % failures, 65.4 ns at 1 % and 274 ns at 10 %, against about 1 000 ns for Resilience4j at every rate: 91×, 15× and 3.3× rather than 440× ([realistic failure rates](benchmarks.md#failure-rates)).
+- **The circuit breaker's 1.9 ns holds while its window holds no failure.** Then a call only reads one field. Once the last `windowSize` calls include a failure or a slow call, every call writes the shared window cursor. With four threads that costs 11.2 ns at 0.1 % failures, 65.4 ns at 1 % and 278 ns at 10 %, against about 1 000 ns for Resilience4j at every rate: 91×, 15× and 3.4× rather than 450× ([realistic failure rates](benchmarks.md#failure-rates)).
 - **Resilience4j does work per call that resilience4cata does not**: its retry counts every call in its built-in metrics (`LongAdder` counters), and its breaker always times calls. resilience4cata keeps no per-call counter outside the breaker's window ([why there are no success metrics](faq.md#success-metrics)).
 - **The bulkhead with free slots on one thread was a tie** (20.5 against 20.4 ns, both one atomic to take and one to give back) until the slot was given back with a volatile add, which measured faster than a release-only one on Graviton3: 17.3 ns.
-- **Contended paths cost hundreds of nanoseconds in both libraries.** The breaker's mixed case at four threads (274 ns) is dominated by one shared window cursor that every call advances; the bulkhead and rate limiter at four threads pay for one shared counter, and the rate limiter parks the threads that lose a race on it.
-- **The sync timeout is the most expensive sync policy** (22.2 ns on one thread; a later run measured 23.7 ns with no code change, an open layout effect, see [the next round](benchmarks.md#annotated-classes-generics-config-overrides-ticker-bulkhead-2026-10-24-aws-graviton3)). Resilience4j's comparison is not like for like: its `TimeLimiter` hands the call to another thread, which is where most of its 8.8 µs goes.
+- **Contended paths cost hundreds of nanoseconds in both libraries.** The breaker's mixed case at four threads (278 ns) is dominated by one shared window cursor that every call advances; the bulkhead and rate limiter at four threads pay for one shared counter, and the rate limiter parks the threads that lose a race on it.
+- **The sync timeout is the most expensive sync policy** (23.6 ns on one thread; the 0.1.0 headline measured 22.2 ns, which has not been seen since, see [the release candidate](benchmarks.md#release-candidate)). Resilience4j's comparison is not like for like: its `TimeLimiter` hands the call to another thread, which is where most of its 8.9 µs goes.
 - **Async calls allocate in both libraries**: every layer returns a new future. resilience4cata's async paths are not allocation-free; only the sync ones are.
 - **The rate limiter reads the clock once per call**, in both libraries; that read is most of its cost (on Apple Silicon, `System.nanoTime()` alone costs about 21 ns on one thread and 163 ns with four; see [Rate limiter, 1 and 4 threads](benchmarks.md#rate-limiter-1-and-4-threads-2026-10-24)).
 

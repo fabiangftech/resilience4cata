@@ -6,13 +6,13 @@ resilience4cata follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## The Java API :id=java-api
 
-The API is every public and protected member of the packages that a published module exports (`dev.resilience4cata`, `dev.resilience4cata.event`, `dev.resilience4cata.config`, `dev.resilience4cata.testkit` and so on; for Spring Boot, `dev.resilience4cata.spring`). Within a major version it stays binary and source compatible. The build checks this on every change: it compares each module with the last release and, from 1.0.0, fails on an incompatible change.
+The API is every public and protected member of the packages that a published module exports (`dev.resilience4cata`, `dev.resilience4cata.event`, `dev.resilience4cata.config`, `dev.resilience4cata.testkit` and so on; for Spring Boot, `dev.resilience4cata.spring`; for Quarkus, `dev.resilience4cata.quarkus`; for Micronaut, whose jar has no `module-info`, the public types of `dev.resilience4cata.micronaut`). Within a major version it stays binary and source compatible. The build checks this on every change: it compares each module with the last release and, from 1.0.0, fails on an incompatible change.
 
 Not part of the API:
 
 - Members marked `@Internal`: they are public only so that another resilience4cata module, or the `ServiceLoader`, can reach them.
 - Members marked `@Experimental`: they may change in any minor version until they are settled. Nothing is marked `@Experimental` today.
-- Packages a module does not export, such as `dev.resilience4cata.internal` and Spring Boot's `dev.resilience4cata.spring.autoconfigure`. For the auto-configuration, what is kept is the class names (for `exclude`), the bean names and the `resilience4cata.spring.*` property names.
+- Packages a module does not export, such as `dev.resilience4cata.internal`, and packages that are exported or public only for a framework's sake: Spring Boot's `dev.resilience4cata.spring.autoconfigure` (exported so that `exclude` can name it) and Quarkus's `dev.resilience4cata.quarkus.runtime` (the extension's beans and configuration roots). For the auto-configuration, what is kept is the class names (for `exclude`), the bean names and the `resilience4cata.spring.*` property names.
 - `dev.resilience4cata.generated` and `dev.resilience4cata.reactor.generated`: they are exported for generated code only. Do not call them from your own code.
 
 ## Generated code :id=generated-code

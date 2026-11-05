@@ -15,7 +15,7 @@ With Maven, in the maven-compiler-plugin's <annotationProcessorPaths>:
     <path><groupId>dev.resilience4cata</groupId><artifactId>resilience4cata-processor</artifactId><version>...</version></path>
 ```
 
-El procesador no se ejecutó cuando se compiló la interfaz, o la interfaz no tiene ninguna anotación de resiliencia. El procesador es obligatorio: no hay alternativa por reflexión.
+El procesador no se ejecutó cuando se compiló la interfaz, o la interfaz no tiene ninguna anotación de resiliencia. El procesador es obligatorio: no hay alternativa por reflexión. En las integraciones con frameworks el mismo error aparece al arrancar: [R4C-SPR-006](../errors.md#r4c-spr-006) en Spring Boot, [R4C-MN-007](../errors.md#r4c-mn-007) para una clase anotada en Micronaut y [R4C-QK-008](../errors.md#r4c-qk-008) en Quarkus, donde hace fallar el build. Las soluciones de abajo son las mismas.
 
 - **Gradle:** agrega `annotationProcessor 'dev.resilience4cata:resilience4cata-processor'` (y `annotationProcessor platform(…bom…)` si usas el BOM, porque la ruta de procesadores se resuelve por separado). Para tipos anotados bajo `src/test`, usa también `testAnnotationProcessor` y `testCompileOnly`.
 - **Maven:** incluye el procesador en `<annotationProcessorPaths>` de `maven-compiler-plugin`. Con maven-compiler-plugin 3.12.0 o posterior, un `<path>` sin `<version>` toma su versión de `dependencyManagement` (el BOM importado); las versiones anteriores del plugin necesitan una `<version>` explícita.

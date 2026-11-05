@@ -49,7 +49,7 @@
   &lt;/<span class="k">path</span>&gt;
 &lt;/<span class="k">annotationProcessorPaths</span>&gt;</pre></div>
         </div>
-        <p class="install-note">Versión 0.13.0 en Maven Central. <code>resilience4cata-all</code> trae core, las anotaciones y la configuración; el procesador va solo en el path de procesadores de anotaciones. <a href="/es/start/installation">Guía de instalación</a></p>
+        <p class="install-note">Versión 0.13.0 en Maven Central. <a href="/es/blog/release-candidate">1.0.0-RC2</a> también está ahí para probarla, con la API congelada para 1.0. <code>resilience4cata-all</code> trae core, las anotaciones y la configuración; el procesador va solo en el path de procesadores de anotaciones. <a href="/es/start/installation">Guía de instalación</a></p>
       </div>
     </div>
     <div class="r4c-compile" aria-label="Interfaz anotada y la clase que el procesador genera a partir de ella">
@@ -159,8 +159,8 @@ at PaymentClient$Resilient.charge
 at CheckoutService.pay</pre>
       </div>
       <div class="why">
-        <h3>Nada se asigna cuando las llamadas salen bien</h3>
-        <p>Las llamadas síncronas que salen bien o se rechazan asignan cero bytes. Un gate de allocations ejecuta los benchmarks en cada pull request y hace fallar el build si eso cambia.</p>
+        <h3>Nada se asigna cuando las llamadas síncronas salen bien</h3>
+        <p>Las llamadas síncronas que salen bien o se rechazan asignan cero bytes. Un gate de allocations ejecuta los benchmarks en cada pull request y hace fallar el build si eso cambia. Las llamadas async asignan sus futures, y la primera llamada con timeout de un hilo lo registra una vez: ver <a href="/es/performance">Rendimiento</a>.</p>
         <div class="gate" role="img" aria-label="Presupuestos de allocations: retry exitoso, circuit breaker exitoso y bulkhead rechazado son 0 bytes por operación">
           <div><span>Retry, success</span><span class="ok">0 B/op</span></div>
           <div><span>CircuitBreaker, success</span><span class="ok">0 B/op</span></div>
@@ -211,7 +211,7 @@ at CheckoutService.pay</pre>
         <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 17.3 ns por llamada, 0 B asignados"><i style="width:31%"></i><b>17.3 ns</b></span>
           <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 20.1 ns por llamada, 0 B asignados"><i style="width:32.6%"></i><b>20.1 ns</b></span></div></div>
       <div class="axis"><span></span><div><span>1 ns</span><span>10</span><span>100</span><span>1 000</span><span>10 000</span></div></div>
-      <p class="axis-note">Tiempo por llamada, escala logarítmica. Menos es mejor.</p>
+      <p class="axis-note">Tiempo por llamada, escala logarítmica. Menos es mejor. Medias medidas solo en ARM (Graviton3). La fila del breaker es el caso en que todas las llamadas salen bien; cuando hay fallos la diferencia se reduce, ver <a href="/es/performance">Rendimiento</a>.</p>
       <details><summary>Ver como tabla</summary>
         <div class="tablewrap"><table>
           <thead><tr><th>Escenario</th><th class="num">Threads</th><th class="num">resilience4cata</th><th class="num">Resilience4j</th></tr></thead>

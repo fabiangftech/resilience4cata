@@ -67,7 +67,7 @@ Resilience4j builder methods (Spring Boot properties use the same names in kebab
 | `waitDurationInOpenState` | 60 s | `waitInOpen` | 60 s |
 | `permittedNumberOfCallsInHalfOpenState` | 10 | `halfOpenCalls` | 10 |
 | `maxWaitDurationInHalfOpenState` | 0 | `maxWaitInHalfOpen` | 0 |
-| `recordExceptions` / `recordException(predicate)` | all exceptions | `recordOn` (classes) or `classifier` | `Exception` |
+| `recordExceptions` / `recordException(predicate)` | all exceptions | `recordOn` (classes) or `classifier` | `Throwable` |
 | `ignoreExceptions` | none | `ignoreOn` | none |
 | `automaticTransitionFromOpenToHalfOpenEnabled` | `false` | no equivalent: half-open on the next call | — |
 | `waitIntervalFunctionInOpenState`, `transitionOnResult`, `initialState`, `slidingWindowSynchronizationStrategy` | | no equivalent | — |
@@ -149,9 +149,9 @@ Fallback → Retry (or Hedge) → CircuitBreaker → RateLimiter → AdaptiveLim
 
 A retry never retries `CallNotPermittedException`, whatever its `abortOn` says, so once the breaker opens, the retry gives up at once instead of retrying into it. In Resilience4j you add that exception to `ignoreExceptions` yourself.
 
-### Errors are not recorded or retried by default :id=errors
+### Errors are not retried by default :id=errors
 
-`recordOn` and `retryOn` default to `Exception`: an `Error` (for example `OutOfMemoryError`, `AssertionError`) is not retried and counts as a **success** for the breaker. `@Fallback(applyOn)` defaults to `Throwable`, so a fallback does catch `Error`s unless you add them to `skipOn`.
+`retryOn` defaults to `Exception`: an `Error` (for example `OutOfMemoryError`, `AssertionError`) is not retried. The breaker records it as a failure, as Resilience4j does (`recordOn` defaults to `Throwable`). `@Fallback(applyOn)` defaults to `Throwable`, so a fallback does catch `Error`s unless you add them to `skipOn`.
 
 ### Timeouts interrupt the caller's thread :id=timeouts
 

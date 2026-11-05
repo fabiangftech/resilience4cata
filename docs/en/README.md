@@ -49,7 +49,7 @@
   &lt;/<span class="k">path</span>&gt;
 &lt;/<span class="k">annotationProcessorPaths</span>&gt;</pre></div>
         </div>
-        <p class="install-note">Version 0.13.0 on Maven Central. <code>resilience4cata-all</code> brings core, the annotations and configuration; the processor only goes on the annotation processor path. <a href="/en/start/installation">Installation guide</a></p>
+        <p class="install-note">Version 0.13.0 on Maven Central. <a href="/en/blog/release-candidate">1.0.0-RC2</a> is there too for testing, with the API frozen for 1.0. <code>resilience4cata-all</code> brings core, the annotations and configuration; the processor only goes on the annotation processor path. <a href="/en/start/installation">Installation guide</a></p>
       </div>
     </div>
     <div class="r4c-compile" aria-label="Annotated interface and the class the processor generates from it">
@@ -159,8 +159,8 @@ at PaymentClient$Resilient.charge
 at CheckoutService.pay</pre>
       </div>
       <div class="why">
-        <h3>Nothing allocated when calls succeed</h3>
-        <p>Synchronous calls that succeed or are rejected allocate zero bytes. An allocation gate runs the benchmarks on every pull request and fails the build if that changes.</p>
+        <h3>Nothing allocated when sync calls succeed</h3>
+        <p>Synchronous calls that succeed or are rejected allocate zero bytes. An allocation gate runs the benchmarks on every pull request and fails the build if that changes. Async calls allocate their futures, and a thread’s first timed call registers it once: see <a href="/en/performance">Performance</a>.</p>
         <div class="gate" role="img" aria-label="Allocation budgets: retry success, circuit breaker success and bulkhead rejection are all 0 bytes per operation">
           <div><span>Retry, success</span><span class="ok">0 B/op</span></div>
           <div><span>CircuitBreaker, success</span><span class="ok">0 B/op</span></div>
@@ -211,7 +211,7 @@ at CheckoutService.pay</pre>
         <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 17.3 ns per call, 0 B allocated"><i style="width:31%"></i><b>17.3 ns</b></span>
           <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 20.1 ns per call, 0 B allocated"><i style="width:32.6%"></i><b>20.1 ns</b></span></div></div>
       <div class="axis"><span></span><div><span>1 ns</span><span>10</span><span>100</span><span>1 000</span><span>10 000</span></div></div>
-      <p class="axis-note">Time per call, logarithmic scale. Lower is better.</p>
+      <p class="axis-note">Time per call, logarithmic scale. Lower is better. Averages measured on ARM (Graviton3) only. The breaker row is the case where every call succeeds; once calls fail the gap narrows, see <a href="/en/performance">Performance</a>.</p>
       <details><summary>Show as a table</summary>
         <div class="tablewrap"><table>
           <thead><tr><th>Scenario</th><th class="num">Threads</th><th class="num">resilience4cata</th><th class="num">Resilience4j</th></tr></thead>

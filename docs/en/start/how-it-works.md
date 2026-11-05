@@ -79,7 +79,7 @@ What follows from this design:
 - **The wrapper is thread-safe.** Create it once and share it, like the registry.
 
 > [!MEASURED]
-> A retry whose first attempt succeeds costs 1.2 ns and allocates nothing, against 22.9 ns for Resilience4j 2.4.0 (AWS Graviton3 `c7g.xlarge`, one thread). [Benchmarks](../benchmarks.md#mvp-completion-classifier-pipeline-events-testkit-2026-10-24-aws-graviton3)
+> A retry whose first attempt succeeds costs 1.4 ns and allocates nothing, against 22.9 ns for Resilience4j 2.4.0 (AWS Graviton3 `c7g.xlarge`, one thread, the code of 1.0.0-RC1). [Benchmarks: the release candidate](../benchmarks.md#release-candidate)
 
 ## Two styles, plus a programmatic API
 

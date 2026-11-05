@@ -6,7 +6,7 @@ Respuestas breves a las preguntas que la gente hace primero, con enlaces a los d
 
 ### ¿Qué es resilience4cata? :id=what
 
-Una biblioteca de resiliencia basada en anotaciones para Java 21+ puro: retry, circuit breaker, rate limiter, timeout, bulkhead y fallback. Un procesador de anotaciones convierte las anotaciones en código fuente Java común en tiempo de compilación, así que no hay proxies, ni generación de bytecode, ni agentes en tiempo de ejecución. Consulta [Cómo funciona](start/how-it-works.md).
+Una biblioteca de resiliencia basada en anotaciones para Java 21+ puro: retry, hedging, circuit breaker, rate limiter, límite de concurrencia adaptativo, timeout, bulkhead y fallback. Un procesador de anotaciones convierte las anotaciones en código fuente Java común en tiempo de compilación, así que no hay proxies, ni generación de bytecode, ni agentes en tiempo de ejecución. Consulta [Cómo funciona](start/how-it-works.md).
 
 ### ¿Qué versiones de Java se admiten? :id=java
 
@@ -37,7 +37,7 @@ No. Cubre políticas similares con un diseño distinto: código generado en tiem
 
 ### ¿Tengo que usar el procesador de anotaciones? :id=processor
 
-Sí, si usas anotaciones: el procesador es obligatorio y no hay alternativa por reflexión. Si no se ejecutó, `Resilient.of` falla con [R4C-RT-003](errors.md#r4c-rt-003), cuyo mensaje muestra la dependencia que debes agregar. Sin anotaciones, la API [`Pipeline`](guides/pipeline.md) no necesita procesador.
+Sí, si usas anotaciones: el procesador es obligatorio y no hay alternativa por reflexión. Si no se ejecutó, `Resilient.of` falla con [R4C-RT-003](errors.md#r4c-rt-003), cuyo mensaje muestra la dependencia que debes agregar. En las integraciones con frameworks el mismo error se informa al arrancar: [R4C-SPR-006](errors.md#r4c-spr-006) en Spring Boot, [R4C-MN-007](errors.md#r4c-mn-007) para una clase anotada en Micronaut y [R4C-QK-008](errors.md#r4c-qk-008) en Quarkus, en tiempo de build. Sin anotaciones, la API [`Pipeline`](guides/pipeline.md) no necesita procesador.
 
 ### ¿Interfaz o clase anotada? :id=style
 
@@ -59,7 +59,7 @@ El `Mono` y el `Flux` de Reactor, sí, con `resilience4cata-reactor`: cada polí
 
 Sí. Las rutas de llamada no toman locks ni usan `synchronized`, así que no fijan un virtual thread a su carrier. Los callbacks diferidos de la propia biblioteca (retries async, timeouts async) se ejecutan en virtual threads nuevos.
 
-Las políticas síncronas están hechas para un hilo por request: un timeout interrumpe un virtual thread bloqueado y limpia la interrupción antes de lanzar, la espera de un bulkhead o de un rate limiter y la pausa de un retry estacionan el virtual thread y liberan su carrier, y lo que el timeout guarda de un hilo desaparece con el hilo. La suite de tests pasa miles de virtual threads por cada política que bloquea mientras una grabación de JFR comprueba que ninguno queda fijado, y ejecuta las pruebas de carga de los frameworks con los requests en virtual threads: Spring Boot con `spring.threads.virtual.enabled=true`, el executor bloqueante de Micronaut (virtual threads desde Java 21) y endpoints de Quarkus con `@RunOnVirtualThread`.
+Las políticas síncronas están hechas para un hilo por request: un timeout interrumpe un virtual thread bloqueado y limpia esa interrupción antes de lanzar (una interrupción que el hilo ya tenía se conserva), la espera de un bulkhead o de un rate limiter y la pausa de un retry estacionan el virtual thread y liberan su carrier, y lo que el timeout guarda de un hilo desaparece con el hilo. La suite de tests pasa miles de virtual threads por cada política que bloquea mientras una grabación de JFR comprueba que ninguno queda fijado, y ejecuta las pruebas de carga de los frameworks con los requests en virtual threads: Spring Boot con `spring.threads.virtual.enabled=true`, el executor bloqueante de Micronaut (virtual threads desde Java 21) y endpoints de Quarkus con `@RunOnVirtualThread`.
 
 ### ¿Puedo cambiar una configuración en tiempo de ejecución? :id=reload
 
@@ -93,13 +93,13 @@ Un timeout síncrono interrumpe el thread de quien llama; el código que ignora 
 
 ### ¿Qué tan rápido es? :id=performance
 
-En AWS Graviton3, un retry cuyo primer intento tiene éxito cuesta 1.2 ns y un circuit breaker 1.9 ns por llamada, con 0 bytes asignados, frente a 22.9 ns y 89.2 ns de Resilience4j 2.4.0 ([medido](benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3)). Los 1.9 ns del breaker valen mientras su ventana no tiene fallos; con una llamada de cada diez fallando y cuatro threads son 274 contra 910 ns. Las rutas con contención cuestan cientos de nanosegundos en ambas bibliotecas, y son medias medidas solo en ARM. Consulta [Rendimiento](performance.md).
+En AWS Graviton3, un retry cuyo primer intento tiene éxito cuesta 1.4 ns y un circuit breaker 1.9 ns por llamada, con 0 bytes asignados, frente a 22.9 ns y 89.9 ns de Resilience4j 2.4.0 ([medido sobre la release candidate](benchmarks.md#release-candidate)). Los 1.9 ns del breaker valen mientras su ventana no tiene fallos; con una llamada de cada diez fallando y cuatro threads son 278 contra 940 ns ([tasas de fallos realistas](benchmarks.md#failure-rates)). Las rutas con contención cuestan cientos de nanosegundos en ambas bibliotecas, y son medias medidas solo en ARM. Consulta [Rendimiento](performance.md).
 
 ## Proyecto :id=project
 
 ### ¿Está listo para producción? :id=production
 
-Cada política tiene pruebas unitarias y de extremo a extremo, las lock-free también pruebas de concurrencia (jcstress), la asignación de memoria se controla en CI, y una prueba de resistencia semanal de dos horas ejecuta todas las políticas bajo carga. La API está revisada para 1.0 y no hay más cambios planeados, pero hasta 1.0.0 una versión menor todavía puede cambiarla; el [Registro de cambios](changelog.md) lista cada cambio incompatible. Lo que 1.0.0 mantendrá compatible está en [Compatibilidad](reference/compatibility.md).
+Cada política tiene pruebas unitarias y de extremo a extremo, las lock-free también pruebas de concurrencia (jcstress), la asignación de memoria se controla en CI, y una prueba de resistencia semanal de dos horas ejecuta todas las políticas bajo carga. La API está congelada desde las release candidates de 1.0.0: 1.0.0 la publica tal cual salvo que los comentarios sobre una release candidate obliguen a un cambio, y el [Registro de cambios](changelog.md) lo indicaría. Lo que 1.0.0 mantendrá compatible está en [Compatibilidad](reference/compatibility.md).
 
 ### ¿Qué no se admite todavía? :id=not-supported
 
@@ -119,7 +119,7 @@ Planificado, no prometido; los nombres y el alcance pueden cambiar:
 | Atributo `locked` (valores de la anotación que la configuración externa no puede sobrescribir) | hecho en 0.7.0 | `locked = true` en la anotación, `Pipeline.Builder.locked()` ([Bloquear una instancia](guides/configuration.md#bloquear-una-instancia)) |
 | `@Cached`, Mutiny y RxJava, corrutinas de Kotlin, inyección de fallos, propagación de deadlines | más adelante | |
 
-Mientras tanto, [testkit](guides/testing.md) cubre las pruebas.
+Mientras no haya inyección de fallos, provoca los fallos en las pruebas con un stub de la interfaz o la clase protegida, y controla esperas y timeouts con el `ManualClock` de [testkit](guides/testing.md).
 
 ### ¿Dónde reporto un bug? :id=bugs
 

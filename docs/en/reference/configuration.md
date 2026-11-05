@@ -117,7 +117,7 @@ Everything is resolved once, when an instance is created. Nothing is reloaded af
 | `defaults.circuitBreaker.waitInOpen` | `R4C_DEFAULTS_CIRCUITBREAKER_WAITINOPEN` | duration | `60s` | ≥ 0 | How long the breaker stays open; the next call after it is a half-open probe. |
 | `defaults.circuitBreaker.halfOpenCalls` | `R4C_DEFAULTS_CIRCUITBREAKER_HALFOPENCALLS` | int | `10` | ≥ 1 | Probe calls let through while half-open. |
 | `defaults.circuitBreaker.maxWaitInHalfOpen` | `R4C_DEFAULTS_CIRCUITBREAKER_MAXWAITINHALFOPEN` | duration | `0` | ≥ 0; `0` = no limit | How long the breaker may stay half-open before opening again if its probes have not finished. |
-| `defaults.circuitBreaker.recordOn` | `R4C_DEFAULTS_CIRCUITBREAKER_RECORDON` | class list | `java.lang.Exception` | exception classes | Failures recorded as failures. Anything else, `Error`s included, counts as a success. |
+| `defaults.circuitBreaker.recordOn` | `R4C_DEFAULTS_CIRCUITBREAKER_RECORDON` | class list | `java.lang.Throwable` | exception classes | Failures recorded as failures. Anything else counts as a success. |
 | `defaults.circuitBreaker.ignoreOn` | `R4C_DEFAULTS_CIRCUITBREAKER_IGNOREON` | class list | — | exception classes | Failures recorded neither as success nor as failure; they win over `recordOn` and a classifier. |
 
 ## Rate limiter :id=rate-limiter

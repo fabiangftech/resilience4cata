@@ -293,6 +293,55 @@ class SubclassProcessorTest {
     }
 
     @Test
+    void typeLevelAnnotationsThatReachNoMethodAreAnError() {
+        Compilation result = compile("demo.Service", """
+                package demo;
+                @dev.resilience4cata.annotation.Retry
+                @dev.resilience4cata.annotation.Timeout("1s")
+                public class Service {
+                    public final String fixed() { return ""; }
+                    public static String helper() { return ""; }
+                }
+                """);
+
+        assertThat(result.errorCodes()).containsExactly("R4C-APT-007");
+        assertThat(result.errors()).singleElement().asString()
+                .contains("Service has no method the generated subclass can override")
+                .contains("@Retry, @Timeout on it protect nothing");
+    }
+
+    @Test
+    void anEmptyAnnotatedInterfaceIsAnError() {
+        Compilation result = compile("demo.Defaults", """
+                package demo;
+                @dev.resilience4cata.annotation.Retry
+                public interface Defaults {
+                }
+                """);
+
+        assertThat(result.errorCodes()).containsExactly("R4C-APT-007");
+        assertThat(result.errors()).singleElement().asString()
+                .contains("Defaults declares and inherits no abstract or default method")
+                .contains("do not reach the methods of interfaces that extend it");
+    }
+
+    @Test
+    void anAnnotatedInterfaceWithOnlyInheritedMethodsIsGenerated() {
+        Compilation result = compile("demo.Client", """
+                package demo;
+                interface Base {
+                    String call();
+                }
+                @dev.resilience4cata.annotation.Retry
+                public interface Client extends Base {
+                }
+                """);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.generatedSource("demo.Client$Resilient")).contains("call()");
+    }
+
+    @Test
     void rejectsPrivateFallbackMethods() {
         Compilation result = compile("demo.Service", """
                 package demo;

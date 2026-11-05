@@ -14,3 +14,8 @@ dependencies {
     // The build-step list (META-INF/quarkus-build-steps.list) and config metadata.
     annotationProcessor libs.quarkus.extension.processor.minimum
 }
+
+tasks.named('jar') {
+    // Quarkus is not modular: an automatic module, named like the other resilience4cata modules.
+    manifest.attributes('Automatic-Module-Name': 'dev.resilience4cata.quarkus.deployment')
+}

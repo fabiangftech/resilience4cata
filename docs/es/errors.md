@@ -207,6 +207,50 @@ tasks.withType(JavaCompile).configureEach {
 }
 ```
 
+### R4C-APT-007
+
+**Causa:** un tipo lleva anotaciones de resiliencia a nivel de tipo, pero no llegan a ningún método, así que no se
+generaría nada. Una interfaz que no declara ni hereda ningún método abstracto o default (las anotaciones a nivel de
+tipo no llegan a los métodos de las interfaces que la extienden), o una clase anotada cuyos métodos son todos final,
+static o private. Sin este error las anotaciones no harían nada, y las integraciones con Spring Boot, Micronaut y
+Quarkus informarían que el tipo se compiló sin el procesador ([R4C-SPR-006](#r4c-spr-006)).
+
+**Incorrecto:**
+
+```java
+// com/acme/RemoteDefaults.java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+@Retry(maxAttempts = 3)
+public interface RemoteDefaults {
+}
+
+// com/acme/PriceClient.java
+package com.acme;
+
+public interface PriceClient extends RemoteDefaults {
+    String price(String sku);
+}
+```
+
+**Corrección:** pon las anotaciones en la interfaz que declara los métodos, o compártelas con un
+[bundle `@ResiliencePolicy`](guides/bundles.md) que uses allí. En una clase, haz que los métodos que quieres
+proteger se puedan sobrescribir.
+
+```java
+// com/acme/PriceClient.java
+package com.acme;
+
+import dev.resilience4cata.annotation.Retry;
+
+@Retry(maxAttempts = 3)
+public interface PriceClient {
+    String price(String sku);
+}
+```
+
 ## Procesador de anotaciones: valores de atributos (R4C-ATR)
 
 ### R4C-ATR-001

@@ -83,7 +83,8 @@ sequenceDiagram
 
 - Lo que pasa después depende de tu código. Las llamadas bloqueantes que responden a interrupciones (`Thread.sleep`, `Object.wait`, `BlockingQueue.take`, `java.net.http.HttpClient.send`, la mayoría de la E/S en virtual threads, los canales interrumpibles de NIO) se detienen y lanzan una excepción; el timeout entonces lanza `CallTimeoutException` con esa excepción como causa.
 - **El código que ignora las interrupciones primero corre hasta el final**: un bucle ocupado, la E/S bloqueante clásica de `java.net.Socket` en un platform thread, una librería que se traga la `InterruptedException`. La llamada sigue hasta que termina; recién entonces quien llama recibe `CallTimeoutException` (sin causa), y el resultado se descarta.
-- El flag de interrupción se limpia antes de lanzar `CallTimeoutException`, así que nunca se filtra a trabajo posterior en ese thread.
+- La interrupción del watchdog se limpia antes de lanzar `CallTimeoutException`, así que nunca se filtra a trabajo posterior en ese thread. Una interrupción que el thread ya tenía antes de que venciera el plazo es del llamador, así que se conserva.
+- **Interrumpir una E/S puede costar una conexión.** Un thread bloqueado en un canal interrumpible (`InterruptibleChannel`, o E/S de sockets en un virtual thread) ve ese canal cerrado por la interrupción, así que la conexión del pool que usaba se pierde y el pool tiene que abrir otra. Cuando eso importe, configura los timeouts propios del cliente más cortos que `@Timeout`.
 - **Precisión.** Una llamada nunca se interrumpe antes de tiempo, y como mucho unos dos ticks del watchdog tarde. Un tick es un dieciseisavo del timeout más corto en uso, entre 1 ms y 50 ms: con solo `@Timeout("2s")`, como mucho unos 100 ms tarde.
 - Una llamada que termina a tiempo no se toca. Las llamadas con timeout no leen ningún reloj: el watchdog mantiene un reloj aproximado para ellas.
 

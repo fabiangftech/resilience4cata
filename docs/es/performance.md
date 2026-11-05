@@ -18,33 +18,33 @@ El bajo overhead es la razón de ser de resilience4cata: el annotation processor
 ## Resultados principales :id=headline
 
 > [!MEASURED]
-> AWS `c7g.xlarge` (Graviton3), JDK 21, resilience4cata 0.1.0 vs Resilience4j 2.4.0, nanosegundos y bytes asignados por llamada. De [Cierre del MVP (2026-10-24, AWS Graviton3)](benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3), salvo el bulkhead con slots libres: el código posterior a 0.13.0, de [slots devueltos con una suma volátil (2026-11-01)](benchmarks.md#release-counters), donde Resilience4j midió 20.4 ns en un thread y de 348 a 450 ns con cuatro; y el breaker que hace fallar una llamada de cada 1 000 o de cada 100, de [tasas de fallos realistas (2026-11-02)](benchmarks.md#failure-rates).
+> AWS `c7g.xlarge` (Graviton3), JDK 21, frente a Resilience4j 2.4.0, nanosegundos y bytes asignados por llamada. El retry cuyo primer intento tiene éxito, el breaker en el que todas las llamadas tienen éxito y el timeout síncrono son el código de 1.0.0-RC1, de [la release candidate (2026-11-02)](benchmarks.md#release-candidate); el breaker con llamadas que fallan, de [tasas de fallos realistas (2026-11-02)](benchmarks.md#failure-rates); el bulkhead con slots libres, el código posterior a 0.13.0, de [slots devueltos con una suma volátil (2026-11-01)](benchmarks.md#release-counters), donde Resilience4j midió 20.4 ns en un thread y de 348 a 450 ns con cuatro; el resto de filas, resilience4cata 0.1.0, de [Cierre del MVP (2026-10-24, AWS Graviton3)](benchmarks.md#cierre-del-mvp-classifier-pipeline-eventos-testkit-2026-10-24-aws-graviton3).
 
 | Escenario | Threads | resilience4cata | Resilience4j 2.4.0 |
 |---|---:|---:|---:|
-| Retry, el primer intento tiene éxito | 1 | **1.2 ns**, 0 B | 22.9 ns, 0 B |
+| Retry, el primer intento tiene éxito | 1 | **1.4 ns**, 0 B | 22.9 ns, 0 B |
 | Retry, falla una vez y luego tiene éxito (Resilience4j sin su `sleep(0)`) | 1 | **6.5 ns**, 0 B | 61.6 ns, 16 B |
-| Circuit breaker, todas las llamadas tienen éxito | 1 | **1.9 ns**, 0 B | 89.2 ns, 0 B |
-| Circuit breaker, todas las llamadas tienen éxito | 4 | **1.9 ns**, 0 B | 832 ns, 2 B |
+| Circuit breaker, todas las llamadas tienen éxito | 1 | **1.9 ns**, 0 B | 89.9 ns, 0 B |
+| Circuit breaker, todas las llamadas tienen éxito | 4 | **1.9 ns**, 0 B | 850 ns, 2 B |
 | Circuit breaker, una de cada 1 000 llamadas falla | 4 | **11.2 ns**, 0 B | 1025 ns, 26 B |
 | Circuit breaker, una de cada 100 llamadas falla | 4 | **65.4 ns**, 0 B | 1006 ns, 22–26 B |
-| Circuit breaker, una de cada diez llamadas falla | 4 | **274 ns**, 0 B | 910 ns, 2 B |
+| Circuit breaker, una de cada diez llamadas falla | 4 | **278 ns**, 0 B | 940 ns, 2 B |
 | Rate limiter, permisos libres | 4 | **187 ns**, 0 B | 275 ns, 40 B |
 | Rate limiter, agotado (todas las llamadas rechazadas) | 4 | **34.7 ns**, 0 B | 1599 ns, 505 B |
 | Bulkhead, slots libres | 1 | **17.3 ns**, 0 B | 20.4 ns, 0 B |
 | Bulkhead, slots libres | 4 | **195.5 ns**, 0 B | 348–450 ns, 0 B |
 | Bulkhead, lleno (todas las llamadas rechazadas) | 1 | **2.3 ns**, 0 B | 139 ns, 416 B |
-| Timeout, llamada síncrona que termina a tiempo (Resilience4j: `TimeLimiter` + executor) | 1 | **22.2 ns**, 0 B | 8842 ns, 176 B |
+| Timeout, llamada síncrona que termina a tiempo (Resilience4j: `TimeLimiter` + executor) | 1 | **23.6 ns**, 0 B | 8908 ns, 183 B |
 | Timeout async, stage todavía pendiente | 1 | **152 ns**, 192 B | 598 ns, 240 B |
 | Timeout async, stage todavía pendiente | 4 | **369 ns**, 192 B | 1563 ns, 234 B |
 
 Leyendo la tabla con honestidad:
 
-- **Los 1.9 ns del circuit breaker valen mientras su ventana no tiene fallos.** Entonces una llamada solo lee un campo. En cuanto las últimas `windowSize` llamadas incluyen un fallo o una llamada lenta, cada llamada escribe el cursor compartido de la ventana. Con cuatro threads eso cuesta 11.2 ns con un 0.1 % de fallos, 65.4 ns con un 1 % y 274 ns con un 10 %, frente a unos 1 000 ns de Resilience4j con cualquier tasa: 91×, 15× y 3.3× en vez de 440× ([tasas de fallos realistas](benchmarks.md#failure-rates)).
+- **Los 1.9 ns del circuit breaker valen mientras su ventana no tiene fallos.** Entonces una llamada solo lee un campo. En cuanto las últimas `windowSize` llamadas incluyen un fallo o una llamada lenta, cada llamada escribe el cursor compartido de la ventana. Con cuatro threads eso cuesta 11.2 ns con un 0.1 % de fallos, 65.4 ns con un 1 % y 278 ns con un 10 %, frente a unos 1 000 ns de Resilience4j con cualquier tasa: 91×, 15× y 3.4× en vez de 450× ([tasas de fallos realistas](benchmarks.md#failure-rates)).
 - **Resilience4j hace trabajo por llamada que resilience4cata no hace**: su retry cuenta cada llamada en sus métricas internas (contadores `LongAdder`), y su breaker siempre mide el tiempo de las llamadas. resilience4cata no mantiene ningún contador por llamada fuera de la ventana del breaker ([por qué no hay métricas de éxito](faq.md#success-metrics)).
 - **El bulkhead con slots libres en un thread era un empate** (20.5 contra 20.4 ns, ambos un atómico para tomar y otro para devolver) hasta que el slot se devolvió con una suma volátil, que resultó más rápida que una solo release en Graviton3: 17.3 ns.
-- **Los caminos con contención cuestan cientos de nanosegundos en ambas librerías.** El caso mixto del breaker con cuatro threads (274 ns) está dominado por un único cursor de ventana compartido que cada llamada avanza; el bulkhead y el rate limiter con cuatro threads pagan por un contador compartido, y el rate limiter aparca los threads que pierden una carrera sobre él.
-- **El timeout síncrono es la política síncrona más cara** (22.2 ns en un thread; una ejecución posterior midió 23.7 ns sin cambios en el código, un efecto de layout aún abierto, ver [la siguiente ronda](benchmarks.md#clases-anotadas-genéricos-overrides-de-config-bulkhead-con-ticker-2026-10-24-aws-graviton3)). La comparación con Resilience4j no es equivalente: su `TimeLimiter` pasa la llamada a otro thread, que es donde se van la mayoría de sus 8.8 µs.
+- **Los caminos con contención cuestan cientos de nanosegundos en ambas librerías.** El caso mixto del breaker con cuatro threads (278 ns) está dominado por un único cursor de ventana compartido que cada llamada avanza; el bulkhead y el rate limiter con cuatro threads pagan por un contador compartido, y el rate limiter aparca los threads que pierden una carrera sobre él.
+- **El timeout síncrono es la política síncrona más cara** (23.6 ns en un thread; el titular de 0.1.0 midió 22.2 ns, que no se ha vuelto a ver, ver [la release candidate](benchmarks.md#release-candidate)). La comparación con Resilience4j no es equivalente: su `TimeLimiter` pasa la llamada a otro thread, que es donde se van la mayoría de sus 8.9 µs.
 - **Las llamadas async asignan memoria en ambas librerías**: cada capa devuelve un future nuevo. Los caminos async de resilience4cata no están libres de allocations; solo los síncronos.
 - **El rate limiter lee el reloj una vez por llamada**, en ambas librerías; esa lectura es la mayor parte de su costo (en Apple Silicon, `System.nanoTime()` por sí solo cuesta unos 21 ns en un thread y 163 ns con cuatro; ver [Rate limiter, 1 y 4 threads](benchmarks.md#rate-limiter-1-y-4-threads-2026-10-24)).
 

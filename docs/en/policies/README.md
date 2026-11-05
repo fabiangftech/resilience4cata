@@ -205,7 +205,7 @@ assertThat(clock.elapsed()).isZero();           // ...and the retry did not wait
 A rejection by an inner policy is an `Exception` like any other to the layers outside it, by default:
 
 - `RateLimitExceededException`, `AdaptiveLimitFullException`, `CallTimeoutException` and `BulkheadFullException` are **retried** by an outer `@Retry` (after its delay) and **recorded as failures** by an outer `@CircuitBreaker`. Your own rate limiter, adaptive limit or bulkhead can therefore open your breaker. List them in the breaker's `ignoreOn` or the retry's `abortOn` when that is not what you want.
-- `Error`s are neither retried nor recorded as breaker failures (`retryOn` and `recordOn` default to `Exception`), but the fallback's default `applyOn = Throwable` does catch them, unless its exception parameter is narrower.
+- `Error`s are not retried (`retryOn` defaults to `Exception`), but the breaker records them as failures (`recordOn` defaults to `Throwable`), and the fallback's default `applyOn = Throwable` does catch them, unless its exception parameter is narrower.
 
 ## Programmatic use
 
