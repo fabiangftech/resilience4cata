@@ -4,9 +4,9 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
-## [Unreleased]
+## [1.0.0-RC3] - 2026-11-05 :id=1.0.0-rc3
 
-After a third review of 1.0.0-RC2 by the same four reviewers ([plan to 1.0](plan-1.0.md#third-review)).
+The third release candidate for 1.0.0, after a third review of 1.0.0-RC2 by the same four reviewers ([plan to 1.0](plan-1.0.md#third-review)). The API is the same as in 1.0.0-RC2; two behaviours change: the circuit breaker records `Error`s as failures, and type-level annotations that protect nothing are a compile error.
 
 ### Changed
 
