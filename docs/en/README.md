@@ -191,35 +191,65 @@ at CheckoutService.pay</pre>
         <dt>Compared</dt><dd>Resilience4j 2.4.0</dd>
         <dt>Date</dt><dd>2026-11-02</dd>
       </dl>
+      <p class="bench-score"><b>150 of 156</b> comparisons won in the <a href="/en/benchmarks?id=frameworks">full run of 0.13.0</a>. The six others are listed there, with why.</p>
       <a href="/en/benchmarks?id=release-candidate">Methods, all results and fairness notes</a>
     </div>
     <figure class="r4c-chart">
       <figcaption class="legend">
         <span><i style="background:var(--series-r4c)"></i>resilience4cata 1.0.0-RC1</span>
         <span><i style="background:var(--series-r4j)"></i>Resilience4j 2.4.0</span>
+        <span class="threads" role="radiogroup" aria-label="Threads"><label><input type="radio" name="bench-threads" value="1" checked>1 thread</label><label><input type="radio" name="bench-threads" value="4">4 threads</label></span>
       </figcaption>
-      <div class="row"><div class="row-label">Retry, first attempt succeeds<small>1 thread</small></div>
-        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 1.4 ns per call, 0 B allocated"><i style="width:3.65%"></i><b>1.4 ns</b></span>
-          <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 22.9 ns per call, 0 B allocated"><i style="width:34.0%"></i><b>22.9 ns</b></span></div></div>
-      <div class="row"><div class="row-label">Circuit breaker, every call succeeds<small>4 threads, one shared breaker</small></div>
-        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 1.9 ns per call, 0 B allocated"><i style="width:6.97%"></i><b>1.9 ns</b></span>
-          <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 850 ns per call, 2 B allocated"><i style="width:73.2%"></i><b>850 ns</b></span></div></div>
-      <div class="row"><div class="row-label">Sync timeout, call finishes in time<small>1 thread</small></div>
-        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 23.6 ns per call, 0 B allocated"><i style="width:34.3%"></i><b>23.6 ns</b></span>
-          <span class="bar r4j" tabindex="0" data-tip="Resilience4j TimeLimiter on an executor: 8908 ns per call, 183 B allocated"><i style="width:98.7%"></i><b>8 908 ns</b></span></div></div>
-      <div class="row"><div class="row-label">Bulkhead with free slots<small>1 thread</small></div>
-        <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 17.3 ns per call, 0 B allocated"><i style="width:31%"></i><b>17.3 ns</b></span>
-          <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 20.1 ns per call, 0 B allocated"><i style="width:32.6%"></i><b>20.1 ns</b></span></div></div>
-      <div class="axis"><span></span><div><span>1 ns</span><span>10</span><span>100</span><span>1 000</span><span>10 000</span></div></div>
-      <p class="axis-note">Time per call, logarithmic scale. Lower is better. Averages measured on ARM (Graviton3) only. The breaker row is the case where every call succeeds; once calls fail the gap narrows, see <a href="/en/performance">Performance</a>.</p>
+      <div class="rows t1">
+        <div class="row"><div class="row-label">Retry, first attempt succeeds</div>
+          <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 1.4 ns per call, 0 B allocated"><i style="width:2.9%"></i><b>1.4 ns<span class="bytes"> · 0 B</span></b></span>
+            <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 22.9 ns per call, 0 B allocated"><i style="width:27.2%"></i><b>22.9 ns<span class="bytes"> · 0 B</span></b></span></div>
+          <div class="ratio"><b>16×</b><small>faster</small></div></div>
+        <div class="row"><div class="row-label">Circuit breaker, every call succeeds<small>Resilience4j in SYNCHRONIZED mode</small></div>
+          <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 1.9 ns per call, 0 B allocated"><i style="width:5.6%"></i><b>1.9 ns<span class="bytes"> · 0 B</span></b></span>
+            <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 89.9 ns per call, 0 B allocated"><i style="width:39.1%"></i><b>89.9 ns<span class="bytes"> · 0 B</span></b></span></div>
+          <div class="ratio"><b>47×</b><small>faster</small></div></div>
+        <div class="row"><div class="row-label">Sync timeout, call finishes in time<small>Resilience4j: TimeLimiter on an executor</small></div>
+          <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 23.6 ns per call, 0 B allocated"><i style="width:27.5%"></i><b>23.6 ns<span class="bytes"> · 0 B</span></b></span>
+            <span class="bar r4j" tabindex="0" data-tip="Resilience4j TimeLimiter on an executor: 8907.6 ns per call, 183 B allocated"><i style="width:79.0%"></i><b>8&nbsp;908 ns<span class="bytes"> · 183 B</span></b></span></div>
+          <div class="ratio"><b>377×</b><small>faster</small></div></div>
+        <div class="row"><div class="row-label">Bulkhead with free slots</div>
+          <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 17.3 ns per call, 0 B allocated"><i style="width:24.8%"></i><b>17.3 ns<span class="bytes"> · 0 B</span></b></span>
+            <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 20.1 ns per call, 0 B allocated"><i style="width:26.1%"></i><b>20.1 ns<span class="bytes"> · 0 B</span></b></span></div>
+          <div class="ratio"><b>1.2×</b><small>faster</small></div></div>
+      </div>
+      <div class="rows t4">
+        <div class="row"><div class="row-label">Retry, first attempt succeeds</div>
+          <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 1.3 ns per call, 0 B allocated"><i style="width:2.3%"></i><b>1.3 ns<span class="bytes"> · 0 B</span></b></span>
+            <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 23.0 ns per call, 0 B allocated"><i style="width:27.2%"></i><b>23.0 ns<span class="bytes"> · 0 B</span></b></span></div>
+          <div class="ratio"><b>18×</b><small>faster</small></div></div>
+        <div class="row"><div class="row-label">Circuit breaker, every call succeeds<small>one breaker shared by four threads</small></div>
+          <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 1.9 ns per call, 0 B allocated"><i style="width:5.6%"></i><b>1.9 ns<span class="bytes"> · 0 B</span></b></span>
+            <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 849.5 ns per call, 2 B allocated"><i style="width:58.6%"></i><b>850 ns<span class="bytes"> · 2 B</span></b></span></div>
+          <div class="ratio"><b>447×</b><small>faster</small></div></div>
+        <div class="row"><div class="row-label">Sync timeout, call finishes in time<small>Resilience4j: TimeLimiter on an executor</small></div>
+          <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 23.6 ns per call, 0 B allocated"><i style="width:27.5%"></i><b>23.6 ns<span class="bytes"> · 0 B</span></b></span>
+            <span class="bar r4j" tabindex="0" data-tip="Resilience4j TimeLimiter on an executor: 9976.8 ns per call, 151 B allocated"><i style="width:80.0%"></i><b>9&nbsp;977 ns<span class="bytes"> · 151 B</span></b></span></div>
+          <div class="ratio"><b>423×</b><small>faster</small></div></div>
+        <div class="row"><div class="row-label">Bulkhead with free slots<small>one bulkhead shared by four threads</small></div>
+          <div class="bars"><span class="bar r4c" tabindex="0" data-tip="resilience4cata: 192.3 ns per call, 0 B allocated"><i style="width:45.7%"></i><b>192 ns<span class="bytes"> · 0 B</span></b></span>
+            <span class="bar r4j" tabindex="0" data-tip="Resilience4j: 410.8 ns per call, 0 B allocated"><i style="width:52.3%"></i><b>411 ns<span class="bytes"> · 0 B</span></b></span></div>
+          <div class="ratio"><b>2.1×</b><small>faster</small></div></div>
+      </div>
+      <div class="axis"><span></span><div><span style="left:0%">1 ns</span><span style="left:20%">10 ns</span><span style="left:40%">100 ns</span><span style="left:60%">1 µs</span><span style="left:80%">10 µs</span><span style="left:100%">100 µs</span></div><span></span></div>
+      <p class="axis-note">Time per call, logarithmic scale; the ratio on the right is Resilience4j’s mean divided by ours. Lower is better. Means measured on ARM (Graviton3) only. The breaker rows are the case where every call succeeds; once calls fail the gap narrows (3.4× with four threads when one call in ten fails), see <a href="/en/performance">Performance</a>.</p>
       <details><summary>Show as a table</summary>
         <div class="tablewrap"><table>
-          <thead><tr><th>Scenario</th><th class="num">Threads</th><th class="num">resilience4cata</th><th class="num">Resilience4j</th></tr></thead>
+          <thead><tr><th>Scenario</th><th class="num">Threads</th><th class="num">resilience4cata</th><th class="num">Resilience4j</th><th class="num">Ratio</th></tr></thead>
           <tbody>
-            <tr><td>Retry, first attempt succeeds</td><td class="num">1</td><td class="num">1.4 ns, 0 B</td><td class="num">22.9 ns, 0 B</td></tr>
-            <tr><td>Circuit breaker, every call succeeds</td><td class="num">4</td><td class="num">1.9 ns, 0 B</td><td class="num">850 ns, 2 B</td></tr>
-            <tr><td>Sync timeout</td><td class="num">1</td><td class="num">23.6 ns, 0 B</td><td class="num">8908 ns, 183 B</td></tr>
-            <tr><td>Bulkhead with free slots</td><td class="num">1</td><td class="num">17.3 ns, 0 B</td><td class="num">20.1 ns, 0 B</td></tr>
+            <tr><td>Retry, first attempt succeeds</td><td class="num">1</td><td class="num">1.4 ns, 0 B</td><td class="num">22.9 ns, 0 B</td><td class="num">16×</td></tr>
+            <tr><td>Retry, first attempt succeeds</td><td class="num">4</td><td class="num">1.3 ns, 0 B</td><td class="num">23.0 ns, 0 B</td><td class="num">18×</td></tr>
+            <tr><td>Circuit breaker, every call succeeds</td><td class="num">1</td><td class="num">1.9 ns, 0 B</td><td class="num">89.9 ns, 0 B</td><td class="num">47×</td></tr>
+            <tr><td>Circuit breaker, every call succeeds</td><td class="num">4</td><td class="num">1.9 ns, 0 B</td><td class="num">849.5 ns, 2 B</td><td class="num">447×</td></tr>
+            <tr><td>Sync timeout, call finishes in time</td><td class="num">1</td><td class="num">23.6 ns, 0 B</td><td class="num">8&nbsp;907.6 ns, 183 B</td><td class="num">377×</td></tr>
+            <tr><td>Sync timeout, call finishes in time</td><td class="num">4</td><td class="num">23.6 ns, 0 B</td><td class="num">9&nbsp;976.8 ns, 151 B</td><td class="num">423×</td></tr>
+            <tr><td>Bulkhead with free slots</td><td class="num">1</td><td class="num">17.3 ns, 0 B</td><td class="num">20.1 ns, 0 B</td><td class="num">1.2×</td></tr>
+            <tr><td>Bulkhead with free slots</td><td class="num">4</td><td class="num">192.3 ns, 0 B</td><td class="num">410.8 ns, 0 B</td><td class="num">2.1×</td></tr>
           </tbody></table></div>
       </details>
       <div class="r4c-chart-tip" hidden></div>
