@@ -17,7 +17,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.SplittableRandom;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.ToDoubleFunction;
 import java.util.function.UnaryOperator;
+import java.util.stream.LongStream;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -32,7 +34,8 @@ import org.junit.jupiter.api.Test;
  * wall-clock measurements: they show how the policies react to load, not what a real network adds.
  *
  * <p>Not in {@code check}: {@code ./gradlew :examples:hedgeSimulation} ({@code -Phedge.calls}, default 200,000 per
- * point; {@code -Phedge.seed}). Report in {@code examples/build/hedge-sim/report.md}.
+ * point; {@code -Phedge.seed}, or {@code -Phedge.seeds=1-10} for the median and range over several seeds). Report in
+ * {@code examples/build/hedge-sim/report.md}.
  */
 class HedgeTailSimulation {
 
@@ -128,28 +131,51 @@ class HedgeTailSimulation {
     @Test
     void sweep() throws IOException {
         int calls = Integer.getInteger("test.hedge.calls", 200_000);
-        long seed = Long.getLong("test.hedge.seed", 1L);
-        List<Result> results = new ArrayList<>();
-        for (CancelMode mode : CancelMode.values()) {
-            for (double load : LOADS) {
-                for (Setup setup : Setup.values()) {
-                    Result result = run(setup, load, mode, calls, seed);
-                    results.add(result);
-                    if (setup == Setup.HEDGE_DEFAULT_BUDGET || setup == Setup.HEDGE_BUDGET_ADAPTIVE) {
-                        // 10 % of the calls plus 1 hedge per second of the run; the budget errs low, never high
-                        double seconds = estimatedSeconds(calls, load);
-                        assertThat(result.requestsPerCall())
-                                .as("%s at %.0f %%: the budget caps the hedges", setup.label, load * 100)
-                                .isLessThanOrEqualTo(1.10 + (seconds + 10) / calls);
+        long[] seeds = seeds(System.getProperty("test.hedge.seeds", System.getProperty("test.hedge.seed", "1")));
+        List<List<Result>> runs = new ArrayList<>();
+        for (long seed : seeds) {
+            List<Result> results = new ArrayList<>();
+            for (CancelMode mode : CancelMode.values()) {
+                for (double load : LOADS) {
+                    for (Setup setup : Setup.values()) {
+                        Result result = run(setup, load, mode, calls, seed);
+                        results.add(result);
+                        if (setup == Setup.HEDGE_DEFAULT_BUDGET || setup == Setup.HEDGE_BUDGET_ADAPTIVE) {
+                            // 10 % of the calls plus 1 hedge per second of the run; the budget errs low, never high
+                            double seconds = estimatedSeconds(calls, load);
+                            assertThat(result.requestsPerCall())
+                                    .as("%s at %.0f %%, seed %d: the budget caps the hedges", setup.label, load * 100, seed)
+                                    .isLessThanOrEqualTo(1.10 + (seconds + 10) / calls);
+                        }
                     }
                 }
             }
+            runs.add(results);
         }
-        String report = report(results, calls, seed);
+        String report = seeds.length == 1 ? report(runs.get(0), calls, seeds[0]) : report(runs, calls, seeds);
         System.out.println(report);
         Path dir = Path.of(System.getProperty("test.hedge.reportDir", "build/hedge-sim"));
         Files.createDirectories(dir);
         Files.writeString(dir.resolve("report.md"), report);
+    }
+
+    /** {@code "3"}, {@code "1-10"} or {@code "1,4,7"}. */
+    static long[] seeds(String spec) {
+        String trimmed = spec.trim();
+        int dash = trimmed.indexOf('-', 1);
+        if (dash > 0) {
+            long first = Long.parseLong(trimmed.substring(0, dash).trim());
+            long last = Long.parseLong(trimmed.substring(dash + 1).trim());
+            return LongStream.rangeClosed(first, last).toArray();
+        }
+        return Arrays.stream(trimmed.split(",")).map(String::trim).mapToLong(Long::parseLong).toArray();
+    }
+
+    @Test
+    void seedSpecs() {
+        assertThat(seeds("3")).containsExactly(3);
+        assertThat(seeds("1-4")).containsExactly(1, 2, 3, 4);
+        assertThat(seeds("1, 4,7")).containsExactly(1, 4, 7);
     }
 
     /** How long the arrivals of a run last, in seconds (an estimate: the mean gap times the calls). */
@@ -183,5 +209,44 @@ class HedgeTailSimulation {
             out.append('\n');
         }
         return out.toString();
+    }
+
+    /** The same points over several seeds: the median, and the lowest and highest value in brackets. */
+    static String report(List<List<Result>> runs, int calls, long[] seeds) {
+        StringBuilder out = new StringBuilder();
+        out.append("# Hedging under contention (simulation)\n\n");
+        out.append(String.format(Locale.ROOT, "%,d calls per point (first %.0f %% not measured), %d seeds (%s), %d workers,"
+                + " hedge delay %d ms. Service time: log-normal, median 10 ms, sigma 0.25; 2 %% of requests take"
+                + " 100-300 ms instead. Each cell: median over the seeds [lowest-highest].%n%n", calls, WARM_UP * 100,
+                seeds.length, Arrays.toString(seeds), WORKERS, DELAY.toMillis()));
+        List<Result> first = runs.get(0);
+        for (CancelMode mode : CancelMode.values()) {
+            out.append("## Cancellation ").append(mode == CancelMode.IGNORED
+                    ? "ignored by the server (losers keep their worker)" : "reaches the server (losers free their worker)")
+                    .append("\n\n");
+            out.append("| Load without hedges | Setup | p99 ms | p99.9 ms | requests/call | worker busy % | failed % |\n");
+            out.append("|---:|---|---:|---:|---:|---:|---:|\n");
+            for (int i = 0; i < first.size(); i++) {
+                Result r = first.get(i);
+                if (r.cancelMode() != mode) {
+                    continue;
+                }
+                int index = i;
+                List<Result> point = runs.stream().map(run -> run.get(index)).toList();
+                out.append(String.format(Locale.ROOT, "| %.0f %% | %s | %s | %s | %s | %s | %s |%n", r.load() * 100,
+                        r.setup().label, spread(point, Result::p99, "%.0f"), spread(point, Result::p999, "%.0f"),
+                        spread(point, Result::requestsPerCall, "%.3f"), spread(point, Result::utilization, "%.1f"),
+                        spread(point, Result::failedShare, "%.2f")));
+            }
+            out.append('\n');
+        }
+        return out.toString();
+    }
+
+    private static String spread(List<Result> point, ToDoubleFunction<Result> metric, String format) {
+        double[] values = point.stream().mapToDouble(metric).sorted().toArray();
+        int n = values.length;
+        double median = n % 2 == 1 ? values[n / 2] : (values[n / 2 - 1] + values[n / 2]) / 2;
+        return String.format(Locale.ROOT, format + " [" + format + "-" + format + "]", median, values[0], values[n - 1]);
     }
 }
