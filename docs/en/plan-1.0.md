@@ -16,6 +16,7 @@ This page is the working plan: each task says what to change, where, and how to 
 - 1.0.0-RC2 (2026-11-04) fails the startup or build when the processor did not run.
 - A [third review](#third-review) of RC2 (2026-11-05): three reviewers say ship 1.0.0; its fixes change two behaviours, so a 1.0.0-RC3 comes first.
 - 1.0.0-RC3 (2026-11-05) has the third review's fixes. The install snippets now show it (owner's decision).
+- `main` takes changes only through pull requests with passing checks (administrators bypass it for the release commits), and every release candidate has a GitHub release (2026-11-06).
 - Next: 1.0.0.
 
 ## The review
@@ -182,7 +183,7 @@ The same four reviewers read 1.0.0-RC2 on 2026-11-05. None ran the whole build; 
 - [x] Release 1.0.0-RC3 with these changes (the breaker default and the new compile error change behaviour), then 1.0.0.
   - **Outcome:** released 2026-11-05 (commit `release 1.0.0-RC3`, tag `v1.0.0-RC3`, `release.yml` run 42052831462, published in the Central portal by the owner). The install snippets show 1.0.0-RC3.
 
-Left for after 1.0 (below): the Spring and Micronaut missing-processor checks in a native image (Spring could run it in its AOT step), `Ticker.onAdvance` without a way to unregister, `onInstanceCreated` without the new instance, no way to stop the shared daemon threads (a leak in a reloadable web application), the watchdog's tick that only shrinks, and the different switch names of the three integrations (deliberate; to be written in [design](design.md)). Outside the code: no outside feedback yet, no branch protection on `main`, and no GitHub releases for the release candidates.
+Left for after 1.0 (below): the Spring and Micronaut missing-processor checks in a native image (Spring could run it in its AOT step), `Ticker.onAdvance` without a way to unregister, `onInstanceCreated` without the new instance, no way to stop the shared daemon threads (a leak in a reloadable web application), the watchdog's tick that only shrinks, and the different switch names of the three integrations (deliberate; to be written in [design](design.md)). Outside the code: no outside feedback yet. Branch protection on `main` and GitHub releases for the release candidates were added on 2026-11-06 (step 8 of [releasing](releasing.md#release-steps)).
 
 ## After 1.0
 
@@ -202,4 +203,4 @@ Additive, so not blocking the freeze. Roughly in order of value. Items marked *(
   - Only circuit breakers have a list method on the registry; retry, hedge and timeout have no handles.
 - Features Resilience4j has, each to decide (build, or document why not): thread-pool bulkhead, cache, RxJava, Kotlin support, an automatic open → half-open transition, event endpoints, carrying the caller's context into hedged attempts.
 - Reassess adoption signals in about six months, as the adopting reviewer would: activity, maintainers, issues closed. A pilot on one high-traffic plain Java service is what they would recommend first.
-- From the third review: the missing-processor check in a Spring or Micronaut native image (Spring could run it in its AOT step, on the JVM); `Ticker.onAdvance` returning a way to unregister; `onInstanceCreated` passing the new instance; a way to stop the shared daemon threads, or documentation that `core` belongs on the server's class path in a reloadable web application; the watchdog's tick growing again when no short timeout is left; the three integrations' switch names written down as deliberate in [design](design.md#api-decisions); branch protection on `main` and GitHub releases for each release.
+- From the third review: the missing-processor check in a Spring or Micronaut native image (Spring could run it in its AOT step, on the JVM); `Ticker.onAdvance` returning a way to unregister; `onInstanceCreated` passing the new instance; a way to stop the shared daemon threads, or documentation that `core` belongs on the server's class path in a reloadable web application; the watchdog's tick growing again when no short timeout is left; the three integrations' switch names written down as deliberate in [design](design.md#api-decisions).
