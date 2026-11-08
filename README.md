@@ -1,18 +1,19 @@
 # resilience4cata
 
-[![Maven Central](https://img.shields.io/maven-central/v/dev.resilience4cata/resilience4cata-core?label=Maven%20Central)](https://central.sonatype.com/namespace/dev.resilience4cata) [![build](https://github.com/fabiangftech/resilience4cata/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/fabiangftech/resilience4cata/actions/workflows/build.yml) [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![Maven Central](https://img.shields.io/maven-central/v/dev.resilience4cata/resilience4cata-core?label=Maven%20Central)](https://central.sonatype.com/namespace/dev.resilience4cata) [![build](https://github.com/fabiangftech/resilience4cata/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/fabiangftech/resilience4cata/actions/workflows/build.yml) [![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=coverage)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-[![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=coverage)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![Maintainability issues](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=software_quality_maintainability_issues)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![Reliability issues](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=software_quality_reliability_issues)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![Security issues](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=software_quality_security_issues)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata) [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=fabiangftech_resilience4cata&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=fabiangftech_resilience4cata)
+**Resilience annotations for plain Java 21+, with no Spring, CDI, AspectJ or agents.** Annotate a method with `@Retry`, `@CircuitBreaker`, `@Timeout`… and an annotation processor generates plain Java at compile time. No proxies, no reflection: a few nanoseconds per call and no allocation on the sync success path.
 
-Annotation-driven resilience for **plain Java 21+**: retry, hedging, circuit breaker, rate limiter, adaptive concurrency limit, timeout, bulkhead and fallback, declared with annotations that work **without Spring, CDI, AspectJ or agents**. A compile-time annotation processor turns them into plain, straight-line Java that calls an allocation-free policy protocol, so the overhead stays in the low nanoseconds and the synchronous success path allocates nothing.
+- **Policies:** retry, hedge, circuit breaker, rate limiter, adaptive limit, timeout, bulkhead, fallback.
+- **Call styles:** sync, `CompletionStage`, Reactor `Mono`/`Flux`; on interfaces or on annotated classes.
+- **Configuration:** named configs, overrides from properties, environment or system properties.
+- **Also:** events, snapshots, Micrometer/OpenTelemetry metrics, a programmatic `Pipeline`, a `testkit` with a manual clock, Spring Boot, Micronaut and Quarkus integrations.
 
-Sync and async (`CompletionStage`, and Reactor's `Mono` and `Flux` with `resilience4cata-reactor`), interfaces and annotated classes, composed annotations, named configurations with external overrides, typed events and snapshots, a programmatic `Pipeline` for code you cannot annotate, and a `testkit` with a manual clock.
-
-**Documentation: [resilience4cata.dev](https://resilience4cata.dev)** (English and Spanish). Status: 1.0.0-RC3 on Maven Central, a [release candidate](docs/en/blog/release-candidate.md) with the API frozen for 1.0.
+Status: **1.0.0-RC3** on Maven Central, API frozen for 1.0 ([release candidate](docs/en/blog/release-candidate.md)). Docs: **[resilience4cata.dev](https://resilience4cata.dev)** (English and [Spanish](https://resilience4cata.dev/es/)).
 
 ## Install
 
-Java 21 or newer. Two lines: `resilience4cata-all` (core, the annotations and external configuration) and the annotation processor, which is mandatory and goes only on the annotation processor path.
+The library plus the annotation processor (required; only on the processor path).
 
 Gradle:
 
@@ -42,7 +43,7 @@ Maven:
 </annotationProcessorPaths>
 ```
 
-The Gradle Kotlin DSL, the BOM and the individual modules (to keep the annotations compile-only), `testkit`, IDEs, JPMS and other annotation processors (Lombok, MapStruct) are covered in [installation](docs/en/start/installation.md). For Spring Boot 4.1+, `resilience4cata-spring` configures the registry from `application.yml` and protects annotated beans without AOP ([Spring Boot guide](docs/en/guides/spring.md)). For Micronaut 5.2+ (Java 25), `resilience4cata-micronaut` does the same ([Micronaut guide](docs/en/guides/micronaut.md)). For Project Reactor, `resilience4cata-reactor` protects methods that return `Mono` or `Flux` ([Reactor guide](docs/en/guides/reactor.md)).
+Kotlin DSL, the BOM, JPMS and Lombok/MapStruct: [installation](docs/en/start/installation.md). Frameworks: [Spring Boot](docs/en/guides/spring.md), [Micronaut](docs/en/guides/micronaut.md), [Reactor](docs/en/guides/reactor.md).
 
 ## Example
 
@@ -68,37 +69,33 @@ PriceClient prices = Resilient.of(PriceClient.class, new HttpPriceClient(), regi
 BigDecimal price = prices.price("sku-1");   // retried, timed out after 2 s, guarded by the "prices" breaker
 ```
 
-The processor generates `PriceClient$Resilient` at compile time; a wrong attribute or fallback signature is a compile error. Non-final classes can be annotated too (`Resilient.create(...)`), and then calls the object makes to itself are protected as well. The [quickstart](docs/en/start/quickstart.md) runs this example end to end in five minutes.
+The processor generates `PriceClient$Resilient`; a wrong attribute or fallback signature fails the compilation. Annotated classes work too (`Resilient.create(...)`), and then self-calls are protected as well. Full walkthrough: [quickstart](docs/en/start/quickstart.md).
 
 ## Performance
 
-Measured with JMH against Resilience4j 2.4.0 under equivalent configuration, on AWS `c7g.xlarge` (4 Graviton3 cores, Amazon Corretto 21), time and allocation per call, on the code of 1.0.0-RC1 ([this run](docs/en/benchmarks.md#release-candidate); the one-in-ten row from [an earlier one](docs/en/benchmarks.md#failure-rates)):
+JMH against Resilience4j 2.4.0 with equivalent configuration, AWS `c7g.xlarge` (Graviton3), Corretto 21, average time and allocation per call:
 
 | Scenario | Threads | resilience4cata | Resilience4j |
 |---|---:|---:|---:|
 | Retry, first attempt succeeds | 1 | **1.4 ns**, 0 B | 22.9 ns, 0 B |
-| Circuit breaker, every call succeeds | 1 | **1.9 ns**, 0 B | 89.9 ns, 0 B |
-| Circuit breaker, every call succeeds | 4 | **1.9 ns**, 0 B | 850 ns, 2 B |
-| Circuit breaker, one call in ten fails | 4 | **278 ns**, 0 B | 940 ns, 2 B |
+| Circuit breaker, all calls succeed | 1 | **1.9 ns**, 0 B | 89.9 ns, 0 B |
+| Circuit breaker, all calls succeed | 4 | **1.9 ns**, 0 B | 850 ns, 2 B |
+| Circuit breaker, 1 in 10 fails | 4 | **278 ns**, 0 B | 940 ns, 2 B |
 | Sync timeout | 1 | **23.6 ns**, 0 B | 8908 ns, 183 B |
 | Bulkhead with free slots | 1 | **17.3 ns**, 0 B | 20.1 ns, 0 B |
 
-The breaker's 1.9 ns holds while its window holds no failure; once calls fail, every call writes a shared cursor and the gap narrows (278 against 940 ns). Resilience4j's retry also counts every call in its built-in metrics (`LongAdder` counters), which resilience4cata does not keep. These are average times in a closed loop on ARM: x86 has not been measured yet, and tails (the slowest calls under contention) are not measured. Most real calls take milliseconds, so the point is near-zero overhead that keeps scaling with threads. Methods, every result (also on an Apple M1), regressions and fairness adjustments are in [benchmarks](docs/en/benchmarks.md). An allocation gate (`./gradlew :benchmark:allocationCheck`, run in CI on every pull request) fails the build if a sync success or rejection path starts allocating.
+Not measured yet: x86 and tail latencies. Method, fairness adjustments and all results: [benchmarks](docs/en/benchmarks.md#release-candidate). CI fails a pull request if a sync success or rejection path starts allocating.
 
 ## Documentation
 
-The site at [resilience4cata.dev](https://resilience4cata.dev) is the Markdown in [`docs/`](docs/) (a [Docsify](https://docsify.js.org) site, pre-rendered for search engines by the `site` module; preview it with `./gradlew :site:serve`). Good places to start:
-
-- [Installation](docs/en/start/installation.md), [quickstart](docs/en/start/quickstart.md) and [how it works](docs/en/start/how-it-works.md)
+- [Quickstart](docs/en/start/quickstart.md) and [how it works](docs/en/start/how-it-works.md)
 - [Policies](docs/en/policies/README.md): every annotation, attribute and default
-- [Configuration](docs/en/guides/configuration.md): properties files, environment variables, system properties
-- [Error reference](docs/en/errors.md): every `R4C-…` code with a wrong example and the fix
+- [Configuration](docs/en/guides/configuration.md): properties, environment variables, system properties
+- [Errors](docs/en/errors.md): every `R4C-…` code with the fix
 
-The documentation is bilingual. English is the source of truth; the Spanish version has the same pages: [documentación en español](https://resilience4cata.dev/es/) ([inicio rápido](docs/es/start/quickstart.md)).
+## Build
 
-## Building from source
-
-`./gradlew build` compiles, tests and builds the Javadoc of every module (the build runs on JDK 17 or newer and compiles with a Java 21 toolchain). `./gradlew publishToMavenLocal` installs the artifacts in your local Maven repository.
+`./gradlew build` (JDK 17+, compiles with a Java 21 toolchain). `./gradlew publishToMavenLocal` installs the artifacts locally. `./gradlew :site:serve` previews the docs site.
 
 ## License
 
