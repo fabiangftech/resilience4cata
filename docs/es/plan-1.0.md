@@ -16,7 +16,7 @@ Esta página es el plan de trabajo: cada tarea dice qué cambiar, dónde y cómo
 - 1.0.0-RC2 (2026-11-04) hace fallar el arranque o el build cuando el procesador no corrió.
 - Una [tercera revisión](#third-review) de RC2 (2026-11-05): tres revisores dicen sacar 1.0.0; sus arreglos cambian dos comportamientos, así que antes viene una 1.0.0-RC3.
 - 1.0.0-RC3 (2026-11-05) trae los arreglos de la tercera revisión. Los snippets de instalación ahora la muestran (decisión del dueño).
-- `main` solo acepta cambios por pull requests con los checks en verde (los administradores lo saltan para los commits de release), y cada release candidate tiene su release de GitHub (2026-11-06).
+- `main` solo acepta cambios por pull requests con los checks en verde (los administradores lo saltan para los commits de release), y cada release candidate tiene su release de GitHub; 1.0.0-RC3 es *Latest*, como lo muestran los snippets de instalación (2026-11-06).
 - Siguiente: 1.0.0.
 
 ## La revisión
