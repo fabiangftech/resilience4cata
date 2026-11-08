@@ -16,7 +16,7 @@ This page is the working plan: each task says what to change, where, and how to 
 - 1.0.0-RC2 (2026-11-04) fails the startup or build when the processor did not run.
 - A [third review](#third-review) of RC2 (2026-11-05): three reviewers say ship 1.0.0; its fixes change two behaviours, so a 1.0.0-RC3 comes first.
 - 1.0.0-RC3 (2026-11-05) has the third review's fixes. The install snippets now show it (owner's decision).
-- `main` takes changes only through pull requests with passing checks (administrators bypass it for the release commits), and every release candidate has a GitHub release (2026-11-06).
+- `main` takes changes only through pull requests with passing checks (administrators bypass it for the release commits), and every release candidate has a GitHub release; 1.0.0-RC3 is *Latest*, as the install snippets show it (2026-11-06).
 - Next: 1.0.0.
 
 ## The review

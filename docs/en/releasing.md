@@ -70,7 +70,7 @@ Keep secrets in `~/.gradle/gradle.properties` or the environment, never in the r
 5. In the portal, open **Deployments**, wait for *Validated*, review the files, then press **Publish** (or **Drop** to discard it). Artifacts reach Maven Central within about 30 minutes.
 6. Bump to the next development version: `version=0.2.0-SNAPSHOT`, commit.
 7. Once the release is visible on Maven Central, update the version written in the docs and the root `README.md` (build snippets on the site, landing pages, changelog): `grep -rn "0\.1\.0" README.md docs/en docs/es`. Set `r4c.apiBaseline=0.1.0` in `gradle.properties` too, so `apiCompatibility` compares with the new release.
-8. Create the GitHub release from the tag, with the version's changelog section as notes (relative links made absolute: `errors.md#r4c-apt-007` → `https://resilience4cata.dev/en/errors?id=r4c-apt-007`) and an install line: `gh release create v0.1.0 --verify-tag --title 0.1.0 --notes-file notes.md`. A release candidate gets `--prerelease --latest=false`, so the last final release stays *Latest*.
+8. Create the GitHub release from the tag, with the version's changelog section as notes (relative links made absolute: `errors.md#r4c-apt-007` → `https://resilience4cata.dev/en/errors?id=r4c-apt-007`) and an install line: `gh release create v0.1.0 --verify-tag --title 0.1.0 --notes-file notes.md`. A release candidate gets `--prerelease --latest=false`; once the install snippets show it (step 7), mark it *Latest* with `gh release edit v1.0.0-RC3 --prerelease=false --latest` (GitHub's *Latest* cannot be a prerelease), so the repository page shows the version the site installs.
 
 To check a bundle without releasing anything, build it with a throwaway key and a release version:
 
