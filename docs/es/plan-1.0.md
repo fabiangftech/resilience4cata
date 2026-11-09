@@ -190,7 +190,7 @@ Queda para después de 1.0 (abajo): los chequeos de procesador ausente de Spring
 Aditivo, así que no bloquea congelar la API. Más o menos en orden de valor. Los puntos marcados *(pedido antes de 1.0)* son los que algún revisor quería antes del release: el dueño decide si adelantarlos.
 
 - Correr la comparación con Resilience4j en x86 (`c7i`) y publicarla junto a Graviton; en x86 cada atómico es una barrera completa y `nanoTime` es barato, así que las decisiones afinadas para ARM pueden quedar en otro orden. *(pedido antes de 1.0)*
-- jcstress en modo por defecto en un runner ARM (`ubuntu-24.04-arm` o Graviton) de forma periódica, y repetir allí los mutantes: hoy el workflow `stress` corre el modo quick solo en x86, que es TSO, así que un orden debilitado no puede fallar allí. *(pedido antes de 1.0)*
+- ~~jcstress en modo por defecto en un runner ARM (`ubuntu-24.04-arm` o Graviton) de forma periódica.~~ Hecho antes de 1.0: `stress` corre el modo quick en x86 y ARM después de cada push a main y cada noche, y `stress-arm` corre el modo por defecto en ARM cada semana. Falta: repetir allí los mutantes, ya que x86 es TSO y un orden debilitado no podía fallar en él. *(pedido antes de 1.0)*
 - Benchmarks de percentiles y de bucle abierto (`SampleTime`) para el rate limiter y el bulkhead con contención. *(pedido antes de 1.0)*
 - ~~Un fallo visible en Spring, Micronaut y Quarkus cuando hay clases anotadas sin clase generada.~~ Hecho antes de 1.0: ver la fase 4.
 - Métricas opcionales de éxito y latencia, medidas antes de añadirlas (escrituras compartidas por llamada), para tener paridad con los dashboards de Resilience4j. *(pedido antes de 1.0)*

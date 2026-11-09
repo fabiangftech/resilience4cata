@@ -124,7 +124,7 @@ The targets the project holds itself to, and how each one is checked:
 | Monomorphic, straight-line generated code per method; no shared lambda chains | JMH with a polluted JIT profile, `-XX:+PrintInlining` |
 | No clock read on a success path unless a feature needs it (rate limiting, slow-call detection, time windows, the adaptive limit's latency, a retry's `maxDuration`); each such policy reads the clock itself, so a stack of them reads it more than once | code review |
 | Preallocated, stackless rejection exceptions; events allocated only if someone listens | JMH rejection scenarios (open breaker, full bulkhead, exhausted rate limiter), gated at 0 B/op in CI |
-| Correct lock-free structures | jcstress, in CI after every push to main and nightly |
+| Correct lock-free structures | jcstress, in CI on x86 and ARM after every push to main and nightly, and weekly in its longer default mode on ARM |
 | Published, reproducible comparison against Resilience4j 2.4.0 | the `benchmark` module, with equivalent Resilience4j configuration and fairness notes ([Benchmarks in depth](benchmarks.md)) |
 
 Most real calls are I/O-bound (milliseconds), so the point is overhead close to zero that holds up with many threads, not raw speed alone.

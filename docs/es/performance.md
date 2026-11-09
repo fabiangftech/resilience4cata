@@ -124,7 +124,7 @@ Los objetivos que el proyecto se impone, y cómo se comprueba cada uno:
 | Código generado monomórfico y en línea recta por método; sin cadenas de lambdas compartidas | JMH con un perfil de JIT contaminado, `-XX:+PrintInlining` |
 | Ninguna lectura del reloj en un camino de éxito salvo que una funcionalidad la necesite (rate limiting, detección de llamadas lentas, ventanas por tiempo, la latencia del adaptive limit, el `maxDuration` de un retry); cada una de esas políticas lee el reloj por su cuenta, así que una pila de ellas lo lee más de una vez | revisión de código |
 | Excepciones de rechazo preasignadas y sin stack trace; eventos asignados solo si alguien escucha | escenarios de rechazo en JMH (breaker abierto, bulkhead lleno, rate limiter agotado), con gate de 0 B/op en CI |
-| Estructuras lock-free correctas | jcstress, en CI después de cada push a main y cada noche |
+| Estructuras lock-free correctas | jcstress, en CI en x86 y ARM después de cada push a main y cada noche, y cada semana en su modo por defecto, más largo, en ARM |
 | Comparación publicada y reproducible con Resilience4j 2.4.0 | el módulo `benchmark`, con configuración equivalente de Resilience4j y notas de equidad ([Benchmarks en detalle](benchmarks.md)) |
 
 La mayoría de las llamadas reales están limitadas por I/O (milisegundos), así que lo importante es un overhead cercano a cero que se mantiene con muchos threads, no solo la velocidad bruta.
