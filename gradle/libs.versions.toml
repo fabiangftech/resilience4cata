@@ -57,7 +57,7 @@ reactorMinimum = "3.6.0"
 # Test-only, in examples: the Reactive Streams TCK (TestNG-based; its rules are run as JUnit dynamic tests) and
 # BlockHound (run in its own Test task, blockHoundTest).
 reactiveStreamsTck = "1.0.4"
-blockhound = "1.0.17.RELEASE"
+blockhound = "1.0.18.RELEASE"
 
 # The documentation site's pre-renderer (the unpublished site module).
 commonmark = "0.30.1"
