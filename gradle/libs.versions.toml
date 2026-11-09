@@ -52,7 +52,7 @@ microprofileHealthMinimum = "4.0.1"
 # The reactor module compiles against the oldest supported Reactor (reactorMinimum: never bump it with the rest,
 # .github/dependabot.yml ignores the artifacts that use it), and minimumReactorTest runs its tests on it; the other
 # tests run on reactorBom, the latest Reactor release train at least two weeks old.
-reactorBom = "2025.0.7"
+reactorBom = "2025.0.8"
 reactorMinimum = "3.6.0"
 # Test-only, in examples: the Reactive Streams TCK (TestNG-based; its rules are run as JUnit dynamic tests) and
 # BlockHound (run in its own Test task, blockHoundTest).
