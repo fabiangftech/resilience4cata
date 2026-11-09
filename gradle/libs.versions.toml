@@ -60,7 +60,7 @@ reactiveStreamsTck = "1.0.4"
 blockhound = "1.0.18.RELEASE"
 
 # The documentation site's pre-renderer (the unpublished site module).
-commonmark = "0.30.1"
+commonmark = "0.31.0"
 
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
