@@ -1,0 +1,51 @@
+# jcstress tests of the lock-free policies in default mode on ARM: more forks and longer runs than the quick mode of
+# stress.yml, on the architecture where weakened orderings can show (x86 is TSO).
+# Locally: ./gradlew :stress:jcstress
+#
+# Weekly and by hand: a GitHub ARM runner has 4 cores, so the run takes a few hours. Its own workflow, so a push to
+# main (which restarts stress.yml) does not cancel it.
+name: stress-arm
+
+on:
+  schedule:
+    - cron: '41 4 * * 6'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jcstress:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: jcstress
+        run: >-
+          ./gradlew :stress:jcstress -Pjcstress="-m default"
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_AARCH64
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jcstress-report-default-arm64
+          path: stress/build/jcstress/results/
+          if-no-files-found: ignore
+          retention-days: 30
