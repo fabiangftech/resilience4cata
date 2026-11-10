@@ -39,7 +39,7 @@ jobs:
       - name: jcstress
         run: >-
           ./gradlew :stress:jcstress -Pjcstress="-m default"
-          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_ARM64
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_AARCH64
 
       - name: Upload report
         if: always()

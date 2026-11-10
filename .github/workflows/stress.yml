@@ -55,7 +55,7 @@ jobs:
       - name: jcstress
         run: >-
           ./gradlew :stress:jcstress -Pjcstress="-m quick"
-          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_${{ matrix.arch == 'arm64' && 'ARM64' || 'X64' }}
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_${{ matrix.arch == 'arm64' && 'AARCH64' || 'X64' }}
 
       - name: Upload report
         if: always()
