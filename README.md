@@ -84,7 +84,7 @@ JMH against Resilience4j 2.4.0 with equivalent configuration, AWS `c7g.xlarge` (
 | Sync timeout | 1 | **23.6 ns**, 0 B | 8908 ns, 183 B |
 | Bulkhead with free slots | 1 | **17.3 ns**, 0 B | 20.1 ns, 0 B |
 
-Not measured yet: x86 and tail latencies. Method, fairness adjustments and all results: [benchmarks](docs/en/benchmarks.md#release-candidate). CI fails a pull request if a sync success or rejection path starts allocating.
+Speed is measured on ARM only so far (Graviton3, Apple M1); x86 and tail latencies are not measured yet. Method, fairness adjustments and all results: [benchmarks](docs/en/benchmarks.md#release-candidate). CI fails a pull request if a sync success or rejection path starts allocating, and runs the concurrency tests (jcstress) on both x86 and ARM after every merge ([why both](docs/en/blog/jcstress-on-arm-and-x86.md)).
 
 ## Documentation
 

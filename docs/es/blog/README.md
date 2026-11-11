@@ -2,6 +2,12 @@
 
 Artículos sobre cómo está construido resilience4cata, qué mide y cómo usarlo bien.
 
+## Probar código lock-free también en ARM, no solo en x86
+
+*10 de noviembre de 2026*
+
+Las pruebas de concurrencia ahora corren en ARM y x86 después de cada merge: por qué x86 solo no podía detectar un orden de memoria debilitado, qué mostraron tres corridas en cada una, y por qué la única carrera que encuentran es igual de frecuente en x86. [Leer el artículo](jcstress-on-arm-and-x86.md)
+
 ## Hedging cuando los hedges compiten por el mismo servicio
 
 *5 de noviembre de 2026*

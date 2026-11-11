@@ -99,7 +99,7 @@ En AWS Graviton3, un retry cuyo primer intento tiene éxito cuesta 1.4 ns y un c
 
 ### ¿Está listo para producción? :id=production
 
-Cada política tiene pruebas unitarias y de extremo a extremo, las lock-free también pruebas de concurrencia (jcstress), la asignación de memoria se controla en CI, y una prueba de resistencia semanal de dos horas ejecuta todas las políticas bajo carga. La API está congelada desde las release candidates de 1.0.0: 1.0.0 la publica tal cual salvo que los comentarios sobre una release candidate obliguen a un cambio, y el [Registro de cambios](changelog.md) lo indicaría. Lo que 1.0.0 mantendrá compatible está en [Compatibilidad](reference/compatibility.md).
+Cada política tiene pruebas unitarias y de extremo a extremo, las lock-free también pruebas de concurrencia (jcstress, en x86 y ARM), la asignación de memoria se controla en CI, y una prueba de resistencia semanal de dos horas ejecuta todas las políticas bajo carga. La API está congelada desde las release candidates de 1.0.0: 1.0.0 la publica tal cual salvo que los comentarios sobre una release candidate obliguen a un cambio, y el [Registro de cambios](changelog.md) lo indicaría. Lo que 1.0.0 mantendrá compatible está en [Compatibilidad](reference/compatibility.md).
 
 ### ¿Qué no se admite todavía? :id=not-supported
 

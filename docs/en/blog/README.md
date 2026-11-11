@@ -2,6 +2,12 @@
 
 Articles about how resilience4cata is built, what it measures, and how to use it well.
 
+## Testing lock-free code on ARM as well as x86
+
+*10 November 2026*
+
+The concurrency tests now run on ARM and x86 after every merge: why x86 alone could not catch a weakened memory ordering, what three runs on each showed, and why the one race they find is as common on x86. [Read the article](jcstress-on-arm-and-x86.md)
+
 ## Hedging when the hedges compete for the same service
 
 *5 November 2026*
