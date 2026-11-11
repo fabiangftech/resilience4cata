@@ -99,7 +99,7 @@ On AWS Graviton3, a retry whose first attempt succeeds costs 1.4 ns and a circui
 
 ### Is it production-ready? :id=production
 
-Every policy has unit and end-to-end tests, the lock-free ones also concurrency tests (jcstress), allocation is gated in CI, and a weekly two-hour soak test runs every policy under load. The API is frozen since the 1.0.0 release candidates: 1.0.0 ships it as it is unless feedback on a release candidate forces a change, and the [Changelog](changelog.md) would list it. What 1.0.0 will keep compatible is in [Compatibility](reference/compatibility.md).
+Every policy has unit and end-to-end tests, the lock-free ones also concurrency tests (jcstress, on x86 and ARM), allocation is gated in CI, and a weekly two-hour soak test runs every policy under load. The API is frozen since the 1.0.0 release candidates: 1.0.0 ships it as it is unless feedback on a release candidate forces a change, and the [Changelog](changelog.md) would list it. What 1.0.0 will keep compatible is in [Compatibility](reference/compatibility.md).
 
 ### What is not supported yet? :id=not-supported
 
