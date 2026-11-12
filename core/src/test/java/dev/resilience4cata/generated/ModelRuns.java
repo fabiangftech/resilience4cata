@@ -9,21 +9,28 @@ import java.util.function.LongConsumer;
  * through the same random operations and compares them after every step.
  *
  * <p>To replay one seed, pass it as {@code -Ptest.seed=<n>} to Gradle (forwarded to the test JVM as the
- * system property {@code test.seed}; not {@code r4c.*}, which the config module reads).
+ * system property {@code test.seed}; not {@code r4c.*}, which the config module reads). Other seeds:
+ * {@code -Ptest.seedStart=<n>} moves the first one (default 0) and {@code -Ptest.seedFactor=<n>} runs n times each
+ * test's count; the nightly {@code fuzz} workflow uses both. A failure names its seed, which replays on its own.
  */
 final class ModelRuns {
 
     private ModelRuns() {
     }
 
-    /** Runs {@code body} for seeds {@code 0 .. count - 1}, or only for {@code test.seed} when it is set. */
+    /**
+     * Runs {@code body} for {@code count × test.seedFactor} seeds from {@code test.seedStart} (by default seeds
+     * {@code 0 .. count - 1}), or only for {@code test.seed} when it is set.
+     */
     static void forEachSeed(int count, LongConsumer body) {
         String only = System.getProperty("test.seed");
         if (only != null && !only.isBlank()) {
             body.accept(Long.parseLong(only.trim()));
             return;
         }
-        for (long seed = 0; seed < count; seed++) {
+        long start = Long.getLong("test.seedStart", 0);
+        long runs = (long) count * Integer.getInteger("test.seedFactor", 1);
+        for (long seed = start; seed < start + runs; seed++) {
             body.accept(seed);
         }
     }

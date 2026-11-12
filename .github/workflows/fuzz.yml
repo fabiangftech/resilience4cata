@@ -1,0 +1,99 @@
+# The seeded tests with new seeds every night: the model tests of core (*ModelTest, each policy against a reference
+# model) and the processor's fuzz test (ProcessorFuzzTest, random annotated sources). The build runs the same seeds
+# every time (0.. for the models, 1..400 for the fuzz test); here they start at a new seed, the run's time in ms, and
+# run more of them, so each night explores cases no build has tried.
+# Locally: ./gradlew :core:test --tests '*ModelTest' -Ptest.seedStart=<n> -Ptest.seedFactor=10
+#          ./gradlew :processor:test --tests '*ProcessorFuzzTest' -PfuzzStart=<n> -PfuzzCount=5000
+#
+# A failure names its seed; the job summary gives the commands that replay it. Turn a seed that finds a bug into a
+# fixed test (FuzzFoundProcessorTest for the processor), so the build keeps it.
+name: fuzz
+
+on:
+  schedule:
+    - cron: '47 2 * * *'
+  workflow_dispatch:
+    inputs:
+      start:
+        description: First seed (empty = the run's time in ms)
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  seeded:
+    name: ${{ matrix.suite }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: models
+            task: ":core:test --tests '*ModelTest' -Ptest.seedFactor=10"
+            start: -Ptest.seedStart
+            replay: ./gradlew :core:test --tests '<the test>' -Ptest.seed=<seed>
+          - suite: processor fuzz
+            task: ":processor:test --tests '*ProcessorFuzzTest' -PfuzzCount=5000"
+            start: -PfuzzStart
+            replay: ./gradlew :processor:test --tests '*ProcessorFuzzTest' -PfuzzSeed=<seed>
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # JDK 21 (listed last: JAVA_HOME, Gradle and the tests) and JDK 25, the micronaut module's toolchain.
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            25
+            21
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Seeds
+        id: seeds
+        env:
+          START: ${{ inputs.start }}
+          SUITE: ${{ matrix.suite }}
+          TASK: ${{ matrix.task }}
+          REPLAY: ${{ matrix.replay }}
+        run: |
+          start=${START:-$(( $(date +%s) * 1000 ))}
+          case $start in *[!0-9]*|'') echo "::error::start must be a number, got '$start'"; exit 1 ;; esac
+          echo "start=$start" >> "$GITHUB_OUTPUT"
+          {
+            echo "### $SUITE: seeds from $start"
+            echo
+            echo "Rerun these seeds: \`./gradlew $TASK ${{ matrix.start }}=$start\`"
+            echo
+            echo "Replay the seed a failure names: \`$REPLAY\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run
+        env:
+          START: ${{ steps.seeds.outputs.start }}
+        # TASK is ours (the matrix above), not user input; eval keeps its quoted --tests pattern.
+        run: eval "./gradlew ${{ matrix.task }} ${{ matrix.start }}=$START --console=plain -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64"
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-${{ matrix.suite == 'models' && 'models' || 'processor' }}
+          path: |
+            core/build/reports/tests/test/
+            core/build/test-results/test/
+            processor/build/reports/tests/test/
+            processor/build/test-results/test/
+          if-no-files-found: ignore
+          retention-days: 14
