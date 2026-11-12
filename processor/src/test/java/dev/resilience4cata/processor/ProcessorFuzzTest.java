@@ -52,12 +52,13 @@ import org.junit.jupiter.api.io.TempDir;
  * expected {@code [R4C-…]} codes, each on an element of a source file. Never a processor crash, an error in a
  * generated file, or a compiler error that is not ours.
  *
- * <p>Replay one seed with {@code ./gradlew :processor:test --tests '*ProcessorFuzzTest' -PfuzzSeed=<seed>}, or run
- * more with {@code -PfuzzCount=<n>}.
+ * <p>Replay one seed with {@code ./gradlew :processor:test --tests '*ProcessorFuzzTest' -PfuzzSeed=<seed>}, run
+ * more with {@code -PfuzzCount=<n>}, or other ones with {@code -PfuzzStart=<first seed>} (the nightly {@code fuzz}
+ * workflow starts at a new seed every night).
  */
 class ProcessorFuzzTest {
 
-    private static final long FIRST_SEED = 1;
+    private static final long FIRST_SEED = Long.getLong("test.fuzz.start", 1);
     private static final int DEFAULT_COUNT = 400;
     private static final int BATCH = 8;
 
@@ -95,8 +96,8 @@ class ProcessorFuzzTest {
             }
         }
         long valid = cases.stream().filter(c -> c.expected == null).count();
-        System.out.printf(Locale.ROOT, "ProcessorFuzzTest: %d seeds (%d valid, %d invalid) in %d compilations%n",
-                cases.size(), valid, cases.size() - valid, compilations);
+        System.out.printf(Locale.ROOT, "ProcessorFuzzTest: %d seeds from %d (%d valid, %d invalid) in %d compilations%n",
+                cases.size(), seeds.getFirst(), valid, cases.size() - valid, compilations);
         assertThat(failures).as("fuzz failures").isEmpty();
     }
 
