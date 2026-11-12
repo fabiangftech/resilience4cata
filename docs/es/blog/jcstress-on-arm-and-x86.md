@@ -51,7 +51,7 @@ Esto corrige algo que escribimos antes. Después de la corrida en Graviton3 (el 
 
 ## Lo que esto todavía no muestra
 
-- **Que el job de ARM detectaría un orden roto.** Una corrida en verde no es una prueba. Cada test de carreras de la biblioteca se comprobó por mutación (debilitar la protección y confirmar que el test falla), pero esos mutantes corrieron en x86 y en Apple M1, no en estos runners. Repetirlos en ARM es el siguiente paso, y sigue abierto en el [plan](../plan-1.0.md#después-de-10).
+- **Que el job de ARM detectaría un orden roto.** Una corrida en verde no es una prueba. Cada test de carreras de la biblioteca se comprobó por mutación (debilitar la protección y confirmar que el test falla), pero esos mutantes corrieron en x86 y en Apple M1, no en estos runners. Repetirlos en ARM es el siguiente paso, y sigue abierto en el [plan](../plan-1.0.md#después-de-10). *Actualización, 12 de noviembre de 2026: hecho. ARM no detectó nada que x86 no detectara: los mutantes que se detectan en una máquina se detectan en ambas, y los que sobreviven sobreviven en ambas (detalles en el [plan](../plan-1.0.md#después-de-10)).*
 - **Cuánto tarda el modo por defecto semanal.** Por las corridas quick, probablemente una o dos horas en cuatro núcleos ARM; el límite es de casi seis. Lo dirá la primera corrida programada.
 - **Nada sobre velocidad.** Son pruebas de corrección. Las cifras de rendimiento siguen siendo solo de ARM (Graviton3 y Apple M1); x86 [todavía no se ha medido](../performance.md).
 
