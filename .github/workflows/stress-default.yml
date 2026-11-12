@@ -1,10 +1,11 @@
-# jcstress tests of the lock-free policies in default mode on ARM: more forks and longer runs than the quick mode of
-# stress.yml, on the architecture where weakened orderings can show (x86 is TSO).
+# jcstress tests of the lock-free policies in default mode, on x86 and on ARM: more forks and longer runs than the
+# quick mode of stress.yml. ARM is where weakened orderings can show (x86 is TSO); x86 is where TimeoutStress hung in
+# default mode while quick mode passed (each state's watchdog filled the thread's ThreadLocalMap), so both run.
 # Locally: ./gradlew :stress:jcstress
 #
-# Weekly and by hand: a GitHub ARM runner has 4 cores, so the run takes a few hours. Its own workflow, so a push to
-# main (which restarts stress.yml) does not cancel it.
-name: stress-arm
+# Weekly and by hand: a GitHub runner has 4 cores, so a run takes a few hours. Its own workflow, so a push to main
+# (which restarts stress.yml) does not cancel it.
+name: stress-default
 
 on:
   schedule:
@@ -20,8 +21,13 @@ concurrency:
 
 jobs:
   jcstress:
-    runs-on: ubuntu-24.04-arm
+    name: jcstress default (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -37,15 +43,15 @@ jobs:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: jcstress
-        run: >-
-          ./gradlew :stress:jcstress -Pjcstress="-m default"
-          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_AARCH64
+        env:
+          JDK: JAVA_HOME_21_${{ matrix.arch == 'arm64' && 'AARCH64' || 'X64' }}
+        run: ./gradlew :stress:jcstress -Pjcstress="-m default" "-Porg.gradle.java.installations.fromEnv=$JDK"
 
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: jcstress-report-default-arm64
+          name: jcstress-report-default-${{ matrix.arch }}
           path: stress/build/jcstress/results/
           if-no-files-found: ignore
           retention-days: 30
