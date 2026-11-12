@@ -32,3 +32,6 @@ create-releases.sh
 social-preview-prompt.txt
 
 launch/
+
+# Maven output of consumer/check.sh
+consumer/maven/target/

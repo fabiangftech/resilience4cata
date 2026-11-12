@@ -1,0 +1,17 @@
+// A user's build, outside the resilience4cata build: it gets resilience4cata only from the repository that
+// consumer/check.sh publishes (-Pr4cRepository), never from Maven Central or the build's own projects.
+rootProject.name = 'consumer'
+
+include 'classpath', 'modulepath'
+
+dependencyResolutionManagement {
+    repositories {
+        exclusiveContent {
+            forRepository {
+                maven { url = providers.gradleProperty('r4cRepository').get() }
+            }
+            filter { includeGroup 'dev.resilience4cata' }
+        }
+        mavenCentral()
+    }
+}
