@@ -26,6 +26,10 @@ import org.openjdk.jcstress.infra.results.II_Result;
  *
  * <p>Every actor that runs a timed call reads and clears its interrupt flag afterwards: a set flag
  * there is an interrupt that leaked past the call (and clearing it keeps the jcstress thread clean).
+ * It also ends with {@code forgetCurrentThreadForTest()}: each state has its own watchdog, so its own
+ * thread-local, and jcstress keeps tens of thousands of states alive; without it the caller's
+ * {@code ThreadLocalMap} grew until lookups stalled the thread and jcstress reported a hang (x86,
+ * default mode).
  */
 public final class TimeoutStress {
 
@@ -73,6 +77,7 @@ public final class TimeoutStress {
             TimeoutPolicy.Scope scope = policy.enter();
             r.r1 = succeed(policy, scope);
             r.r2 = leaked();
+            watchdog.forgetCurrentThreadForTest();
         }
 
         @Actor
@@ -102,6 +107,7 @@ public final class TimeoutStress {
                 r.r1 = e.getCause() == FAILURE ? 1 : 2;
             }
             r.r2 = leaked();
+            watchdog.forgetCurrentThreadForTest();
         }
 
         @Actor
@@ -143,6 +149,7 @@ public final class TimeoutStress {
             TimeoutPolicy.Scope second = policy.enter();
             r.r2 = succeed(policy, second);
             r.r3 = leaked();
+            watchdog.forgetCurrentThreadForTest();
         }
 
         @Actor
@@ -190,6 +197,7 @@ public final class TimeoutStress {
             TimeoutPolicy.Scope second = fast.enter();
             r.r2 = succeed(fast, second);
             r.r3 = leaked();
+            watchdog.forgetCurrentThreadForTest();
         }
 
         @Actor
@@ -238,6 +246,7 @@ public final class TimeoutStress {
             TimeoutPolicy.Scope second = slow.enter();
             r.r2 = succeed(slow, second);
             r.r3 = leaked();
+            watchdog.forgetCurrentThreadForTest();
         }
 
         @Actor

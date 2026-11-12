@@ -163,6 +163,15 @@ final class Watchdog {
         }
     }
 
+    /**
+     * Forgets the calling thread's scopes in this watchdog. For stress tests, which create a watchdog per
+     * jcstress state: without it, each thread's {@code ThreadLocalMap} holds one entry per live state (tens of
+     * thousands), and lookups slowed a thread down until jcstress reported the test as hung.
+     */
+    void forgetCurrentThreadForTest() {
+        local.remove();
+    }
+
     /** Number of threads with registered scopes; used by tests. */
     int registeredThreads() {
         return threads.size();
