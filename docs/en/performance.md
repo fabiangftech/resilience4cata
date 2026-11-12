@@ -12,7 +12,7 @@ Low overhead is the reason resilience4cata exists: the annotation processor gene
 - **Differences in behaviour that the numbers include**: Resilience4j's breaker always times calls (resilience4cata only when `slowCallDuration` is set); Resilience4j's `TimeLimiter` needs a `Future`, so a synchronous call must go to another thread (resilience4cata times it out on the caller's thread).
 - **Two machines, never mixed**: an AWS `c7g.xlarge` (4 Graviton3 cores, no SMT, fixed clock, Amazon Corretto 21), and an Apple M1 laptop (JDK 21) for earlier rounds. Numbers from different machines are not comparable.
 - A benchmark with one decorated method is Resilience4j's best case: the JIT sees one type at every call site. Real applications have many.
-- **Average time per call, in a closed loop** (JMH `AverageTime`): every thread calls again as soon as the last call returns. Tails are not measured: under contention a rate limiter or a bulkhead parks the threads that lose a race, so some calls wait far longer than the average shows.
+- **Average time per call, in a closed loop** (JMH `AverageTime`): every thread calls again as soon as the last call returns. That hides tails: under contention the rate limiter parks the threads that lose a race, and with four threads saturating one limiter between 0.1 % and 1 % of the calls wait 110 µs or more (Resilience4j's: 910 µs at p99.9). The bulkhead has no such tail. Percentiles: [benchmarks](benchmarks.md#percentiles).
 - **ARM only so far**: Graviton3 and Apple M1. x86-64 has not been measured yet; its atomics are full fences and its clock is cheap, so the order of some results may differ there.
 
 ## Headline results :id=headline
