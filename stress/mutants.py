@@ -2,9 +2,9 @@
 """Mutation check of the jcstress tests: weaken one guard in core, run the jcstress group that should
 catch it, put the code back, and report whether the mutant was caught.
 
-    stress/mutants.py list                      # the mutant ids, one per line
-    stress/mutants.py json                      # the same as a JSON array (for a CI matrix)
-    stress/mutants.py run <id> [jcstress mode]  # apply, run, restore; mode defaults to quick
+    stress/mutants.py list                              # the mutant ids, one per line
+    stress/mutants.py json [id]                         # the same as a JSON array (for a CI matrix)
+    stress/mutants.py run <id> [mode] [--clean] [args]  # apply, run, restore; mode defaults to quick
 
 A mutant is caught when jcstress reports at least one FAILED test in its group (jcstress then exits
 non-zero, which fails the Gradle task); the failed tests are read from its console output.
@@ -16,8 +16,10 @@ fail on x86 too (TSO lets a later load pass an earlier store), and the "atomicit
 that every machine must catch. On aarch64 HotSpot compiles getAcquire and getVolatile to the same
 instruction (ldar), so a mutant must go down to opaque or plain to change anything there.
 
-Run from the repository root. Writes one JSON line per run to stress/build/mutants/<id>.json, and a
-row to $GITHUB_STEP_SUMMARY when set. Exit code: 0 caught, 2 survived, 1 error.
+--clean runs the mutant's jcstress group on the unchanged code: the baseline when a run is
+inconclusive (a test hung, which jcstress reports as an error rather than a failure). Other arguments
+go to Gradle. Run from the repository root. Writes one JSON line per run to
+stress/build/mutants/<id>[-clean].json. Exit code: 0 caught, 2 survived, 3 inconclusive, 1 error.
 """
 
 import json
@@ -92,6 +94,7 @@ MUTANTS = {
 }
 
 FAILED = re.compile(r"\[FAILED\]\s+(\S+)")
+HUNG = re.compile(r"^(\S+) \[[^\]]*\] had timed out", re.MULTILINE)
 
 
 def apply(file, old, new):
@@ -104,62 +107,71 @@ def apply(file, old, new):
     return text
 
 
-def run(mutant_id, mode):
+def run(mutant_id, mode, clean, gradle_args):
     if mutant_id not in MUTANTS:
         raise SystemExit(f"error: unknown mutant {mutant_id}; known: {', '.join(MUTANTS)}")
     kind, file, old, new, tests, what = MUTANTS[mutant_id]
-    original = apply(file, old, new)
+    original = None if clean else apply(file, old, new)
     try:
         command = ["./gradlew", ":stress:jcstress", f"-Pjcstress=-m {mode} -t {tests}", "--console=plain"]
-        command += sys.argv[4:]  # extra Gradle arguments, for example the CI's JDK selection
+        command += gradle_args  # for example the CI's JDK selection
         process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         output = process.stdout
         sys.stdout.write(output)
     finally:
-        Path(file).write_text(original)
+        if original is not None:
+            Path(file).write_text(original)
     failed = sorted(set(FAILED.findall(output)))
-    if process.returncode != 0 and not failed:
-        print(f"error: the run failed without a failed jcstress test (exit {process.returncode})", file=sys.stderr)
+    hung = sorted(set(HUNG.findall(output)))
+    if process.returncode != 0 and not failed and not hung:
+        print(f"error: the run failed without a jcstress result (exit {process.returncode})", file=sys.stderr)
         return 1
-    caught = bool(failed)
+    # A test that hangs is a jcstress error, not a forbidden outcome: it may be the mutant (a lost
+    # wake-up) or the machine (a loaded two-core runner). A clean run of the same group tells which.
+    verdict = "caught" if failed else "inconclusive" if hung else "survived"
     record = {
         "mutant": mutant_id,
         "kind": kind,
+        "clean": clean,
         "arch": platform.machine(),
         "mode": mode,
-        "caught": caught,
+        "verdict": verdict,
+        "caught": bool(failed),
         "failed": failed,
+        "hung": hung,
         "what": what,
     }
     out = Path("stress/build/mutants")
     out.mkdir(parents=True, exist_ok=True)
-    (out / f"{mutant_id}.json").write_text(json.dumps(record) + "\n")
-    verdict = "caught" if caught else "survived"
-    print(f"\nmutant {mutant_id} ({kind}) on {record['arch']}: {verdict}"
-          + (f" by {', '.join(failed)}" if failed else ""))
-    summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary:
-        with open(summary, "a") as f:
-            f.write(f"| `{mutant_id}` | {kind} | {record['arch']} | {mode} | **{verdict}** | "
-                    f"{', '.join(failed) or '-'} |\n")
-    return 0 if caught else 2
+    (out / f"{mutant_id}{'-clean' if clean else ''}.json").write_text(json.dumps(record) + "\n")
+    label = f"{mutant_id} (clean code)" if clean else f"mutant {mutant_id} ({kind})"
+    detail = f" by {', '.join(failed)}" if failed else f", hung: {', '.join(hung)}" if hung else ""
+    print(f"\n{label} on {record['arch']}: {verdict}{detail}")
+    return {"caught": 0, "survived": 2, "inconclusive": 3}[verdict]
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in ("list", "json", "run"):
+    args = sys.argv[1:]
+    if not args or args[0] not in ("list", "json", "run"):
         print(__doc__)
         return 1
-    if sys.argv[1] == "list":
-        print("\n".join(MUTANTS))
+    only = args[1] if args[0] == "json" and len(args) > 1 and args[1] else None
+    ids = [only] if only else list(MUTANTS)
+    if only and only not in MUTANTS:
+        raise SystemExit(f"error: unknown mutant {only}; known: {', '.join(MUTANTS)}")
+    if args[0] == "list":
+        print("\n".join(ids))
         return 0
-    if sys.argv[1] == "json":
-        print(json.dumps(list(MUTANTS)))
+    if args[0] == "json":
+        print(json.dumps(ids))
         return 0
-    if len(sys.argv) < 3:
-        print("usage: stress/mutants.py run <id> [mode] [gradle args...]", file=sys.stderr)
+    if len(args) < 2:
+        print("usage: stress/mutants.py run <id> [mode] [--clean] [gradle args...]", file=sys.stderr)
         return 1
-    mode = sys.argv[3] if len(sys.argv) > 3 else "quick"
-    return run(sys.argv[2], mode)
+    rest = args[2:]
+    mode = rest.pop(0) if rest and not rest[0].startswith("-") else "quick"
+    clean = "--clean" in rest
+    return run(args[1], mode, clean, [a for a in rest if a != "--clean"])
 
 
 if __name__ == "__main__":

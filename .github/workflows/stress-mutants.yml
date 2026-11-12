@@ -4,7 +4,8 @@
 #
 # The question it answers: would the ARM job of `stress` notice a weakened memory ordering? x86 is TSO,
 # so most of these mutants cannot fail there; the table compares both machines. A survived mutant is a
-# result, not a job failure: only errors (a mutant that no longer applies, a broken build) fail a job.
+# result, not a job failure, and so is an inconclusive one (a test hung: rerun with `clean` for the
+# baseline); only errors (a mutant that no longer applies, a broken build) fail a job.
 # By hand only: it is an experiment to rerun after changing a lock-free policy or its stress test.
 name: stress-mutants
 
@@ -16,6 +17,14 @@ on:
         default: quick
         type: choice
         options: [quick, default, tough]
+      only:
+        description: One mutant id (empty = all)
+        default: ''
+        type: string
+      clean:
+        description: Run each mutant's jcstress group on the unchanged code (the baseline)
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -30,7 +39,9 @@ jobs:
         with:
           persist-credentials: false
       - id: list
-        run: echo "ids=$(python3 stress/mutants.py json)" >> "$GITHUB_OUTPUT"
+        env:
+          ONLY: ${{ inputs.only }}
+        run: echo "ids=$(python3 stress/mutants.py json "$ONLY")" >> "$GITHUB_OUTPUT"
 
   mutant:
     name: ${{ matrix.mutant }} (${{ matrix.arch }})
@@ -60,13 +71,15 @@ jobs:
         env:
           MUTANT: ${{ matrix.mutant }}
           MODE: ${{ inputs.mode }}
+          CLEAN: ${{ inputs.clean && '--clean' || '' }}
           JDK: JAVA_HOME_21_${{ matrix.arch == 'arm64' && 'AARCH64' || 'X64' }}
-        # 0 caught, 2 survived (both are results), anything else is an error.
+        # 0 caught, 2 survived, 3 inconclusive (all results), anything else is an error.
         run: |
           set +e
-          python3 stress/mutants.py run "$MUTANT" "$MODE" "-Porg.gradle.java.installations.fromEnv=$JDK"
+          # shellcheck disable=SC2086 # CLEAN is empty or one flag
+          python3 stress/mutants.py run "$MUTANT" "$MODE" $CLEAN "-Porg.gradle.java.installations.fromEnv=$JDK"
           code=$?
-          if [ "$code" -ne 0 ] && [ "$code" -ne 2 ]; then exit "$code"; fi
+          if [ "$code" -ne 0 ] && [ "$code" -ne 2 ] && [ "$code" -ne 3 ]; then exit "$code"; fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -86,13 +99,21 @@ jobs:
           merge-multiple: true
           path: results
       - name: Table
+        env:
+          MODE: ${{ inputs.mode }}
+          CLEAN: ${{ inputs.clean }}
         run: |
           {
+            echo "Mode: \`$MODE\`$([ "$CLEAN" = true ] && echo ', on the unchanged code (baseline)')"
+            echo
             echo "| Mutant | Kind | x86 | ARM |"
             echo "|---|---|---|---|"
             jq -rs '
+              def cell: if .verdict == "survived" then "**survived**"
+                elif .verdict == "inconclusive" then "inconclusive (hung: \(.hung | map(split(".") | last) | join(", ")))"
+                else .verdict end;
               group_by(.mutant)[]
-              | (map({(.arch): (if .caught then "caught" else "**survived**" end)}) | add) as $by
+              | (map({(.arch): cell}) | add) as $by
               | "| `\(.[0].mutant)` | \(.[0].kind) | \($by.x86_64 // "-") | \($by.aarch64 // "-") |"
             ' results/*.json
           } >> "$GITHUB_STEP_SUMMARY"
