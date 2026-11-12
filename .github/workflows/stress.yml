@@ -2,8 +2,8 @@
 # Locally: ./gradlew :stress:jcstress -Pjcstress="-m quick"
 #
 # x86 is TSO, so a weakened ordering (a plain or release access where acquire or volatile is needed) cannot fail
-# there; ARM reorders more, and the library is tuned for it. The longer default mode runs weekly on ARM
-# (stress-arm.yml).
+# there; ARM reorders more, and the library is tuned for it. The longer default mode runs weekly on both
+# (stress-default.yml).
 #
 # Not run on every PR: it takes several minutes of all-core load, and its value comes from many
 # repetitions on varied hardware, not from one run per PR. A race it finds is rarely one the PR's
