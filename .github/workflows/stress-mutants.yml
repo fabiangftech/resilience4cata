@@ -1,0 +1,98 @@
+# Mutation check of the jcstress tests, on x86 and on ARM: each mutant weakens one guard in core
+# (stress/mutants.py), runs the jcstress group that should catch it, and reports caught or survived.
+# Locally: python3 stress/mutants.py run <id> [mode]
+#
+# The question it answers: would the ARM job of `stress` notice a weakened memory ordering? x86 is TSO,
+# so most of these mutants cannot fail there; the table compares both machines. A survived mutant is a
+# result, not a job failure: only errors (a mutant that no longer applies, a broken build) fail a job.
+# By hand only: it is an experiment to rerun after changing a lock-free policy or its stress test.
+name: stress-mutants
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: jcstress mode (quick, default, tough)
+        default: quick
+        type: choice
+        options: [quick, default, tough]
+
+permissions:
+  contents: read
+
+jobs:
+  mutants:
+    runs-on: ubuntu-24.04
+    outputs:
+      ids: ${{ steps.list.outputs.ids }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: list
+        run: echo "ids=$(python3 stress/mutants.py json)" >> "$GITHUB_OUTPUT"
+
+  mutant:
+    name: ${{ matrix.mutant }} (${{ matrix.arch }})
+    needs: mutants
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        mutant: ${{ fromJSON(needs.mutants.outputs.ids) }}
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Run the mutant
+        env:
+          MUTANT: ${{ matrix.mutant }}
+          MODE: ${{ inputs.mode }}
+          JDK: JAVA_HOME_21_${{ matrix.arch == 'arm64' && 'AARCH64' || 'X64' }}
+        # 0 caught, 2 survived (both are results), anything else is an error.
+        run: |
+          set +e
+          python3 stress/mutants.py run "$MUTANT" "$MODE" "-Porg.gradle.java.installations.fromEnv=$JDK"
+          code=$?
+          if [ "$code" -ne 0 ] && [ "$code" -ne 2 ]; then exit "$code"; fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutant-${{ matrix.mutant }}-${{ matrix.arch }}
+          path: stress/build/mutants/
+          if-no-files-found: error
+          retention-days: 30
+
+  summary:
+    needs: mutant
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutant-*
+          merge-multiple: true
+          path: results
+      - name: Table
+        run: |
+          {
+            echo "| Mutant | Kind | x86 | ARM |"
+            echo "|---|---|---|---|"
+            jq -rs '
+              group_by(.mutant)[]
+              | (map({(.arch): (if .caught then "caught" else "**survived**" end)}) | add) as $by
+              | "| `\(.[0].mutant)` | \(.[0].kind) | \($by.x86_64 // "-") | \($by.aarch64 // "-") |"
+            ' results/*.json
+          } >> "$GITHUB_STEP_SUMMARY"
