@@ -37,14 +37,14 @@ MUTANTS = {
         "ordering", CORE + "TimeoutPolicy.java",
         "STATE.setRelease(scope, running); // publishes start and limit to the watchdog",
         "STATE.set(scope, running);",
-        "TimeoutStress",
+        "TimeoutStress.TickSeesWholeCall",
         "enter() publishes RUNNING with a plain store: the watchdog may read RUNNING with an old start or limit.",
     ),
     "timeout-watchdog-opaque": (
         "ordering", CORE + "TimeoutPolicy.java",
         "expireIfOverdue(now, (long) STATE.getAcquire(this));",
         "expireIfOverdue(now, (long) STATE.getOpaque(this));",
-        "TimeoutStress",
+        "TimeoutStress.TickSeesWholeCall",
         "The watchdog reads the stamp without acquire: start and limit may be read before it.",
     ),
     "timeout-end-release-cas": (
