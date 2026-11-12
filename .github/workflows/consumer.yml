@@ -1,0 +1,68 @@
+# Installs resilience4cata as a user does, from its published artifacts, and checks that it works: consumer/check.sh
+# publishes every module to build/central-staging, checks the BOM lists exactly what is published, and builds and runs
+# a small application with Gradle (class path and module path) and Maven, with -Xlint:all -Werror. The build's own
+# tests use project dependencies, so they never read the POMs, the Gradle module metadata or the BOM.
+# Locally: consumer/check.sh
+#
+# On PRs and pushes that touch what ends up in the published artifacts' metadata or the generated code; release.yml
+# runs the same script on the bundle it is about to upload.
+name: consumer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/build.gradle'
+      - '**/module-info.java'
+      - '**/src/main/resources/**'
+      - 'processor/src/main/**'
+      - 'conventions/**'
+      - 'gradle/**'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - 'consumer/**'
+      - '.github/workflows/consumer.yml'
+  pull_request:
+    paths:
+      - '**/build.gradle'
+      - '**/module-info.java'
+      - '**/src/main/resources/**'
+      - 'processor/src/main/**'
+      - 'conventions/**'
+      - 'gradle/**'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - 'consumer/**'
+      - '.github/workflows/consumer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  consumer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # JDK 25 builds the micronaut module; JDK 21 (listed last: JAVA_HOME) runs Gradle, Maven and the application.
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            25
+            21
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Check the published artifacts as a user
+        run: consumer/check.sh -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64

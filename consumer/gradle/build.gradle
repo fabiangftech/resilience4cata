@@ -1,0 +1,54 @@
+// The same application (consumer/app) on the class path and as a named module, set up as
+// docs/en/start/installation.md tells Gradle users: the BOM, resilience4cata-all and the processor.
+def r4cVersion = providers.gradleProperty('r4cVersion').get()
+
+subprojects {
+    apply plugin: 'application'
+
+    java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+    sourceSets.main {
+        java.srcDir rootProject.file('../app/src/main/java')
+        resources.srcDir rootProject.file('../app/src/main/resources')
+    }
+
+    dependencies {
+        implementation platform("dev.resilience4cata:resilience4cata-bom:$r4cVersion")
+        annotationProcessor platform("dev.resilience4cata:resilience4cata-bom:$r4cVersion")
+        implementation 'dev.resilience4cata:resilience4cata-all'
+        annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
+    }
+
+    // What a strict user build does: generated code must not add a single warning.
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs.addAll(['-Xlint:all', '-Werror'])
+    }
+
+    application.mainClass = 'com.example.consumer.Main'
+}
+
+project(':modulepath') {
+    sourceSets.main.java.srcDir rootProject.file('../app/module')
+    application.mainModule = 'com.example.consumer'
+}
+
+// Every artifact the BOM lists (-Pr4cArtifacts, from check.sh) resolves with its dependencies, through the BOM. The
+// micronaut module needs Java 25, so the request says 25 (every other module accepts it).
+apply plugin: 'java-base' // the JVM version compatibility rules
+def everything = configurations.create('everything') {
+    canBeConsumed = false
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.JAVA_RUNTIME))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category, Category.LIBRARY))
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.JAR))
+        attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling, Bundling.EXTERNAL))
+        attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 25)
+    }
+}
+dependencies.add(everything.name, dependencies.platform("dev.resilience4cata:resilience4cata-bom:$r4cVersion"))
+providers.gradleProperty('r4cArtifacts').get().split(',').each { dependencies.add(everything.name, "dev.resilience4cata:$it") }
+tasks.register('resolveEverything') {
+    def files = everything.incoming.files
+    inputs.files(files)
+    doLast { println "resolved ${files.files.size()} jars for every artifact in the BOM" }
+}
