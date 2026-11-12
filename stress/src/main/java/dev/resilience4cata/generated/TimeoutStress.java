@@ -200,4 +200,52 @@ public final class TimeoutStress {
             }
         }
     }
+
+    /**
+     * The watchdog's real path ({@code tick}) must see a call's start and limit together with its
+     * {@code RUNNING} stamp. The caller makes a short call (1 ms) that ends normally, says so through
+     * {@code firstEnded}, then starts a long call (1 s) on the same scope. The watchdog ticks at 150 ms
+     * only once it saw {@code firstEnded}, so the only running call it can find is the long one, started
+     * at 100 ms or later: never overdue. A watchdog that pairs the long call's stamp with the short
+     * call's start and limit (enter's stamp written before its start and limit became visible, or the
+     * watchdog reading them before the stamp) interrupts it early. {@code TickRacesSuccess} cannot see
+     * this: its tick is so late that any start and limit are overdue.
+     *
+     * <p>Results: the watchdog ticked, the long call timed out, interrupt leaked after it.
+     */
+    @JCStressTest
+    @Outcome(id = "[01], 0, 0", expect = ACCEPTABLE, desc = "The long call was not interrupted.")
+    @Outcome(id = ".*, 1, .*", expect = FORBIDDEN, desc = "The long call was interrupted with the short call's start and limit.")
+    @Outcome(expect = FORBIDDEN, desc = "An interrupt leaked, or unexpected.")
+    @State
+    public static class TickSeesWholeCall {
+        static final long STARTED = 100_000_000L;
+        static final long TICK = 150_000_000L;
+        final Watchdog watchdog = new Watchdog(0);
+        final TimeoutPolicy fast = policy(watchdog);
+        final TimeoutPolicy slow = new TimeoutPolicy("slow", TimeoutConfig.builder().timeout(Duration.ofSeconds(1)).build(), watchdog);
+        volatile boolean firstEnded;
+
+        public TickSeesWholeCall() {
+            watchdog.tick(STARTED); // the coarse clock both calls start from
+        }
+
+        @Actor
+        public void caller(III_Result r) {
+            succeed(fast, fast.enter()); // ends long before its 1 ms: the watchdog does not tick yet
+            leaked();
+            firstEnded = true;
+            TimeoutPolicy.Scope second = slow.enter();
+            r.r2 = succeed(slow, second);
+            r.r3 = leaked();
+        }
+
+        @Actor
+        public void watchdog(III_Result r) {
+            if (firstEnded) {
+                watchdog.tick(TICK);
+                r.r1 = 1;
+            }
+        }
+    }
 }
