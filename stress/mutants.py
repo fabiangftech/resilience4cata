@@ -13,7 +13,10 @@ Most mutants weaken a memory ordering (an acquire or volatile read made opaque, 
 plain). x86 keeps loads and stores in order (TSO) and every atomic read-modify-write there is a full
 fence, so those can only fail on a machine that reorders, such as ARM. The "store-buffering" ones can
 fail on x86 too (TSO lets a later load pass an earlier store), and the "atomicity" one is a control
-that every machine must catch. On aarch64 HotSpot compiles getAcquire and getVolatile to the same
+that every machine must catch. The "masked" ones weaken an ordering that an atomic read-modify-write
+just before it already provides on x86 and on ARM (the AQS enqueue CAS before the semaphore's re-check,
+exit()'s getAndAdd of the permit before its read of the waiter count): they are expected to survive, and they stay in the
+list in case that neighbour changes. On aarch64 HotSpot compiles getAcquire and getVolatile to the same
 instruction (ldar), so a mutant must go down to opaque or plain to change anything there.
 
 --clean runs the mutant's jcstress group on the unchanged code: the baseline when a run is
@@ -57,14 +60,14 @@ MUTANTS = {
         "RUNNING -> IDLE without acquire: the next call's limit may be seen with this call's stamp.",
     ),
     "semaphore-recheck-opaque": (
-        "ordering", CORE + "BulkheadSemaphore.java",
+        "masked", CORE + "BulkheadSemaphore.java",
         "        int get() {\n            return (int) VALUE.getVolatile(this);",
         "        int get() {\n            return (int) VALUE.getOpaque(this);",
         "BulkheadSemaphoreStress",
         "A queued thread re-checks the permits with an opaque read: the release's wake-up can be lost.",
     ),
     "waiters-count-opaque": (
-        "ordering", CORE + "BulkheadWaiters.java",
+        "masked", CORE + "BulkheadWaiters.java",
         "return (int) COUNT.getVolatile(this);",
         "return (int) COUNT.getOpaque(this);",
         "BulkheadWaitersStress",

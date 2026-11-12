@@ -51,7 +51,7 @@ This corrects something we wrote earlier. After the Graviton3 run (10.9 % of exe
 
 ## What this does not show yet
 
-- **That the ARM job would catch a broken ordering.** A green run is not a proof. Each race test in the library was checked by mutation (weaken the guard, confirm the test fails), but those mutants ran on x86 and on Apple M1, not on these runners. Running them again on ARM is the next step, and it is still open in the [plan](../plan-1.0.md#after-10).
+- **That the ARM job would catch a broken ordering.** A green run is not a proof. Each race test in the library was checked by mutation (weaken the guard, confirm the test fails), but those mutants ran on x86 and on Apple M1, not on these runners. Running them again on ARM is the next step, and it is still open in the [plan](../plan-1.0.md#after-10). *Update, 12 November 2026: done. ARM caught nothing that x86 missed: the mutants caught on one machine are caught on both, and those that survive survive on both (details in the [plan](../plan-1.0.md#after-10)).*
 - **How long the weekly default mode takes.** From the quick runs, probably one to two hours on four ARM cores; the limit is just under six. The first scheduled run will tell.
 - **Anything about speed.** These are correctness tests. The performance numbers are still from ARM only (Graviton3 and Apple M1); x86 [has not been measured yet](../performance.md).
 
