@@ -67,6 +67,19 @@ dependencies {
     jacocoAggregation project(':micrometer')
     jacocoAggregation project(':opentelemetry')
     jacocoAggregation project(':reactor')
+    // The framework integrations: their own tests (context runners, @SpringBootTest, Micronaut contexts).
+    jacocoAggregation project(':spring')
+    jacocoAggregation project(':micronaut')
+    // The Quarkus extension is tested by quarkus:it: its @QuarkusTests (test) here, and its QuarkusExtensionTests
+    // (extensionTest, not a test suite the aggregation knows) below. The deployment module is not on its class path.
+    jacocoAggregation project(':quarkus:it')
+    jacocoAggregation project(':quarkus:deployment')
+}
+
+tasks.named('testCodeCoverageReport') {
+    def extensionTest = project(':quarkus:it').layout.buildDirectory.file('jacoco/extensionTest.exec')
+    dependsOn ':quarkus:it:extensionTest'
+    executionData.from(extensionTest)
 }
 
 // BlockHound instruments the JVM for good (and needs a JVM flag to do so on Java 21+), so its test runs alone, in a
