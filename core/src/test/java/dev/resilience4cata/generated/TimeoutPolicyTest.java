@@ -181,6 +181,16 @@ class TimeoutPolicyTest {
         assertThat(watchdog.registeredThreads()).isZero();
     }
 
+    /** The seam the jcstress tests use: their watchdog per state must not leave an entry in the thread's map. */
+    @Test
+    void aThreadCanForgetItsScopesForStressTests() {
+        Watchdog.ThreadScopes first = watchdog.scopes();
+        assertThat(watchdog.scopes()).as("one set of scopes per thread").isSameAs(first);
+
+        watchdog.forgetCurrentThreadForTest();
+        assertThat(watchdog.scopes()).as("forgotten: the next call registers the thread again").isNotSameAs(first);
+    }
+
     @Test
     void deadVirtualThreadsAreForgottenToo() throws InterruptedException {
         TimeoutPolicy timeout = timeout(Duration.ofMillis(100));
