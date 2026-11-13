@@ -3,8 +3,10 @@
 # default mode while quick mode passed (each state's watchdog filled the thread's ThreadLocalMap), so both run.
 # Locally: ./gradlew :stress:jcstress
 #
-# Weekly and by hand: a GitHub runner has 4 cores, so a run takes a few hours. Its own workflow, so a push to main
-# (which restarts stress.yml) does not cancel it.
+# Weekly and by hand: a GitHub runner has 4 cores, so a run takes hours. On x86 jcstress tries more than twice as many
+# thread and core layouts as on ARM, and the whole suite needs about 8 h there, past GitHub's 6 h per job: the tests
+# run in three shards of 22 (by class), and the last shard takes every class the first two do not name, so a new
+# test class always runs. Its own workflow, so a push to main (which restarts stress.yml) does not cancel it.
 name: stress-default
 
 on:
@@ -21,13 +23,20 @@ concurrency:
 
 jobs:
   jcstress:
-    name: jcstress default (${{ matrix.arch }})
+    name: jcstress default (${{ matrix.arch }}, ${{ matrix.shard.name }})
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
         arch: [x64, arm64]
+        shard:
+          - name: 1 of 3
+            tests: '\.(Cancellation|Bulkhead|Timeout|Hedge)Stress\.'
+          - name: 2 of 3
+            tests: '\.(CircuitBreaker|CircuitBreakerHalfOpen|CircuitBreakerQuiet|FluxCall|BulkheadWaiters|AdaptiveLimit)Stress\.'
+          - name: 3 of 3
+            tests: '^(?!.*\.(Cancellation|Bulkhead|Timeout|Hedge|CircuitBreaker|CircuitBreakerHalfOpen|CircuitBreakerQuiet|FluxCall|BulkheadWaiters|AdaptiveLimit)Stress\.)'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,13 +54,14 @@ jobs:
       - name: jcstress
         env:
           JDK: JAVA_HOME_21_${{ matrix.arch == 'arm64' && 'AARCH64' || 'X64' }}
-        run: ./gradlew :stress:jcstress -Pjcstress="-m default" "-Porg.gradle.java.installations.fromEnv=$JDK"
+          TESTS: ${{ matrix.shard.tests }}
+        run: ./gradlew :stress:jcstress "-Pjcstress=-m default -t $TESTS" "-Porg.gradle.java.installations.fromEnv=$JDK"
 
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: jcstress-report-default-${{ matrix.arch }}
+          name: jcstress-report-default-${{ matrix.arch }}-${{ strategy.job-index }}
           path: stress/build/jcstress/results/
           if-no-files-found: ignore
           retention-days: 30
