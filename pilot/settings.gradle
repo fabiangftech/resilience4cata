@@ -1,0 +1,14 @@
+// The pilot: three small services (Spring Boot, Micronaut, Quarkus) that use resilience4cata from Maven Central as a
+// user would, a simulated backend, and a k6 load with outages. Its own build, outside the library's. See README.md.
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+    plugins {
+        id 'io.quarkus' version "${quarkus}"
+    }
+}
+
+rootProject.name = 'pilot'
+include 'common', 'backend', 'spring', 'micronaut', 'quarkus'

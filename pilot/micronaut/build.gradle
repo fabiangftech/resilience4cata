@@ -1,0 +1,27 @@
+apply plugin: 'application'
+application {
+    mainClass = 'pilot.micronaut.App'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25 // Micronaut 5 needs Java 25
+    // As the Micronaut guide says: annotated classes become Micronaut beans.
+    options.compilerArgs.add('-Ar4c.inject=micronaut')
+}
+
+dependencies {
+    implementation project(':common')
+    implementation platform("io.micronaut.platform:micronaut-platform:$micronautPlatform")
+    annotationProcessor platform("io.micronaut.platform:micronaut-platform:$micronautPlatform")
+    annotationProcessor 'io.micronaut:micronaut-inject-java'
+    implementation 'io.micronaut:micronaut-http-server-netty'
+    implementation 'io.micronaut.serde:micronaut-serde-jackson'
+    runtimeOnly 'ch.qos.logback:logback-classic'
+    runtimeOnly 'org.yaml:snakeyaml'
+
+    implementation platform("dev.resilience4cata:resilience4cata-bom:$r4c")
+    annotationProcessor platform("dev.resilience4cata:resilience4cata-bom:$r4c")
+    implementation 'dev.resilience4cata:resilience4cata-micronaut'
+    compileOnly 'dev.resilience4cata:resilience4cata-annotations'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
+}

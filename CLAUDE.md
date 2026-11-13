@@ -106,6 +106,7 @@ Start with `docs/en/design.md` (decisions and open questions), then `docs/en/pol
 ./gradlew :stress:jcstress -Pjcstress="-m quick -t CircuitBreaker"    # one group (regex on the test class name)
 ./gradlew build -Pcoverage :examples:testCodeCoverageReport   # JaCoCo (agent only with -Pcoverage); aggregated report in examples/build/reports/jacoco/testCodeCoverageReport/
 set -a; . ./.env; set +a; ./gradlew build -Pcoverage :examples:testCodeCoverageReport sonar --no-configuration-cache   # SonarCloud analysis (needs SONAR_TOKEN; CI: sonar.yml)
+pilot/run.sh aws                                 # Spring Boot, Micronaut and Quarkus services on the release from Central under 10 min of k6 load with outages, one c7g.4xlarge; pilot/README.md; MINUTE=6 pilot/run.sh local for a short local run
 infra/bench.sh 3bc496f HEAD [regex]              # every benchmark on ~19 EC2 machines in parallel, base vs new; ~20 min; reads AWS keys from .env
 MACHINES=1 THREADS=1 JMH_OPTIONS="-f 6" infra/bench.sh 53a6651 HEAD '^TimeoutBenchmark[.]resilience4cata$'   # one benchmark, more forks
 ```
