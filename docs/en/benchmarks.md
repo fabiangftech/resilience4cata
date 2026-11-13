@@ -643,6 +643,39 @@ The four comparisons on the landing page, measured again on the code of 1.0.0-RC
 - The sync timeout measures 23.6 ns, as in [the run after the MVP](#annotated-classes-generics-config-overrides-ticker-bulkhead-2026-10-24-aws-graviton3) (23.7 ns); the 22.2 ns of the 0.1.0 headline has not been seen since.
 - With four threads, the bulkhead (192.3 ns) and Resilience4j's (forks from 361 to 528 ns) carry the usual contention spread.
 
+## Percentiles under contention (2026-11-12, AWS Graviton3) :id=percentiles
+
+The other sections give the average time per call, which hides tails. Here the same `RateLimiterBenchmark` and `BulkheadBenchmark` ran in JMH's `SampleTime` mode, which times individual calls: `MACHINES=6 JMH_OPTIONS="-bm sample" infra/bench.sh HEAD HEAD '^(RateLimiterBenchmark|BulkheadBenchmark)[.]'` on `580a090`, 6 `c7g.xlarge`, 3 forks per benchmark and thread count, each run as both halves of its machine (the table gives the mean of the halves; 1.2 to 2.2 million timed calls per row with four threads).
+
+How to read it:
+
+- **Every value includes about 34 ns of measurement.** Each sampled call is timed with two clock reads: the `baseline` row (the service called directly, no policy) has a median of 34 ns, where the average-time mode measures about 1 ns. Compare rows with each other, not with the averages of the other sections.
+- **p99.99 of 2 to 6 µs is the machine**, not the library: the baseline has it too (an interrupt, a JIT or GC safepoint). The largest samples, about 10 ms with four threads, are also in the baseline, and are left out.
+- **Closed loop**, as in every other section: each thread calls again as soon as its call returns, so a stalled call delays that thread's next calls instead of piling up more callers. An open-loop run (calls started at a fixed rate, latency counted from the planned start) is not done yet.
+
+Four threads, one shared limiter or bulkhead:
+
+| Scenario | Library | p50 | p90 | p99 | p99.9 | p99.99 | Mean |
+|---|---|---:|---:|---:|---:|---:|---:|
+| No policy (`baseline`) | — | 34 ns | 35 ns | 46 ns | 52 ns | 3.5 µs | 54 ns |
+| Rate limiter, permits free | resilience4cata | 78 ns | 81 ns | 160 ns | **110 µs** | 320 µs | 539 ns |
+| | Resilience4j 2.4.0 | 100 ns | 102 ns | 167 ns | 910 µs | 8.4 ms | 4.4 µs |
+| Rate limiter, exhausted (all rejected) | resilience4cata | 74 ns | 76 ns | 78 ns | 81 ns | 3.9 µs | 96 ns |
+| | Resilience4j 2.4.0 | 431 ns | 488 ns | 56.7 µs | 224 µs | 387 µs | 2.1 µs |
+| Bulkhead, slots free | resilience4cata | 348 ns | 410 ns | 526 ns | 555 ns | 5.9 µs | 373 ns |
+| | Resilience4j 2.4.0 | 540 ns | 784 ns | 1.1 µs | 1.8 µs | 6.2 µs | 605 ns |
+| Bulkhead, waiting allowed, slots free | resilience4cata | 354 ns | 477 ns | 544 ns | 716 ns | 5.4 µs | 407 ns |
+| | Resilience4j 2.4.0 | 576 ns | 850 ns | 1.5 µs | 3.1 µs | 7.6 µs | 643 ns |
+| Bulkhead, full (all rejected) | resilience4cata | 36 ns | 38 ns | 47 ns | 54 ns | 2.8 µs | 48 ns |
+| | Resilience4j 2.4.0 | 297 ns | 316 ns | 348 ns | 1.9 µs | 15.3 µs | 347 ns |
+
+- **The contended rate limiter has the tail the averages hid.** Between 0.1 % and 1 % of the calls lose the race for the shared `tat`, park for 1 ns and wait 110 µs or more (p99.9), up to 320 µs (p99.99); the mean of 539 ns is mostly those calls. That is longer than the 50 µs of timer slack [the rate limiter section](#rate-limiter-1-and-4-threads-2026-10-24) expected. Resilience4j's `AtomicRateLimiter` parks its losers too, and its tail is 8× longer at p99.9 (910 µs) and 26× at p99.99 (8.4 ms). It only happens when admitted calls arrive faster than the shared cache line moves between cores, here four threads doing nothing else.
+- **An exhausted limiter has no tail**: a rejection only reads, so every percentile up to p99.9 is within 30 ns of its median. Resilience4j's rejections write its shared state and park on a lost race: 56.7 µs at p99.
+- **The bulkheads have no park tail**: a slot is taken with one compare-and-set and given back with one add, and nobody parks while slots are free. resilience4cata's p99.9 is 555 ns (716 ns with waiting allowed), Resilience4j's 1.8 µs (3.1 µs).
+- **Rejections by a full bulkhead stay at the baseline** in resilience4cata (36 ns median, a read and a preallocated exception). Resilience4j's reaches 1.9 µs at p99.9 (not investigated).
+
+With one thread nothing parks. resilience4cata's rows stay within 10 ns of their median up to p99.9 (rate limiter 80 → 88 ns, bulkhead 54 → 62 ns). Resilience4j's do the same while calls pass, and reach 1.5 to 1.9 µs at p99.9 on its rejections (its rate limiter allocates about 550 B per rejection, [above](#rate-limiter-1-and-4-threads-2026-10-24)).
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings in three forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) and fails if the fork that allocates least reaches its budget + 1 B/op, or if a benchmark is missing from the results. Three forks because C2 decides once per JVM whether it scalar-replaces an object: a fork keeps the same bytes in every iteration, and the next one can allocate an object or two more. On the CI runner (x86), 21 runs of the one-fork gate measured `FluxBenchmark.resilience4cataPipelineStack` at 696, 728, 752 and 776 B and `resilience4cataTimeout` at 384 to 440 B, so the gate failed now and then on changes that allocate nothing; a longer warm-up put every fork on the higher value instead (Apple M1). An allocation the code starts making shows in every fork, so the lowest fork still catches it. The table shows every fork's bytes. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.

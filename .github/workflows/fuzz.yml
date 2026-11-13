@@ -2,8 +2,8 @@
 # model) and the processor's fuzz test (ProcessorFuzzTest, random annotated sources). The build runs the same seeds
 # every time (0.. for the models, 1..400 for the fuzz test); here they start at a new seed, the run's time in ms, and
 # run more of them, so each night explores cases no build has tried.
-# Locally: ./gradlew :core:test --tests '*ModelTest' -Ptest.seedStart=<n> -Ptest.seedFactor=10
-#          ./gradlew :processor:test --tests '*ProcessorFuzzTest' -PfuzzStart=<n> -PfuzzCount=5000
+# Locally: ./gradlew :core:test --tests '*ModelTest' -Ptest.seedStart=<n> -Ptest.seedFactor=100
+#          ./gradlew :processor:test --tests '*ProcessorFuzzTest' -PfuzzStart=<n> -PfuzzCount=30000
 #
 # A failure names its seed; the job summary gives the commands that replay it. Turn a seed that finds a bug into a
 # fixed test (FuzzFoundProcessorTest for the processor), so the build keeps it.
@@ -36,11 +36,11 @@ jobs:
       matrix:
         include:
           - suite: models
-            task: ":core:test --tests '*ModelTest' -Ptest.seedFactor=10"
+            task: ":core:test --tests '*ModelTest' -Ptest.seedFactor=100"
             start: -Ptest.seedStart
             replay: ./gradlew :core:test --tests '<the test>' -Ptest.seed=<seed>
           - suite: processor fuzz
-            task: ":processor:test --tests '*ProcessorFuzzTest' -PfuzzCount=5000"
+            task: ":processor:test --tests '*ProcessorFuzzTest' -PfuzzCount=30000"
             start: -PfuzzStart
             replay: ./gradlew :processor:test --tests '*ProcessorFuzzTest' -PfuzzSeed=<seed>
     steps:

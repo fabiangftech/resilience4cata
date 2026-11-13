@@ -643,6 +643,39 @@ Las cuatro comparaciones de la portada, medidas otra vez sobre el código de 1.0
 - El timeout síncrono mide 23.6 ns, como en [la corrida posterior al MVP](#clases-anotadas-genéricos-overrides-de-config-bulkhead-con-ticker-2026-10-24-aws-graviton3) (23.7 ns); los 22.2 ns del titular de 0.1.0 no se han vuelto a ver.
 - Con cuatro threads, el bulkhead (192.3 ns) y el de Resilience4j (forks de 361 a 528 ns) tienen la dispersión habitual de la contención.
 
+## Percentiles con contención (2026-11-12, AWS Graviton3) :id=percentiles
+
+Las demás secciones dan el tiempo medio por llamada, que esconde las colas. Aquí los mismos `RateLimiterBenchmark` y `BulkheadBenchmark` corrieron en el modo `SampleTime` de JMH, que mide llamadas individuales: `MACHINES=6 JMH_OPTIONS="-bm sample" infra/bench.sh HEAD HEAD '^(RateLimiterBenchmark|BulkheadBenchmark)[.]'` sobre `580a090`, 6 `c7g.xlarge`, 3 forks por benchmark y número de threads, cada corrida como las dos mitades de su máquina (la tabla da la media de las mitades; entre 1,2 y 2,2 millones de llamadas medidas por fila con cuatro threads).
+
+Cómo leerla:
+
+- **Cada valor incluye unos 34 ns de medición.** Cada llamada muestreada se mide con dos lecturas del reloj: la fila `baseline` (el servicio llamado directamente, sin política) tiene una mediana de 34 ns, donde el modo de tiempo medio mide alrededor de 1 ns. Compara las filas entre sí, no con las medias de las demás secciones.
+- **Un p99.99 de 2 a 6 µs es la máquina**, no la librería: el baseline también lo tiene (una interrupción, un safepoint del JIT o del GC). Las muestras más grandes, unos 10 ms con cuatro threads, también están en el baseline, y quedan fuera.
+- **Bucle cerrado**, como en todas las demás secciones: cada thread vuelve a llamar en cuanto vuelve su llamada, así que una llamada detenida retrasa las siguientes de ese thread en lugar de acumular más llamadores. Una corrida en bucle abierto (llamadas iniciadas a una tasa fija, latencia contada desde el inicio planeado) no se ha hecho todavía.
+
+Cuatro threads, un limiter o bulkhead compartido:
+
+| Escenario | Librería | p50 | p90 | p99 | p99.9 | p99.99 | Media |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Sin política (`baseline`) | — | 34 ns | 35 ns | 46 ns | 52 ns | 3,5 µs | 54 ns |
+| Rate limiter, permisos libres | resilience4cata | 78 ns | 81 ns | 160 ns | **110 µs** | 320 µs | 539 ns |
+| | Resilience4j 2.4.0 | 100 ns | 102 ns | 167 ns | 910 µs | 8,4 ms | 4,4 µs |
+| Rate limiter, agotado (todo rechazado) | resilience4cata | 74 ns | 76 ns | 78 ns | 81 ns | 3,9 µs | 96 ns |
+| | Resilience4j 2.4.0 | 431 ns | 488 ns | 56,7 µs | 224 µs | 387 µs | 2,1 µs |
+| Bulkhead, slots libres | resilience4cata | 348 ns | 410 ns | 526 ns | 555 ns | 5,9 µs | 373 ns |
+| | Resilience4j 2.4.0 | 540 ns | 784 ns | 1,1 µs | 1,8 µs | 6,2 µs | 605 ns |
+| Bulkhead, con espera, slots libres | resilience4cata | 354 ns | 477 ns | 544 ns | 716 ns | 5,4 µs | 407 ns |
+| | Resilience4j 2.4.0 | 576 ns | 850 ns | 1,5 µs | 3,1 µs | 7,6 µs | 643 ns |
+| Bulkhead, lleno (todo rechazado) | resilience4cata | 36 ns | 38 ns | 47 ns | 54 ns | 2,8 µs | 48 ns |
+| | Resilience4j 2.4.0 | 297 ns | 316 ns | 348 ns | 1,9 µs | 15,3 µs | 347 ns |
+
+- **El rate limiter con contención tiene la cola que las medias escondían.** Entre el 0,1 % y el 1 % de las llamadas pierden la carrera por el `tat` compartido, aparcan 1 ns y esperan 110 µs o más (p99.9), hasta 320 µs (p99.99); la media de 539 ns son sobre todo esas llamadas. Es más que los 50 µs de holgura del temporizador que esperaba [la sección del rate limiter](#rate-limiter-1-y-4-threads-2026-10-24). El `AtomicRateLimiter` de Resilience4j también aparca a los que pierden, y su cola es 8× más larga en p99.9 (910 µs) y 26× en p99.99 (8,4 ms). Solo pasa cuando las llamadas admitidas llegan más rápido de lo que la línea de caché compartida se mueve entre núcleos, aquí cuatro threads que no hacen otra cosa.
+- **Un limiter agotado no tiene cola**: un rechazo solo lee, así que cada percentil hasta p99.9 está a menos de 30 ns de su mediana. Los rechazos de Resilience4j escriben su estado compartido y aparcan al perder una carrera: 56,7 µs en p99.
+- **Los bulkheads no tienen cola de park**: un slot se toma con un compare-and-set y se devuelve con una suma, y nadie aparca mientras hay slots libres. El p99.9 de resilience4cata es 555 ns (716 ns con espera), el de Resilience4j 1,8 µs (3,1 µs).
+- **Los rechazos de un bulkhead lleno se quedan en el baseline** en resilience4cata (mediana de 36 ns, una lectura y una excepción preasignada). El de Resilience4j llega a 1,9 µs en p99.9 (no investigado).
+
+Con un thread nadie aparca. Las filas de resilience4cata se quedan a menos de 10 ns de su mediana hasta p99.9 (rate limiter 80 → 88 ns, bulkhead 54 → 62 ns). Las de Resilience4j hacen lo mismo mientras las llamadas pasan, y llegan a 1,5–1,9 µs en p99.9 en sus rechazos (su rate limiter asigna unos 550 B por rechazo, [arriba](#rate-limiter-1-y-4-threads-2026-10-24)).
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos en tres forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) y falla si el fork que menos asigna llega a su presupuesto + 1 B/op, o si un benchmark falta en los resultados. Tres forks porque C2 decide una vez por JVM si elimina un objeto (scalar replacement): un fork mantiene los mismos bytes en todas sus iteraciones, y el siguiente puede asignar uno o dos objetos más. En el runner de CI (x86), 21 ejecuciones del gate con un fork midieron `FluxBenchmark.resilience4cataPipelineStack` en 696, 728, 752 y 776 B y `resilience4cataTimeout` entre 384 y 440 B, así que el gate fallaba de vez en cuando en cambios que no asignan nada; un calentamiento más largo llevó todos los forks al valor más alto (Apple M1). Una allocation nueva en el código aparece en todos los forks, así que el fork más bajo la sigue detectando. La tabla muestra los bytes de cada fork. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.
