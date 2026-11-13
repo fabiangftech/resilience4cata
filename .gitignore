@@ -35,3 +35,8 @@ launch/
 
 # Maven output of consumer/check.sh
 consumer/maven/target/
+
+# Terraform state and plugins of the pilot (pilot/infra/)
+pilot/infra/.terraform/
+pilot/infra/.terraform.lock.hcl
+pilot/infra/terraform.tfstate*

@@ -1,0 +1,28 @@
+#!/bin/bash
+# Installs a JDK 25 and k6, runs the pilot, uploads the results and powers off (which terminates the machine).
+set -uo pipefail
+exec > /var/log/pilot.log 2>&1
+
+BUCKET='${bucket}'
+RESULTS="s3://$BUCKET/results"
+finish() {
+  aws s3 cp --recursive --quiet /opt/pilot/results "$RESULTS/" || true
+  aws s3 cp /var/log/pilot.log "$RESULTS/machine.log" || true
+  printf "" | aws s3 cp - "$RESULTS/done" || true
+  shutdown -h now
+}
+trap finish EXIT
+( sleep $((${max_minutes} * 60)); finish ) &
+
+mkdir -p /opt/jdk /opt/pilot /opt/k6
+curl -sSL https://corretto.aws/downloads/latest/amazon-corretto-25-aarch64-linux-jdk.tar.gz | tar xz -C /opt/jdk --strip-components 1
+curl -sSL https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-linux-arm64.tar.gz | tar xz -C /opt/k6 --strip-components 1
+aws s3 cp "s3://$BUCKET/bundle.tar.gz" - | tar xz -C /opt/pilot
+mkdir -p /opt/pilot/results
+lscpu > /opt/pilot/results/lscpu.txt
+# Enough sockets and files for k6's connections.
+ulimit -n 1048576
+sysctl -w net.ipv4.ip_local_port_range="1024 65000" net.ipv4.tcp_tw_reuse=1 net.core.somaxconn=8192
+
+OUT=/opt/pilot/results JAVA=/opt/jdk/bin/java JCMD=/opt/jdk/bin/jcmd K6=/opt/k6/k6 \
+    APP_CPUS=0-3 BACKEND_CPUS=4-7 K6_CPUS=8-15 /opt/pilot/machine.sh

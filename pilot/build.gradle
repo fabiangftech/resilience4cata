@@ -1,0 +1,17 @@
+// Every project compiles with a Java 25 toolchain: Micronaut 5 needs Java 25, the others are compiled for Java 21
+// (the library's baseline) and run on 25 on the machine, all three on the same JDK.
+subprojects {
+    apply plugin: 'java'
+    repositories {
+        mavenCentral()
+    }
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(25)
+        }
+    }
+    tasks.withType(JavaCompile).configureEach {
+        options.release = 21
+        options.compilerArgs.add('-parameters')
+    }
+}

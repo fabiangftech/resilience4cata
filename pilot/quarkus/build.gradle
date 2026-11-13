@@ -1,0 +1,17 @@
+plugins {
+    id 'io.quarkus'
+}
+
+dependencies {
+    implementation project(':common')
+    implementation enforcedPlatform("io.quarkus:quarkus-bom:$quarkus")
+    implementation 'io.quarkus:quarkus-rest'
+    implementation 'io.quarkus:quarkus-arc'
+
+    // As the Quarkus guide says.
+    implementation platform("dev.resilience4cata:resilience4cata-bom:$r4c")
+    annotationProcessor platform("dev.resilience4cata:resilience4cata-bom:$r4c")
+    implementation 'dev.resilience4cata:resilience4cata-quarkus'
+    compileOnly 'dev.resilience4cata:resilience4cata-annotations'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
+}

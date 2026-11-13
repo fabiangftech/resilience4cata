@@ -1,0 +1,17 @@
+apply plugin: 'application'
+application {
+    mainClass = 'pilot.spring.App'
+}
+
+dependencies {
+    implementation project(':common')
+    implementation platform("org.springframework.boot:spring-boot-dependencies:$springBoot")
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+
+    // As the Spring guide says.
+    implementation platform("dev.resilience4cata:resilience4cata-bom:$r4c")
+    annotationProcessor platform("dev.resilience4cata:resilience4cata-bom:$r4c")
+    implementation 'dev.resilience4cata:resilience4cata-spring'
+    compileOnly 'dev.resilience4cata:resilience4cata-annotations'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
+}

@@ -1,0 +1,5 @@
+micronaut:
+  application:
+    name: pilot
+  server:
+    port: 8080
