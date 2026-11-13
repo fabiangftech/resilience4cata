@@ -23,11 +23,13 @@ sonar {
 }
 
 // Only the published modules are analysed. Benchmarks, jcstress tests, examples, the site generator and the Quarkus
-// extension's test application are harnesses, not library code.
-subprojects {
-    afterEvaluate {
-        if (!pluginManager.hasPlugin('r4c.publish')) {
-            sonar { skipProject = true }
+// extension's test application are harnesses, not library code. A skipped project hides its subprojects from the
+// scanner too, so :quarkus (no code, parent of the published quarkus:runtime and quarkus:deployment) is kept.
+gradle.projectsEvaluated {
+    def publishes = { p -> p.pluginManager.hasPlugin('r4c.publish') }
+    subprojects.each { p ->
+        if (!publishes(p) && !p.subprojects.any(publishes)) {
+            p.sonar { skipProject = true }
         }
     }
 }
