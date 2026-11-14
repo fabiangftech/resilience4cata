@@ -4,7 +4,9 @@ Notable changes in each release of resilience4cata, newest first.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may change the API.
 
-## [Unreleased] :id=unreleased
+## [1.0.0-RC4] - 2026-11-14 :id=1.0.0-rc4
+
+The fourth release candidate for 1.0.0. The API is the same as in 1.0.0-RC3; one behaviour changes, found by the [pilot](https://github.com/fabiangftech/resilience4cata/tree/main/pilot): the circuit breaker no longer records the rejections of the method's own bulkhead, rate limiter or adaptive limit.
 
 ### Changed
 
