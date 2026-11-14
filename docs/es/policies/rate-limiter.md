@@ -129,7 +129,7 @@ El limiter existe una vez que su interfaz se envolvió o su pipeline se construy
 El rate limiter es la cuarta capa: dentro de CircuitBreaker, alrededor de Timeout y Bulkhead.
 
 - Las llamadas que rechaza un breaker abierto nunca llegan aquí, así que no gastan permisos.
-- Sus rechazos son `Exception`, así que por defecto un `@CircuitBreaker` externo los registra como fallas (tu propio limiter puede abrir tu breaker: agrega `RateLimitExceededException` a su `ignoreOn` si no es lo que quieres) y un `@Retry` externo los reintenta después de su espera (agrégala a `abortOn` para fallar rápido).
+- Un `@CircuitBreaker` externo nunca registra sus rechazos (tu propio limiter no es una dependencia que falla, así que no puede abrir tu breaker). Son `Exception`, así que un `@Retry` externo los reintenta después de su espera (agrega `RateLimitExceededException` a `abortOn` para fallar rápido).
 - Cada intento de un retry toma su propio permiso.
 - El tiempo de espera por un permiso no cuenta para el `@Timeout`, que está adentro.
 

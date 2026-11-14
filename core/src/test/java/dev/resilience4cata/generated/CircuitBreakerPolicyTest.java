@@ -2,12 +2,18 @@ package dev.resilience4cata.generated;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.resilience4cata.AdaptiveLimitFullException;
+import dev.resilience4cata.BulkheadFullException;
+import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.CircuitBreakerConfig;
 import dev.resilience4cata.CircuitBreakerState;
+import dev.resilience4cata.Classifier;
+import dev.resilience4cata.RateLimitExceededException;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
@@ -163,6 +169,70 @@ class CircuitBreakerPolicyTest {
         assertThat(cb.acquire()).isEqualTo(CircuitBreakerPolicy.REJECTED);
         cb.onFailure(probe, 0, new IllegalArgumentException());
         assertThat(cb.acquire()).isNotNegative(); // the permit came back
+    }
+
+    private static List<Throwable> localRejections() {
+        return List.of(new BulkheadFullException("b"), new RateLimitExceededException("r"), new AdaptiveLimitFullException("a"));
+    }
+
+    @Test
+    void localRejectionsAreNeverRecordedWhateverRecordOnSays() {
+        // A full bulkhead, rate limiter or adaptive limit is this application's own load, not a failing
+        // dependency: it must not open the breaker, even when recordOn names it.
+        CircuitBreakerPolicy cb = breaker(window(2).halfOpenCalls(1)
+                .recordOn(List.of(BulkheadFullException.class, RateLimitExceededException.class, AdaptiveLimitFullException.class)));
+        for (int i = 0; i < 10; i++) {
+            for (Throwable rejection : localRejections()) {
+                fail(cb, rejection);
+            }
+        }
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.CLOSED);
+        assertThat(cb.snapshot().bufferedCalls()).isZero();
+
+        cb = breaker(window(2).halfOpenCalls(1));
+        fail(cb);
+        fail(cb);
+        now.addAndGet(Duration.ofSeconds(10).toNanos());
+        for (Throwable rejection : localRejections()) {
+            long probe = cb.acquire();
+            assertThat(probe).isNotNegative();
+            cb.onFailure(probe, 0, rejection); // the probe permit comes back each time
+        }
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.HALF_OPEN);
+    }
+
+    @Test
+    void localRejectionsAreNotRecordedWhateverTheClassifierSays() {
+        CircuitBreakerPolicy cb = breaker(window(2));
+        for (int i = 0; i < 10; i++) {
+            for (Throwable rejection : localRejections()) {
+                long token = cb.acquire();
+                cb.onFailure(token, cb.startTimer(), rejection, Classifier.Outcome.FAILURE);
+            }
+        }
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.CLOSED);
+    }
+
+    @Test
+    void localRejectionsOfAsyncCallsAreNotRecorded() {
+        CircuitBreakerPolicy cb = breaker(window(2));
+        for (int i = 0; i < 10; i++) {
+            for (Throwable rejection : localRejections()) {
+                assertThat(cb.executeAsync(() -> CompletableFuture.<String>failedFuture(rejection)))
+                        .isCompletedExceptionally();
+                assertThat(cb.executeAsync(() -> CompletableFuture.<String>failedFuture(rejection), (v, e) -> Classifier.Outcome.FAILURE))
+                        .isCompletedExceptionally();
+            }
+        }
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.CLOSED);
+    }
+
+    @Test
+    void anOpenBreakerFurtherInIsStillAFailure() {
+        CircuitBreakerPolicy cb = breaker(window(2));
+        fail(cb, new CallNotPermittedException("inner"));
+        fail(cb, new CallNotPermittedException("inner"));
+        assertThat(cb.state()).isEqualTo(CircuitBreakerState.OPEN);
     }
 
     @Test

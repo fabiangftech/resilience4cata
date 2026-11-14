@@ -187,7 +187,7 @@ The limit exists once its interface has been wrapped or its pipeline built; an u
 The adaptive limit is inside the rate limiter and outside the timeout and the bulkhead:
 
 - **A `@Timeout` inside is the overload signal.** A call that times out fails with `CallTimeoutException`, which is in `dropOn` by default: the latency of that call (the timeout) goes into the window, and AIMD backs off. The same goes for a full `@Bulkhead` inside (`BulkheadFullException`).
-- **Outer policies see `AdaptiveLimitFullException`.** It is an `Exception`: by default an outer `@Retry` retries it after its delay (add it to `abortOn` to fail fast) and an outer `@CircuitBreaker` records it as a failure (add it to `ignoreOn` if a full limit should not open the breaker). A `@Hedge` stops starting attempts when one is rejected by the limit, as for an open breaker or a full bulkhead.
+- **Outer policies see `AdaptiveLimitFullException`.** It is an `Exception`: by default an outer `@Retry` retries it after its delay (add it to `abortOn` to fail fast) but an outer `@CircuitBreaker` never records it: a full limit cannot open the breaker. A `@Hedge` stops starting attempts when one is rejected by the limit, as for an open breaker or a full bulkhead.
 - **Each attempt is measured on its own**: a retry's delay is outside the limit, and holds no slot.
 - **Rejected calls already took a rate-limiter permit**, since the rate limiter is outside.
 

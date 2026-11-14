@@ -412,7 +412,10 @@ public final class CircuitBreakerConfig implements PolicyConfig {
     }
 
     /**
-     * Exceptions recorded as failures; other exceptions count as successes.
+     * Exceptions recorded as failures; other exceptions count as successes. Rejections by a local limit
+     * ({@link BulkheadFullException}, {@link RateLimitExceededException}, {@link AdaptiveLimitFullException})
+     * are never recorded, whatever this says: they come from this application's own load, not from the
+     * dependency.
      *
      * @return the value
      */

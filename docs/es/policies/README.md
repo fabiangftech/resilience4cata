@@ -202,11 +202,12 @@ assertThat(calls).hasValue(0);                  // the breaker rejected the firs
 assertThat(clock.elapsed()).isZero();           // ...and the retry did not wait to try again
 ```
 
-### Los rechazos son fallas para las capas externas
+### Los rechazos y las capas externas
 
-Un rechazo de una política interna es, por defecto, una `Exception` como cualquier otra para las capas que están afuera:
+Un rechazo de una política interna es, por defecto, una `Exception` como cualquier otra para las capas que están afuera, con una excepción:
 
-- `RateLimitExceededException`, `AdaptiveLimitFullException`, `CallTimeoutException` y `BulkheadFullException` las **reintenta** un `@Retry` externo (después de su espera) y las **registra como fallas** un `@CircuitBreaker` externo. Tu propio rate limiter, adaptive limit o bulkhead puede entonces abrir tu breaker. Ponlas en el `ignoreOn` del breaker o en el `abortOn` del retry cuando no es lo que quieres.
+- `RateLimitExceededException`, `AdaptiveLimitFullException`, `CallTimeoutException` y `BulkheadFullException` las **reintenta** un `@Retry` externo (después de su espera). Ponlas en el `abortOn` del retry cuando no es lo que quieres.
+- Un `@CircuitBreaker` externo **registra** `CallTimeoutException` como falla, pero **nunca** el rechazo de un límite local (`BulkheadFullException`, `RateLimitExceededException`, `AdaptiveLimitFullException`), digan lo que digan su `recordOn`, `ignoreOn` o clasificador: un bulkhead lleno es la carga de esta aplicación, y no debe abrir el breaker cuando la dependencia está bien.
 - Los `Error` no se reintentan (`retryOn` vale `Exception` por defecto), pero el breaker los registra como fallas (`recordOn` vale `Throwable` por defecto), y el `applyOn = Throwable` por defecto del fallback sí los atrapa, salvo que su parámetro de excepción sea más estrecho.
 
 ## Uso programático

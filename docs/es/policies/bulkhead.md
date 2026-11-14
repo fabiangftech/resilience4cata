@@ -127,7 +127,7 @@ El bulkhead existe una vez que su interfaz se envolvió o su pipeline se constru
 El bulkhead es la capa más interna, justo alrededor de tu método:
 
 - Un slot se ocupa solo mientras corre el método. Durante la espera de un `@Retry`, el slot queda libre para otras llamadas.
-- `BulkheadFullException` es una `Exception`: por defecto un `@Retry` externo la reintenta después de su espera (agrégala a `abortOn` para fallar rápido) y un `@CircuitBreaker` externo la registra como falla (agrégala a `ignoreOn` si un bulkhead lleno no debe abrir el breaker).
+- `BulkheadFullException` es una `Exception`: por defecto un `@Retry` externo la reintenta después de su espera (agrégala a `abortOn` para fallar rápido) pero un `@CircuitBreaker` externo nunca la registra: un bulkhead lleno es la carga de esta aplicación, no una falla de la dependencia, así que no puede abrir el breaker.
 - El tiempo esperando un slot cuenta para el `@Timeout`, que está afuera: una espera sync interrumpida por el timeout termina con `CallTimeoutException`.
 - Las llamadas rechazadas ya tomaron un permiso del rate limiter, porque el rate limiter está afuera.
 

@@ -1,5 +1,7 @@
 package dev.resilience4cata.generated;
 
+import dev.resilience4cata.AdaptiveLimitFullException;
+import dev.resilience4cata.BulkheadFullException;
 import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.CircuitBreakerConfig;
 import dev.resilience4cata.CircuitBreakerHandle;
@@ -7,6 +9,7 @@ import dev.resilience4cata.CircuitBreakerSnapshot;
 import dev.resilience4cata.CircuitBreakerState;
 import dev.resilience4cata.event.CircuitBreakerEvent;
 import dev.resilience4cata.Classifier;
+import dev.resilience4cata.RateLimitExceededException;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.List;
@@ -613,7 +616,10 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         }
     }
 
-    /** Caches, per exception class, how it is counted. {@code ignoreOn} wins over {@code recordOn}. */
+    /**
+     * Caches, per exception class, how it is counted. A local rejection ({@link #isLocalRejection}) is
+     * always ignored; then {@code ignoreOn} wins over {@code recordOn}.
+     */
     private static final class Classification extends ClassValue<Outcome> {
         private final List<Class<? extends Throwable>> recordOn;
         private final List<Class<? extends Throwable>> ignoreOn;
@@ -625,6 +631,9 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
 
         @Override
         protected Outcome computeValue(Class<?> type) {
+            if (isLocalRejection(type)) {
+                return Outcome.IGNORED;
+            }
             for (Class<? extends Throwable> ignore : ignoreOn) {
                 if (ignore.isAssignableFrom(type)) {
                     return Outcome.IGNORED;
@@ -637,6 +646,19 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
             }
             return Outcome.SUCCESS;
         }
+    }
+
+    /**
+     * Whether a failure is a rejection by a local limit (a full bulkhead, a rate limiter or an adaptive
+     * limit): this application's own load, not a failure of the dependency, so the breaker never records
+     * it, whatever {@code recordOn}, {@code ignoreOn} or a classifier say. A breaker's own
+     * {@code CallNotPermittedException} is not one: an open breaker further in means the dependency
+     * is failing.
+     */
+    static boolean isLocalRejection(Class<?> type) {
+        return BulkheadFullException.class.isAssignableFrom(type)
+                || RateLimitExceededException.class.isAssignableFrom(type)
+                || AdaptiveLimitFullException.class.isAssignableFrom(type);
     }
 
     /**
