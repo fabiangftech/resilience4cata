@@ -10,12 +10,13 @@ MINUTE=6 pilot/run.sh local    # on this machine, each "minute" of the load shor
 ```
 
 Results and `report.md` land in `pilot/build/<aws|local>/<run>/`. On AWS the service, the backend and k6 get 4, 4 and 8
-cores (`taskset`); every resource is destroyed at the end. `-Pr4c=<version>` in `gradle.properties` picks the release.
+cores (`taskset`); every resource is destroyed at the end. `r4c` in `gradle.properties` picks the release;
+`R4C=1.0.0-SNAPSHOT pilot/run.sh aws` runs this repository's code instead (published to `~/.m2` first).
 
 ## What runs
 
 - `Inventory` (the same annotated class in the three services): `stock` with `@Fallback`, `@Retry` (3 attempts, 20 ms),
-  `@CircuitBreaker` (100 calls, 50 %, 5 s open, `ignoreOn = BulkheadFullException`), `@Timeout("200ms")` and
+  `@CircuitBreaker` (100 calls, 50 %, 5 s open), `@Timeout("200ms")` and
   `@Bulkhead(40, maxWait 20 ms)`; `quote` with a fail-fast `@RateLimiter` (200 per second). The bodies run inside a
   `Probe` that records the most calls inside at once, the earliest interrupt and the rate-limited calls.
 - `backend`: a JDK `HttpServer` on virtual threads; `normal` answers in 3 ms plus an exponential 5 ms with 1 % 503s,
@@ -40,7 +41,10 @@ At most 40 calls inside the bulkhead; no call interrupted before 188 ms in the m
 bulkhead wait); 120,195–120,197 quotes in 600 s for at most 120,197; breaker closed and nothing inside at the end; heap
 after a full GC lower at the end than after the warm-up; one library thread throughout; 0.4–0.5 of the 4 cores used.
 
-Found on the way: without `ignoreOn = BulkheadFullException.class` the Spring service opened its breaker during its cold
-start with no backend failure, because the breaker counts its own inner bulkhead's rejections as failures. That is the
-documented default ([circuit breaker](../docs/en/policies/circuit-breaker.md#with-other-policies)), and the page advises
-`ignoreOn`; it is an easy trap.
+Found on the way: on 1.0.0-RC3 the Spring service opened its breaker during its cold start with no backend failure,
+because the breaker counted its own inner bulkhead's rejections as failures (the run above used
+`ignoreOn = BulkheadFullException.class` to avoid it). Since then the breaker never records a local limit's rejection
+([circuit breaker](../docs/en/policies/circuit-breaker.md#with-other-policies)), and the services no longer need it.
+A second run on that code (2026-11-13, same machine, no `ignoreOn`) passed every check for the three services with the
+same numbers; its one order answered by an open breaker in the steady phase started just as the backend went down at
+minute 4, and its retries met the breaker already open.

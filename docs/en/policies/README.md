@@ -200,11 +200,12 @@ assertThat(calls).hasValue(0);                  // the breaker rejected the firs
 assertThat(clock.elapsed()).isZero();           // ...and the retry did not wait to try again
 ```
 
-### Rejections are failures to the outer layers
+### Rejections and the outer layers
 
-A rejection by an inner policy is an `Exception` like any other to the layers outside it, by default:
+A rejection by an inner policy is an `Exception` like any other to the layers outside it, by default, with one exception:
 
-- `RateLimitExceededException`, `AdaptiveLimitFullException`, `CallTimeoutException` and `BulkheadFullException` are **retried** by an outer `@Retry` (after its delay) and **recorded as failures** by an outer `@CircuitBreaker`. Your own rate limiter, adaptive limit or bulkhead can therefore open your breaker. List them in the breaker's `ignoreOn` or the retry's `abortOn` when that is not what you want.
+- `RateLimitExceededException`, `AdaptiveLimitFullException`, `CallTimeoutException` and `BulkheadFullException` are **retried** by an outer `@Retry` (after its delay). List them in the retry's `abortOn` when that is not what you want.
+- An outer `@CircuitBreaker` **records** `CallTimeoutException` as a failure, but **never** the rejection of a local limit (`BulkheadFullException`, `RateLimitExceededException`, `AdaptiveLimitFullException`), whatever its `recordOn`, `ignoreOn` or classifier say: a full bulkhead is this application's own load, and must not open the breaker when the dependency is fine.
 - `Error`s are not retried (`retryOn` defaults to `Exception`), but the breaker records them as failures (`recordOn` defaults to `Throwable`), and the fallback's default `applyOn = Throwable` does catch them, unless its exception parameter is narrower.
 
 ## Programmatic use

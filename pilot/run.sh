@@ -5,20 +5,24 @@
 #
 #   pilot/run.sh aws               # on AWS, about 40 minutes; reads AWS keys from .env like infra/bench.sh
 #   MINUTE=6 pilot/run.sh local    # on this machine, each "minute" of the load shortened to 6 s
+#   R4C=1.0.0-SNAPSHOT pilot/run.sh aws   # this repository's code (published to ~/.m2 first)
 #
 # Results and report.md in pilot/build/<aws|local>/<run>/.
 set -euo pipefail
 PILOT=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$PILOT/.." && pwd)
 MODE=${1:-}
-[[ $MODE == aws || $MODE == local ]] || { sed -n '2,10p' "$0"; exit 2; }
+[[ $MODE == aws || $MODE == local ]] || { sed -n '2,11p' "$0"; exit 2; }
 RUN_ID=$(date +%Y%m%d-%H%M%S)
 WORK="$PILOT/build/$MODE/$RUN_ID"
 mkdir -p "$WORK"
 log() { echo "$(date +%H:%M:%S) $*"; }
 
 log "building"
-"$ROOT/gradlew" -q -p "$PILOT" installDist :quarkus:quarkusBuild
+if [[ ${R4C:-} == *-SNAPSHOT ]]; then
+  "$ROOT/gradlew" -q -p "$ROOT" publishToMavenLocal -Pversion="$R4C"
+fi
+"$ROOT/gradlew" -q -p "$PILOT" ${R4C:+-Pr4c=$R4C} installDist :quarkus:quarkusBuild
 BUNDLE="$WORK/bundle"
 mkdir -p "$BUNDLE"
 for p in backend spring micronaut; do cp -R "$PILOT/$p/build/install/$p" "$BUNDLE/$p"; done

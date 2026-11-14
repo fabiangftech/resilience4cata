@@ -127,7 +127,7 @@ The bulkhead exists once its interface has been wrapped or its pipeline built; a
 The bulkhead is the innermost layer, right around your method:
 
 - A slot is held only while the method runs. During a `@Retry` delay, the slot is free for other callers.
-- `BulkheadFullException` is an `Exception`: by default an outer `@Retry` retries it after its delay (add it to `abortOn` to fail fast) and an outer `@CircuitBreaker` records it as a failure (add it to `ignoreOn` if a full bulkhead should not open the breaker).
+- `BulkheadFullException` is an `Exception`: by default an outer `@Retry` retries it after its delay (add it to `abortOn` to fail fast) but an outer `@CircuitBreaker` never records it: a full bulkhead is this application's own load, not a failure of the dependency, so it cannot open the breaker.
 - The time spent waiting for a slot counts towards `@Timeout`, which is outside: a sync wait interrupted by the timeout ends with `CallTimeoutException`.
 - Rejected calls already took a rate-limiter permit, since the rate limiter is outside.
 

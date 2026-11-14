@@ -187,7 +187,7 @@ El límite existe una vez que su interfaz se envolvió o su pipeline se construy
 El adaptive limit está dentro del rate limiter y fuera del timeout y del bulkhead:
 
 - **Un `@Timeout` adentro es la señal de sobrecarga.** Una llamada que vence falla con `CallTimeoutException`, que está en `dropOn` por defecto: la latencia de esa llamada (el timeout) entra en la ventana, y AIMD retrocede. Lo mismo pasa con un `@Bulkhead` lleno adentro (`BulkheadFullException`).
-- **Las políticas de afuera ven `AdaptiveLimitFullException`.** Es una `Exception`: por defecto un `@Retry` de afuera la reintenta después de su espera (agrégala a `abortOn` para fallar rápido) y un `@CircuitBreaker` de afuera la registra como falla (agrégala a `ignoreOn` si un límite lleno no debe abrir el breaker). Un `@Hedge` deja de lanzar intentos cuando el límite rechaza uno, como con un breaker abierto o un bulkhead lleno.
+- **Las políticas de afuera ven `AdaptiveLimitFullException`.** Es una `Exception`: por defecto un `@Retry` de afuera la reintenta después de su espera (agrégala a `abortOn` para fallar rápido) pero un `@CircuitBreaker` de afuera nunca la registra: un límite lleno no puede abrir el breaker. Un `@Hedge` deja de lanzar intentos cuando el límite rechaza uno, como con un breaker abierto o un bulkhead lleno.
 - **Cada intento se mide por separado**: la espera de un retry está afuera del límite y no ocupa lugar.
 - **Las llamadas rechazadas ya tomaron un permiso del rate limiter**, porque el rate limiter está afuera.
 

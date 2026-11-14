@@ -84,15 +84,17 @@ class PoliciesPageTest {
     };
 
     @Test
-    void rateLimiterRejectionsCountAsBreakerFailures() {
+    void rateLimiterRejectionsAreNeverBreakerFailures() {
         LimitedApi api = Resilient.of(LimitedApi.class, backend, registry);
         api.limited("a");
-        try {
-            api.limited("b");
-        } catch (RuntimeException expected) {
-            assertThat(expected).isInstanceOf(dev.resilience4cata.RateLimitExceededException.class);
+        for (int i = 0; i < 5; i++) {
+            try {
+                api.limited("b");
+            } catch (RuntimeException expected) {
+                assertThat(expected).isInstanceOf(dev.resilience4cata.RateLimitExceededException.class);
+            }
         }
-        assertThat(registry.circuitBreaker("limited").state()).isEqualTo(CircuitBreakerState.OPEN);
+        assertThat(registry.circuitBreaker("limited").state()).isEqualTo(CircuitBreakerState.CLOSED);
     }
 
     @Test

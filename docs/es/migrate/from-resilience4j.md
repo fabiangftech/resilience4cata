@@ -149,6 +149,10 @@ Fallback → Retry (o Hedge) → CircuitBreaker → RateLimiter → AdaptiveLimi
 
 Un retry nunca reintenta `CallNotPermittedException`, diga lo que diga su `abortOn`, así que en cuanto el breaker se abre, el retry se rinde de inmediato en lugar de seguir reintentando contra él. En Resilience4j tienes que agregar tú mismo esa excepción a `ignoreExceptions`.
 
+### Un bulkhead lleno no abre el breaker :id=local-rejections
+
+El breaker nunca registra `BulkheadFullException`, `RateLimitExceededException` ni `AdaptiveLimitFullException`, digan lo que digan su `recordOn` o `ignoreOn`: son la carga de esta aplicación, no fallas de la dependencia. En Resilience4j el bulkhead y el rate limiter también están dentro del breaker, y su `BulkheadFullException` y `RequestNotPermitted` cuentan como fallas salvo que las agregues a `ignoreExceptions`, así que una ráfaga puede abrir el breaker con la dependencia sana. Quita esas entradas al migrar; no hace falta nada en su lugar.
+
 ### Los errores no se reintentan de forma predeterminada :id=errors
 
 `retryOn` tiene como valor predeterminado `Exception`: un `Error` (por ejemplo `OutOfMemoryError`, `AssertionError`) no se reintenta. El breaker lo registra como falla, igual que Resilience4j (`recordOn` tiene como valor predeterminado `Throwable`). `@Fallback(applyOn)` tiene como valor predeterminado `Throwable`, así que un fallback sí captura los `Error`s a menos que los agregues a `skipOn`.

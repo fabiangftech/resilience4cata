@@ -1,6 +1,5 @@
 package pilot.spring;
 
-import dev.resilience4cata.BulkheadFullException;
 import dev.resilience4cata.annotation.Bulkhead;
 import dev.resilience4cata.annotation.CircuitBreaker;
 import dev.resilience4cata.annotation.Fallback;
@@ -24,10 +23,7 @@ public class Inventory {
     @Fallback(method = "lastKnown")
     @Retry(name = "inventory", maxAttempts = 3, delay = "20ms")
     @CircuitBreaker(name = "inventory", windowSize = 100, minimumCalls = 20, failureRateThreshold = 50,
-            waitInOpen = "5s", halfOpenCalls = 5,
-            // As the circuit breaker page advises: our own full bulkhead is not the backend failing. Without it, the
-            // cold start's queue (Spring, first seconds) opened the breaker with no backend failure at all.
-            ignoreOn = BulkheadFullException.class)
+            waitInOpen = "5s", halfOpenCalls = 5)
     @Timeout("200ms")
     @Bulkhead(name = "inventory", maxConcurrent = 40, maxWait = "20ms")
     public String stock(String id) throws IOException, InterruptedException {

@@ -59,7 +59,10 @@ public @interface CircuitBreaker {
     /** How long the breaker may stay half-open before opening again, for example {@code "10s"}. {@code "0"} means no limit. */
     String maxWaitInHalfOpen() default "";
 
-    /** Exceptions recorded as failures. Empty means inherit. */
+    /**
+     * Exceptions recorded as failures. Empty means inherit. Rejections by a local limit (a full bulkhead,
+     * a rate limiter, an adaptive limit) are never recorded, whatever this says.
+     */
     Class<? extends Throwable>[] recordOn() default {};
 
     /** Exceptions that count neither as success nor as failure. */
