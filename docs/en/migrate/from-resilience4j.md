@@ -149,6 +149,10 @@ Fallback → Retry (or Hedge) → CircuitBreaker → RateLimiter → AdaptiveLim
 
 A retry never retries `CallNotPermittedException`, whatever its `abortOn` says, so once the breaker opens, the retry gives up at once instead of retrying into it. In Resilience4j you add that exception to `ignoreExceptions` yourself.
 
+### A full bulkhead does not open the breaker :id=local-rejections
+
+The breaker never records `BulkheadFullException`, `RateLimitExceededException` or `AdaptiveLimitFullException`, whatever its `recordOn` or `ignoreOn` say: they are this application's own load, not failures of the dependency. In Resilience4j the bulkhead and the rate limiter sit inside the breaker too, and their `BulkheadFullException` and `RequestNotPermitted` count as failures unless you add them to `ignoreExceptions`, so a burst can open the breaker while the dependency is fine. Drop those entries when you migrate; nothing replaces them.
+
 ### Errors are not retried by default :id=errors
 
 `retryOn` defaults to `Exception`: an `Error` (for example `OutOfMemoryError`, `AssertionError`) is not retried. The breaker records it as a failure, as Resilience4j does (`recordOn` defaults to `Throwable`). `@Fallback(applyOn)` defaults to `Throwable`, so a fallback does catch `Error`s unless you add them to `skipOn`.

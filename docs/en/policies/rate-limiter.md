@@ -129,7 +129,7 @@ The limiter exists once its interface has been wrapped or its pipeline built; an
 The rate limiter is the fourth layer: inside CircuitBreaker, around Timeout and Bulkhead.
 
 - Calls rejected by an open breaker never get here, so they don't use up permits.
-- Its rejections are `Exception`s, so by default an outer `@CircuitBreaker` records them as failures (your own limiter can open your breaker: add `RateLimitExceededException` to its `ignoreOn` if that is not what you want), and an outer `@Retry` retries them after its backoff delay (add it to `abortOn` to fail fast).
+- An outer `@CircuitBreaker` never records its rejections (your own limiter is not a failing dependency, so it cannot open your breaker). They are `Exception`s, so an outer `@Retry` retries them after its backoff delay (add `RateLimitExceededException` to `abortOn` to fail fast).
 - Each retry attempt takes a permit of its own.
 - The time spent waiting for a permit is not part of the `@Timeout`, which is inside.
 

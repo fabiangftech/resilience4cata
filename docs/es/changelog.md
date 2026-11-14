@@ -4,6 +4,12 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Sin publicar] :id=unreleased
+
+### Cambiado
+
+- **El circuit breaker nunca registra el rechazo de un límite local**: `BulkheadFullException`, `RateLimitExceededException` y `AdaptiveLimitFullException` no cuentan ni como fallas ni como éxitos (una prueba half-open recupera su permiso), digan lo que digan `recordOn`, `ignoreOn` o un clasificador. Una ráfaga que llenaba el propio bulkhead del método podía abrir el breaker sin ninguna falla de la dependencia, y mandar todas las llamadas al fallback: el [piloto](https://github.com/fabiangftech/resilience4cata/tree/main/pilot) lo encontró en un arranque en frío. `CallTimeoutException` y el `CallNotPermittedException` de un breaker interno siguen siendo fallas. Un `ignoreOn` con esos tres rechazos ya no hace falta.
+
 ## [1.0.0-RC3] - 2026-11-05 :id=1.0.0-rc3
 
 El tercer candidato a release de 1.0.0, después de una tercera revisión de 1.0.0-RC2 por los mismos cuatro revisores ([plan hacia la 1.0](plan-1.0.md#third-review)). La API es la misma que en 1.0.0-RC2; cambian dos comportamientos: el circuit breaker registra los `Error` como fallas, y las anotaciones a nivel de tipo que no protegen nada son un error de compilación.

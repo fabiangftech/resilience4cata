@@ -4,6 +4,12 @@ subprojects {
     apply plugin: 'java'
     repositories {
         mavenCentral()
+        // A -SNAPSHOT version (R4C=<version> pilot/run.sh) is this repository's build, from publishToMavenLocal.
+        if (rootProject.r4c.endsWith('-SNAPSHOT')) {
+            mavenLocal {
+                content { includeGroup 'dev.resilience4cata' }
+            }
+        }
     }
     java {
         toolchain {
