@@ -16,3 +16,8 @@ tasks.named('test') {
     inputs.files('../docs/en/reference/configuration.md', '../docs/es/reference/configuration.md')
             .withPropertyName('configurationReference').withPathSensitivity(PathSensitivity.RELATIVE)
 }
+
+// ContractTest compares the code with the repository's contract directory (docs/en/reference/compatibility.md).
+tasks.named('test') {
+    inputs.dir("$rootDir/contract").withPropertyName('contract').withPathSensitivity(PathSensitivity.RELATIVE)
+}

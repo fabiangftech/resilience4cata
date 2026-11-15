@@ -29,6 +29,14 @@ These are kept within a major version as well:
 - The JSON of the Spring Boot and Micronaut endpoints, which is `ResilienceSnapshot.toMap()` ([Snapshots](../guides/observability.md#snapshots)).
 - Error codes such as `R4C-ATR-001`. A code is never renumbered or reused, and a retired code keeps its section in the [error reference](../errors.md). The text of a message may improve in any version, so match on the code, not on the text.
 
+## How it is checked :id=how-it-is-checked
+
+CI runs these checks on every change to resilience4cata:
+
+- **The Java API**: each published module is compared with the last release by japicmp.
+- **Generated code**: the end-to-end tests are compiled with the last release's processor, annotations and modules from Maven Central, and run on the new modules.
+- **Everything else on this page**: metric names, types, units and tags in both metrics modules, the endpoints' JSON, configuration keys with their environment variables and values, the integrations' property names (and Spring Boot's auto-configuration and bean names), and error codes are compared with the files of the repository's [`contract`](https://github.com/fabiangftech/resilience4cata/tree/main/contract) directory. An entry may be added there in a minor version; removing or changing one fails the build.
+
 ## What may grow in a minor version :id=growth
 
 Adding is compatible, so a minor version may do any of the following. Write code that tolerates it:

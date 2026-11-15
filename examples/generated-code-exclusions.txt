@@ -1,0 +1,4 @@
+# Test sources left out of `./gradlew :examples:check -Pr4c.generatedBy=<release>` (CI: build.yml, against
+# r4c.apiBaseline): tests that use API added after that release, so they cannot compile against it. Ant patterns
+# relative to src/test/java, one per line, for example dev/resilience4cata/examples/NewFeatureTest.java.
+# Empty the list when r4c.apiBaseline moves past the release that added that API.

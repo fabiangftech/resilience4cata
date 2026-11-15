@@ -29,6 +29,14 @@ Esto también se mantiene dentro de una versión mayor:
 - El JSON de los endpoints de Spring Boot y Micronaut, que es `ResilienceSnapshot.toMap()` ([Snapshots](../guides/observability.md#snapshots)).
 - Los códigos de error como `R4C-ATR-001`. Un código nunca se renumera ni se reutiliza, y un código retirado conserva su sección en la [referencia de errores](../errors.md). El texto de un mensaje puede mejorar en cualquier versión, así que compara por el código, no por el texto.
 
+## Cómo se comprueba :id=how-it-is-checked
+
+CI ejecuta estas comprobaciones en cada cambio de resilience4cata:
+
+- **La API de Java**: japicmp compara cada módulo publicado con la última release.
+- **El código generado**: los tests de punta a punta se compilan con el procesador, las anotaciones y los módulos de la última release, descargados de Maven Central, y se ejecutan sobre los módulos nuevos.
+- **Todo lo demás de esta página**: los nombres, tipos, unidades y tags de las métricas en los dos módulos de métricas, el JSON de los endpoints, las claves de configuración con sus variables de entorno y valores, los nombres de propiedades de las integraciones (y, en Spring Boot, los nombres de las autoconfiguraciones y de los beans) y los códigos de error se comparan con los archivos del directorio [`contract`](https://github.com/fabiangftech/resilience4cata/tree/main/contract) del repositorio. Una entrada se puede añadir en una versión menor; quitar o cambiar una hace fallar el build.
+
 ## Qué puede crecer en una versión menor :id=growth
 
 Añadir es compatible, así que una versión menor puede hacer cualquiera de estas cosas. Escribe código que lo tolere:

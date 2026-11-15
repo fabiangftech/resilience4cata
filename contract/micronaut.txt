@@ -1,0 +1,13 @@
+# What docs/en/reference/compatibility.md promises to keep within a major version, as the code offers it.
+# Checked by a test (see contract/README.md): a line may be added in a minor version, never removed or changed.
+# The Micronaut integration: property names. Test: micronaut ContractTest.
+property resilience4cata.micronaut.allow-missing-processor
+property resilience4cata.micronaut.allow-retry-inside-transaction
+property resilience4cata.micronaut.exclude
+property resilience4cata.micronaut.health.down-when-open
+property resilience4cata.micronaut.health.enabled
+property resilience4cata.micronaut.metrics.enabled
+property resilience4cata.micronaut.verify-instances
+property resilience4cata.micronaut.verify-instances value=fail
+property resilience4cata.micronaut.verify-instances value=off
+property resilience4cata.micronaut.verify-instances value=warn

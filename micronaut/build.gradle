@@ -120,3 +120,8 @@ tasks.named('check') {
 
 // No module-info (Automatic-Module-Name only): the API packages that apiCompatibility compares.
 r4cApi.packages = ['dev.resilience4cata.micronaut']
+
+// ContractTest compares the code with the repository's contract directory (docs/en/reference/compatibility.md).
+tasks.named('test') {
+    inputs.dir("$rootDir/contract").withPropertyName('contract').withPathSensitivity(PathSensitivity.RELATIVE)
+}
