@@ -6,7 +6,7 @@ This page is the working plan: each task says what to change, where, and how to 
 
 ## Status
 
-- Versions on Maven Central: 0.13.0, and the release candidates 1.0.0-RC1, 1.0.0-RC2 and 1.0.0-RC3. `main` is 1.0.0-SNAPSHOT.
+- Versions on Maven Central: 0.13.0, and the release candidates 1.0.0-RC1, 1.0.0-RC2, 1.0.0-RC3 and 1.0.0-RC4. `main` is 1.0.0-SNAPSHOT.
 - The performance plan from the AWS runs is done (pull requests #53–#59, see [benchmarks](benchmarks.md)).
 - Javadoc titles carry the artifact name (#60); javadoc.io was synced for all 11 modules.
 - Phases 1 to 3 are done (#62 to #65).
@@ -17,6 +17,7 @@ This page is the working plan: each task says what to change, where, and how to 
 - A [third review](#third-review) of RC2 (2026-11-05): three reviewers say ship 1.0.0; its fixes change two behaviours, so a 1.0.0-RC3 comes first.
 - 1.0.0-RC3 (2026-11-05) has the third review's fixes. The install snippets now show it (owner's decision).
 - `main` takes changes only through pull requests with passing checks (administrators bypass it for the release commits), and every release candidate has a GitHub release; 1.0.0-RC3 is *Latest*, as the install snippets show it (2026-11-06).
+- 1.0.0-RC4 (2026-11-14): the pilot found the circuit breaker opening through the method's own full bulkhead at a cold start; the breaker now never records a local limit's rejection (#100). Same API as RC3. The install snippets show it, and it is *Latest*.
 - Next: 1.0.0.
 
 ## The review
@@ -202,5 +203,5 @@ Additive, so not blocking the freeze. Roughly in order of value. Items marked *(
   - `ConfigException.problems()` returns `List<String>`, not structured problems (code, key, origin).
   - Only circuit breakers have a list method on the registry; retry, hedge and timeout have no handles.
 - Features Resilience4j has, each to decide (build, or document why not): thread-pool bulkhead, cache, RxJava, Kotlin support, an automatic open → half-open transition, event endpoints, carrying the caller's context into hedged attempts.
-- Reassess adoption signals in about six months, as the adopting reviewer would: activity, maintainers, issues closed. A pilot on one high-traffic plain Java service is what they would recommend first. Until one exists, `pilot/` runs Spring Boot, Micronaut and Quarkus services on 1.0.0-RC3 from Central under 10 minutes of k6 load with the backend down and slow, on one AWS machine: every check passed on 2026-11-13 (see `pilot/README.md`). It is not a pilot with real traffic.
+- Reassess adoption signals in about six months, as the adopting reviewer would: activity, maintainers, issues closed. A pilot on one high-traffic plain Java service is what they would recommend first. Until one exists, `pilot/` runs Spring Boot, Micronaut and Quarkus services on the latest release from Central under 10 minutes of k6 load with the backend down and slow, on one AWS machine: every check passed on 2026-11-13 (see `pilot/README.md`). It is not a pilot with real traffic.
 - From the third review: the missing-processor check in a Spring or Micronaut native image (Spring could run it in its AOT step, on the JVM); `Ticker.onAdvance` returning a way to unregister; `onInstanceCreated` passing the new instance; a way to stop the shared daemon threads, or documentation that `core` belongs on the server's class path in a reloadable web application; the watchdog's tick growing again when no short timeout is left; the three integrations' switch names written down as deliberate in [design](design.md#api-decisions).
