@@ -129,6 +129,14 @@ This is the default, on purpose. The retry is outside the circuit breaker (order
 
 This holds whatever `abortOn` and `retryOn` say, and with a classifier too; it is not an entry of `abortOn`, so setting your own list does not remove it. See [Retry](../policies/retry.md) and [Circuit breaker](../policies/circuit-breaker.md).
 
+### The breaker opens right after startup :id=breaker-opens-at-startup
+
+If the dependency is healthy but the breaker opens in the first seconds after a deployment, look at the service's own CPU. During a cold start the JIT compiles the hot code and calls are slower than later; under a tight container CPU limit (Kubernetes `limits.cpu`), the cgroup quota freezes the whole JVM for part of every 100 ms period. Calls then really pass their `@Timeout`, and the breaker counts each `CallTimeoutException` as a failure of the dependency: it cannot tell a slow backend from a slow process. It closes again once `waitInOpen` passes and the service has warmed up.
+
+The pilot measured it: limited to half a core, Spring Boot, Micronaut and Quarkus services answered 3 to 36 % of their first minute's orders from an open breaker; with 1 core only Spring did, for 2.5 %; without a limit none did ([Benchmarks: services under a CPU limit](../benchmarks.md#cpu-limit)).
+
+Fixes: give the service CPU headroom at startup (a higher limit, or none, as many teams set only `requests`), or warm it up before it takes traffic (a readiness probe that waits for a few warm-up calls). A full bulkhead does not open the breaker: its rejections are never recorded ([Circuit breaker](../policies/circuit-breaker.md#with-other-policies)).
+
 ### A timeout does not stop my code :id=timeout-not-interrupting
 
 A sync `@Timeout` runs the call on the caller's thread and **interrupts** it when the time is up. Code that ignores interrupts keeps running until it returns on its own, and only then does the caller get `CallTimeoutException`:
@@ -139,7 +147,7 @@ A sync `@Timeout` runs the call on the caller's thread and **interrupts** it whe
 
 Fixes: set the I/O timeouts of the client itself (connect and read timeouts; `java.net.http.HttpClient`, NIO channels and most modern clients respond to interrupts or have their own timeouts), check `Thread.interrupted()` in long loops, and restore the interrupt flag when you catch `InterruptedException`. For async methods, the returned stage fails with `CallTimeoutException` on time, and the call's stage is cancelled if it is a `Future`; whether the work behind it stops depends on that code.
 
-Timeouts are also coarse by design: never early, at most about two watchdog ticks late (a tick is the shortest timeout in use / 16, between 1 and 50 ms). See [Timeout](../policies/timeout.md).
+Timeouts are also coarse by design: never early, at most about two watchdog ticks late (a tick is the shortest timeout in use / 16, between 1 and 50 ms) while the process gets CPU; under a container CPU limit, a throttled JVM is interrupted only when it runs again. See [Timeout](../policies/timeout.md).
 
 ### My external configuration is not applied :id=config-not-applied
 

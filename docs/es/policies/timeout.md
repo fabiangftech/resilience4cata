@@ -85,8 +85,11 @@ sequenceDiagram
 - **El código que ignora las interrupciones primero corre hasta el final**: un bucle ocupado, la E/S bloqueante clásica de `java.net.Socket` en un platform thread, una librería que se traga la `InterruptedException`. La llamada sigue hasta que termina; recién entonces quien llama recibe `CallTimeoutException` (sin causa), y el resultado se descarta.
 - La interrupción del watchdog se limpia antes de lanzar `CallTimeoutException`, así que nunca se filtra a trabajo posterior en ese thread. Una interrupción que el thread ya tenía antes de que venciera el plazo es del llamador, así que se conserva.
 - **Interrumpir una E/S puede costar una conexión.** Un thread bloqueado en un canal interrumpible (`InterruptibleChannel`, o E/S de sockets en un virtual thread) ve ese canal cerrado por la interrupción, así que la conexión del pool que usaba se pierde y el pool tiene que abrir otra. Cuando eso importe, configura los timeouts propios del cliente más cortos que `@Timeout`.
-- **Precisión.** Una llamada nunca se interrumpe antes de tiempo, y como mucho unos dos ticks del watchdog tarde. Un tick es un dieciseisavo del timeout más corto en uso, entre 1 ms y 50 ms: con solo `@Timeout("2s")`, como mucho unos 100 ms tarde.
+- **Precisión.** Una llamada nunca se interrumpe antes de tiempo, y como mucho unos dos ticks del watchdog tarde. Un tick es un dieciseisavo del timeout más corto en uso, entre 1 ms y 50 ms: con solo `@Timeout("2s")`, como mucho unos 100 ms tarde. Eso requiere que el proceso tenga CPU: con un límite de CPU de contenedor (una cuota de cgroup, lo que fija un `limits.cpu` de Kubernetes), una JVM con throttling congela a la vez el watchdog y al llamador, y el interrupt llega cuando el proceso vuelve a ejecutarse.
 - Una llamada que termina a tiempo no se toca. Las llamadas con timeout no leen ningún reloj: el watchdog mantiene un reloj aproximado para ellas.
+
+> [!MEASURED]
+> AWS Graviton3, JDK 25, servicios con 1500 llamadas por segundo y un `@Timeout` de 200 ms: sin límite, el interrupt más tardío llegó a los 221,6–225,1 ms. Con medio núcleo, los interrupts llegaron hasta 4,8 s tarde, todos en el primer minuto, mientras compilaba el JIT y el servicio tenía throttling en la mayoría de los periodos; ninguno pasó de 250 ms después. Ninguno llegó antes de tiempo. [Benchmarks: servicios con límite de CPU](../benchmarks.md#cpu-limit)
 
 ### Async: el future falla
 

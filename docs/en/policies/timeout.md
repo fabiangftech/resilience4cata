@@ -85,8 +85,11 @@ sequenceDiagram
 - **Code that ignores interrupts runs to completion first**: a busy loop, classic blocking `java.net.Socket` I/O on a platform thread, a library that swallows `InterruptedException`. The call keeps going until it returns; only then does the caller get `CallTimeoutException` (with no cause), and the result is discarded.
 - The watchdog's interrupt is cleared before `CallTimeoutException` is thrown, so it never leaks into later work on that thread. An interrupt the thread already had before the timeout passed is the caller's, so it is kept.
 - **Interrupting I/O can cost a connection.** A thread blocked on an interruptible channel (`InterruptibleChannel`, or socket I/O on a virtual thread) has that channel closed by the interrupt, so a pooled connection it was using is lost and the pool has to open a new one. Set the client's own timeouts shorter than `@Timeout` when that matters.
-- **Precision.** A call is never interrupted early, and at most about two watchdog ticks late. A tick is a sixteenth of the shortest timeout in use, between 1 ms and 50 ms: with `@Timeout("2s")` alone, about 100 ms late at most.
+- **Precision.** A call is never interrupted early, and at most about two watchdog ticks late. A tick is a sixteenth of the shortest timeout in use, between 1 ms and 50 ms: with `@Timeout("2s")` alone, about 100 ms late at most. That needs the process to get CPU: under a container CPU limit (a cgroup quota, which is what a Kubernetes `limits.cpu` sets), a throttled JVM freezes the watchdog and the caller together, and the interrupt comes when the process runs again.
 - A call that finishes in time is untouched. Timed calls read no clock: the watchdog keeps a coarse clock for them.
+
+> [!MEASURED]
+> AWS Graviton3, JDK 25, services under 1500 calls per second with a 200 ms `@Timeout`: without a limit, the latest interrupt came at 221.6–225.1 ms. Limited to half a core, interrupts came up to 4.8 s late, all in the first minute while the JIT compiled and the service was throttled in most periods; none later than 250 ms after that. None came early. [Benchmarks: services under a CPU limit](../benchmarks.md#cpu-limit)
 
 ### Async: the future fails
 

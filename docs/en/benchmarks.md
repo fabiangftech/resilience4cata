@@ -676,6 +676,23 @@ Four threads, one shared limiter or bulkhead:
 
 With one thread nothing parks. resilience4cata's rows stay within 10 ns of their median up to p99.9 (rate limiter 80 → 88 ns, bulkhead 54 → 62 ns). Resilience4j's do the same while calls pass, and reach 1.5 to 1.9 µs at p99.9 on its rejections (its rate limiter allocates about 550 B per rejection, [above](#rate-limiter-1-and-4-threads-2026-10-24)).
 
+## Services under a CPU limit (2026-11-15, AWS Graviton3) :id=cpu-limit
+
+The pilot (`pilot/README.md`: Spring Boot, Micronaut and Quarkus services on 1.0.0-RC4 from Maven Central, 10 minutes of k6 load at 1500 orders per second with the backend down for a minute and slow for another, one `c7g.4xlarge`, JDK 25) ran three times: without a limit, and with each service limited to 1 and to 0.5 core (`CPU=<cores> pilot/run.sh aws`). The limit is a cgroup v2 quota with a 100 ms period, which is what a Kubernetes `limits.cpu` sets; the service's threads run on 4 cores, so it can use a period's quota early and is then frozen until the next one. With the limit the JVM sees 1 processor. The services use 0.34–0.42 core on average outside the first minute, when the JIT compiles.
+
+| | No limit | 1 core | 0.5 core |
+|---|---|---|---|
+| Throttled periods, first minute | – | 16–22 % | 67–99 % (threads waiting 1.6–2.2 s per second) |
+| Throttled periods, steady | – | 0 % | Spring 8 %, Micronaut 0 %, Quarkus 2 % |
+| Latest interrupt of a 200 ms `@Timeout`, time in the method | 221.6–225.1 ms | up to 1629 ms | up to 4802 ms, all in the first minute |
+| Earliest interrupt | 188 ms | 188 ms | 188 ms |
+| First-minute orders answered by an open breaker | 0 % | Spring 2.5 % | 2.9–35.9 % |
+
+- **A timeout is late only while the process is frozen.** Without a limit, the latest interrupt came within the watchdog's two ticks (25 ms for a 200 ms timeout). At 0.5 core every interrupt later than 250 ms came in the first minute, while the service was throttled most of the time: the watchdog's thread and the interrupted one were frozen together. None came later than 250 ms in the steady phase. No timeout fired early in any run.
+- **A starved cold start opens the breaker**: calls really took longer than 200 ms, and a timeout counts as a failure of the dependency. The breaker closed again after `waitInOpen` (5 s).
+- **The policies held their limits in every run**: at most 40 calls in the bulkhead, the rate limiter's permits, the breaker closed at the end, nothing left inside, one library thread, the heap flat.
+- **Spring needs more than half a core at this load**: at 0.5 core its calls slowed enough to fill the bulkhead in the steady phase (1.4 % of orders answered by the bulkhead's fallback, p99 318 ms). Micronaut and Quarkus passed every check.
+
 ## Allocation gate
 
 Timing on shared CI runners is noise, but bytes allocated per operation are not, so CI gates on them. `./gradlew :benchmark:allocationCheck` runs every benchmark listed in `benchmark/allocation-budgets.properties` with short settings in three forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) and fails if the fork that allocates least reaches its budget + 1 B/op, or if a benchmark is missing from the results. Three forks because C2 decides once per JVM whether it scalar-replaces an object: a fork keeps the same bytes in every iteration, and the next one can allocate an object or two more. On the CI runner (x86), 21 runs of the one-fork gate measured `FluxBenchmark.resilience4cataPipelineStack` at 696, 728, 752 and 776 B and `resilience4cataTimeout` at 384 to 440 B, so the gate failed now and then on changes that allocate nothing; a longer warm-up put every fork on the higher value instead (Apple M1). An allocation the code starts making shows in every fork, so the lowest fork still catches it. The table shows every fork's bytes. It prints a table and writes `benchmark/build/jmh/allocation-report.md`; the `alloc-gate` workflow runs it on every PR. Adding a benchmark is one line: `<BenchmarkClass>.<method> = <bytes per op>`.
