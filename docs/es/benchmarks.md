@@ -676,6 +676,23 @@ Cuatro threads, un limiter o bulkhead compartido:
 
 Con un thread nadie aparca. Las filas de resilience4cata se quedan a menos de 10 ns de su mediana hasta p99.9 (rate limiter 80 → 88 ns, bulkhead 54 → 62 ns). Las de Resilience4j hacen lo mismo mientras las llamadas pasan, y llegan a 1,5–1,9 µs en p99.9 en sus rechazos (su rate limiter asigna unos 550 B por rechazo, [arriba](#rate-limiter-1-y-4-threads-2026-10-24)).
 
+## Servicios con límite de CPU (2026-11-15, AWS Graviton3) :id=cpu-limit
+
+El piloto (`pilot/README.md`: servicios Spring Boot, Micronaut y Quarkus con 1.0.0-RC4 de Maven Central, 10 minutos de carga k6 a 1500 pedidos por segundo con el backend caído un minuto y lento otro, una `c7g.4xlarge`, JDK 25) corrió tres veces: sin límite, y con cada servicio limitado a 1 y a 0,5 núcleo (`CPU=<núcleos> pilot/run.sh aws`). El límite es una cuota de cgroup v2 con un periodo de 100 ms, lo que fija un `limits.cpu` de Kubernetes; los hilos del servicio corren en 4 núcleos, así que puede gastar pronto la cuota de un periodo y queda congelado hasta el siguiente. Con el límite la JVM ve 1 procesador. Los servicios usan 0,34–0,42 núcleos de media fuera del primer minuto, cuando compila el JIT.
+
+| | Sin límite | 1 núcleo | 0,5 núcleo |
+|---|---|---|---|
+| Periodos con throttling, primer minuto | – | 16–22 % | 67–99 % (hilos esperando 1,6–2,2 s por segundo) |
+| Periodos con throttling, estable | – | 0 % | Spring 8 %, Micronaut 0 %, Quarkus 2 % |
+| Interrupt más tardío de un `@Timeout` de 200 ms, tiempo en el método | 221,6–225,1 ms | hasta 1629 ms | hasta 4802 ms, todos en el primer minuto |
+| Interrupt más temprano | 188 ms | 188 ms | 188 ms |
+| Pedidos del primer minuto respondidos por un breaker abierto | 0 % | Spring 2,5 % | 2,9–35,9 % |
+
+- **Un timeout solo llega tarde mientras el proceso está congelado.** Sin límite, el interrupt más tardío llegó dentro de los dos ticks del watchdog (25 ms para un timeout de 200 ms). Con 0,5 núcleo, todos los interrupts de más de 250 ms llegaron en el primer minuto, con el servicio congelado casi todo el tiempo: el hilo del watchdog y el interrumpido estaban congelados a la vez. Ninguno pasó de 250 ms en la fase estable. Ningún timeout saltó antes de tiempo en ninguna corrida.
+- **Un arranque sin CPU abre el breaker**: las llamadas de verdad tardaron más de 200 ms, y un timeout cuenta como falla de la dependencia. El breaker se volvió a cerrar tras `waitInOpen` (5 s).
+- **Las políticas respetaron sus límites en todas las corridas**: como mucho 40 llamadas en el bulkhead, los permisos del rate limiter, el breaker cerrado al final, nada pendiente dentro, un solo hilo de la librería, el heap estable.
+- **Spring necesita más de medio núcleo con esta carga**: con 0,5 núcleo sus llamadas se hicieron lo bastante lentas como para llenar el bulkhead en la fase estable (1,4 % de los pedidos respondidos por el fallback del bulkhead, p99 de 318 ms). Micronaut y Quarkus pasaron todos los chequeos.
+
 ## Gate de allocations
 
 En los runners compartidos de CI los tiempos son ruido, pero los bytes asignados por operación no, así que CI decide con ellos. `./gradlew :benchmark:allocationCheck` corre cada benchmark listado en `benchmark/allocation-budgets.properties` con ajustes cortos en tres forks (`-f 3 -wi 3 -w 200ms -i 3 -r 200ms -t 1 -prof gc`) y falla si el fork que menos asigna llega a su presupuesto + 1 B/op, o si un benchmark falta en los resultados. Tres forks porque C2 decide una vez por JVM si elimina un objeto (scalar replacement): un fork mantiene los mismos bytes en todas sus iteraciones, y el siguiente puede asignar uno o dos objetos más. En el runner de CI (x86), 21 ejecuciones del gate con un fork midieron `FluxBenchmark.resilience4cataPipelineStack` en 696, 728, 752 y 776 B y `resilience4cataTimeout` entre 384 y 440 B, así que el gate fallaba de vez en cuando en cambios que no asignan nada; un calentamiento más largo llevó todos los forks al valor más alto (Apple M1). Una allocation nueva en el código aparece en todos los forks, así que el fork más bajo la sigue detectando. La tabla muestra los bytes de cada fork. Imprime una tabla y escribe `benchmark/build/jmh/allocation-report.md`; el workflow `alloc-gate` lo corre en cada PR. Agregar un benchmark es una línea: `<ClaseBenchmark>.<método> = <bytes por op>`.

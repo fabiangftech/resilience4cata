@@ -142,6 +142,7 @@ resource "aws_instance" "pilot" {
   user_data = templatefile("${path.module}/user-data.sh.tftpl", {
     bucket      = aws_s3_bucket.run.id
     max_minutes = var.max_minutes
+    cpu_quota   = var.cpu_quota
   })
 
   tags = {

@@ -4,7 +4,9 @@
 # get their own cores (taskset); locally nothing is pinned.
 #
 # Environment: OUT (default ./results), MINUTE (seconds per minute of load.js, default 60), APPS (default
-# "spring micronaut quarkus"), JAVA, JCMD, K6, APP_CPUS/BACKEND_CPUS/K6_CPUS (empty = not pinned).
+# "spring micronaut quarkus"), JAVA, JCMD, K6, APP_CPUS/BACKEND_CPUS/K6_CPUS (empty = not pinned), APP_CPU_QUOTA
+# (empty = none): a CPU limit for the service in cores, such as 1 or 0.5, enforced as Kubernetes does (cgroup v2
+# cpu.max, CFS quota per 100 ms period) through `systemd-run --scope -p CPUQuota=...`, on top of its APP_CPUS cores.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=${OUT:-$HERE/results}
@@ -14,6 +16,7 @@ JAVA=${JAVA:-java}
 JCMD=${JCMD:-jcmd}
 K6=${K6:-k6}
 APP_CPUS=${APP_CPUS-}
+APP_CPU_QUOTA=${APP_CPU_QUOTA-}
 BACKEND_CPUS=${BACKEND_CPUS-}
 K6_CPUS=${K6_CPUS-}
 mkdir -p "$OUT"
@@ -22,6 +25,13 @@ now_ms() { python3 -c 'import time; print(int(time.time() * 1000))'; }
 pin() { # <cpus> <command...>: replaces the calling (sub)shell, so that $! of `( pin ... ) &` is the process itself
   local cpus=$1; shift
   if [ -n "$cpus" ] && command -v taskset > /dev/null; then exec taskset -c "$cpus" "$@"; else exec "$@"; fi
+}
+cpu_stat() { # <pid>: the throttling counters of its cgroup (cgroup v2), as JSON fields, or nothing
+  local path file
+  path=$(awk -F: '$1 == "0" {print $3}' "/proc/$1/cgroup" 2> /dev/null)
+  file="/sys/fs/cgroup$path/cpu.stat"
+  [ -n "$path" ] && [ -r "$file" ] || return 0
+  awk '$1 == "nr_periods" || $1 == "nr_throttled" || $1 == "throttled_usec" {printf ",\"%s\":%s", $1, $2}' "$file"
 }
 wait_up() { # <url> <seconds>
   for _ in $(seq $(($2 * 4))); do curl -sf -o /dev/null "$1" && return 0; sleep 0.25; done
@@ -41,12 +51,21 @@ sample() { # <pid> <file>: every 5 s, one JSON line: time, CPU ticks, RSS, threa
     fi
     local stats
     stats=$(curl -s -m 2 http://127.0.0.1:8080/pilot/stats || echo null)
-    echo "{\"t\":$(( $(now_ms) ))e-3,\"ticks\":$ticks,\"rssKb\":$rss,\"threads\":$threads,\"stats\":${stats:-null}}" >> "$2"
+    echo "{\"t\":$(( $(now_ms) ))e-3,\"ticks\":$ticks,\"rssKb\":$rss,\"threads\":$threads$(cpu_stat "$1"),\"stats\":${stats:-null}}" >> "$2"
     sleep 5
   done
 }
 
 log "java: $("$JAVA" -version 2>&1 | head -1)"
+if [ -n "$APP_CPU_QUOTA" ] && ! command -v systemd-run > /dev/null; then
+  log "APP_CPU_QUOTA needs systemd-run"; exit 1
+fi
+echo "{\"cpuQuota\":${APP_CPU_QUOTA:-null}}" > "$OUT/setup.json"
+# systemd-run --scope moves itself into a new scope with the limit, then execs the command: the pid stays the same.
+QUOTA=()
+if [ -n "$APP_CPU_QUOTA" ]; then
+  QUOTA=(systemd-run --scope --quiet -p "CPUQuota=$(python3 -c "print(round($APP_CPU_QUOTA * 100))")%")
+fi
 ( pin "$BACKEND_CPUS" "$JAVA" -Xms1g -Xmx1g -cp "$HERE/backend/lib/*" pilot.backend.Backend 9000 ) > "$OUT/backend.log" 2>&1 &
 BACKEND=$!
 wait_up http://127.0.0.1:9000/admin/stats 30 || { log "the backend did not start"; exit 1; }
@@ -62,7 +81,7 @@ for app in $APPS; do
     quarkus) CMD=("$JAVA" "${JVM[@]}" -jar "$HERE/quarkus/quarkus-run.jar") ;;
   esac
   started=$(now_ms)
-  ( pin "$APP_CPUS" "${CMD[@]}" ) > "$OUT/$app.log" 2>&1 &
+  ( pin "$APP_CPUS" ${QUOTA[@]+"${QUOTA[@]}"} "${CMD[@]}" ) > "$OUT/$app.log" 2>&1 &
   APP=$!
   if ! wait_up http://127.0.0.1:8080/pilot/stats 90; then log "$app did not start"; kill "$APP"; continue; fi
   echo "{\"startupMillis\":$(( $(now_ms) - started ))}" > "$OUT/$app-startup.json"

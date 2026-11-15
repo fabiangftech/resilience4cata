@@ -6,6 +6,7 @@ while k6 sends them 10 minutes of load with outages. Not part of the library's b
 
 ```bash
 pilot/run.sh aws               # one c7g.4xlarge on AWS, about 35 minutes, AWS keys from .env (like infra/bench.sh)
+CPU=1 pilot/run.sh aws         # the service limited to 1 core, as a Kubernetes CPU limit does (see below)
 MINUTE=6 pilot/run.sh local    # on this machine, each "minute" of the load shortened to 6 s
 ```
 
@@ -48,3 +49,44 @@ because the breaker counted its own inner bulkhead's rejections as failures (the
 A second run on that code (2026-11-13, same machine, no `ignoreOn`) passed every check for the three services with the
 same numbers; its one order answered by an open breaker in the steady phase started just as the backend went down at
 minute 4, and its retries met the breaker already open.
+
+## Under a CPU limit (2026-11-15, AWS Graviton3, JDK 25, 1.0.0-RC4)
+
+`CPU=<cores>` runs each service with `systemd-run --scope -p CPUQuota=<cores × 100>%` on its 4 cores: cgroup v2's
+`cpu.max` with a 100 ms period, which is what a Kubernetes `limits.cpu` sets. With threads on 4 cores, a service at a
+1-core limit can use its quota in 25 ms and is then frozen for the rest of the period. The JVM sees 1 processor (so it
+picks Serial GC and one carrier thread for virtual threads). The report adds the share of periods in which the service
+was throttled, how long its threads waited per second, and when interrupts arrived late.
+
+Three runs on the same machine type, the same load:
+
+| | No limit | 1 core | 0.5 core |
+|---|---|---|---|
+| Checks | all pass | all pass | Micronaut, Quarkus pass; Spring fails 2 (below) |
+| Throttled periods, warm-up minute | – | 16–22 % | 67–99 % (threads waiting 1.6–2.2 s per second) |
+| Throttled periods, steady | – | 0 % | Spring 8 %, Micronaut 0 %, Quarkus 2 % |
+| Latest interrupt (200 ms timeout) | 221.6–225.1 ms | up to 1629 ms | up to 4802 ms, all in the warm-up minute |
+| Earliest interrupt | 188 ms | 188 ms | 188 ms |
+| Warm-up orders answered by an open breaker | 0 % | Spring 2.5 % | 2.9–35.9 % |
+
+What it shows:
+
+- **The policies hold their limits under throttling**: never an early timeout, at most 40 calls in the bulkhead, the
+  rate limiter's permits, the breaker closed at the end, nothing left inside, one library thread, the heap flat.
+- **A timeout is only as punctual as the process gets CPU.** Without a limit the latest interrupt came 21.6–25.1 ms
+  after the 200 ms (the watchdog's two ticks are 25 ms). At 0.5 core, every interrupt later than 250 ms came in the
+  warm-up minute, while the service was throttled most of the time (the JIT's warm-up): the watchdog and the
+  interrupted thread were both frozen. None came later than 250 ms in the steady phase. (The 1-core run did not yet
+  record when they came.)
+- **A starved cold start opens the breaker.** In the warm-up minute calls really took longer than 200 ms because the
+  service had no CPU, and the breaker counts a timeout as a failure of the dependency: it cannot tell a slow backend
+  from a slow process. It closed again after `waitInOpen` (5 s), and no breaker opened outside the warm-up and the
+  backend's outages.
+- **Spring needs more than half a core at this load**: it uses 0.41 core on average against 0.34 for Micronaut and
+  Quarkus, was throttled in 8 % of the steady periods, and its calls slowed enough to fill the bulkhead: 1.4 % of the
+  steady orders were answered by the bulkhead's fallback (p99 318 ms), so the steady and after checks failed. The
+  bulkhead did its job; the service needs more CPU.
+
+Runs `20261115-114127` (no limit), `20261115-110010` (1 core; it did not record when late interrupts came yet) and
+`20261115-121354` (0.5 core).
+

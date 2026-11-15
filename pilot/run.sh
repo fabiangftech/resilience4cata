@@ -6,13 +6,14 @@
 #   pilot/run.sh aws               # on AWS, about 40 minutes; reads AWS keys from .env like infra/bench.sh
 #   MINUTE=6 pilot/run.sh local    # on this machine, each "minute" of the load shortened to 6 s
 #   R4C=1.0.0-SNAPSHOT pilot/run.sh aws   # this repository's code (published to ~/.m2 first)
+#   CPU=1 pilot/run.sh aws         # the service under a CPU limit of 1 core, as Kubernetes enforces it (cgroup quota)
 #
 # Results and report.md in pilot/build/<aws|local>/<run>/.
 set -euo pipefail
 PILOT=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$PILOT/.." && pwd)
 MODE=${1:-}
-[[ $MODE == aws || $MODE == local ]] || { sed -n '2,11p' "$0"; exit 2; }
+[[ $MODE == aws || $MODE == local ]] || { sed -n '2,12p' "$0"; exit 2; }
 RUN_ID=$(date +%Y%m%d-%H%M%S)
 WORK="$PILOT/build/$MODE/$RUN_ID"
 mkdir -p "$WORK"
@@ -30,7 +31,7 @@ cp -R "$PILOT/quarkus/build/quarkus-app" "$BUNDLE/quarkus"
 cp "$PILOT/load.js" "$PILOT/machine.sh" "$BUNDLE/"
 
 if [ "$MODE" = local ]; then
-  MINUTE=${MINUTE:-6} OUT="$WORK/results" "$BUNDLE/machine.sh"
+  MINUTE=${MINUTE:-6} OUT="$WORK/results" APP_CPU_QUOTA=${CPU:-} "$BUNDLE/machine.sh"
   python3 "$PILOT/report.py" "$WORK/results" "${MINUTE:-6}" | tee "$WORK/report.md"
   exit
 fi
@@ -43,7 +44,7 @@ export AWS_REGION=${AWS_REGION:-us-east-1} AWS_DEFAULT_REGION=${AWS_REGION:-us-e
 tar czf "$WORK/bundle.tar.gz" -C "$BUNDLE" .
 
 TF=(terraform -chdir="$PILOT/infra")
-VARS=(-var "run_id=$RUN_ID" -var "region=$AWS_REGION" -var "bundle=$WORK/bundle.tar.gz")
+VARS=(-var "run_id=$RUN_ID" -var "region=$AWS_REGION" -var "bundle=$WORK/bundle.tar.gz" -var "cpu_quota=${CPU:-}")
 destroy() {
   log "destroying run $RUN_ID"
   for _ in 1 2 3; do

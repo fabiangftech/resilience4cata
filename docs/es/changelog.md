@@ -4,6 +4,12 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Sin publicar] :id=unreleased
+
+### Cambiado
+
+- Documentación: la precisión de un timeout supone que el proceso tiene CPU, porque con un límite de CPU de contenedor una JVM con throttling solo se interrumpe cuando vuelve a ejecutarse; un arranque en frío sin CPU puede abrir el circuit breaker con timeouts reales ([Solución de problemas](guides/troubleshooting.md#breaker-opens-at-startup)). Las dos cosas las midió el piloto con límite de CPU ([Benchmarks](benchmarks.md#cpu-limit)).
+
 ## [1.0.0-RC4] - 2026-11-14 :id=1.0.0-rc4
 
 El cuarto candidato a release de 1.0.0. La API es la misma que en 1.0.0-RC3; cambia un comportamiento, encontrado por el [piloto](https://github.com/fabiangftech/resilience4cata/tree/main/pilot): el circuit breaker ya no registra los rechazos del propio bulkhead, rate limiter o adaptive limit del método.

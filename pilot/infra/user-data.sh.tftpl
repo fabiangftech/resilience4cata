@@ -25,4 +25,4 @@ ulimit -n 1048576
 sysctl -w net.ipv4.ip_local_port_range="1024 65000" net.ipv4.tcp_tw_reuse=1 net.core.somaxconn=8192
 
 OUT=/opt/pilot/results JAVA=/opt/jdk/bin/java JCMD=/opt/jdk/bin/jcmd K6=/opt/k6/k6 \
-    APP_CPUS=0-3 BACKEND_CPUS=4-7 K6_CPUS=8-15 /opt/pilot/machine.sh
+    APP_CPUS=0-3 BACKEND_CPUS=4-7 K6_CPUS=8-15 APP_CPU_QUOTA='${cpu_quota}' /opt/pilot/machine.sh

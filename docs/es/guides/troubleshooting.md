@@ -129,6 +129,14 @@ Es el comportamiento por defecto, a propósito. El retry está fuera del circuit
 
 Esto vale digan lo que digan `abortOn` y `retryOn`, y también con un classifier; no es una entrada de `abortOn`, así que definir tu propia lista no lo quita. Consulta [Retry](../policies/retry.md) y [Circuit breaker](../policies/circuit-breaker.md).
 
+### El breaker se abre justo después de arrancar :id=breaker-opens-at-startup
+
+Si la dependencia está sana pero el breaker se abre en los primeros segundos después de un despliegue, mira la CPU del propio servicio. En un arranque en frío el JIT compila el código caliente y las llamadas son más lentas que después; con un límite de CPU de contenedor ajustado (`limits.cpu` de Kubernetes), la cuota del cgroup congela toda la JVM durante parte de cada periodo de 100 ms. Las llamadas entonces pasan de verdad su `@Timeout`, y el breaker cuenta cada `CallTimeoutException` como falla de la dependencia: no puede distinguir un backend lento de un proceso lento. Se vuelve a cerrar cuando pasa `waitInOpen` y el servicio ya se calentó.
+
+El piloto lo midió: con medio núcleo, servicios Spring Boot, Micronaut y Quarkus respondieron entre el 3 y el 36 % de los pedidos de su primer minuto con un breaker abierto; con 1 núcleo solo Spring, un 2,5 %; sin límite, ninguno ([Benchmarks: servicios con límite de CPU](../benchmarks.md#cpu-limit)).
+
+Soluciones: dale al servicio margen de CPU al arrancar (un límite más alto, o ninguno, como muchos equipos que solo fijan `requests`), o caliéntalo antes de que reciba tráfico (una readiness probe que espere unas llamadas de calentamiento). Un bulkhead lleno no abre el breaker: sus rechazos nunca se registran ([Circuit breaker](../policies/circuit-breaker.md#with-other-policies)).
+
 ### Un timeout no detiene mi código :id=timeout-not-interrupting
 
 Un `@Timeout` sync ejecuta la llamada en el thread de quien llama y lo **interrumpe** cuando se acaba el tiempo. El código que ignora las interrupciones sigue ejecutándose hasta que retorna por sí solo, y solo entonces quien llama recibe `CallTimeoutException`:
@@ -139,7 +147,7 @@ Un `@Timeout` sync ejecuta la llamada en el thread de quien llama y lo **interru
 
 Soluciones: configura los timeouts de E/S del propio cliente (timeouts de conexión y de lectura; `java.net.http.HttpClient`, los canales NIO y la mayoría de los clientes modernos responden a las interrupciones o tienen sus propios timeouts), verifica `Thread.interrupted()` en los bucles largos y restablece el flag de interrupción cuando captures `InterruptedException`. En los métodos async, el stage devuelto falla con `CallTimeoutException` a tiempo, y el stage de la llamada se cancela si es un `Future`; que el trabajo detrás de él se detenga depende de ese código.
 
-Los timeouts además son poco precisos por diseño: nunca antes de tiempo, a lo sumo unos dos ticks del watchdog tarde (un tick es el timeout más corto en uso / 16, entre 1 y 50 ms). Consulta [Timeout](../policies/timeout.md).
+Los timeouts además son poco precisos por diseño: nunca antes de tiempo, a lo sumo unos dos ticks del watchdog tarde (un tick es el timeout más corto en uso / 16, entre 1 y 50 ms) mientras el proceso tenga CPU; con un límite de CPU de contenedor, una JVM con throttling solo se interrumpe cuando vuelve a ejecutarse. Consulta [Timeout](../policies/timeout.md).
 
 ### Mi configuración externa no se aplica :id=config-not-applied
 

@@ -18,6 +18,12 @@ variable "bundle" {
   type        = string
 }
 
+variable "cpu_quota" {
+  description = "A CPU limit for the service in cores (cgroup v2 quota, as Kubernetes sets it), or empty for none."
+  type        = string
+  default     = ""
+}
+
 variable "max_minutes" {
   description = "Hard limit: the machine powers off (and terminates) after this many minutes whatever happens."
   type        = number
