@@ -1,6 +1,7 @@
 package pilot.common;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -12,6 +13,11 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class Probe {
 
+    /** Upper bounds of the interrupted calls' histogram, in ms: the 200 ms timeout and how late it fired. */
+    private static final int[] BOUNDS_MILLIS = {180, 200, 225, 250, 300, 400};
+    private static final int LATE_MILLIS = 250;
+    private static final int LATE_KEPT = 200;
+
     public static final Probe STOCK = new Probe();
     public static final Probe QUOTE = new Probe();
 
@@ -20,6 +26,12 @@ public final class Probe {
     private final AtomicLong calls = new AtomicLong();
     private final AtomicLong interrupted = new AtomicLong();
     private final AtomicLong minInterruptedNanos = new AtomicLong(Long.MAX_VALUE);
+    private final AtomicLong maxInterruptedNanos = new AtomicLong();
+    /** Interrupted calls by time in the method: below each bound of {@link #BOUNDS_MILLIS}, then above the last. */
+    private final java.util.concurrent.atomic.AtomicLongArray interruptedAt = new java.util.concurrent.atomic.AtomicLongArray(BOUNDS_MILLIS.length + 1);
+    /** When late interrupts (at least {@link #LATE_MILLIS} in the method) happened, epoch ms, the first {@link #LATE_KEPT}. */
+    private final java.util.Queue<long[]> late = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final AtomicInteger lateCount = new AtomicInteger();
     private final AtomicLong firstNanos = new AtomicLong();
     private final AtomicLong lastNanos = new AtomicLong();
     private final java.util.concurrent.ConcurrentHashMap<String, AtomicLong> failures = new java.util.concurrent.ConcurrentHashMap<>();
@@ -39,7 +51,17 @@ public final class Probe {
             return call.run();
         } catch (InterruptedException e) {
             interrupted.incrementAndGet();
-            minInterruptedNanos.accumulateAndGet(System.nanoTime() - start, Math::min);
+            long took = System.nanoTime() - start;
+            minInterruptedNanos.accumulateAndGet(took, Math::min);
+            maxInterruptedNanos.accumulateAndGet(took, Math::max);
+            int bucket = 0;
+            while (bucket < BOUNDS_MILLIS.length && took >= BOUNDS_MILLIS[bucket] * 1_000_000L) {
+                bucket++;
+            }
+            interruptedAt.incrementAndGet(bucket);
+            if (took >= LATE_MILLIS * 1_000_000L && lateCount.getAndIncrement() < LATE_KEPT) {
+                late.add(new long[] {System.currentTimeMillis(), took / 1_000_000});
+            }
             throw e;
         } catch (java.io.IOException | RuntimeException e) {
             String key = e.getClass().getSimpleName() + ": " + e.getMessage();
@@ -58,6 +80,18 @@ public final class Probe {
         map.put("interrupted", interrupted.get());
         long min = minInterruptedNanos.get();
         map.put("minInterruptedMillis", min == Long.MAX_VALUE ? null : min / 1e6);
+        long max = maxInterruptedNanos.get();
+        map.put("maxInterruptedMillis", max == 0 ? null : max / 1e6);
+        Map<String, Object> histogram = new LinkedHashMap<>();
+        for (int i = 0; i <= BOUNDS_MILLIS.length; i++) {
+            histogram.put(i < BOUNDS_MILLIS.length ? "<" + BOUNDS_MILLIS[i] : ">=" + BOUNDS_MILLIS[i - 1], interruptedAt.get(i));
+        }
+        map.put("interruptedMillis", histogram);
+        List<Object> lateList = new java.util.ArrayList<>();
+        for (long[] entry : late) {
+            lateList.add(List.of(entry[0], entry[1]));
+        }
+        map.put("lateInterrupts", lateList);
         long first = firstNanos.get();
         map.put("spanSeconds", first == 0 ? 0 : (lastNanos.get() - first) / 1e9);
         map.put("failures", new java.util.TreeMap<>(failures));
@@ -72,6 +106,7 @@ public final class Probe {
         Runtime runtime = Runtime.getRuntime();
         map.put("heapUsedMb", (runtime.totalMemory() - runtime.freeMemory()) / 1048576.0);
         map.put("platformThreads", Thread.getAllStackTraces().size());
+        map.put("availableProcessors", runtime.availableProcessors());
         map.put("libraryThreads", Thread.getAllStackTraces().keySet().stream()
                 .filter(t -> t.getName().startsWith("resilience4cata")).count());
         map.put("snapshot", snapshot);

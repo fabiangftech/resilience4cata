@@ -14,12 +14,19 @@ SPAN = {"warmup": (0, 1), "steady": (1, 4), "down": (4, 5), "recovery": (5, 6), 
 OUTCOMES = ["ok", "fallback_open", "fallback_bulkhead", "fallback_timeout", "fallback_backend", "fallback_other",
             "limited", "failed", "error"]
 BULKHEAD, TIMEOUT_MS, MAX_WAIT_MS, PERMITS = 40, 200, 20, 200
+SKEW_SECONDS = 0.1
 
 
 def heap_used_mb(path):
+    """The heap in use from jcmd GC.heap_info: G1's one line, or the generations of Serial or Parallel GC (a JVM
+    that sees one processor, as under a CPU limit of 1 core or less, picks Serial GC)."""
     text = path.read_text() if path.exists() else ""
     m = re.search(r"garbage-first heap\s+total (?:reserved )?\d+K, (?:committed \d+K, )?used (\d+)K", text)
-    return int(m.group(1)) / 1024 if m else None
+    if m:
+        return int(m.group(1)) / 1024
+    generations = re.findall(r"^\s*(?:DefNew|Tenured|def new generation|tenured generation|PSYoungGen|ParOldGen)\s+total \d+K, used (\d+)K",
+                             text, re.MULTILINE)
+    return sum(int(g) for g in generations) / 1024 if len(generations) == 2 else None
 
 
 def count(metrics, name):
@@ -31,6 +38,8 @@ def app_report(results, app, minute):
     final = json.loads((results / f"{app}-final.json").read_text())
     startup = json.loads((results / f"{app}-startup.json").read_text())["startupMillis"]
     samples = [json.loads(line) for line in (results / f"{app}-samples.jsonl").read_text().splitlines() if line.strip()]
+    setup = results / "setup.json"
+    quota = json.loads(setup.read_text()).get("cpuQuota") if setup.exists() else None
     lines = [f"## {app}", "", f"Startup to the first answer: {startup / 1000:.1f} s.", ""]
     checks = []
 
@@ -77,14 +86,19 @@ def app_report(results, app, minute):
     check(early is None or early >= TIMEOUT_MS - MAX_WAIT_MS,
           f"timeout: {stock['interrupted']:,} calls interrupted, the earliest after {early or 0:.1f} ms in the method "
           f"(≥ {TIMEOUT_MS - MAX_WAIT_MS} ms: {TIMEOUT_MS} ms timeout minus at most {MAX_WAIT_MS} ms waiting for the bulkhead)")
-    allowed = PERMITS * quote["spanSeconds"] + PERMITS
-    check(quote["calls"] <= allowed, f"rate limiter: {quote['calls']:,} quotes let through in {quote['spanSeconds']:.1f} s (at most {allowed:,.0f})")
+    # The span runs from the first to the last call's start in the method, which lags the limiter's grant by however
+    # long the thread took to get there: allow SKEW_SECONDS of that (20 permits), far less than a broken limiter lets in.
+    allowed = PERMITS * (quote["spanSeconds"] + SKEW_SECONDS) + PERMITS
+    check(quote["calls"] <= allowed, f"rate limiter: {quote['calls']:,} quotes let through in {quote['spanSeconds']:.1f} s "
+          f"(at most {allowed:,.0f}: {PERMITS}/s, a burst of {PERMITS}, and {SKEW_SECONDS * 1000:.0f} ms for the threads to reach the method)")
     breaker = next(b for b in final["snapshot"]["circuitBreakers"] if b["id"] == "inventory")
     check(breaker["state"] == "CLOSED", f"breaker {breaker['state']} at the end")
     check(stock["inside"] == 0 and quote["inside"] == 0, "nothing left inside the protected methods at the end")
     warm, end = heap_used_mb(results / f"{app}-heap-warm.txt"), heap_used_mb(results / f"{app}-heap-end.txt")
     if warm is not None and end is not None:
         check(end <= warm + 16, f"heap after a full GC: {warm:.1f} MB after the warm-up, {end:.1f} MB at the end (≤ +16 MB)")
+    else:
+        check(False, f"heap after a full GC: could not read {app}-heap-warm.txt or {app}-heap-end.txt")
     first = next((s for s in samples if s["t"] - samples[0]["t"] >= minute and s.get("stats")), None)
     if first:
         check(final["libraryThreads"] <= first["stats"]["libraryThreads"],
@@ -97,7 +111,35 @@ def app_report(results, app, minute):
             if len(inside) >= 2:
                 cpu.append(f"{phase} {(inside[-1]['ticks'] - inside[0]['ticks']) / 100 / (inside[-1]['t'] - inside[0]['t']):.2f}")
         rss = max(s["rssKb"] for s in samples) / 1024
-        lines += [f"CPU (cores used, of 4): {', '.join(cpu)}. Peak RSS {rss:.0f} MB, platform threads at the end: {final['platformThreads']}.", ""]
+        limit = f", limited to {quota:g}" if quota is not None else ""
+        lines += [f"CPU (cores used, of 4{limit}): {', '.join(cpu)}. Peak RSS {rss:.0f} MB, platform threads at the end: {final['platformThreads']}.", ""]
+    if stock.get("maxInterruptedMillis") is not None:
+        buckets = ", ".join(f"{k} ms: {v:,}" for k, v in stock["interruptedMillis"].items() if v)
+        lines += [f"Interrupted calls by time in the method: {buckets}; the latest after {stock['maxInterruptedMillis']:.1f} ms "
+                  f"(the timeout is {TIMEOUT_MS} ms; the watchdog promises at most about two ticks late, 2 × {TIMEOUT_MS / 16:.1f} ms).", ""]
+        late = stock.get("lateInterrupts") or []
+        if late and samples:
+            by = {}
+            for at, took in late:
+                offset = at / 1000 - samples[0]["t"]
+                phase = next((p for p in PHASES if SPAN[p][0] * minute <= offset < SPAN[p][1] * minute), "outside the load")
+                by.setdefault(phase, []).append(took)
+            kept = "" if len(late) < 200 else " (the first 200)"
+            lines += ["Interrupts at 250 ms or later, by phase" + kept + ": " + ", ".join(
+                f"{phase} {len(t)} (up to {max(t)} ms)" for phase, t in sorted(by.items(), key=lambda e: PHASES.index(e[0]) if e[0] in PHASES else 99)) + ".", ""]
+    if quota is not None and samples and samples[0].get("nr_periods") is not None:
+        throttled = []
+        for phase in PHASES:
+            lo, hi = SPAN[phase]
+            inside = [s for s in samples if lo * minute <= s["t"] - samples[0]["t"] <= hi * minute]
+            if len(inside) >= 2:
+                periods = inside[-1]["nr_periods"] - inside[0]["nr_periods"]
+                hits = inside[-1]["nr_throttled"] - inside[0]["nr_throttled"]
+                waited = (inside[-1]["throttled_usec"] - inside[0]["throttled_usec"]) / 1000 / (inside[-1]["t"] - inside[0]["t"])
+                throttled.append(f"{phase} {100 * hits / max(periods, 1):.0f} % ({waited:.0f} ms/s)")
+        lines += [f"CPU limit {quota:g} core(s), cgroup quota per 100 ms period; the JVM saw {final.get('availableProcessors')} "
+                  f"processor(s). Periods in which the service was throttled (and how long its threads waited, per second): "
+                  f"{', '.join(throttled)}.", ""]
     lines += ["Checks:", ""] + [f"- {'✅' if ok else '❌'} {text}" for ok, text in checks] + [""]
     return lines, all(ok for ok, _ in checks)
 
@@ -114,7 +156,10 @@ def main():
         lines, ok = app_report(results, app, minute)
         out += lines
         verdicts[app] = ok
-    head = ["# Pilot run", "", "| Service | Result |", "|---|---|"]
+    setup = results / "setup.json"
+    quota = json.loads(setup.read_text()).get("cpuQuota") if setup.exists() else None
+    title = "# Pilot run" + (f": the service limited to {quota:g} CPU core(s)" if quota is not None else "")
+    head = [title, "", "| Service | Result |", "|---|---|"]
     head += [f"| {app} | {'✅ every check passed' if ok else '❌ see below'} |" for app, ok in verdicts.items()]
     print("\n".join(head + [""] + out))
     return 0 if all(verdicts.values()) else 1
