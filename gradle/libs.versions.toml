@@ -44,7 +44,7 @@ micronautPlatformMinimum = "5.2.0"
 # While quarkus is quarkusMinimum or a fourth-digit fix of it (3.40.1.1 for 3.40.1) the tests run on the minimum's
 # line; once quarkus moves to a later patch or minor, quarkus:it needs a suite on quarkusMinimum, like spring's
 # minimumSpringBootTest and micronaut's minimumMicronautTest.
-quarkus = "3.40.1.1"
+quarkus = "3.40.1.2"
 quarkusMinimum = "3.40.1"
 # Compile-only in the quarkus extension: the health check's API, at the version of quarkusMinimum's BOM.
 microprofileHealthMinimum = "4.0.1"
