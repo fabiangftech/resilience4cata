@@ -21,3 +21,11 @@ tasks.named('test') {
 tasks.named('test') {
     inputs.dir("$rootDir/contract").withPropertyName('contract').withPathSensitivity(PathSensitivity.RELATIVE)
 }
+
+// ConfigFuzzTest: -PfuzzSeed=<n> replays one seed, -PfuzzCount=<n> runs that many seeds from -PfuzzStart=<n>
+// (the nightly fuzz workflow starts at a new seed).
+tasks.named('test') {
+    systemProperty 'test.fuzz.start', providers.gradleProperty('fuzzStart').getOrElse('1')
+    systemProperty 'test.seed', providers.gradleProperty('fuzzSeed').getOrElse('')
+    systemProperty 'test.fuzz.count', providers.gradleProperty('fuzzCount').getOrElse('1000')
+}
