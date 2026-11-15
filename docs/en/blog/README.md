@@ -2,6 +2,12 @@
 
 Articles about how resilience4cata is built, what it measures, and how to use it well.
 
+## resilience4cata 1.0.0-RC4: your own bulkhead no longer opens the breaker
+
+*14 November 2026*
+
+The pilot found the circuit breaker opening through the method's own full bulkhead at a cold start, with no failure from the backend. Why that is a trap, the rule in RC4, and the pilot run on the new code. [Read the article](release-candidate-4.md)
+
 ## Testing lock-free code on ARM as well as x86
 
 *10 November 2026*

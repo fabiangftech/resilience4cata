@@ -2,6 +2,12 @@
 
 Artículos sobre cómo está construido resilience4cata, qué mide y cómo usarlo bien.
 
+## resilience4cata 1.0.0-RC4: tu propio bulkhead ya no abre el breaker
+
+*14 de noviembre de 2026*
+
+El piloto encontró el circuit breaker abriéndose por el propio bulkhead lleno del método en un arranque en frío, sin ninguna falla del backend. Por qué es una trampa, la regla en RC4, y la corrida del piloto con el código nuevo. [Leer el artículo](release-candidate-4.md)
+
 ## Probar código lock-free también en ARM, no solo en x86
 
 *10 de noviembre de 2026*
