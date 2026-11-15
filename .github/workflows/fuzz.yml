@@ -1,12 +1,15 @@
 # The seeded tests with new seeds every night: the model tests of core (*ModelTest, each policy against a reference
-# model) and the processor's fuzz test (ProcessorFuzzTest, random annotated sources). The build runs the same seeds
-# every time (0.. for the models, 1..400 for the fuzz test); here they start at a new seed, the run's time in ms, and
-# run more of them, so each night explores cases no build has tried.
+# model), the processor's fuzz test (ProcessorFuzzTest, random annotated sources) and the configuration's fuzz test
+# (ConfigFuzzTest, random settings in random sources, against a model and damaged). The build runs the same seeds
+# every time (0.. for the models, 1..400 and 1..1000 for the fuzz tests); here they start at a new seed, the run's
+# time in ms, and run more of them, so each night explores cases no build has tried.
 # Locally: ./gradlew :core:test --tests '*ModelTest' -Ptest.seedStart=<n> -Ptest.seedFactor=100
 #          ./gradlew :processor:test --tests '*ProcessorFuzzTest' -PfuzzStart=<n> -PfuzzCount=30000
+#          ./gradlew :config:test --tests '*ConfigFuzzTest' -PfuzzStart=<n> -PfuzzCount=1000000
 #
 # A failure names its seed; the job summary gives the commands that replay it. Turn a seed that finds a bug into a
-# fixed test (FuzzFoundProcessorTest for the processor), so the build keeps it.
+# fixed test (FuzzFoundProcessorTest for the processor, a ResilienceConfigTest case for the configuration), so the
+# build keeps it.
 name: fuzz
 
 on:
@@ -36,13 +39,21 @@ jobs:
       matrix:
         include:
           - suite: models
+            module: core
             task: ":core:test --tests '*ModelTest' -Ptest.seedFactor=100"
             start: -Ptest.seedStart
             replay: ./gradlew :core:test --tests '<the test>' -Ptest.seed=<seed>
           - suite: processor fuzz
+            module: processor
             task: ":processor:test --tests '*ProcessorFuzzTest' -PfuzzCount=30000"
             start: -PfuzzStart
             replay: ./gradlew :processor:test --tests '*ProcessorFuzzTest' -PfuzzSeed=<seed>
+          # About 5 minutes: 1000 seeds take 1.3 s locally.
+          - suite: config fuzz
+            module: config
+            task: ":config:test --tests '*ConfigFuzzTest' -PfuzzCount=1000000"
+            start: -PfuzzStart
+            replay: ./gradlew :config:test --tests '*ConfigFuzzTest' -PfuzzSeed=<seed>
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,11 +100,9 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: fuzz-${{ matrix.suite == 'models' && 'models' || 'processor' }}
+          name: fuzz-${{ matrix.module }}
           path: |
-            core/build/reports/tests/test/
-            core/build/test-results/test/
-            processor/build/reports/tests/test/
-            processor/build/test-results/test/
+            ${{ matrix.module }}/build/reports/tests/test/
+            ${{ matrix.module }}/build/test-results/test/
           if-no-files-found: ignore
           retention-days: 14
