@@ -42,7 +42,7 @@ class MetricsParityTest {
         micrometer.bindTo(registry);
         openTelemetry.bindTo(registry);
 
-        produceEveryMetric(registry);
+        produceEveryMetric(registry, clock);
 
         Map<String, String> fromMicrometer = new TreeMap<>();
         for (Meter meter : meters.getMeters()) {
@@ -58,7 +58,8 @@ class MetricsParityTest {
         provider.close();
     }
 
-    private void produceEveryMetric(ResilienceRegistry registry) throws Exception {
+    /** Produces every metric of the specification at least once; {@link ContractTest} reuses it. */
+    static void produceEveryMetric(ResilienceRegistry registry, ManualClock clock) throws Exception {
         // Retries and give-ups.
         Pipeline<String> retried = Pipeline.builder(registry, "payments", String.class)
                 .retry(r -> r.maxAttempts(2).delay(Duration.ZERO)).build();

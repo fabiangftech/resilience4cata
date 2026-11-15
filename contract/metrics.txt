@@ -1,0 +1,127 @@
+# What docs/en/reference/compatibility.md promises to keep within a major version, as the code offers it.
+# Checked by a test (see contract/README.md): a line may be added in a minor version, never removed or changed.
+# Metric names, types, units, tag keys and tag values (except the instance id), per metrics module. Test: examples ContractTest.
+micrometer r4c.adaptivelimit.concurrent.calls gauge
+micrometer r4c.adaptivelimit.concurrent.calls tag name
+micrometer r4c.adaptivelimit.limit gauge
+micrometer r4c.adaptivelimit.limit tag name
+micrometer r4c.adaptivelimit.limit.changes counter
+micrometer r4c.adaptivelimit.limit.changes tag name
+micrometer r4c.bulkhead.concurrent.calls gauge
+micrometer r4c.bulkhead.concurrent.calls tag name
+micrometer r4c.bulkhead.max.concurrent gauge
+micrometer r4c.bulkhead.max.concurrent tag name
+micrometer r4c.bulkhead.waiting.calls gauge
+micrometer r4c.bulkhead.waiting.calls tag name
+micrometer r4c.calls.rejected counter
+micrometer r4c.calls.rejected tag kind
+micrometer r4c.calls.rejected tag kind=adaptivelimit
+micrometer r4c.calls.rejected tag kind=bulkhead
+micrometer r4c.calls.rejected tag kind=circuitbreaker
+micrometer r4c.calls.rejected tag kind=ratelimiter
+micrometer r4c.calls.rejected tag name
+micrometer r4c.circuitbreaker.failure.rate gauge unit=percent
+micrometer r4c.circuitbreaker.failure.rate tag name
+micrometer r4c.circuitbreaker.slow.call.rate gauge unit=percent
+micrometer r4c.circuitbreaker.slow.call.rate tag name
+micrometer r4c.circuitbreaker.state gauge
+micrometer r4c.circuitbreaker.state tag name
+micrometer r4c.circuitbreaker.state tag state
+micrometer r4c.circuitbreaker.state tag state=closed
+micrometer r4c.circuitbreaker.state tag state=disabled
+micrometer r4c.circuitbreaker.state tag state=forced_open
+micrometer r4c.circuitbreaker.state tag state=half_open
+micrometer r4c.circuitbreaker.state tag state=open
+micrometer r4c.circuitbreaker.transitions counter
+micrometer r4c.circuitbreaker.transitions tag from
+micrometer r4c.circuitbreaker.transitions tag from=closed
+micrometer r4c.circuitbreaker.transitions tag name
+micrometer r4c.circuitbreaker.transitions tag to
+micrometer r4c.circuitbreaker.transitions tag to=open
+micrometer r4c.fallback.applied counter
+micrometer r4c.fallback.applied tag name
+micrometer r4c.hedge.failed counter
+micrometer r4c.hedge.failed tag name
+micrometer r4c.hedge.hedged counter
+micrometer r4c.hedge.hedged tag name
+micrometer r4c.hedge.hedged tag reason
+micrometer r4c.hedge.hedged tag reason=delay
+micrometer r4c.hedge.hedged tag reason=failure
+micrometer r4c.hedge.skipped counter
+micrometer r4c.hedge.skipped tag name
+micrometer r4c.hedge.skipped tag reason
+micrometer r4c.hedge.skipped tag reason=budget_exhausted
+micrometer r4c.hedge.won counter
+micrometer r4c.hedge.won tag name
+micrometer r4c.ratelimiter.available.permits gauge
+micrometer r4c.ratelimiter.available.permits tag name
+micrometer r4c.retry.gave.up counter
+micrometer r4c.retry.gave.up tag name
+micrometer r4c.retry.gave.up tag reason
+micrometer r4c.retry.gave.up tag reason=max_attempts
+micrometer r4c.retry.retries counter
+micrometer r4c.retry.retries tag name
+micrometer r4c.timeout.timed.out counter
+micrometer r4c.timeout.timed.out tag name
+opentelemetry r4c.adaptivelimit.concurrent.calls long_gauge unit={call}
+opentelemetry r4c.adaptivelimit.concurrent.calls tag name
+opentelemetry r4c.adaptivelimit.limit long_gauge unit={call}
+opentelemetry r4c.adaptivelimit.limit tag name
+opentelemetry r4c.adaptivelimit.limit.changes long_sum unit={window}
+opentelemetry r4c.adaptivelimit.limit.changes tag name
+opentelemetry r4c.bulkhead.concurrent.calls long_gauge unit={call}
+opentelemetry r4c.bulkhead.concurrent.calls tag name
+opentelemetry r4c.bulkhead.max.concurrent long_gauge unit={call}
+opentelemetry r4c.bulkhead.max.concurrent tag name
+opentelemetry r4c.bulkhead.waiting.calls long_gauge unit={call}
+opentelemetry r4c.bulkhead.waiting.calls tag name
+opentelemetry r4c.calls.rejected long_sum unit={call}
+opentelemetry r4c.calls.rejected tag kind
+opentelemetry r4c.calls.rejected tag kind=adaptivelimit
+opentelemetry r4c.calls.rejected tag kind=bulkhead
+opentelemetry r4c.calls.rejected tag kind=circuitbreaker
+opentelemetry r4c.calls.rejected tag kind=ratelimiter
+opentelemetry r4c.calls.rejected tag name
+opentelemetry r4c.circuitbreaker.failure.rate double_gauge unit=%
+opentelemetry r4c.circuitbreaker.failure.rate tag name
+opentelemetry r4c.circuitbreaker.slow.call.rate double_gauge unit=%
+opentelemetry r4c.circuitbreaker.slow.call.rate tag name
+opentelemetry r4c.circuitbreaker.state long_gauge
+opentelemetry r4c.circuitbreaker.state tag name
+opentelemetry r4c.circuitbreaker.state tag state
+opentelemetry r4c.circuitbreaker.state tag state=closed
+opentelemetry r4c.circuitbreaker.state tag state=disabled
+opentelemetry r4c.circuitbreaker.state tag state=forced_open
+opentelemetry r4c.circuitbreaker.state tag state=half_open
+opentelemetry r4c.circuitbreaker.state tag state=open
+opentelemetry r4c.circuitbreaker.transitions long_sum unit={transition}
+opentelemetry r4c.circuitbreaker.transitions tag from
+opentelemetry r4c.circuitbreaker.transitions tag from=closed
+opentelemetry r4c.circuitbreaker.transitions tag name
+opentelemetry r4c.circuitbreaker.transitions tag to
+opentelemetry r4c.circuitbreaker.transitions tag to=open
+opentelemetry r4c.fallback.applied long_sum unit={call}
+opentelemetry r4c.fallback.applied tag name
+opentelemetry r4c.hedge.failed long_sum unit={call}
+opentelemetry r4c.hedge.failed tag name
+opentelemetry r4c.hedge.hedged long_sum unit={attempt}
+opentelemetry r4c.hedge.hedged tag name
+opentelemetry r4c.hedge.hedged tag reason
+opentelemetry r4c.hedge.hedged tag reason=delay
+opentelemetry r4c.hedge.hedged tag reason=failure
+opentelemetry r4c.hedge.skipped long_sum unit={attempt}
+opentelemetry r4c.hedge.skipped tag name
+opentelemetry r4c.hedge.skipped tag reason
+opentelemetry r4c.hedge.skipped tag reason=budget_exhausted
+opentelemetry r4c.hedge.won long_sum unit={call}
+opentelemetry r4c.hedge.won tag name
+opentelemetry r4c.ratelimiter.available.permits long_gauge unit={permit}
+opentelemetry r4c.ratelimiter.available.permits tag name
+opentelemetry r4c.retry.gave.up long_sum unit={call}
+opentelemetry r4c.retry.gave.up tag name
+opentelemetry r4c.retry.gave.up tag reason
+opentelemetry r4c.retry.gave.up tag reason=max_attempts
+opentelemetry r4c.retry.retries long_sum unit={retry}
+opentelemetry r4c.retry.retries tag name
+opentelemetry r4c.timeout.timed.out long_sum unit={call}
+opentelemetry r4c.timeout.timed.out tag name

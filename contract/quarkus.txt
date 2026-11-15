@@ -1,0 +1,14 @@
+# What docs/en/reference/compatibility.md promises to keep within a major version, as the code offers it.
+# Checked by a test (see contract/README.md): a line may be added in a minor version, never removed or changed.
+# The Quarkus extension: property names, phase and enum values. Test: quarkus:it ContractTest.
+property quarkus.resilience4cata.allow-missing-processor build_time
+property quarkus.resilience4cata.allow-retry-inside-transaction build_time
+property quarkus.resilience4cata.beans.enabled build_time
+property quarkus.resilience4cata.beans.exclude build_time
+property quarkus.resilience4cata.health.down-when-open run_time
+property quarkus.resilience4cata.health.enabled build_time
+property quarkus.resilience4cata.metrics.enabled build_time
+property quarkus.resilience4cata.verify-instances run_time
+property quarkus.resilience4cata.verify-instances value=fail
+property quarkus.resilience4cata.verify-instances value=off
+property quarkus.resilience4cata.verify-instances value=warn

@@ -1,0 +1,28 @@
+# What docs/en/reference/compatibility.md promises to keep within a major version, as the code offers it.
+# Checked by a test (see contract/README.md): a line may be added in a minor version, never removed or changed.
+# The Spring Boot integration: property names, auto-configuration class names, bean names. Test: spring ContractTest.
+auto-configuration dev.resilience4cata.spring.autoconfigure.ResilienceAutoConfiguration
+auto-configuration dev.resilience4cata.spring.autoconfigure.ResilienceEndpointAutoConfiguration
+auto-configuration dev.resilience4cata.spring.autoconfigure.ResilienceHealthAutoConfiguration
+auto-configuration dev.resilience4cata.spring.autoconfigure.ResilienceMetricsAutoConfiguration
+bean resilience4cataHealthIndicator
+bean resilienceConfig
+bean resilienceEndpoint
+bean resilienceInstanceVerifier
+bean resilienceMetricsBinder
+bean resilienceMetricsCustomizer
+bean resilienceMicrometerMetrics
+bean resilienceRegistry
+bean resilienceRetryInsideTransactionCheck
+bean resilientBeansPostProcessor
+bean resilientClassesPostProcessor
+property resilience4cata.spring.allow-missing-processor
+property resilience4cata.spring.allow-retry-inside-transaction
+property resilience4cata.spring.exclude
+property resilience4cata.spring.health.down-when-open
+property resilience4cata.spring.metrics.enabled
+property resilience4cata.spring.verify-instances
+property resilience4cata.spring.verify-instances value=fail
+property resilience4cata.spring.verify-instances value=off
+property resilience4cata.spring.verify-instances value=warn
+property resilience4cata.spring.wrap

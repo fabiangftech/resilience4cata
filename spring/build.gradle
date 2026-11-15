@@ -124,3 +124,8 @@ tasks.withType(Test).configureEach {
 tasks.named('check') {
     dependsOn testing.suites.minimumSpringBootTest
 }
+
+// ContractTest compares the code with the repository's contract directory (docs/en/reference/compatibility.md).
+tasks.named('test') {
+    inputs.dir("$rootDir/contract").withPropertyName('contract').withPathSensitivity(PathSensitivity.RELATIVE)
+}
