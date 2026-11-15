@@ -35,6 +35,9 @@ class HttpCallsTest {
     /** Queued instead of a status: answer 200, but only after two seconds. */
     private static final int SLOW = -1;
 
+    /** The retry's instance: {@code @Retry} has no name, so its id is derived from the method. */
+    private static final String RETRY = "dev.resilience4cata.examples.docs.httpcalls.InventoryClient#stock(java.lang.String)";
+
     private final Queue<Integer> statuses = new ConcurrentLinkedQueue<>();
     private final AtomicInteger requests = new AtomicInteger();
     private volatile int last = 200;
@@ -83,7 +86,7 @@ class HttpCallsTest {
     @Test
     void serverErrorsAreRetried() throws Exception {
         statuses.addAll(List.of(503, 503, 200));
-        InventoryClient inventory = connect(base, ResilienceRegistry.builder().build());
+        InventoryClient inventory = connect(base, withoutTimeBudget().build());
 
         assertThat(inventory.stock("sku-1")).isEqualTo(7);
         assertThat(requests).hasValue(3);
@@ -104,7 +107,7 @@ class HttpCallsTest {
     @Test
     void anOpenBreakerStopsTheRetriesBeforeTheServiceIsCalledAgain() {
         statuses.add(500);
-        ResilienceRegistry registry = ResilienceRegistry.builder()
+        ResilienceRegistry registry = withoutTimeBudget()
                 .circuitBreakerInstance("inventory", b -> b.windowSize(2).minimumCalls(2))
                 .build();
         InventoryClient inventory = connect(base, registry);
@@ -112,6 +115,15 @@ class HttpCallsTest {
         assertThatThrownBy(() -> inventory.stock("sku-1")).isInstanceOf(CallRejectedException.class);
         assertThat(requests).as("the third attempt was rejected without a request").hasValue(2);
         assertThat(registry.circuitBreaker("inventory").state()).isEqualTo(CircuitBreakerState.OPEN);
+    }
+
+    /**
+     * The retry without its 3 s {@code maxDuration}, for the tests that count attempts: on a busy two-core CI runner
+     * the first requests of a cold JVM once took 3.5 s, the budget ran out and the third attempt never ran. The
+     * budget itself is tested by {@link #aSlowAnswerIsInterruptedAndRetriedUntilTheAttemptsOrTheBudgetRunOut}.
+     */
+    private static ResilienceRegistry.Builder withoutTimeBudget() {
+        return ResilienceRegistry.builder().retryInstance(RETRY, r -> r.maxDuration(Duration.ZERO));
     }
 
     @Test
