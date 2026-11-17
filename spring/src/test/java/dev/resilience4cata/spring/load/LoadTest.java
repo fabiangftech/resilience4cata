@@ -40,6 +40,8 @@ import org.springframework.core.env.Environment;
 @SpringBootTest(classes = LoadTest.App.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.main.web-application-type=servlet",
         "server.tomcat.threads.max=400",
+        // 200 connections open at once: Tomcat's default queue of 100 overflows, and Windows refuses the rest
+        "server.tomcat.accept-count=1000",
         "management.endpoints.web.exposure.include=resilience4cata"})
 class LoadTest {
 
