@@ -42,6 +42,10 @@ tasks.matching { it.name in ['compileAotJava', 'compileAotTestJava'] }.configure
 
 graalvmNative {
     toolchainDetection = false
+    // native:footprint finds the application's image by the project's name (Spring Boot's plugin names it after the jar).
+    binaries.main {
+        imageName = project.name
+    }
     metadataRepository {
         enabled = true
     }
