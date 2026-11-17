@@ -1,0 +1,12 @@
+resilience4cata:
+  instances:
+    inventory:
+      retry.max-attempts: 4
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,resilience4cata
+  endpoint:
+    health:
+      show-components: always

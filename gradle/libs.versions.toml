@@ -195,6 +195,8 @@ micronaut-micrometer-core = { module = "io.micronaut.micrometer:micronaut-microm
 micronaut-http-server-netty = { module = "io.micronaut:micronaut-http-server-netty" }
 micronaut-http-client = { module = "io.micronaut:micronaut-http-client" }
 micronaut-serde-jackson = { module = "io.micronaut.serde:micronaut-serde-jackson" }
+micronaut-serde-processor = { module = "io.micronaut.serde:micronaut-serde-processor" }
+micronaut-graal = { module = "io.micronaut:micronaut-graal" }
 micronaut-test-junit5 = { module = "io.micronaut.test:micronaut-test-junit5" }
 logback-classic = { module = "ch.qos.logback:logback-classic" }
 # benchmark:micronaut only: Micronaut's own @Retryable and @CircuitBreaker.
@@ -207,3 +209,8 @@ commonmark-ext-gfm-tables = { module = "org.commonmark:commonmark-ext-gfm-tables
 # The official Quarkus Gradle plugin, applied only by the unpublished quarkus:it project (its tests need the
 # application model the plugin provides): the second exception to "no third-party Gradle plugins", see CLAUDE.md.
 quarkus = { id = "io.quarkus", version.ref = "quarkus" }
+# The official Spring Boot and GraalVM Native Build Tools plugins, applied only by the unpublished native:spring and
+# native:micronaut projects, which test the library in native images (not Micronaut's application plugin: from 5.0
+# it needs Gradle on Java 25).
+spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
+graalvm-native = { id = "org.graalvm.buildtools.native", version = "1.1.18" }

@@ -18,4 +18,6 @@ include 'annotations', 'core', 'processor', 'config', 'all', 'testkit', 'microme
         'quarkus:runtime', 'quarkus:deployment', 'quarkus:it',
         'bom', 'examples', 'benchmark', 'stress', 'site',
         // The same benchmarks inside each framework, against Resilience4j's integration or the framework's own.
-        'benchmark:spring', 'benchmark:micronaut', 'benchmark:quarkus'
+        'benchmark:spring', 'benchmark:micronaut', 'benchmark:quarkus',
+        // Spring Boot and Micronaut applications tested on the JVM and as GraalVM native images (CI: native.yml).
+        'native:spring', 'native:micronaut'

@@ -1,0 +1,53 @@
+plugins {
+    id 'r4c.java-library'
+    // The official Spring Boot and GraalVM Native Build Tools plugins: this project only tests the library in a
+    // native image (CLAUDE.md: third-party plugins are excluded from the library's build, not from its test projects).
+    alias(libs.plugins.spring.boot)
+    alias(libs.plugins.graalvm.native)
+}
+
+// Its own group: with the root's, Gradle would take this project and :spring for the same module.
+group = 'dev.resilience4cata.nativeimage'
+
+description = 'A Spring Boot application with resilience4cata, tested on the JVM (test) and as a GraalVM native image (nativeTest). Not published.'
+
+dependencies {
+    implementation platform(libs.spring.boot.dependencies)
+    implementation project(':spring')
+    implementation project(':micrometer')
+    implementation libs.spring.boot.webmvc
+    implementation libs.spring.boot.tomcat
+    implementation libs.spring.boot.actuator.autoconfigure
+    implementation libs.spring.boot.health
+    implementation libs.spring.boot.micrometer.metrics
+    implementation libs.jackson.databind
+    runtimeOnly libs.snakeyaml
+    compileOnly project(':annotations')
+    annotationProcessor project(':processor')
+
+    testImplementation platform(libs.spring.boot.dependencies)
+    testImplementation libs.spring.boot.test
+    testImplementation libs.spring.test
+    testCompileOnly project(':annotations')
+    testAnnotationProcessor project(':processor')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    // As Spring Boot's Gradle plugin does for applications: Spring matches parameters by name.
+    options.compilerArgs.add('-parameters')
+}
+
+// The sources Spring AOT generates are Spring's (raw types, annotations read from class files without the annotations
+// jar): compiled without the build's -Xlint:all -Werror.
+tasks.matching { it.name in ['compileAotJava', 'compileAotTestJava'] }.configureEach {
+    options.compilerArgs.removeAll(['-Xlint:all', '-Werror'])
+}
+
+graalvmNative {
+    // GraalVM is GRAALVM_HOME (CI: graalvm/setup-graalvm), not a Gradle toolchain.
+    toolchainDetection = false
+    // Reachability metadata of the libraries (Tomcat, Jackson...) from GraalVM's repository.
+    metadataRepository {
+        enabled = true
+    }
+}

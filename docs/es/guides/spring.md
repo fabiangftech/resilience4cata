@@ -451,8 +451,10 @@ Spring AOT (el paso de procesamiento de una imagen nativa, o de una aplicación 
   AOT: `resilience4cata.spring.metrics.enabled`, `management.health.resilience4cata.enabled`, la exposición del
   endpoint, y `resilience4cata.spring.exclude` para las clases anotadas.
 
-Spring Boot 4 necesita GraalVM 25 o posterior para imágenes nativas. El build del proyecto comprueba el
-procesamiento AOT en la JVM; su CI no construye imágenes nativas.
+Spring Boot 4 necesita GraalVM 25 o posterior para imágenes nativas. El CI del proyecto construye una imagen
+nativa de una aplicación pequeña (una clase anotada, una interfaz envuelta con fallback, configuración YAML, y el
+health, las métricas y el endpoint resilience4cata de Actuator sobre Tomcat) con los plugins de Gradle de Spring
+Boot y de GraalVM, y corre sus tests dentro de la imagen.
 
 ## Límites :id=limits
 

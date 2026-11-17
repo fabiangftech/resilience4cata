@@ -1,9 +1,14 @@
-# Builds the Quarkus guide's application (quarkus:it) as a GraalVM native image and runs the @QuarkusIntegrationTest
-# classes against it: the annotated class, the interface and REST client wrappers, health, metrics, and the Mono and
-# Flux beans (src/integrationTest). The same tests run against the jar with ./gradlew :quarkus:it:quarkusIntTest.
-# Locally (GraalVM for JDK 25):
+# Builds GraalVM native images of three applications and runs their tests inside them:
+# - quarkus: the Quarkus guide's application (quarkus:it), with the @QuarkusIntegrationTest classes against the image:
+#   the annotated class, the interface and REST client wrappers, health, metrics, and the Mono and Flux beans
+#   (src/integrationTest). The same tests run against the jar with ./gradlew :quarkus:it:quarkusIntTest.
+# - spring and micronaut: small applications (native:spring, native:micronaut) whose JUnit tests run inside the image
+#   through GraalVM Native Build Tools (nativeTest): an annotated class, a wrapped interface, YAML configuration,
+#   health, metrics and the resilience4cata endpoint over HTTP. The same tests run on the JVM in `check`.
+# Locally (GraalVM for JDK 25 in GRAALVM_HOME):
 #   ./gradlew :quarkus:it:testNative -Dquarkus.native.enabled=true -Dquarkus.package.jar.enabled=false \
 #     -Dquarkus.native.graalvm-home=<GraalVM>
+#   ./gradlew :native:spring:nativeTest :native:micronaut:nativeTest
 #
 # Not on every PR: a native build takes several minutes. It runs on PRs that touch what ends up in the image, after
 # every merge to main and nightly.
@@ -19,6 +24,9 @@ on:
       - 'reactor/**'
       - 'micrometer/**'
       - 'quarkus/**'
+      - 'spring/**'
+      - 'micronaut/**'
+      - 'native/**'
       - 'gradle/libs.versions.toml'
       - '.github/workflows/native.yml'
   schedule:
@@ -72,4 +80,76 @@ jobs:
           path: |
             quarkus/it/build/reports/tests/
             quarkus/it/build/test-results/
+          retention-days: 14
+
+  native-spring:
+    name: native (spring)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # JDK 21 is the compile toolchain (--release 21).
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # GraalVM for JDK 25 builds the image; it becomes JAVA_HOME (Gradle runs on it) and sets GRAALVM_HOME.
+      - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1.6.8
+        with:
+          java-version: '25'
+          distribution: graalvm-community
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Native image tests
+        run: ./gradlew :native:spring:nativeTest -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-spring-test-reports
+          path: native/spring/build/test-results/
+          retention-days: 14
+
+  native-micronaut:
+    name: native (micronaut)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # JDK 21 is the compile toolchain of the library's modules (--release 21); the application itself is on 25.
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # GraalVM for JDK 25 builds the image; it becomes JAVA_HOME (Gradle runs on it) and sets GRAALVM_HOME.
+      - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1.6.8
+        with:
+          java-version: '25'
+          distribution: graalvm-community
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Native image tests
+        run: ./gradlew :native:micronaut:nativeTest -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-micronaut-test-reports
+          path: native/micronaut/build/test-results/
           retention-days: 14
