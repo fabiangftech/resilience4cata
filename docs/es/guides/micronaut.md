@@ -434,6 +434,39 @@ aplicar la configuración con `config.applyTo(builder)`.
   de eventos. Como los endpoints del propio Micronaut, es sensible por defecto: configúralo con
   `endpoints.resilience4cata.enabled` y `endpoints.resilience4cata.sensitive`.
 
+### OpenTelemetry :id=opentelemetry
+
+El módulo solo vincula Micrometer. Para exportar en su lugar las [métricas de OpenTelemetry](opentelemetry.md),
+añade `dev.resilience4cata:resilience4cata-opentelemetry` y estos beans a una `@Factory`, junto a tu bean
+`OpenTelemetry`:
+
+<!-- snippet: micronaut-opentelemetry -->
+```java
+@Singleton
+@Bean(preDestroy = "close")
+OpenTelemetryMetrics resilienceMetrics(OpenTelemetry openTelemetry) {
+    return OpenTelemetryMetrics.create(openTelemetry);
+}
+
+@Singleton
+BeanCreatedEventListener<ResilienceRegistry.Builder> resilienceCounters(OpenTelemetryMetrics metrics) {
+    return event -> metrics.register(event.getBean()); // the counters' listener, before the registry is built
+}
+
+@Singleton
+BeanCreatedEventListener<ResilienceRegistry> resilienceGauges(OpenTelemetryMetrics metrics) {
+    return event -> {
+        metrics.bindTo(event.getBean()); // the gauges, read at each collection
+        return event.getBean();
+    };
+}
+```
+
+El primer listener registra el listener de los contadores en el builder antes de construir el registry, el segundo
+vincula los gauges cuando se crea el registry, y `preDestroy = "close"` elimina los gauges cuando el contexto se
+detiene. Si Micrometer también está en el class path, pon `resilience4cata.micronaut.metrics.enabled=false` para
+que los eventos no se cuenten dos veces.
+
 ## Interruptores :id=switches
 
 | Propiedad | Por defecto | Efecto |

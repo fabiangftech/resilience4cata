@@ -430,6 +430,39 @@ the configuration with `config.applyTo(builder)`.
   is sensitive by default: configure it with `endpoints.resilience4cata.enabled` and
   `endpoints.resilience4cata.sensitive`.
 
+### OpenTelemetry :id=opentelemetry
+
+The module binds only Micrometer. To export the [OpenTelemetry metrics](opentelemetry.md) instead, add
+`dev.resilience4cata:resilience4cata-opentelemetry` and these beans to a `@Factory`, next to your `OpenTelemetry`
+bean:
+
+<!-- snippet: micronaut-opentelemetry -->
+```java
+@Singleton
+@Bean(preDestroy = "close")
+OpenTelemetryMetrics resilienceMetrics(OpenTelemetry openTelemetry) {
+    return OpenTelemetryMetrics.create(openTelemetry);
+}
+
+@Singleton
+BeanCreatedEventListener<ResilienceRegistry.Builder> resilienceCounters(OpenTelemetryMetrics metrics) {
+    return event -> metrics.register(event.getBean()); // the counters' listener, before the registry is built
+}
+
+@Singleton
+BeanCreatedEventListener<ResilienceRegistry> resilienceGauges(OpenTelemetryMetrics metrics) {
+    return event -> {
+        metrics.bindTo(event.getBean()); // the gauges, read at each collection
+        return event.getBean();
+    };
+}
+```
+
+The first listener registers the counters' listener on the builder before the registry is built, the second binds
+the gauges when the registry is created, and `preDestroy = "close"` removes the gauges when the context stops.
+With Micrometer on the class path too, set `resilience4cata.micronaut.metrics.enabled=false` so that events are
+not counted twice.
+
 ## Switches :id=switches
 
 | Property | Default | Effect |

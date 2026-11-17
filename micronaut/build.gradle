@@ -27,6 +27,9 @@ def micronautTestLibraries = [
         libs.micronaut.data.tx,
         libs.logback.classic,
         project(':micrometer'),
+        // OpenTelemetryTest: the guide's OpenTelemetry wiring.
+        project(':opentelemetry'),
+        libs.opentelemetry.sdk.testing,
         project(':testkit'),
         project(':reactor')
 ]
