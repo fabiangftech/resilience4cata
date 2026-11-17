@@ -19,6 +19,7 @@ import org.junit.jupiter.api.RepeatedTest;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Hooks;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
 /**
@@ -41,6 +42,8 @@ class MonoConcurrencyTest {
     private final AtomicInteger subscriptionIds = new AtomicInteger();
     private final List<Throwable> dropped = new CopyOnWriteArrayList<>();
     private final List<Object> droppedValues = new CopyOnWriteArrayList<>();
+    /** Per caller: signalled when one of its attempts reaches the delegate, inside the policies. */
+    private final Map<Integer, Sinks.One<Boolean>> started = new ConcurrentHashMap<>();
 
     @BeforeEach
     void hooks() {
@@ -92,8 +95,13 @@ class MonoConcurrencyTest {
                         cancels.incrementAndGet();
                         end.run();
                     })
-                    .doFinally(signal -> open.decrementAndGet());
+                    .doFinally(signal -> open.decrementAndGet())
+                    .doOnSubscribe(subscription -> startedOf(i).tryEmitValue(Boolean.TRUE));
         });
+    }
+
+    private Sinks.One<Boolean> startedOf(int i) {
+        return started.computeIfAbsent(i, k -> Sinks.one());
     }
 
     private final ResilienceRegistry registry = ResilienceRegistry.builder().build();
@@ -133,11 +141,17 @@ class MonoConcurrencyTest {
                             .doOnSuccess(v -> outcomes.incrementAndGet(i))
                             .doOnError(e -> outcomes.incrementAndGet(i))
                             .onErrorResume(e -> Mono.empty());
-                    // One caller in five gives up after a random few milliseconds: take cancels the call. Reactor lets
-                    // that cancel race the outcome, so such a caller may see both.
-                    return i % 5 == 0
-                            ? mono.doOnCancel(() -> cancelled.incrementAndGet(i))
-                                    .take(Duration.ofMillis(ThreadLocalRandom.current().nextInt(1, 20)), Schedulers.parallel())
+                    // One caller in ten gives up after a random few milliseconds (take), another one in ten as soon as
+                    // its call reaches the delegate, inside the policies (takeUntilOther): on a starved machine the
+                    // timers fire too late to cancel anything (a loaded macOS runner saw no caller cancel), the
+                    // second kind does not depend on them. Reactor lets a cancel race the outcome, so such a caller
+                    // may see both.
+                    if (i % 10 == 0) {
+                        return mono.doOnCancel(() -> cancelled.incrementAndGet(i))
+                                .take(Duration.ofMillis(ThreadLocalRandom.current().nextInt(1, 20)), Schedulers.parallel());
+                    }
+                    return i % 10 == 5
+                            ? mono.doOnCancel(() -> cancelled.incrementAndGet(i)).takeUntilOther(startedOf(i).asMono())
                             : mono;
                 }, 128)
                 .then()
