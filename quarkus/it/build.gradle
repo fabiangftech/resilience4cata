@@ -22,6 +22,10 @@ configurations {
         canBeConsumed = false
         transitive = false
     }
+    openTelemetryJar {
+        canBeConsumed = false
+        transitive = false
+    }
     extensionTestImplementation.extendsFrom implementation, testImplementation
     extensionTestRuntimeOnly.extendsFrom runtimeOnly, testRuntimeOnly
     extensionTestCompileOnly.extendsFrom testCompileOnly
@@ -53,6 +57,13 @@ dependencies {
     // extensionTest ones: QuarkusExtensionTest builds its applications from the test source set's application model.
     testImplementation libs.quarkus.smallrye.fault.tolerance
     testImplementation libs.quarkus.narayana.jta
+    // OpenTelemetryBindingTest and MetricsBindingChoiceTest (extensionTest): Quarkus OpenTelemetry and
+    // resilience4cata-opentelemetry, as a jar file for the same reason as resilience4cata-micrometer. With Micrometer
+    // present too, the extension binds Micrometer, so the other applications are unchanged.
+    testImplementation libs.quarkus.opentelemetry
+    testImplementation libs.opentelemetry.sdk.testing
+    openTelemetryJar project(':opentelemetry')
+    testImplementation files(configurations.openTelemetryJar)
     // Usability tests (usability packages): Quarkus features users combine with the policies, and @InjectMock.
     testImplementation libs.quarkus.hibernate.validator
     testImplementation libs.quarkus.scheduler
@@ -108,6 +119,15 @@ tasks.named('check') {
 // A random HTTP port: other builds on the machine (and CI's parallel jobs) may hold Quarkus's default test port.
 tasks.withType(Test).configureEach {
     systemProperty 'quarkus.http.test-port', '0'
+}
+// quarkus-opentelemetry is a test dependency (the metrics binding tests): its tracing, on by default, would export
+// every request's spans to an OTLP collector that is not there and log each failure. The applications built for the
+// tests (test, extensionTest) turn it off; a system property wins over each application's own configuration.
+tasks.named('test') {
+    systemProperty 'quarkus.otel.traces.enabled', 'false'
+}
+extensionTest.configure {
+    systemProperty 'quarkus.otel.traces.enabled', 'false'
 }
 
 // The Quarkus plugin finds the deployment module through META-INF/quarkus-extension.properties of the runtime jar,

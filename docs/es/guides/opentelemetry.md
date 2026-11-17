@@ -104,11 +104,11 @@ No agregues la clase ni el mensaje de la excepción como atributo: en la prácti
 ## Lo que cuesta :id=cost
 
 - **Las llamadas exitosas no cuestan nada.** Las políticas no publican ningún evento en caso de éxito, y el listener es el único código que este módulo agrega a un camino de llamada.
-- **Cada evento cuesta un `add` en un contador.** El listener encuentra los `Attributes` del evento en una caché (construidos una vez por instancia y valores de atributos, ya que los atributos de OpenTelemetry son inmutables), así que no asigna nada aparte del propio record del evento; después, el `add` del SDK hace su trabajo de agregación. Los eventos se publican solo en rechazos, retries, abandonos, transiciones, timeouts y fallbacks.
+- **Cada evento cuesta un `add` en un contador.** El listener encuentra los `Attributes` del evento en una caché (construidos una vez por instancia y valores de atributos, ya que los atributos de OpenTelemetry son inmutables), así que no asigna nada aparte del propio record del evento; después, el `add` del SDK hace su trabajo de agregación y, una vez que la serie existe, tampoco asigna nada (comprobado por un test con el SDK 1.67.0). Los eventos se publican solo en rechazos, retries, abandonos, transiciones, timeouts y fallbacks.
 - **Los gauges no cuestan nada entre recolecciones.** Un solo batch callback construye un `registry.snapshot()` por recolección, que recorre las ventanas de los breakers, al intervalo del reader.
 - **El listener nunca lanza excepciones**: un fallo dentro de OpenTelemetry se registra en `DEBUG` mediante `System.Logger` y la llamada continúa.
 
-Aún no medido: el costo de un evento con la agregación del SDK.
+Aún no medido: el tiempo que tarda un evento con la agregación del SDK.
 
 ## Exportar :id=exporting
 
@@ -144,19 +144,22 @@ El exportador convierte los puntos en guiones bajos, agrega `_total` a los conta
 
 ### OTLP :id=otlp
 
-Para enviar las métricas a un OpenTelemetry Collector o a un backend OTLP, registra un reader periódico con el exportador OTLP (`io.opentelemetry:opentelemetry-exporter-otlp`). Ilustrativo, no probado en este repositorio:
+Para enviar las métricas a un OpenTelemetry Collector o a un backend OTLP, registra un reader periódico con el exportador OTLP (`io.opentelemetry:opentelemetry-exporter-otlp`). Por HTTP:
 
-<!-- not-compiled: illustrative, needs opentelemetry-exporter-otlp and a collector -->
+<!-- snippet: opentelemetry-otlp -->
 ```java
 OpenTelemetrySdk openTelemetry = OpenTelemetrySdk.builder()
         .setMeterProvider(SdkMeterProvider.builder()
-                .registerMetricReader(PeriodicMetricReader.builder(
-                                OtlpGrpcMetricExporter.builder().setEndpoint("http://localhost:4317").build())
+                .registerMetricReader(PeriodicMetricReader.builder(OtlpHttpMetricExporter.builder()
+                                .setEndpoint(collector + "/v1/metrics") // http://localhost:4318/v1/metrics by default
+                                .build())
                         .setInterval(Duration.ofSeconds(30))
                         .build())
                 .build())
         .build();
 ```
+
+Para gRPC, usa `OtlpGrpcMetricExporter` del mismo modo (puerto 4317 por defecto). Esta configuración está probada contra un receptor OTLP que decodifica lo que envía el exportador: nombres, tipos de instrumento, unidades, atributos y el scope llegan como en la [tabla de arriba](#metrics).
 
 Con el módulo de autoconfiguración del SDK o con el agente de Java de OpenTelemetry, el SDK se configura con variables de entorno `OTEL_*`, y `OpenTelemetryMetrics.create(GlobalOpenTelemetry.get())` lo usa.
 
