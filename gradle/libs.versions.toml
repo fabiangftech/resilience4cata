@@ -200,3 +200,8 @@ commonmark-ext-gfm-tables = { module = "org.commonmark:commonmark-ext-gfm-tables
 # The official Quarkus Gradle plugin, applied only by the unpublished quarkus:it project (its tests need the
 # application model the plugin provides): the second exception to "no third-party Gradle plugins", see CLAUDE.md.
 quarkus = { id = "io.quarkus", version.ref = "quarkus" }
+# The official Spring Boot and GraalVM Native Build Tools plugins, applied only by the unpublished native:spring and
+# native:micronaut projects, which test the library in native images.
+spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
+graalvm-native = { id = "org.graalvm.buildtools.native", version = "1.1.18" }
+micronaut-application = { id = "io.micronaut.application", version = "5.0.2" }

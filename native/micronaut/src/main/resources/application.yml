@@ -1,0 +1,16 @@
+micronaut:
+  application:
+    name: native-shop
+  metrics:
+    enabled: true
+resilience4cata:
+  instances:
+    inventory:
+      retry.max-attempts: 4
+endpoints:
+  health:
+    details-visible: ANONYMOUS
+  metrics:
+    sensitive: false
+  resilience4cata:
+    sensitive: false

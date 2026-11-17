@@ -1,0 +1,53 @@
+plugins {
+    id 'r4c.java-library'
+    // The official Micronaut application plugin, with GraalVM Native Build Tools: this project only tests the library
+    // in a native image (CLAUDE.md: third-party plugins are excluded from the library's build, not from its test
+    // projects).
+    alias(libs.plugins.micronaut.application)
+}
+
+// Its own group: with the root's, Gradle would take this project and :micronaut for the same module.
+group = 'dev.resilience4cata.nativeimage'
+
+description = 'A Micronaut application with resilience4cata, tested on the JVM (test) and as a GraalVM native image (nativeTest). Not published.'
+
+// Micronaut 5 needs Java 25, as the micronaut module.
+r4cJava.release = 25
+
+application {
+    mainClass = 'dev.resilience4cata.nativeimage.micronaut.NativeShop'
+}
+
+micronaut {
+    version = libs.versions.micronautPlatform.get()
+    runtime 'netty'
+    testRuntime 'junit5'
+    processing {
+        incremental false
+    }
+}
+
+dependencies {
+    implementation project(':micronaut')
+    implementation project(':micrometer')
+    implementation 'io.micronaut:micronaut-management'
+    implementation 'io.micronaut.micrometer:micronaut-micrometer-core'
+    implementation 'io.micronaut.serde:micronaut-serde-jackson'
+    runtimeOnly 'org.yaml:snakeyaml'
+    runtimeOnly 'ch.qos.logback:logback-classic'
+    compileOnly project(':annotations')
+    annotationProcessor project(':processor')
+    testCompileOnly project(':annotations')
+    testAnnotationProcessor project(':processor')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    // Micronaut's classes carry annotations of jars it does not ship, as in the micronaut module; the generated
+    // subclasses carry the class's bean annotations (-Ar4c.inject=micronaut), as the Micronaut guide recommends.
+    options.compilerArgs.addAll(['-Xlint:-classfile', '-Ar4c.inject=micronaut'])
+}
+
+graalvmNative {
+    // GraalVM is GRAALVM_HOME (CI: graalvm/setup-graalvm), not a Gradle toolchain.
+    toolchainDetection = false
+}
