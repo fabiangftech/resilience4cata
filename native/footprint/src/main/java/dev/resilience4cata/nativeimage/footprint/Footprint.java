@@ -77,7 +77,8 @@ public final class Footprint {
 
     /**
      * The one executable file of a {@code nativeCompile} directory, wherever its name comes from (Spring Boot's plugin
-     * renames the image); a file is accepted as it is.
+     * names the image after the jar, version included), next to the shared libraries GraalVM copies there; a file is
+     * accepted as it is.
      */
     static Path executableIn(Path path) throws IOException {
         if (!Files.isDirectory(path)) {
@@ -85,7 +86,8 @@ public final class Footprint {
         }
         try (Stream<Path> files = Files.list(path)) {
             List<Path> executables = files.filter(Files::isRegularFile).filter(Files::isExecutable)
-                    .filter(file -> !file.getFileName().toString().contains(".")).toList();
+                    .filter(file -> !file.getFileName().toString().matches(".*\\.(so|dylib|dll|jar|json|txt)$"))
+                    .toList();
             if (executables.size() != 1) {
                 throw new IllegalStateException("Expected one native image in " + path + ", found " + executables);
             }
