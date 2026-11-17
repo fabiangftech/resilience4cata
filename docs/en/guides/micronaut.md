@@ -526,8 +526,9 @@ Nothing to add for resilience4cata:
 - the endpoint serves `ResilienceSnapshot.toMap()`, which core builds without reflection.
 
 The project's CI builds a GraalVM 25 native image of a small application (an annotated class, an `@ResilientBean`
-interface with a fallback, YAML configuration, health, Micrometer metrics and the endpoint over Netty) with
-Micronaut's Gradle plugin, and runs its tests inside the image. Build yours with Micronaut's Gradle or Maven plugin, which also puts
+interface with a fallback, YAML configuration, health, Micrometer metrics and the endpoint over Netty, and `Mono` and
+`Flux` methods of both styles) with GraalVM's Gradle plugin and Micronaut's `micronaut-graal` annotation processor,
+and runs its tests inside the image. Build yours with Micronaut's Gradle or Maven plugin, which also puts
 `application.yml` in the image. Exception classes named in external configuration (`retry-on: com.acme.Busy`) are
 loaded by name: name them in the annotations instead, or register them for reflection. The
 retry-inside-transaction check (`R4C-MN-005`) reads class files, so a native image skips it: it runs in the JVM

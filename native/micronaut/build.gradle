@@ -23,6 +23,8 @@ dependencies {
     implementation platform(libs.micronaut.platform)
     implementation project(':micronaut')
     implementation project(':micrometer')
+    // Mono and Flux methods (reactive package): the reactor module, on the platform's Reactor.
+    implementation project(':reactor')
     implementation libs.micronaut.inject
     implementation libs.micronaut.http.server.netty
     implementation libs.micronaut.management

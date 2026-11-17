@@ -531,7 +531,8 @@ No hay nada que añadir para resilience4cata:
 
 El CI del proyecto construye una imagen nativa de GraalVM 25 de una aplicación pequeña (una clase anotada, una
 interfaz `@ResilientBean` con fallback, configuración YAML, health, métricas de Micrometer y el endpoint sobre
-Netty) con el plugin de Gradle de Micronaut, y corre sus tests dentro de la imagen. Construye la tuya con el plugin de Gradle o de Maven de Micronaut, que
+Netty, y métodos `Mono` y `Flux` de los dos estilos) con el plugin de Gradle de GraalVM y el procesador de
+anotaciones `micronaut-graal` de Micronaut, y corre sus tests dentro de la imagen. Construye la tuya con el plugin de Gradle o de Maven de Micronaut, que
 además incluye `application.yml` en la imagen. Las clases de excepción nombradas en la configuración externa
 (`retry-on: com.acme.Busy`) se cargan por nombre: nómbralas en las anotaciones, o regístralas para reflexión. La
 revisión de reintentos dentro de transacciones (`R4C-MN-005`) lee archivos de clase, así que una imagen nativa la

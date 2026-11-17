@@ -15,6 +15,8 @@ dependencies {
     implementation platform(libs.spring.boot.dependencies)
     implementation project(':spring')
     implementation project(':micrometer')
+    // Mono and Flux methods (reactive package): the reactor module, on the Boot BOM's Reactor.
+    implementation project(':reactor')
     implementation libs.spring.boot.webmvc
     implementation libs.spring.boot.tomcat
     implementation libs.spring.boot.actuator.autoconfigure
@@ -24,6 +26,10 @@ dependencies {
     runtimeOnly libs.snakeyaml
     compileOnly project(':annotations')
     annotationProcessor project(':processor')
+
+    // The AOT sources reference the annotated classes, whose class files carry the annotations' enum values.
+    aotCompileOnly project(':annotations')
+    aotTestCompileOnly project(':annotations')
 
     testImplementation platform(libs.spring.boot.dependencies)
     testImplementation libs.spring.boot.test
