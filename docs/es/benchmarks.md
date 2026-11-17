@@ -707,12 +707,13 @@ Una fuga de unos pocos bytes por llamada, o de un objeto por cada hilo que algun
 - los hilos de la librería;
 - los hilos para los que el watchdog de timeouts guarda scopes;
 - las tareas de timers;
-- los meters y las instancias del registry.
+- los meters de Micrometer, las series de OpenTelemetry (los dos módulos escuchan el registry; OpenTelemetry exporta cada segundo con un reader periódico) y las instancias del registry.
 
 Falla si:
 
 - el heap más bajo después de GC en el último cuarto de la corrida queda más de 16 MB (`-Psoak.heapBudgetMb`) sobre el más bajo entre el 20% y el 45%;
-- después del calentamiento aparece un hilo de la librería o una instancia del registry, o hay un meter que no pertenece a ninguna instancia;
+- después del calentamiento aparece un hilo de la librería o una instancia del registry, o hay un meter o una serie de OpenTelemetry que no pertenece a ninguna instancia;
+- cuando la carga se detiene, OpenTelemetry y Micrometer no contaron los mismos eventos;
 - cuando termina la carga queda una llamada, una tarea de timer, un slot de bulkhead o de adaptive limit, o el scope del watchdog de un hilo muerto;
 - hay una falla inesperada o Reactor descarta un error. Un caso se cuenta pero se permite: que el propio operador `timeout` del llamador descarte un error que compitió con su cancelación, algo que las reglas de Reactive Streams permiten.
 

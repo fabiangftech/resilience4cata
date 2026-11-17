@@ -707,12 +707,13 @@ A leak of a few bytes per call, or of one object per thread that ever made a cal
 - the library's threads;
 - the threads the timeout watchdog keeps scopes for;
 - the timer tasks;
-- the meters and the registry instances.
+- the Micrometer meters, the OpenTelemetry series (both modules listen on the registry; OpenTelemetry exports every second through a periodic reader) and the registry instances.
 
 It fails if:
 
 - the lowest heap after GC in the last quarter of the run is more than 16 MB (`-Psoak.heapBudgetMb`) above the lowest one between 20% and 45% of it;
-- a library thread or a registry instance appears after the warm-up, or a meter belongs to no instance;
+- a library thread or a registry instance appears after the warm-up, or a meter or an OpenTelemetry series belongs to no instance;
+- once the load stops, OpenTelemetry and Micrometer have not counted the same events;
 - once the load stops, a call, a timer task, a bulkhead or adaptive-limit slot, or the watchdog scope of a dead thread is left;
 - a failure is unexpected, or Reactor drops an error. One case is counted but allowed: the caller's own `timeout` operator dropping an error that raced its cancel, which the Reactive Streams rules allow.
 
