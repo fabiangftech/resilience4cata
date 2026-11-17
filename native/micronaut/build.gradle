@@ -62,6 +62,11 @@ graalvmNative {
     metadataRepository {
         enabled = true
     }
+    // An application: Native Build Tools would build the main binary as a shared library, since r4c.java-library
+    // applies the java-library plugin (nativeTest always builds an executable).
+    binaries.main {
+        sharedLibrary = false
+    }
     binaries.all {
         // application.yml and logback.xml, as Micronaut's application plugin would include them.
         resources.autodetect()

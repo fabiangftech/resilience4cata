@@ -89,7 +89,10 @@ public final class Footprint {
                     .filter(file -> !file.getFileName().toString().matches(".*\\.(so|dylib|dll|jar|json|txt)$"))
                     .toList();
             if (executables.size() != 1) {
-                throw new IllegalStateException("Expected one native image in " + path + ", found " + executables);
+                try (Stream<Path> all = Files.list(path)) {
+                    throw new IllegalStateException("Expected one native image in " + path + ", found " + executables
+                            + " among " + all.map(Path::getFileName).toList());
+                }
             }
             return executables.getFirst();
         }
