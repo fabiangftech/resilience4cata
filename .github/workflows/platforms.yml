@@ -3,7 +3,8 @@
 #   stays on JDK 25), so that a change in a newer JDK shows here before users meet it;
 # - os: Windows and macOS (build.yml runs on Linux only): file paths, line ends, environment variables, the clock
 #   and thread scheduling differ there.
-# Not on every PR: the Windows build alone takes far longer than build.yml. Locally, the same command as build.yml:
+# Not on every PR: the Windows build alone takes far longer than build.yml. --continue: a weekly run shows every
+# failure, not only the first. Locally, the same command as build.yml:
 #   ./gradlew build -PtestJdk=27
 name: platforms
 
@@ -69,7 +70,7 @@ jobs:
         env:
           TESTED_JDK: ${{ steps.tested.outputs.path }}
         run: >-
-          ./gradlew build -PtestJdk=${{ matrix.java }}
+          ./gradlew build --continue -PtestJdk=${{ matrix.java }}
           -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
           "-Porg.gradle.java.installations.paths=$TESTED_JDK"
 
@@ -119,7 +120,7 @@ jobs:
         env:
           JDK21: ${{ steps.jdk21.outputs.path }}
           JDK25: ${{ steps.jdk25.outputs.path }}
-        run: ./gradlew build -PtestJdk=21 "-Porg.gradle.java.installations.paths=$JDK21,$JDK25"
+        run: ./gradlew build --continue -PtestJdk=21 "-Porg.gradle.java.installations.paths=$JDK21,$JDK25"
 
       - name: Upload test reports
         if: failure()
