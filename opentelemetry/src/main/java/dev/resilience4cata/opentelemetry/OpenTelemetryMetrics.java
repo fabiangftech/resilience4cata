@@ -218,7 +218,12 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
      */
     public ResilienceRegistry.Builder register(ResilienceRegistry.Builder builder) {
         Objects.requireNonNull(builder, "builder");
-        return builder.listen(ResilienceEvent.class, new Listener());
+        return builder.listen(ResilienceEvent.class, listener());
+    }
+
+    /** The counters' listener; package-private for the allocation test, which feeds it events directly. */
+    EventListener<ResilienceEvent> listener() {
+        return new Listener();
     }
 
     /**

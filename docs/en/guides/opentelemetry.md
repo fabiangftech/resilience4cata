@@ -103,11 +103,11 @@ Don't add the exception class or message as an attribute: they are unbounded in 
 ## What it costs :id=cost
 
 - **Successful calls cost nothing.** Policies publish no event on success, and the listener is the only code this module adds to a call path.
-- **Each event costs one counter `add`.** The listener finds the event's `Attributes` in a cache (built once per instance and attribute values, since OpenTelemetry attributes are immutable), so it allocates nothing beyond the event record itself; the SDK's own `add` then does its aggregation work. Events are published only on rejections, retries, give-ups, transitions, timeouts and fallbacks.
+- **Each event costs one counter `add`.** The listener finds the event's `Attributes` in a cache (built once per instance and attribute values, since OpenTelemetry attributes are immutable), so it allocates nothing beyond the event record itself; the SDK's own `add` then does its aggregation work and, once the series exists, allocates nothing either (checked by a test with SDK 1.67.0). Events are published only on rejections, retries, give-ups, transitions, timeouts and fallbacks.
 - **Gauges cost nothing between collections.** One batch callback builds one `registry.snapshot()` per collection, which walks the breakers' windows, at the reader's interval.
 - **The listener never throws**: a failure inside OpenTelemetry is logged at `DEBUG` through `System.Logger` and the call goes on.
 
-Not measured yet: the cost of an event with the SDK's aggregation.
+Not measured yet: the time an event takes with the SDK's aggregation.
 
 ## Exporting :id=exporting
 
@@ -143,19 +143,22 @@ The exporter turns dots into underscores, adds `_total` to counters and `_percen
 
 ### OTLP :id=otlp
 
-To send metrics to an OpenTelemetry Collector or an OTLP backend, register a periodic reader with the OTLP exporter (`io.opentelemetry:opentelemetry-exporter-otlp`). Illustrative, not tested in this repository:
+To send metrics to an OpenTelemetry Collector or an OTLP backend, register a periodic reader with the OTLP exporter (`io.opentelemetry:opentelemetry-exporter-otlp`). Over HTTP:
 
-<!-- not-compiled: illustrative, needs opentelemetry-exporter-otlp and a collector -->
+<!-- snippet: opentelemetry-otlp -->
 ```java
 OpenTelemetrySdk openTelemetry = OpenTelemetrySdk.builder()
         .setMeterProvider(SdkMeterProvider.builder()
-                .registerMetricReader(PeriodicMetricReader.builder(
-                                OtlpGrpcMetricExporter.builder().setEndpoint("http://localhost:4317").build())
+                .registerMetricReader(PeriodicMetricReader.builder(OtlpHttpMetricExporter.builder()
+                                .setEndpoint(collector + "/v1/metrics") // http://localhost:4318/v1/metrics by default
+                                .build())
                         .setInterval(Duration.ofSeconds(30))
                         .build())
                 .build())
         .build();
 ```
+
+For gRPC, use `OtlpGrpcMetricExporter` the same way (port 4317 by default). This setup is tested against an OTLP receiver that decodes what the exporter sends: names, instrument types, units, attributes and the scope arrive as in the [table above](#metrics).
 
 With the SDK autoconfiguration module or the OpenTelemetry Java agent, the SDK is configured by `OTEL_*` environment variables instead, and `OpenTelemetryMetrics.create(GlobalOpenTelemetry.get())` uses it.
 
