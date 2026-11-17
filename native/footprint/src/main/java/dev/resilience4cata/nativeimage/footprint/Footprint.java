@@ -23,13 +23,15 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.ToDoubleFunction;
+import java.util.stream.Stream;
 
 /**
  * Starts native images of the shop applications, with and without resilience4cata, and measures each: the time from
  * starting the process to the first answered request, and the resident set size (RSS) right after that request and
  * after a fixed load. The runs of the images alternate, so that a slower period of the machine affects them all.
  *
- * <p>Arguments: the report file, the number of runs per image, then one {@code name=path} per image. An image whose
+ * <p>Arguments: the report file, the number of runs per image, then one {@code name=path} per image (the image, or the
+ * directory that holds it). An image whose
  * name ends with {@code -plain} is the baseline of the image named without that suffix; it must not use generated
  * classes, the other must (checked on {@code /reactive/beans} at every run).
  */
@@ -53,7 +55,7 @@ public final class Footprint {
         Map<String, Path> images = new LinkedHashMap<>();
         for (int i = 2; i < args.length; i++) {
             String[] image = args[i].split("=", 2);
-            images.put(image[0], Path.of(image[1]));
+            images.put(image[0], executableIn(Path.of(image[1])));
         }
         Map<String, List<Run>> results = new LinkedHashMap<>();
         images.keySet().forEach(name -> results.put(name, new ArrayList<>()));
@@ -71,6 +73,24 @@ public final class Footprint {
         String text = report(images, results, runs);
         Files.writeString(report, text);
         System.out.print(text);
+    }
+
+    /**
+     * The one executable file of a {@code nativeCompile} directory, wherever its name comes from (Spring Boot's plugin
+     * renames the image); a file is accepted as it is.
+     */
+    static Path executableIn(Path path) throws IOException {
+        if (!Files.isDirectory(path)) {
+            return path;
+        }
+        try (Stream<Path> files = Files.list(path)) {
+            List<Path> executables = files.filter(Files::isRegularFile).filter(Files::isExecutable)
+                    .filter(file -> !file.getFileName().toString().contains(".")).toList();
+            if (executables.size() != 1) {
+                throw new IllegalStateException("Expected one native image in " + path + ", found " + executables);
+            }
+            return executables.getFirst();
+        }
     }
 
     private Run measure(String name, Path image, Path log) throws Exception {

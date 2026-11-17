@@ -58,10 +58,6 @@ tasks.withType(JavaCompile).configureEach {
 graalvmNative {
     // GraalVM is GRAALVM_HOME (CI: graalvm/setup-graalvm), not a Gradle toolchain.
     toolchainDetection = false
-    // native:footprint finds the application's image by the project's name (Spring Boot's plugin names it after the jar).
-    binaries.main {
-        imageName = project.name
-    }
     // Reachability metadata of the libraries (Netty, Jackson...) from GraalVM's repository.
     metadataRepository {
         enabled = true

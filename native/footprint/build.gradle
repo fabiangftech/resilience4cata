@@ -6,8 +6,8 @@ group = 'dev.resilience4cata.nativeimage'
 
 description = 'Measures the startup time and memory of the native shop images with and without resilience4cata. Not published.'
 
-// The images, each built by its project's nativeCompile (GraalVM in GRAALVM_HOME); a name ending with -plain is the
-// baseline of the one without the suffix. Native Build Tools names an image after its project.
+// The images, each built by its project's nativeCompile (GraalVM in GRAALVM_HOME) into its directory; a name ending
+// with -plain is the baseline of the one without the suffix.
 def images = ['spring', 'spring-plain', 'micronaut', 'micronaut-plain']
 
 // ./gradlew :native:footprint:footprint [-Pfootprint.runs=10]: report in native/footprint/build/footprint/report.md.
@@ -23,7 +23,7 @@ tasks.register('footprint', JavaExec) {
     def nativeDir = rootProject.layout.projectDirectory.dir('native')
     argumentProviders.add({
         [report.get().asFile.path, runs.get()] + images.collect {
-            "${it}=${nativeDir.dir("${it}/build/native/nativeCompile/${it}").asFile.path}".toString()
+            "${it}=${nativeDir.dir("${it}/build/native/nativeCompile").asFile.path}".toString()
         }
     } as CommandLineArgumentProvider)
     outputs.file(report)
