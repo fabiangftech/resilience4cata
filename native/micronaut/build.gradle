@@ -1,9 +1,10 @@
 plugins {
     id 'r4c.java-library'
-    // The official Micronaut application plugin, with GraalVM Native Build Tools: this project only tests the library
-    // in a native image (CLAUDE.md: third-party plugins are excluded from the library's build, not from its test
-    // projects).
-    alias(libs.plugins.micronaut.application)
+    id 'application'
+    // The official GraalVM Native Build Tools plugin: this project only tests the library in a native image (CLAUDE.md:
+    // third-party plugins are excluded from the library's build, not from its test projects). Not Micronaut's own
+    // application plugin: from 5.0 it needs Gradle on Java 25, and the build runs on any JDK from 17.
+    alias(libs.plugins.graalvm.native)
 }
 
 // Its own group: with the root's, Gradle would take this project and :micronaut for the same module.
@@ -18,26 +19,31 @@ application {
     mainClass = 'dev.resilience4cata.nativeimage.micronaut.NativeShop'
 }
 
-micronaut {
-    version = libs.versions.micronautPlatform.get()
-    runtime 'netty'
-    testRuntime 'junit5'
-    processing {
-        incremental false
-    }
-}
-
 dependencies {
+    implementation platform(libs.micronaut.platform)
     implementation project(':micronaut')
     implementation project(':micrometer')
-    implementation 'io.micronaut:micronaut-management'
-    implementation 'io.micronaut.micrometer:micronaut-micrometer-core'
-    implementation 'io.micronaut.serde:micronaut-serde-jackson'
-    runtimeOnly 'org.yaml:snakeyaml'
-    runtimeOnly 'ch.qos.logback:logback-classic'
+    implementation libs.micronaut.inject
+    implementation libs.micronaut.http.server.netty
+    implementation libs.micronaut.management
+    implementation libs.micronaut.micrometer.core
+    implementation libs.micronaut.serde.jackson
+    runtimeOnly libs.snakeyaml
+    runtimeOnly libs.logback.classic
     compileOnly project(':annotations')
+    // Micronaut's processors (bean definitions, serde, and micronaut-graal: the native-image configuration of the
+    // beans, which Micronaut's application plugin would add), and ours.
+    annotationProcessor platform(libs.micronaut.platform)
+    annotationProcessor libs.micronaut.inject.java
+    annotationProcessor libs.micronaut.serde.processor
+    annotationProcessor libs.micronaut.graal
     annotationProcessor project(':processor')
+
+    testImplementation platform(libs.micronaut.platform)
+    testImplementation libs.micronaut.test.junit5
     testCompileOnly project(':annotations')
+    testAnnotationProcessor platform(libs.micronaut.platform)
+    testAnnotationProcessor libs.micronaut.inject.java
     testAnnotationProcessor project(':processor')
 }
 
@@ -50,4 +56,12 @@ tasks.withType(JavaCompile).configureEach {
 graalvmNative {
     // GraalVM is GRAALVM_HOME (CI: graalvm/setup-graalvm), not a Gradle toolchain.
     toolchainDetection = false
+    // Reachability metadata of the libraries (Netty, Jackson...) from GraalVM's repository.
+    metadataRepository {
+        enabled = true
+    }
+    binaries.all {
+        // application.yml and logback.xml, as Micronaut's application plugin would include them.
+        resources.autodetect()
+    }
 }
