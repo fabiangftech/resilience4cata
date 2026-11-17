@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 @SpringBootTest(classes = LoadTest.App.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.main.web-application-type=servlet",
         "spring.threads.virtual.enabled=true",
+        "server.tomcat.accept-count=1000", // as in LoadTest
         "management.endpoints.web.exposure.include=resilience4cata"})
 class VirtualThreadsLoadTest extends LoadTest {
 

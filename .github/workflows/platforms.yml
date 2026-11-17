@@ -1,0 +1,133 @@
+# The whole build where build.yml does not run it, weekly and by hand:
+# - newest-jdk: the tests on the latest feature release and on the next release's early-access build (Gradle itself
+#   stays on JDK 25), so that a change in a newer JDK shows here before users meet it;
+# - os: Windows and macOS (build.yml runs on Linux only): file paths, line ends, environment variables, the clock
+#   and thread scheduling differ there.
+# Not on every PR: the Windows build alone takes far longer than build.yml. --continue: a weekly run shows every
+# failure, not only the first. Locally, the same command as build.yml:
+#   ./gradlew build -PtestJdk=27
+name: platforms
+
+on:
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/platforms.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  newest-jdk:
+    name: build (JDK ${{ matrix.java }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # An early-access JDK is ahead of some test tools: on 28-ea, BlockHound cannot instrument the JDK and Quarkus's
+    # dev mode (ReloadTest) cannot read its class files, while the library's own tests pass (2026-11-17). Its job
+    # shows its result without failing the workflow.
+    continue-on-error: ${{ matrix.early-access }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - java: 27
+            setup: '27'
+            early-access: false
+          - java: 28
+            setup: '28-ea'
+            early-access: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The JDK under test, found through its path (an early-access build has no JAVA_HOME_<n>_X64 of a release).
+      - id: tested
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.setup }}
+
+      # JDK 21 compiles (--release 21) and JDK 25 compiles the micronaut module; 25, listed last, runs Gradle.
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Build
+        env:
+          TESTED_JDK: ${{ steps.tested.outputs.path }}
+        run: >-
+          ./gradlew build --continue -PtestJdk=${{ matrix.java }}
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+          "-Porg.gradle.java.installations.paths=$TESTED_JDK"
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports-jdk${{ matrix.java }}
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 14
+
+  os:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, macos-15]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # JDK 21 compiles (--release 21) and runs the tests; JDK 25 compiles and tests the micronaut module and runs
+      # Gradle. Found through their paths: the JAVA_HOME_<n>_<arch> names differ between the runners.
+      - id: jdk21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - id: jdk25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Build
+        shell: bash
+        env:
+          JDK21: ${{ steps.jdk21.outputs.path }}
+          JDK25: ${{ steps.jdk25.outputs.path }}
+        run: ./gradlew build --continue -PtestJdk=21 "-Porg.gradle.java.installations.paths=$JDK21,$JDK25"
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports-${{ matrix.os }}
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 14

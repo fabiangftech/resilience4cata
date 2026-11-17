@@ -6,6 +6,10 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y 
 
 ## [Sin publicar] :id=unreleased
 
+### Corregido
+
+- `resilience4cata-config` ignora una marca de orden de bytes (BOM) UTF-8 al principio de un archivo de propiedades o de un recurso del classpath, que los editores de Windows pueden escribir. Se leía como parte de la primera clave, que entonces fallaba como clave desconocida ([R4C-CFG-001](errors.md#r4c-cfg-001)) con esa misma clave como sugerencia.
+
 ### Cambiado
 
 - Documentación: la precisión de un timeout supone que el proceso tiene CPU, porque con un límite de CPU de contenedor una JVM con throttling solo se interrumpe cuando vuelve a ejecutarse; un arranque en frío sin CPU puede abrir el circuit breaker con timeouts reales ([Solución de problemas](guides/troubleshooting.md#breaker-opens-at-startup)). Las dos cosas las midió el piloto con límite de CPU ([Benchmarks](benchmarks.md#cpu-limit)).

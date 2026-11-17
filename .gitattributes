@@ -1,0 +1,6 @@
+# Every text file keeps LF line ends in the working tree, on every OS: the tests compare the documentation and the
+# generated code with their snippets byte for byte, and git's default on Windows (core.autocrlf) would check them
+# out with CRLF. Windows batch scripts need CRLF.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
