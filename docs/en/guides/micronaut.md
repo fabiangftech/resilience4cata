@@ -532,7 +532,14 @@ and runs its tests inside the image. Build yours with Micronaut's Gradle or Mave
 `application.yml` in the image. Exception classes named in external configuration (`retry-on: com.acme.Busy`) are
 loaded by name: name them in the annotations instead, or register them for reflection. The
 retry-inside-transaction check (`R4C-MN-005`) reads class files, so a native image skips it: it runs in the JVM
-build and tests.
+build and tests. Server-sent events in a native image need one reflection entry that Netty's metadata lacks, unrelated
+to resilience4cata: the first chunked response failed with `Can't find '[touch]' in io.netty.util.ReferenceCountUtil`
+until the application registered that class's declared methods (`"allDeclaredMethods": true` in its
+`reachability-metadata.json`).
+
+> [!MEASURED]
+> In that application's native image, resilience4cata adds 1.9 MB of image, 5 ms of startup (32 ms against 27 ms to
+> the first answered request) and 3–5 MB of RSS ([Native image footprint](../benchmarks.md#native-footprint)).
 
 ## Limits :id=limits
 

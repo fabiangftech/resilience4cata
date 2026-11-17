@@ -457,6 +457,10 @@ health, las métricas y el endpoint resilience4cata de Actuator sobre Tomcat, y 
 estilos servidos por Spring MVC) con los plugins de Gradle de Spring Boot y de GraalVM, y corre sus tests dentro de
 la imagen.
 
+> [!MEASURED]
+> En la imagen nativa de esa aplicación, resilience4cata añade 1,9 MB de imagen, 11 ms de arranque (78 ms frente a
+> 67 ms hasta la primera respuesta) y 9–11 MB de RSS ([Huella en una imagen nativa](../benchmarks.md#native-footprint)).
+
 ## Límites :id=limits
 
 - Las interfaces anotadas cambian el tipo del bean al envoltorio: inyecta la interfaz. Las llamadas sobre `this`
