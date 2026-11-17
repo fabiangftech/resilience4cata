@@ -64,6 +64,7 @@ PaymentGateway payments = Resilient.of(PaymentGateway.class, delegate, registry)
 - `register(builder)` debe ejecutarse **antes de `build()`**: los listeners quedan fijos al construir el registry. Devuelve el mismo builder, así que el resto de tu configuración (`retry(...)`, `ticker(...)`, `ResilienceConfig.applyTo(...)`) se encadena como siempre.
 - `bindTo(registry)` puede ejecutarse en cualquier momento. Las instancias de las políticas se crean de forma diferida, cuando se envuelve una interfaz o se construye un pipeline; los gauges leen `registry.snapshot()` en cada recolección, así que las instancias creadas después de `bindTo` aparecen en la siguiente sin ninguna llamada extra.
 - `create(MeterProvider)` hace lo mismo que `create(OpenTelemetry)` cuando solo tienes el meter provider. `GlobalOpenTelemetry.get()` también funciona, si tu aplicación (o el agente de Java) lo configura.
+- En un framework: la [extensión de Quarkus](quarkus.md#observability) registra estas métricas sola cuando está Quarkus OpenTelemetry y no Micrometer; con [Spring Boot](spring.md#opentelemetry) y [Micronaut](micronaut.md#opentelemetry), que solo vinculan Micrometer, conecta los mismos tres pasos como beans.
 
 ## Métricas :id=metrics
 

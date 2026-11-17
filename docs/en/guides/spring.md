@@ -347,6 +347,33 @@ applied); the `ResilienceConfig` bean is still there to build it with `config.ap
   `GET /actuator/resilience4cata/{instance}` the policies of one instance id. It is read-only and keeps no event
   history. Expose it like any endpoint: `management.endpoints.web.exposure.include=health,resilience4cata`.
 
+### OpenTelemetry :id=opentelemetry
+
+The auto-configuration binds only Micrometer. To export the [OpenTelemetry metrics](opentelemetry.md) instead,
+add `dev.resilience4cata:resilience4cata-opentelemetry` and three beans next to your `OpenTelemetry` bean:
+
+<!-- snippet: spring-opentelemetry -->
+```java
+@Bean
+OpenTelemetryMetrics resilienceMetrics(OpenTelemetry openTelemetry) {
+    return OpenTelemetryMetrics.create(openTelemetry); // closed with the context
+}
+
+@Bean
+ResilienceRegistryCustomizer resilienceCounters(OpenTelemetryMetrics metrics) {
+    return metrics::register; // the counters' listener, before the registry is built
+}
+
+@Bean
+SmartInitializingSingleton resilienceGauges(OpenTelemetryMetrics metrics, ResilienceRegistry registry) {
+    return () -> metrics.bindTo(registry); // the gauges, read at each collection
+}
+```
+
+The customizer registers the counters' listener before the registry is built, the gauges are bound once every
+singleton exists, and the metrics bean is closed with the context, which removes the gauges. With Micrometer on
+the class path too, set `resilience4cata.spring.metrics.enabled=false` so that events are not counted twice.
+
 ## Switches :id=switches
 
 | Property | Default | Effect |

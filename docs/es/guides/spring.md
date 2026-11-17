@@ -351,6 +351,34 @@ listener); el bean `ResilienceConfig` sigue disponible para construirlo con `con
   `GET /actuator/resilience4cata/{instance}` las políticas de un id de instancia. Es de solo lectura y no guarda
   historial de eventos. Exponlo como cualquier endpoint: `management.endpoints.web.exposure.include=health,resilience4cata`.
 
+### OpenTelemetry :id=opentelemetry
+
+La autoconfiguración solo vincula Micrometer. Para exportar en su lugar las [métricas de OpenTelemetry](opentelemetry.md),
+añade `dev.resilience4cata:resilience4cata-opentelemetry` y tres beans junto a tu bean `OpenTelemetry`:
+
+<!-- snippet: spring-opentelemetry -->
+```java
+@Bean
+OpenTelemetryMetrics resilienceMetrics(OpenTelemetry openTelemetry) {
+    return OpenTelemetryMetrics.create(openTelemetry); // closed with the context
+}
+
+@Bean
+ResilienceRegistryCustomizer resilienceCounters(OpenTelemetryMetrics metrics) {
+    return metrics::register; // the counters' listener, before the registry is built
+}
+
+@Bean
+SmartInitializingSingleton resilienceGauges(OpenTelemetryMetrics metrics, ResilienceRegistry registry) {
+    return () -> metrics.bindTo(registry); // the gauges, read at each collection
+}
+```
+
+El customizer registra el listener de los contadores antes de construir el registry, los gauges se vinculan cuando
+ya existen todos los singletons, y el bean de métricas se cierra con el contexto, lo que elimina los gauges. Si
+Micrometer también está en el class path, pon `resilience4cata.spring.metrics.enabled=false` para que los eventos
+no se cuenten dos veces.
+
 ## Interruptores :id=switches
 
 | Propiedad | Por defecto | Efecto |
