@@ -138,6 +138,7 @@ quarkus-smallrye-fault-tolerance-dev = { module = "io.quarkus:quarkus-smallrye-f
 quarkus-smallrye-health = { module = "io.quarkus:quarkus-smallrye-health" }
 quarkus-smallrye-fault-tolerance = { module = "io.quarkus:quarkus-smallrye-fault-tolerance" }
 quarkus-micrometer-registry-prometheus = { module = "io.quarkus:quarkus-micrometer-registry-prometheus" }
+quarkus-opentelemetry = { module = "io.quarkus:quarkus-opentelemetry" }
 quarkus-narayana-jta = { module = "io.quarkus:quarkus-narayana-jta" }
 quarkus-rest = { module = "io.quarkus:quarkus-rest" }
 quarkus-rest-client = { module = "io.quarkus:quarkus-rest-client" }
