@@ -7,10 +7,40 @@ description = 'OpenTelemetry metrics for resilience4cata: counters from events, 
 
 dependencies {
     api project(':core')
-    api libs.opentelemetry.api
-    testImplementation project(':testkit')
+    // Compiled against the oldest supported OpenTelemetry API; the application's own, newer API wins at resolution.
+    api libs.opentelemetry.api.minimum
+
+    // `test` runs on the latest OpenTelemetry, through its BOM.
+    testImplementation platform(libs.opentelemetry.bom)
     testImplementation libs.opentelemetry.sdk
     testImplementation libs.opentelemetry.sdk.testing
+    testImplementation project(':testkit')
+}
+
+// `test` runs on the latest OpenTelemetry; `minimumOpenTelemetryTest` runs the same tests on the oldest supported API
+// and the SDK of that version.
+testing {
+    suites {
+        minimumOpenTelemetryTest(JvmTestSuite) {
+            sources {
+                java {
+                    srcDirs = ['src/test/java']
+                }
+            }
+            dependencies {
+                implementation project()
+                implementation project(':testkit')
+                // Explicit versions, no OpenTelemetry BOM.
+                implementation libs.opentelemetry.sdk.minimum
+                implementation libs.opentelemetry.sdk.testing.minimum
+                implementation libs.assertj
+            }
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn testing.suites.minimumOpenTelemetryTest
 }
 
 // The instrumentation scope version: the build's version, written into a resource.

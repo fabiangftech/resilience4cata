@@ -52,6 +52,12 @@ updates:
       # reactor-bom entry (reactorBom), which these rules do not touch.
       - dependency-name: 'io.projectreactor:reactor-core'
       - dependency-name: 'io.projectreactor:reactor-test'
+      # The oldest OpenTelemetry that resilience4cata-opentelemetry supports (opentelemetryMinimum): its main code
+      # compiles against opentelemetry-api at that version and minimumOpenTelemetryTest runs on that API and SDK. Every
+      # other test gets OpenTelemetry through the opentelemetry-bom entry (opentelemetry), which these rules do not touch.
+      - dependency-name: 'io.opentelemetry:opentelemetry-api'
+      - dependency-name: 'io.opentelemetry:opentelemetry-sdk'
+      - dependency-name: 'io.opentelemetry:opentelemetry-sdk-testing'
     groups:
       junit:
         patterns: ['org.junit*']

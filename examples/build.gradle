@@ -14,6 +14,7 @@ dependencies {
     // docs/en/guides/opentelemetry.md: the module, an SDK, and the Prometheus and OTLP exporters it shows; the OTLP
     // protocol classes decode, in OtlpExportTest, what the OTLP exporter sends.
     testImplementation project(':opentelemetry')
+    testImplementation platform(libs.opentelemetry.bom)
     testImplementation libs.opentelemetry.sdk
     testImplementation libs.opentelemetry.sdk.testing
     testImplementation libs.opentelemetry.exporter.prometheus
