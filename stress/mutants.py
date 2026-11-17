@@ -35,6 +35,7 @@ from pathlib import Path
 
 CORE = "core/src/main/java/dev/resilience4cata/generated/"
 REACTOR = "reactor/src/main/java/dev/resilience4cata/reactor/generated/"
+OPENTELEMETRY = "opentelemetry/src/main/java/dev/resilience4cata/opentelemetry/"
 
 # id: (kind, file, exact text, replacement, jcstress test regex, what the mutant breaks)
 MUTANTS = {
@@ -93,6 +94,22 @@ MUTANTS = {
         "if (PHASE.getVolatile(this) == from && PHASE.getAndSet(this, to) != null) {",
         "EventStress|CircuitBreakerStress.ConcurrentFailuresOpenOnce",
         "Control: a check-then-set transition; two threads can both make it. Every machine must catch it.",
+    ),
+    "otel-bind-after-close": (
+        "atomicity", OPENTELEMETRY + "OpenTelemetryMetrics.java",
+        "if (closed || !bound.add(registry)) {",
+        "if (!bound.add(registry)) {",
+        "OpenTelemetryMetricsStress.BindVsClose",
+        "bindTo does not check again under the lock that the metrics are open: a close() between its first check and"
+        " the registration leaves the gauges registered after close returned.",
+    ),
+    "otel-bind-twice": (
+        "atomicity", OPENTELEMETRY + "OpenTelemetryMetrics.java",
+        "if (closed || !bound.add(registry)) {",
+        "if (closed || (!bound.add(registry) && false)) {",
+        "OpenTelemetryMetricsStress.ConcurrentBind",
+        "bindTo relies on its unlocked first check alone: two threads binding one registry both register a callback,"
+        " and every gauge point is reported twice.",
     ),
 }
 

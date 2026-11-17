@@ -15,8 +15,12 @@ resilience4j = "2.4.0"
 concurrencyLimits = "0.5.4"
 # api of the micrometer module; the Prometheus registry is test-only (examples), for the sample scrape in the docs.
 micrometer = "1.17.1"
-# The opentelemetry module: the API is an api dependency, the SDK is test-only.
+# The opentelemetry module compiles against the oldest supported OpenTelemetry API (opentelemetryMinimum: never bump it
+# with the rest, .github/dependabot.yml ignores the artifacts that use it; 1.62.0 is the oldest that Spring Boot 4.1,
+# Quarkus 3.40 and Micronaut 5.2 ship) and minimumOpenTelemetryTest runs its tests on that API and SDK. Every other test
+# gets OpenTelemetry through the opentelemetry-bom entry (opentelemetry, the latest).
 opentelemetry = "1.67.0"
+opentelemetryMinimum = "1.62.0"
 # Test-only, in examples: the Prometheus exporter of docs/en/guides/opentelemetry.md (published only as -alpha).
 opentelemetry-prometheus = "1.67.0-alpha"
 # Test-only, in examples: the OTLP protocol classes that decode what the OTLP exporter sends (published only as -alpha).
@@ -100,11 +104,14 @@ reactor-test-minimum = { module = "io.projectreactor:reactor-test", version.ref 
 reactive-streams-tck = { module = "org.reactivestreams:reactive-streams-tck", version.ref = "reactiveStreamsTck" }
 blockhound = { module = "io.projectreactor.tools:blockhound", version.ref = "blockhound" }
 micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
-opentelemetry-api = { module = "io.opentelemetry:opentelemetry-api", version.ref = "opentelemetry" }
-opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "opentelemetry" }
-opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testing", version.ref = "opentelemetry" }
+opentelemetry-bom = { module = "io.opentelemetry:opentelemetry-bom", version.ref = "opentelemetry" }
+opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk" }
+opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testing" }
+opentelemetry-api-minimum = { module = "io.opentelemetry:opentelemetry-api", version.ref = "opentelemetryMinimum" }
+opentelemetry-sdk-minimum = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "opentelemetryMinimum" }
+opentelemetry-sdk-testing-minimum = { module = "io.opentelemetry:opentelemetry-sdk-testing", version.ref = "opentelemetryMinimum" }
 opentelemetry-exporter-prometheus = { module = "io.opentelemetry:opentelemetry-exporter-prometheus", version.ref = "opentelemetry-prometheus" }
-opentelemetry-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp", version.ref = "opentelemetry" }
+opentelemetry-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp" }
 opentelemetry-proto = { module = "io.opentelemetry.proto:opentelemetry-proto", version.ref = "opentelemetry-proto" }
 micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }
 spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "springBoot" }

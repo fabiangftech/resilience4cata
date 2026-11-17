@@ -12,7 +12,7 @@ How resilience4cata is published to Maven Central. Everything uses Gradle's own 
 | `resilience4cata-config` | same; depends on `resilience4cata-core` (`compile`) |
 | `resilience4cata-micrometer` | same; depends on `resilience4cata-core` and `io.micrometer:micrometer-core` (`compile`) |
 | `resilience4cata-testkit` | same; depends on `resilience4cata-core` (`compile`) |
-| `resilience4cata-opentelemetry` | same; depends on `resilience4cata-core` and `io.opentelemetry:opentelemetry-api` (`compile`) |
+| `resilience4cata-opentelemetry` | same; depends on `resilience4cata-core` and `io.opentelemetry:opentelemetry-api` (`compile`, the oldest supported version, 1.62.0) |
 | `resilience4cata-reactor` | same; depends on `resilience4cata-core` and `io.projectreactor:reactor-core` (`compile`, the oldest supported version, 3.6.0) |
 | `resilience4cata-junit` | same; depends on `resilience4cata-testkit` and `org.junit.jupiter:junit-jupiter-api` 5.10.5 (`compile`) |
 | `resilience4cata-all` | jar (only `module-info`), sources, a Javadoc jar with a README (javadoc refuses a module without packages), POM, module metadata; depends on `core`, `annotations` and `config` (`compile`) |

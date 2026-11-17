@@ -7,4 +7,9 @@ description = 'jcstress tests of the lock-free policies. Not published.'
 dependencies {
     implementation project(':core')
     implementation project(':reactor')
+    // OpenTelemetryMetricsStress: the module on a real SDK with an in-memory reader.
+    implementation project(':opentelemetry')
+    implementation platform(libs.opentelemetry.bom)
+    implementation libs.opentelemetry.sdk
+    implementation libs.opentelemetry.sdk.testing
 }

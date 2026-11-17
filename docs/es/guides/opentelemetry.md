@@ -8,7 +8,7 @@ Esta versión tiene **solo métricas**. Todavía no hay spans de tracing.
 
 ## Dependencia :id=dependency
 
-El módulo depende de `resilience4cata-core` y de la API de OpenTelemetry (`io.opentelemetry:opentelemetry-api`, 1.67.0), nada más. Tú pones el SDK y el exportador que uses: el módulo nunca los configura.
+El módulo depende de `resilience4cata-core` y de la API de OpenTelemetry (`io.opentelemetry:opentelemetry-api`, 1.62.0 o posterior), nada más. Tú pones el SDK y el exportador que uses: el módulo nunca los configura.
 
 <!-- tabs:start -->
 #### **Gradle**
@@ -46,7 +46,7 @@ dependencies {
 ```
 <!-- tabs:end -->
 
-El módulo está probado con OpenTelemetry 1.67.0. OpenTelemetry mantiene su API 1.x estable compatible hacia atrás, así que un SDK 1.x más nuevo también debería funcionar (no probado). Con JPMS, agrega `requires dev.resilience4cata.opentelemetry;`. El jar de la API de OpenTelemetry es un módulo automático (`io.opentelemetry.api`), requerido de forma transitiva.
+El módulo necesita OpenTelemetry 1.62.0 o posterior, la versión más antigua que traen Spring Boot 4.1, Quarkus 3.40 y Micronaut 5.2; sus tests corren en 1.62.0 (API y SDK) y en 1.67.0. OpenTelemetry mantiene su API 1.x estable compatible hacia atrás, así que un SDK 1.x más nuevo también debería funcionar. Con JPMS, agrega `requires dev.resilience4cata.opentelemetry;`. El jar de la API de OpenTelemetry es un módulo automático (`io.opentelemetry.api`), requerido de forma transitiva.
 
 ## Configuración :id=setup
 
@@ -104,7 +104,7 @@ No agregues la clase ni el mensaje de la excepción como atributo: en la prácti
 ## Lo que cuesta :id=cost
 
 - **Las llamadas exitosas no cuestan nada.** Las políticas no publican ningún evento en caso de éxito, y el listener es el único código que este módulo agrega a un camino de llamada.
-- **Cada evento cuesta un `add` en un contador.** El listener encuentra los `Attributes` del evento en una caché (construidos una vez por instancia y valores de atributos, ya que los atributos de OpenTelemetry son inmutables), así que no asigna nada aparte del propio record del evento; después, el `add` del SDK hace su trabajo de agregación y, una vez que la serie existe, tampoco asigna nada (comprobado por un test con el SDK 1.67.0). Los eventos se publican solo en rechazos, retries, abandonos, transiciones, timeouts y fallbacks.
+- **Cada evento cuesta un `add` en un contador.** El listener encuentra los `Attributes` del evento en una caché (construidos una vez por instancia y valores de atributos, ya que los atributos de OpenTelemetry son inmutables), así que no asigna nada aparte del propio record del evento; después, el `add` del SDK hace su trabajo de agregación y, una vez que la serie existe, tampoco asigna nada (comprobado por un test con el SDK 1.62.0 y 1.67.0). Los eventos se publican solo en rechazos, retries, abandonos, transiciones, timeouts y fallbacks.
 - **Los gauges no cuestan nada entre recolecciones.** Un solo batch callback construye un `registry.snapshot()` por recolección, que recorre las ventanas de los breakers, al intervalo del reader.
 - **El listener nunca lanza excepciones**: un fallo dentro de OpenTelemetry se registra en `DEBUG` mediante `System.Logger` y la llamada continúa.
 
