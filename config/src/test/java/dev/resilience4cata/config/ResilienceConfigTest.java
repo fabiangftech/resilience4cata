@@ -415,6 +415,21 @@ class ResilienceConfigTest {
         assertThat(failure(ResilienceConfig.builder().file(file)).problems().get(0)).contains("not valid UTF-8");
     }
 
+    /** A file saved by Windows Notepad: a UTF-8 byte order mark first, and CRLF line ends. */
+    @Test
+    void aFileWithAByteOrderMarkAndCrlfLineEndsReadsLikeAnyOther(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("windows.properties");
+        Files.write(file, ("\uFEFFdefaults.retry.maxAttempts=5\r\nconfigs.slow.retry.delay=1s\r\n")
+                .getBytes(StandardCharsets.UTF_8));
+        ResilienceRegistry registry = ResilienceConfig.builder().file(file).build().toRegistry();
+        assertThat(registry.retryConfig("").maxAttempts()).isEqualTo(5);
+        assertThat(registry.retryConfig("slow").delay()).isEqualTo(Duration.ofSeconds(1));
+
+        Files.write(file, ("\uFEFF# comment\r\n\r\ndefaults.retry.maxAtempts=2\r\n").getBytes(StandardCharsets.UTF_8));
+        assertThat(failure(ResilienceConfig.builder().file(file)).problems().get(0))
+                .contains("'defaults.retry.maxAtempts' (file " + file.toAbsolutePath() + ", line 3)");
+    }
+
     @Test
     void loadReadsTheDefaultResourceWhenPresent() {
         ResilienceConfig config = ResilienceConfig.load();

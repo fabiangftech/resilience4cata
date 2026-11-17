@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased] :id=unreleased
 
+### Fixed
+
+- `resilience4cata-config` ignores a UTF-8 byte order mark at the start of a properties file or classpath resource, as Windows editors may write one. It was read as part of the first key, which then failed as an unknown key ([R4C-CFG-001](errors.md#r4c-cfg-001)) whose suggestion was the same key.
+
 ### Changed
 
 - Documentation: a timeout's precision assumes the process gets CPU, since under a container CPU limit a throttled JVM is interrupted only when it runs again; a starved cold start can open the circuit breaker through real timeouts ([Troubleshooting](guides/troubleshooting.md#breaker-opens-at-startup)). Both measured by the pilot under a CPU limit ([Benchmarks](benchmarks.md#cpu-limit)).

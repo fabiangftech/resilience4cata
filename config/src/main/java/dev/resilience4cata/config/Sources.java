@@ -276,13 +276,17 @@ final class Sources {
         }
     }
 
-    /** Decodes UTF-8, rejecting malformed input instead of replacing it silently. */
+    /**
+     * Decodes UTF-8, rejecting malformed input instead of replacing it silently, and drops a leading byte order mark
+     * (Windows editors write one): it would otherwise be part of the first key, which then matches no known key.
+     */
     private static String decode(byte[] bytes) {
         try {
-            return StandardCharsets.UTF_8.newDecoder()
+            String text = StandardCharsets.UTF_8.newDecoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT)
                     .decode(ByteBuffer.wrap(bytes)).toString();
+            return text.startsWith("\uFEFF") ? text.substring(1) : text;
         } catch (CharacterCodingException e) {
             throw new IllegalStateException("not valid UTF-8", e);
         }
