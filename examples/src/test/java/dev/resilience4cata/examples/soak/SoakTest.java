@@ -17,7 +17,21 @@ import dev.resilience4cata.Resilient;
 import dev.resilience4cata.event.ResilienceEvent;
 import dev.resilience4cata.generated.SoakProbe;
 import dev.resilience4cata.micrometer.MicrometerMetrics;
+import dev.resilience4cata.opentelemetry.OpenTelemetryMetrics;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.sdk.common.CompletableResultCode;
+import io.opentelemetry.sdk.metrics.InstrumentType;
+import io.opentelemetry.sdk.metrics.SdkMeterProvider;
+import io.opentelemetry.sdk.metrics.data.AggregationTemporality;
+import io.opentelemetry.sdk.metrics.data.LongPointData;
+import io.opentelemetry.sdk.metrics.data.MetricData;
+import io.opentelemetry.sdk.metrics.data.MetricDataType;
+import io.opentelemetry.sdk.metrics.data.PointData;
+import io.opentelemetry.sdk.metrics.export.MetricExporter;
+import io.opentelemetry.sdk.metrics.export.PeriodicMetricReader;
+import java.util.Collection;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
@@ -52,7 +66,8 @@ import reactor.core.publisher.Mono;
 /**
  * A long run of every policy under load on real clocks and threads, looking for what grows: the heap after a full
  * GC, the library's own threads, the sync-timeout watchdog's per-thread scopes, timer queues, meters and registry
- * instances. Callers are platform threads and short-lived virtual threads (each new thread registers with the
+ * instances, and the OpenTelemetry series exported every second next to the Micrometer meters (both modules listen on
+ * one registry, so their counters must agree to the event). Callers are platform threads and short-lived virtual threads (each new thread registers with the
  * watchdog, which must forget it when it dies), and some callers give up early, so cancellation runs all along.
  *
  * <p>Not in {@code check}: {@code ./gradlew :examples:soakTest -Psoak.duration=2h} (default 2 minutes; CI:
@@ -88,7 +103,13 @@ class SoakTest {
 
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
     private final MicrometerMetrics metrics = MicrometerMetrics.create(meters);
-    private final ResilienceRegistry registry = metrics.register(ResilienceRegistry.builder())
+    /** Exported every second, as in production, to an exporter that keeps only the latest export. */
+    private final LatestExport exported = new LatestExport();
+    private final SdkMeterProvider otelProvider = SdkMeterProvider.builder()
+            .registerMetricReader(PeriodicMetricReader.builder(exported).setInterval(Duration.ofSeconds(1)).build())
+            .build();
+    private final OpenTelemetryMetrics otel = OpenTelemetryMetrics.create(otelProvider);
+    private final ResilienceRegistry registry = otel.register(metrics.register(ResilienceRegistry.builder()))
             .listen(ResilienceEvent.class, event -> events.increment())
             .build();
     private final SoakBackend backend = new SoakBackend();
@@ -102,13 +123,60 @@ class SoakTest {
             .build();
 
     record Sample(Duration elapsed, long calls, long heapAfterGc, Set<String> libraryThreads, int liveThreads,
-            int watchdogThreads, int queuedTimers, int meters, int instances, int backendInside) {
+            int watchdogThreads, int queuedTimers, int meters, int otelSeries, int instances, int backendInside) {
+    }
+
+    /** The latest export of the periodic reader: the test itself must not keep every export. */
+    static final class LatestExport implements MetricExporter {
+        volatile Collection<MetricData> latest = List.of();
+        final LongAdder exports = new LongAdder();
+
+        @Override
+        public CompletableResultCode export(Collection<MetricData> metrics) {
+            latest = List.copyOf(metrics);
+            exports.increment();
+            return CompletableResultCode.ofSuccess();
+        }
+
+        @Override
+        public CompletableResultCode flush() {
+            return CompletableResultCode.ofSuccess();
+        }
+
+        @Override
+        public CompletableResultCode shutdown() {
+            return CompletableResultCode.ofSuccess();
+        }
+
+        @Override
+        public AggregationTemporality getAggregationTemporality(InstrumentType instrumentType) {
+            return AggregationTemporality.CUMULATIVE;
+        }
+
+        /** The exported points of resilience4cata's metrics. */
+        List<PointData> points() {
+            return latest.stream().filter(m -> m.getName().startsWith("r4c."))
+                    .flatMap(m -> m.getData().getPoints().stream()).map(PointData.class::cast).toList();
+        }
+
+        /** The exported total of every resilience4cata counter, by metric name. */
+        Map<String, Long> counterTotals() {
+            Map<String, Long> totals = new TreeMap<>();
+            for (MetricData m : latest) {
+                if (m.getName().startsWith("r4c.") && m.getType() == MetricDataType.LONG_SUM) {
+                    totals.put(m.getName(), m.getLongSumData().getPoints().stream()
+                            .mapToLong(LongPointData::getValue).sum());
+                }
+            }
+            return totals;
+        }
     }
 
     @Test
     void nothingGrowsUnderALongLoad() throws Exception {
         Hooks.onErrorDropped(this::dropped);
         metrics.bindTo(registry);
+        otel.bindTo(registry);
         List<Sample> samples = new ArrayList<>();
         List<String> checks = new ArrayList<>();
         long start = System.nanoTime();
@@ -151,11 +219,19 @@ class SoakTest {
                 check(checks, op + " answered and failed", count(op, "value") > 0 && failures(op) > 0,
                         outcomesOf(op).toString());
             }
+            otelProvider.forceFlush().join(10, TimeUnit.SECONDS); // the counters as they are now, after the load
+            check(checks, "OpenTelemetry exported all along", exported.exports.sum() >= DURATION.toSeconds() / 2,
+                    exported.exports.sum() + " exports");
+            check(checks, "OpenTelemetry and Micrometer counted the same events",
+                    exported.counterTotals().equals(micrometerCounterTotals()),
+                    "OpenTelemetry " + exported.counterTotals() + ", Micrometer " + micrometerCounterTotals());
             check(checks, "breakers opened", count("sync", "CallNotPermittedException") > 0
                     && count("async", "CallNotPermittedException") > 0, "no rejection by an open breaker");
         } finally {
             Hooks.resetOnErrorDropped();
             metrics.close();
+            otel.close();
+            otelProvider.close();
             writeReport(samples, checks);
         }
         assertThat(checks).as("see " + REPORT_DIR.resolve("report.md")).allMatch(line -> line.startsWith("- ✅"));
@@ -317,7 +393,8 @@ class SoakTest {
                 + snapshot.hedges().size() + snapshot.adaptiveLimits().size();
         return new Sample(Duration.ofNanos(System.nanoTime() - start), calls.sum(), heap, library,
                 ManagementFactory.getThreadMXBean().getThreadCount(), SoakProbe.watchdogThreads(),
-                SoakProbe.queuedTimers(), meters.getMeters().size(), instances, backend.inside.get());
+                SoakProbe.queuedTimers(), meters.getMeters().size(), exported.points().size(), instances,
+                backend.inside.get());
     }
 
     private void checkGrowth(List<Sample> samples, List<String> checks) throws IOException {
@@ -353,6 +430,22 @@ class SoakTest {
         List<String> strays = meters.getMeters().stream().map(meter -> meter.getId().getTag("name"))
                 .filter(id -> id != null && !ids.contains(id)).distinct().limit(5).toList();
         check(checks, "every meter belongs to a registry instance", strays.isEmpty(), strays.toString());
+        AttributeKey<String> name = AttributeKey.stringKey("name");
+        List<String> otelStrays = exported.points().stream().map(p -> p.getAttributes().get(name))
+                .filter(id -> id == null || !ids.contains(id)).distinct().limit(5).toList();
+        check(checks, "every OpenTelemetry series belongs to a registry instance", otelStrays.isEmpty(),
+                otelStrays.toString());
+    }
+
+    /** Micrometer's total of every resilience4cata counter, by name; read once the load has stopped. */
+    private Map<String, Long> micrometerCounterTotals() {
+        Map<String, Long> totals = new TreeMap<>();
+        meters.getMeters().forEach(meter -> {
+            if (meter instanceof Counter counter && meter.getId().getName().startsWith("r4c.")) {
+                totals.merge(meter.getId().getName(), (long) counter.count(), Long::sum);
+            }
+        });
+        return totals;
     }
 
     private Set<String> instanceIds() {
@@ -467,17 +560,19 @@ class SoakTest {
                     .collect(Collectors.joining(", "))).append(" |\n");
         }
         out.append("\n## Samples\n\n| Elapsed | Calls | Heap after GC (MB) | Live threads | Watchdog threads "
-                + "| Timer tasks | Meters | Instances | Backend calls inside |\n|---|---|---|---|---|---|---|---|---|\n");
+                + "| Timer tasks | Meters | OpenTelemetry series | Instances | Backend calls inside |\n"
+                + "|---|---|---|---|---|---|---|---|---|---|\n");
         int step = Math.max(1, samples.size() / 30);
         for (int s = 0; s < samples.size(); s++) {
             if (s % step != 0 && s != samples.size() - 1) {
                 continue;
             }
             Sample sample = samples.get(s);
-            out.append(String.format(Locale.ROOT, "| %s | %,d | %.1f | %d | %d | %d | %d | %d | %d |%n",
+            out.append(String.format(Locale.ROOT, "| %s | %,d | %.1f | %d | %d | %d | %d | %d | %d | %d |%n",
                     sample.elapsed().truncatedTo(java.time.temporal.ChronoUnit.SECONDS), sample.calls(),
                     sample.heapAfterGc() / (double) MB, sample.liveThreads(), sample.watchdogThreads(),
-                    sample.queuedTimers(), sample.meters(), sample.instances(), sample.backendInside()));
+                    sample.queuedTimers(), sample.meters(), sample.otelSeries(), sample.instances(),
+                    sample.backendInside()));
         }
         if (!samples.isEmpty()) {
             out.append("\nLibrary threads: ").append(samples.getLast().libraryThreads()).append('\n');
