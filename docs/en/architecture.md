@@ -162,6 +162,7 @@ Single-word directories. Published under the groupId `dev.resilience4cata` (the 
 | `bom` | yes | Version alignment (`resilience4cata-bom`) | — |
 | `benchmark` | no | JMH against Resilience4j | `core`, `processor`, Resilience4j |
 | `stress` | no | jcstress for lock-free structures | `core` |
+| `mutation` | no | PIT mutation testing of `core` against its unit tests, weekly | `core` |
 | `examples` | no | Runnable samples, also end-to-end tests of the generated code | `annotations`, `core`, `config`, `testkit`, `junit`, `micrometer`, `opentelemetry`, `processor` |
 | `docs` | no | Documentation. Not a Gradle project | — |
 
@@ -211,7 +212,7 @@ Based on [05 §2–§4](research/05-project-architecture.md), as set up now:
 - **No Kotlin anywhere.** Gradle 9 (wrapper 9.6) with the Groovy DSL, kept minimal and declarative (`settings.gradle`, one short `build.gradle` per module). All build logic lives in convention plugins **written in Java**, in the `conventions` included build. Versions are in `gradle/libs.versions.toml`.
 - Java toolchain 21 with `--release 21`, `-Xlint:all -Werror`; CI matrix on JDK 21 and 25 (GitHub Actions, not yet run on GitHub). Configuration cache and build cache on.
 - `module-info.java` in every published module; internal packages are not exported.
-- Testing: JUnit, AssertJ, jcstress and JMH (with an allocation gate). Processor tests compile sources in memory with a small `Compilation` helper on plain `javax.tools`, not the compile-testing library. ArchUnit and jqwik (in maintenance mode) are ideas, not used.
+- Testing: JUnit, AssertJ, jcstress, JMH (with an allocation gate) and PIT (mutation testing of `core`, a weekly report). Processor tests compile sources in memory with a small `Compilation` helper on plain `javax.tools`, not the compile-testing library. ArchUnit and jqwik (in maintenance mode) are ideas, not used.
 - Static analysis: `javac -Xlint:all -Werror` and JSpecify nullness annotations. Error Prone + NullAway, Spotless and JaCoCo are ideas, not set up.
 - Publishing: to the Maven Central Portal (OSSRH closed in June 2025) with Gradle's own `maven-publish` and `signing` plugins and no third-party plugin. The `r4c.publish` convention plugin writes the POMs and signs; `r4c.central`, at the root, builds a checked bundle zip and uploads it through the Publisher API as a deployment that is released by hand in the portal. The `dev.resilience4cata` namespace is verified on the Central Portal through a DNS TXT record on `resilience4cata.dev`. Steps: [Releasing](releasing.md).
 - Versioning: SemVer, `0.x` while incubating. `apiCompatibility` (japicmp, in `check` and CI) compares every published module with the last release: a warning before `1.0`, a build failure from `1.0` unless the major version changes ([Releasing](releasing.md)). What a major version keeps compatible, for users: [Compatibility](reference/compatibility.md).

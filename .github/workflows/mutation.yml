@@ -1,0 +1,73 @@
+# PIT mutation testing of core (the unpublished mutation project, PIT's own command line): every mutant PIT makes of
+# core's classes, run against core's unit tests. A report, not a gate: the job summary lists the totals, a table per
+# class and every mutant no test detected; the HTML report is an artifact. Weekly and by hand (a class pattern narrows
+# it); on a PR that changes the mutation project, a narrow run checks that it still works.
+# Locally:
+#   ./gradlew :mutation:pitest [-Pmutation.targets='dev.resilience4cata.generated.RetryPolicy*']
+#   (report in mutation/build/reports/pitest/index.html, summary in mutation/build/reports/mutation-summary.md)
+name: mutation
+
+on:
+  schedule:
+    - cron: '17 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Classes to mutate (PIT pattern)'
+        required: false
+        default: 'dev.resilience4cata.*'
+  pull_request:
+    paths:
+      - 'mutation/**'
+      - '.github/workflows/mutation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pitest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # JDK 21 compiles core and runs PIT and the tests; JDK 25, listed last, runs Gradle.
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Mutation testing
+        env:
+          # A PR runs one small group of classes; the weekly run every class.
+          TARGETS: ${{ github.event_name == 'pull_request' && 'dev.resilience4cata.generated.Retry*' || inputs.targets || 'dev.resilience4cata.*' }}
+        run: ./gradlew :mutation:pitest "-Pmutation.targets=$TARGETS"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f mutation/build/reports/mutation-summary.md ]; then
+            cat mutation/build/reports/mutation-summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pitest-report
+          path: |
+            mutation/build/reports/pitest/
+            mutation/build/reports/mutation-summary.md
+          retention-days: 30
