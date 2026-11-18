@@ -17,6 +17,8 @@ include 'annotations', 'core', 'processor', 'config', 'all', 'testkit', 'microme
         // quarkus:it, the only project that applies the Quarkus Gradle plugin.
         'quarkus:runtime', 'quarkus:deployment', 'quarkus:it',
         'bom', 'examples', 'benchmark', 'stress', 'site',
+        // PIT mutation testing of core, run by hand and weekly (CI: mutation.yml); not in the library's build.
+        'mutation',
         // The same benchmarks inside each framework, against Resilience4j's integration or the framework's own.
         'benchmark:spring', 'benchmark:micronaut', 'benchmark:quarkus',
         // Spring Boot and Micronaut applications tested on the JVM and as GraalVM native images (CI: native.yml), the

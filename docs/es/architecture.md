@@ -162,6 +162,7 @@ Carpetas de una sola palabra. Se publican con el groupId `dev.resilience4cata` (
 | `bom` | sí | Alinea las versiones (`resilience4cata-bom`) | — |
 | `benchmark` | no | JMH contra Resilience4j | `core`, `processor`, Resilience4j |
 | `stress` | no | jcstress para las estructuras sin locks | `core` |
+| `mutation` | no | Mutation testing de `core` con PIT contra sus tests unitarios, cada semana | `core` |
 | `examples` | no | Ejemplos ejecutables, que también son tests de punta a punta del código generado | `annotations`, `core`, `config`, `testkit`, `junit`, `micrometer`, `opentelemetry`, `processor` |
 | `docs` | no | Documentación. No es un proyecto de Gradle | — |
 
@@ -211,7 +212,7 @@ A partir de [05 §2–§4](research/05-project-architecture.md), tal como está 
 - **Nada de Kotlin.** Gradle 9 (wrapper 9.6) con el DSL de Groovy, mínimo y declarativo (`settings.gradle` y un `build.gradle` corto por módulo). Toda la lógica del build vive en convention plugins **escritos en Java**, en el included build `conventions`. Las versiones están en `gradle/libs.versions.toml`.
 - Toolchain de Java 21 con `--release 21`, `-Xlint:all -Werror`; CI en JDK 21 y 25 (GitHub Actions, todavía sin correr en GitHub). Configuration cache y build cache activos.
 - `module-info.java` en cada módulo publicado; los paquetes internos no se exportan.
-- Tests: JUnit, AssertJ, jcstress y JMH (con un control de asignaciones). Los tests del procesador compilan fuentes en memoria con un helper `Compilation` propio sobre `javax.tools`, no con la librería compile-testing. ArchUnit y jqwik (en modo mantenimiento) son ideas, no se usan.
+- Tests: JUnit, AssertJ, jcstress, JMH (con un control de asignaciones) y PIT (mutation testing de `core`, un informe semanal). Los tests del procesador compilan fuentes en memoria con un helper `Compilation` propio sobre `javax.tools`, no con la librería compile-testing. ArchUnit y jqwik (en modo mantenimiento) son ideas, no se usan.
 - Análisis estático: `javac -Xlint:all -Werror` y anotaciones de nulidad de JSpecify. Error Prone + NullAway, Spotless y JaCoCo son ideas, no están configurados.
 - Publicación: al Maven Central Portal (OSSRH cerró en junio de 2025) con los plugins propios de Gradle `maven-publish` y `signing`, sin plugins de terceros. El plugin de convención `r4c.publish` escribe los POM y firma; `r4c.central`, en la raíz, arma un zip de bundle verificado y lo sube por la Publisher API como un deployment que se publica a mano en el portal. El namespace `dev.resilience4cata` se verifica en el Central Portal con un registro DNS TXT en `resilience4cata.dev`. Pasos: [Publicar una versión](releasing.md).
 - Versionado: SemVer, `0.x` mientras se incuba. `apiCompatibility` (japicmp, en `check` y en el CI) compara cada módulo publicado con la última release: un aviso antes de la `1.0`, un fallo del build desde la `1.0` salvo que cambie la versión mayor ([Publicar una versión](releasing.md)). Lo que una versión mayor mantiene compatible, para usuarios: [Compatibilidad](reference/compatibility.md).

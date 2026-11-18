@@ -1,0 +1,104 @@
+// PIT mutation testing of core: every mutant PIT makes of core's classes, run against core's own unit tests. A report,
+// not a gate (mutation.yml, weekly and by hand). PIT runs through its official command line, as JMH and jcstress do in
+// this build, so no Gradle plugin is involved, and nothing here touches the library's build.
+//
+//   ./gradlew :mutation:pitest                                          # every class of core
+//   ./gradlew :mutation:pitest -Pmutation.targets='dev.resilience4cata.generated.RetryPolicy*'
+//   ./gradlew :mutation:pitest -Pmutation.threads=8
+//
+// Report: mutation/build/reports/pitest/index.html; mutations.xml summarised in mutation/build/reports/mutation-summary.md.
+plugins {
+    // For MutationSummary (src/main/java), the job summary's Markdown.
+    id 'r4c.java-library'
+}
+
+description = 'PIT mutation testing of core against its unit tests. Not published.'
+
+evaluationDependsOn(':core')
+
+configurations {
+    pitest {
+        canBeConsumed = false
+    }
+    // What core's classes and tests need at run time: core's own dependencies and the test libraries that
+    // r4c.java-library gives every module (another project's configurations cannot be resolved from here).
+    testedLibraries {
+        canBeConsumed = false
+    }
+}
+
+dependencies {
+    pitest libs.pitest.command.line
+    pitest libs.pitest.junit5.plugin
+    testedLibraries libs.jspecify
+    testedLibraries platform(libs.junit.bom)
+    testedLibraries libs.junit.jupiter
+    testedLibraries libs.assertj
+    testedLibraries libs.junit.launcher
+}
+
+def core = project(':core')
+
+tasks.register('pitest', JavaExec) {
+    description = 'Runs PIT on core: mutants of its classes against its unit tests.'
+    group = 'verification'
+    classpath = configurations.pitest
+    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
+    // Core's tests read ../docs, relative to core, as they do under :core:test.
+    workingDir = core.projectDir
+    // The mutated classes (core's class directory: PIT mutates directories, not jars), core's tests, their libraries.
+    def tested = files(core.sourceSets.main.output, core.sourceSets.test.output, configurations.testedLibraries)
+    inputs.files(tested).withPropertyName('tested').withNormalizer(ClasspathNormalizer)
+    // Core's tests and test fixtures share core's packages, so dev.resilience4cata.* would mutate them too: every
+    // class compiled from core's test sources is excluded, by name (X and its nested X$*).
+    def testClasses = core.sourceSets.test.output.classesDirs
+    def sources = core.layout.projectDirectory.dir('src/main/java')
+    def report = layout.buildDirectory.dir('reports/pitest')
+    def targets = providers.gradleProperty('mutation.targets').orElse('dev.resilience4cata.*')
+    def threads = providers.gradleProperty('mutation.threads').orElse(
+            Integer.toString(Runtime.runtime.availableProcessors()))
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    argumentProviders.add({
+        def excluded = new TreeSet<String>()
+        testClasses.files.findAll { it.directory }.each { root ->
+            root.eachFileRecurse(groovy.io.FileType.FILES) { file ->
+                if (file.name.endsWith('.class') && file.name != 'module-info.class') {
+                    def name = root.toPath().relativize(file.toPath()).toString().replace(File.separatorChar, '.' as char)
+                    def topLevel = name.substring(0, name.length() - '.class'.length()).split('\\$')[0]
+                    excluded.add(topLevel)
+                    excluded.add(topLevel + '$*')
+                }
+            }
+        }
+        [
+                '--reportDir', report.get().asFile.path,
+                '--targetClasses', targets.get(),
+                '--targetTests', 'dev.resilience4cata.*',
+                '--classPath', tested.files.collect { it.path }.join(','),
+                '--sourceDirs', sources.asFile.path,
+                '--excludedClasses', excluded.join(','),
+                '--threads', threads.get(),
+                '--outputFormats', 'HTML,XML',
+                '--timestampedReports=false',
+                '--mutators', 'DEFAULTS',
+                '--timeoutConst', '8000',
+                '--verbosity', 'QUIET_WITH_PROGRESS',
+        ]
+    } as CommandLineArgumentProvider)
+    outputs.dir(report)
+    outputs.upToDateWhen { false }
+    finalizedBy 'mutationSummary'
+}
+
+tasks.register('mutationSummary', JavaExec) {
+    description = 'Summarises the PIT report in Markdown: totals, a table per class, the undetected mutants.'
+    group = 'verification'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.resilience4cata.mutation.MutationSummary'
+    def xml = layout.buildDirectory.file('reports/pitest/mutations.xml')
+    def summary = layout.buildDirectory.file('reports/mutation-summary.md')
+    inputs.files(xml).withPropertyName('mutations').withPathSensitivity(PathSensitivity.NONE)
+    onlyIf { xml.get().asFile.exists() }
+    argumentProviders.add({ [xml.get().asFile.path, summary.get().asFile.path] } as CommandLineArgumentProvider)
+    outputs.file(summary)
+}
