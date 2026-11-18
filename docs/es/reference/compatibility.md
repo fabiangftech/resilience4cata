@@ -35,6 +35,7 @@ CI ejecuta estas comprobaciones en cada cambio de resilience4cata:
 
 - **La API de Java**: japicmp compara cada módulo publicado con la última release.
 - **El código generado**: los tests de punta a punta se compilan con el procesador, las anotaciones y los módulos de la última release, descargados de Maven Central, y se ejecutan sobre los módulos nuevos.
+- **Los archivos de configuración**: un archivo escrito para la última release, que usa todas las claves que esa release conoce (todos los atributos de todas las políticas, configs con nombre con `extends`, instancias, un perfil), lo leen esa release, descargada de Maven Central, y el código nuevo. El código nuevo no debe informar ningún problema ni registrar ningún aviso, y debe resolver cada configuración a los mismos valores.
 - **Todo lo demás de esta página**: los nombres, tipos, unidades y tags de las métricas en los dos módulos de métricas, el JSON de los endpoints, las claves de configuración con sus variables de entorno y valores, los nombres de propiedades de las integraciones (y, en Spring Boot, los nombres de las autoconfiguraciones y de los beans) y los códigos de error se comparan con los archivos del directorio [`contract`](https://github.com/fabiangftech/resilience4cata/tree/main/contract) del repositorio. Una entrada se puede añadir en una versión menor; quitar o cambiar una hace fallar el build.
 
 ## Qué puede crecer en una versión menor :id=growth

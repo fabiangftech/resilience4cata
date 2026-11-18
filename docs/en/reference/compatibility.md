@@ -35,6 +35,7 @@ CI runs these checks on every change to resilience4cata:
 
 - **The Java API**: each published module is compared with the last release by japicmp.
 - **Generated code**: the end-to-end tests are compiled with the last release's processor, annotations and modules from Maven Central, and run on the new modules.
+- **Configuration files**: a file written for the last release, which uses every key that release knows (every attribute of every policy, named configs with `extends`, instances, a profile), is read by that release from Maven Central and by the new code. The new code must report no problem and log no warning, and must resolve every configuration to the same values.
 - **Everything else on this page**: metric names, types, units and tags in both metrics modules, the endpoints' JSON, configuration keys with their environment variables and values, the integrations' property names (and Spring Boot's auto-configuration and bean names), and error codes are compared with the files of the repository's [`contract`](https://github.com/fabiangftech/resilience4cata/tree/main/contract) directory. An entry may be added there in a minor version; removing or changing one fails the build.
 
 ## What may grow in a minor version :id=growth

@@ -6,6 +6,7 @@
 # Locally: ./gradlew :core:test --tests '*ModelTest' -Ptest.seedStart=<n> -Ptest.seedFactor=100
 #          ./gradlew :processor:test --tests '*ProcessorFuzzTest' -PfuzzStart=<n> -PfuzzCount=30000
 #          ./gradlew :config:test --tests '*ConfigFuzzTest' -PfuzzStart=<n> -PfuzzCount=1000000
+#          ./gradlew :config:test --tests '*DurationsAgreementTest' -PfuzzStart=<n>   (its failure names the seed)
 #
 # A failure names its seed; the job summary gives the commands that replay it. Turn a seed that finds a bug into a
 # fixed test (FuzzFoundProcessorTest for the processor, a ResilienceConfigTest case for the configuration), so the
@@ -51,7 +52,7 @@ jobs:
           # About 5 minutes: 1000 seeds take 1.3 s locally.
           - suite: config fuzz
             module: config
-            task: ":config:test --tests '*ConfigFuzzTest' -PfuzzCount=1000000"
+            task: ":config:test --tests '*ConfigFuzzTest' --tests '*DurationsAgreementTest' -PfuzzCount=1000000"
             start: -PfuzzStart
             replay: ./gradlew :config:test --tests '*ConfigFuzzTest' -PfuzzSeed=<seed>
     steps:

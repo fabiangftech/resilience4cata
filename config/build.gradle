@@ -29,3 +29,26 @@ tasks.named('test') {
     systemProperty 'test.seed', providers.gradleProperty('fuzzSeed').getOrElse('')
     systemProperty 'test.fuzz.count', providers.gradleProperty('fuzzCount').getOrElse('1000')
 }
+
+configurations {
+    // UpgradeTest: the last release's config module (r4c.apiBaseline) from Maven Central, run in its own class loader.
+    baselineConfig {
+        canBeConsumed = false
+    }
+    // DurationsAgreementTest: the processor's jar, whose Durations parser must agree with this module's.
+    processorJar {
+        canBeConsumed = false
+        transitive = false
+    }
+}
+
+dependencies {
+    baselineConfig "dev.resilience4cata:resilience4cata-config:${providers.gradleProperty('r4c.apiBaseline').get()}"
+    processorJar project(':processor')
+}
+
+tasks.named('test') {
+    jvmArgumentProviders.add(new dev.resilience4cata.build.ClasspathProperty('test.baselineConfigPath', configurations.baselineConfig))
+    systemProperty 'test.apiBaseline', providers.gradleProperty('r4c.apiBaseline').get()
+    jvmArgumentProviders.add(new dev.resilience4cata.build.ClasspathProperty('test.processorJar', configurations.processorJar))
+}
