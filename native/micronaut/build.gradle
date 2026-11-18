@@ -23,6 +23,8 @@ dependencies {
     implementation platform(libs.micronaut.platform)
     implementation project(':micronaut')
     implementation project(':micrometer')
+    // Mono and Flux methods (reactive package): the reactor module, on the platform's Reactor.
+    implementation project(':reactor')
     implementation libs.micronaut.inject
     implementation libs.micronaut.http.server.netty
     implementation libs.micronaut.management
@@ -59,6 +61,11 @@ graalvmNative {
     // Reachability metadata of the libraries (Netty, Jackson...) from GraalVM's repository.
     metadataRepository {
         enabled = true
+    }
+    // An application: Native Build Tools would build the main binary as a shared library, since r4c.java-library
+    // applies the java-library plugin (nativeTest always builds an executable).
+    binaries.main {
+        sharedLibrary = false
     }
     binaries.all {
         // application.yml and logback.xml, as Micronaut's application plugin would include them.

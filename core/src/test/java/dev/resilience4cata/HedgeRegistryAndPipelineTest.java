@@ -97,7 +97,9 @@ class HedgeRegistryAndPipelineTest {
         CompletableFuture<String> result = pipeline.executeAsync(
                 () -> CompletableFuture.failedFuture(new java.io.IOException("down")));
 
-        assertThat(result).isCompletedWithValue("fallback after 3");
+        // On the system clock a failed attempt's successor starts on a new virtual thread, so the call may end just
+        // after executeAsync returns (a macOS runner saw it still pending).
+        assertThat(result).succeedsWithin(Duration.ofSeconds(10)).isEqualTo("fallback after 3");
     }
 
     @Test

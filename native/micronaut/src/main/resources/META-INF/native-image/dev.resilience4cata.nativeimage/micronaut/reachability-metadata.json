@@ -1,0 +1,9 @@
+{
+  "comment": "Netty's ReferenceCountUtil names its own methods to its leak detector (getDeclaredMethods) in its static initializer, the first time a chunked response (server-sent events) is written; Netty's metadata does not register them, so the image failed with \"Can't find '[touch]' in io.netty.util.ReferenceCountUtil\".",
+  "reflection": [
+    {
+      "type": "io.netty.util.ReferenceCountUtil",
+      "allDeclaredMethods": true
+    }
+  ]
+}

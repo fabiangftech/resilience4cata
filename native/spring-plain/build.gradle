@@ -1,0 +1,53 @@
+plugins {
+    id 'r4c.java-library'
+    // The official Spring Boot and GraalVM Native Build Tools plugins, as in native:spring.
+    alias(libs.plugins.spring.boot)
+    alias(libs.plugins.graalvm.native)
+}
+
+// Its own group, as native:spring.
+group = 'dev.resilience4cata.nativeimage'
+
+description = 'native:spring without resilience4cata, the baseline of native:footprint: the same sources, compiled without the processor and run without the library. Not published.'
+
+// The same application: the annotations stay in the class files (CLASS retention, compile only) and nothing reads them.
+sourceSets {
+    main {
+        java.srcDirs = ['../spring/src/main/java']
+        resources.srcDirs = ['../spring/src/main/resources']
+    }
+}
+
+dependencies {
+    implementation platform(libs.spring.boot.dependencies)
+    implementation libs.spring.boot.webmvc
+    implementation libs.spring.boot.tomcat
+    implementation libs.spring.boot.actuator.autoconfigure
+    implementation libs.spring.boot.health
+    implementation libs.spring.boot.micrometer.metrics
+    implementation libs.jackson.databind
+    implementation libs.reactor.core
+    runtimeOnly libs.snakeyaml
+    compileOnly project(':annotations')
+    aotCompileOnly project(':annotations')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.add('-parameters')
+}
+
+tasks.matching { it.name in ['compileAotJava', 'compileAotTestJava'] }.configureEach {
+    options.compilerArgs.removeAll(['-Xlint:all', '-Werror'])
+}
+
+graalvmNative {
+    toolchainDetection = false
+    metadataRepository {
+        enabled = true
+    }
+    // An application: Native Build Tools would build the main binary as a shared library, since r4c.java-library
+    // applies the java-library plugin (nativeTest always builds an executable).
+    binaries.main {
+        sharedLibrary = false
+    }
+}

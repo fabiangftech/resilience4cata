@@ -4,11 +4,15 @@
 #   (src/integrationTest). The same tests run against the jar with ./gradlew :quarkus:it:quarkusIntTest.
 # - spring and micronaut: small applications (native:spring, native:micronaut) whose JUnit tests run inside the image
 #   through GraalVM Native Build Tools (nativeTest): an annotated class, a wrapped interface, YAML configuration,
-#   health, metrics and the resilience4cata endpoint over HTTP. The same tests run on the JVM in `check`.
+#   health, metrics and the resilience4cata endpoint over HTTP, and Mono and Flux methods of both styles served by
+#   the framework (the scenarios of the Quarkus ReactiveSmokeIT). The same tests run on the JVM in `check`.
+# - footprint: the spring and micronaut images and the same applications without resilience4cata (native:*-plain),
+#   started in turn; startup time and RSS go to the job summary (native:footprint). A report, not a gate.
 # Locally (GraalVM for JDK 25 in GRAALVM_HOME):
 #   ./gradlew :quarkus:it:testNative -Dquarkus.native.enabled=true -Dquarkus.package.jar.enabled=false \
 #     -Dquarkus.native.graalvm-home=<GraalVM>
 #   ./gradlew :native:spring:nativeTest :native:micronaut:nativeTest
+#   ./gradlew :native:footprint:footprint     # report in native/footprint/build/footprint/report.md
 #
 # Not on every PR: a native build takes several minutes. It runs on PRs that touch what ends up in the image, after
 # every merge to main and nightly.
@@ -152,4 +156,47 @@ jobs:
         with:
           name: native-micronaut-test-reports
           path: native/micronaut/build/test-results/
+          retention-days: 14
+
+  footprint:
+    name: native (footprint)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # JDK 21 is the compile toolchain of the library's modules (--release 21).
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # GraalVM for JDK 25 builds the images; it becomes JAVA_HOME (Gradle runs on it) and sets GRAALVM_HOME.
+      - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1.6.8
+        with:
+          java-version: '25'
+          distribution: graalvm-community
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Measure
+        run: ./gradlew :native:footprint:footprint -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f native/footprint/build/footprint/report.md ]; then
+            cat native/footprint/build/footprint/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-footprint-logs
+          path: native/footprint/build/footprint/
           retention-days: 14

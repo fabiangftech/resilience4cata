@@ -1,0 +1,68 @@
+plugins {
+    id 'r4c.java-library'
+    id 'application'
+    // The official GraalVM Native Build Tools plugin, as in native:micronaut.
+    alias(libs.plugins.graalvm.native)
+}
+
+// Its own group, as native:micronaut.
+group = 'dev.resilience4cata.nativeimage'
+
+description = 'native:micronaut without resilience4cata, the baseline of native:footprint: the same sources, compiled without the processor and run without the library. Not published.'
+
+r4cJava.release = 25
+
+application {
+    mainClass = 'dev.resilience4cata.nativeimage.micronaut.NativeShop'
+}
+
+// The same application: the annotations stay in the class files (CLASS retention, compile only) and nothing reads
+// them. The two implementations marked @ResilientBean (an annotation of the micronaut module, read at run time) are
+// replaced by copies without it, in this project's src/main/java under other names (an exclude pattern applies to
+// every source directory).
+sourceSets {
+    main {
+        java {
+            srcDir '../micronaut/src/main/java'
+            exclude 'dev/resilience4cata/nativeimage/micronaut/RemotePrices.java',
+                    'dev/resilience4cata/nativeimage/micronaut/reactive/BackendRatesClient.java'
+        }
+        resources.srcDirs = ['../micronaut/src/main/resources']
+    }
+}
+
+dependencies {
+    implementation platform(libs.micronaut.platform)
+    implementation libs.micronaut.inject
+    implementation libs.micronaut.http.server.netty
+    implementation libs.micronaut.management
+    implementation libs.micronaut.micrometer.core
+    implementation libs.micronaut.serde.jackson
+    implementation libs.reactor.core
+    runtimeOnly libs.snakeyaml
+    runtimeOnly libs.logback.classic
+    compileOnly project(':annotations')
+    annotationProcessor platform(libs.micronaut.platform)
+    annotationProcessor libs.micronaut.inject.java
+    annotationProcessor libs.micronaut.serde.processor
+    annotationProcessor libs.micronaut.graal
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.add('-Xlint:-classfile')
+}
+
+graalvmNative {
+    toolchainDetection = false
+    metadataRepository {
+        enabled = true
+    }
+    // An application: Native Build Tools would build the main binary as a shared library, since r4c.java-library
+    // applies the java-library plugin (nativeTest always builds an executable).
+    binaries.main {
+        sharedLibrary = false
+    }
+    binaries.all {
+        resources.autodetect()
+    }
+}

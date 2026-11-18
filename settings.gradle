@@ -19,5 +19,6 @@ include 'annotations', 'core', 'processor', 'config', 'all', 'testkit', 'microme
         'bom', 'examples', 'benchmark', 'stress', 'site',
         // The same benchmarks inside each framework, against Resilience4j's integration or the framework's own.
         'benchmark:spring', 'benchmark:micronaut', 'benchmark:quarkus',
-        // Spring Boot and Micronaut applications tested on the JVM and as GraalVM native images (CI: native.yml).
-        'native:spring', 'native:micronaut'
+        // Spring Boot and Micronaut applications tested on the JVM and as GraalVM native images (CI: native.yml), the
+        // same applications without resilience4cata, and the measurement of what the library adds to their images.
+        'native:spring', 'native:micronaut', 'native:spring-plain', 'native:micronaut-plain', 'native:footprint'

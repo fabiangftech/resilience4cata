@@ -28,9 +28,10 @@ jobs:
     name: build (JDK ${{ matrix.java }})
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    # An early-access JDK is ahead of some test tools: on 28-ea, BlockHound cannot instrument the JDK and Quarkus's
-    # dev mode (ReloadTest) cannot read its class files, while the library's own tests pass (2026-11-17). Its job
-    # shows its result without failing the workflow.
+    # An early-access JDK is ahead of some test tools: on 28-ea, BlockHound cannot instrument the JDK, Quarkus's dev
+    # mode (ReloadTest) cannot read its class files, and Spring cannot create CGLIB proxies (Objenesis; the R4C-SPR-004
+    # test fails with them), while the library's own tests pass (2026-11-17). Its job shows its result without failing
+    # the workflow.
     continue-on-error: ${{ matrix.early-access }}
     strategy:
       fail-fast: false

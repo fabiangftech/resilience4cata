@@ -445,8 +445,12 @@ Spring AOT (the processing step of a native image build, or of an AOT-optimized 
 
 Spring Boot 4 needs GraalVM 25 or newer for native images. The project's CI builds a native image of a small
 application (an annotated class, a wrapped interface with a fallback, YAML configuration, Actuator's health, metrics
-and the resilience4cata endpoint over Tomcat) with Spring Boot's and GraalVM's Gradle plugins, and runs its tests
-inside the image.
+and the resilience4cata endpoint over Tomcat, and `Mono` and `Flux` methods of both styles served by Spring MVC) with
+Spring Boot's and GraalVM's Gradle plugins, and runs its tests inside the image.
+
+> [!MEASURED]
+> In that application's native image, resilience4cata adds 1.9 MB of image, 11 ms of startup (78 ms against 67 ms
+> to the first answered request) and 9–11 MB of RSS ([Native image footprint](../benchmarks.md#native-footprint)).
 
 ## Limits :id=limits
 

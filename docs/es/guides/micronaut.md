@@ -531,11 +531,19 @@ No hay nada que añadir para resilience4cata:
 
 El CI del proyecto construye una imagen nativa de GraalVM 25 de una aplicación pequeña (una clase anotada, una
 interfaz `@ResilientBean` con fallback, configuración YAML, health, métricas de Micrometer y el endpoint sobre
-Netty) con el plugin de Gradle de Micronaut, y corre sus tests dentro de la imagen. Construye la tuya con el plugin de Gradle o de Maven de Micronaut, que
+Netty, y métodos `Mono` y `Flux` de los dos estilos) con el plugin de Gradle de GraalVM y el procesador de
+anotaciones `micronaut-graal` de Micronaut, y corre sus tests dentro de la imagen. Construye la tuya con el plugin de Gradle o de Maven de Micronaut, que
 además incluye `application.yml` en la imagen. Las clases de excepción nombradas en la configuración externa
 (`retry-on: com.acme.Busy`) se cargan por nombre: nómbralas en las anotaciones, o regístralas para reflexión. La
 revisión de reintentos dentro de transacciones (`R4C-MN-005`) lee archivos de clase, así que una imagen nativa la
-omite: se ejecuta en el build y las pruebas en la JVM.
+omite: se ejecuta en el build y las pruebas en la JVM. Los server-sent events en una imagen nativa necesitan una
+entrada de reflexión que falta en los metadatos de Netty, ajena a resilience4cata: la primera respuesta chunked
+fallaba con `Can't find '[touch]' in io.netty.util.ReferenceCountUtil` hasta que la aplicación registró los métodos
+declarados de esa clase (`"allDeclaredMethods": true` en su `reachability-metadata.json`).
+
+> [!MEASURED]
+> En la imagen nativa de esa aplicación, resilience4cata añade 1,9 MB de imagen, 5 ms de arranque (32 ms frente a
+> 27 ms hasta la primera respuesta) y 3–5 MB de RSS ([Huella en una imagen nativa](../benchmarks.md#native-footprint)).
 
 ## Límites :id=limits
 
