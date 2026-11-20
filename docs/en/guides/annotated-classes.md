@@ -187,7 +187,12 @@ Also:
 
 ## With Lombok
 
-If Lombok generates the constructor or the methods of an annotated class, Lombok must run before resilience4cata: declare it first on the processor path ([installation](../start/installation.md#with-other-annotation-processors)).
+An annotated class may use Lombok, in either order on the processor path ([installation](../start/installation.md#with-other-annotation-processors)): the processor reads a class that uses Lombok annotations only once Lombok has changed it.
+
+- The generated subclass mirrors the constructors Lombok writes, with their parameter names: `@RequiredArgsConstructor` on a class with two final fields gives `new StockService$Resilient(registry, warehouse, clock)`.
+- Type-level policies protect every method the subclass may override, so the getters, setters and `canEqual` that `@Data`, `@Getter` or `@Setter` write too; their overrides keep `@lombok.Generated`. As for any class, `equals`, `hashCode` and `toString` take only method-level annotations. To protect only your own methods, annotate them rather than the class.
+- `@Value` makes the class final: it cannot have a generated subclass ([R4C-SUB-001](../errors.md#r4c-sub-001)).
+- A parameter's `@NonNull` is repeated on the override, where Lombok adds its null check: a `null` fails with Lombok's `NullPointerException` before any policy runs.
 
 ## Async methods
 

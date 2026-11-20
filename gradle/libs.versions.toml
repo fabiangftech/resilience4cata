@@ -68,6 +68,12 @@ reactorMinimum = "3.6.0"
 reactiveStreamsTck = "1.0.4"
 blockhound = "1.0.18.RELEASE"
 
+# Test-only, in processor: the Eclipse compiler (ECJ), which runs annotation processors in Eclipse and in IntelliJ
+# when it is set to compile with Eclipse. EclipseCompilerTest compiles with it and with javac and compares.
+ecj = "3.46.0"
+# Test-only, in processor: LombokProcessorTest runs Lombok's processor next to ours, in both orders.
+lombok = "1.18.48"
+
 # The documentation site's pre-renderer (the unpublished site module).
 commonmark = "0.32.0"
 
@@ -86,6 +92,8 @@ japicmp = { module = "com.github.siom79.japicmp:japicmp", version.ref = "japicmp
 jcstress-core = { module = "org.openjdk.jcstress:jcstress-core", version.ref = "jcstress" }
 pitest-command-line = { module = "org.pitest:pitest-command-line", version.ref = "pitest" }
 pitest-junit5-plugin = { module = "org.pitest:pitest-junit5-plugin", version.ref = "pitestJunit5" }
+ecj = { module = "org.eclipse.jdt:ecj", version.ref = "ecj" }
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
 resilience4j-retry = { module = "io.github.resilience4j:resilience4j-retry", version.ref = "resilience4j" }
 resilience4j-circuitbreaker = { module = "io.github.resilience4j:resilience4j-circuitbreaker", version.ref = "resilience4j" }
 resilience4j-timelimiter = { module = "io.github.resilience4j:resilience4j-timelimiter", version.ref = "resilience4j" }

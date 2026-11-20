@@ -360,6 +360,8 @@ El procesador es procesamiento de anotaciones estándar de `javac`, así que un 
 
 **Eclipse.** En proyectos Maven, m2e configura el procesamiento de anotaciones a través de m2e-apt: activa *Preferences → Maven → Annotation Processing → Automatically configure JDT APT*, o define la propiedad `<m2e.apt.activation>jdt_apt</m2e.apt.activation>` en el POM. En proyectos Gradle (Buildship), revisa *Project → Properties → Java Compiler → Annotation Processing* y su *Factory Path*, que debe incluir `resilience4cata-processor` (y su dependencia `resilience4cata-annotations`).
 
+El procesador genera con el compilador de Eclipse (ECJ) el mismo código que con `javac`: lo usan Eclipse, VS Code e IntelliJ IDEA configurado para compilar con Eclipse. Los tests del proyecto compilan miles de fuentes anotadas aleatorias con ambos y comparan lo que escribe el procesador.
+
 **VS Code.** El *Extension Pack for Java* usa por debajo el compilador de Eclipse, así que valen las notas de Eclipse: los proyectos Maven toman `annotationProcessorPaths`, y en proyectos Gradle la opción `java.import.gradle.annotationProcessing.enabled` debe quedar activada (es su valor por defecto).
 
 Si en un IDE `Resilient.of` falla con `R4C-RT-003` mientras el build de línea de comandos funciona, el IDE no ejecutó el procesador: recompila el proyecto después de activarlo.
@@ -385,10 +387,9 @@ Sin el export calificado, `Resilient.of` falla con [`R4C-RT-005`](../errors.md#r
 
 ## Con otros procesadores de anotaciones
 
-resilience4cata funciona junto a Lombok, MapStruct y otros procesadores. Dos reglas:
+resilience4cata funciona junto a Lombok, MapStruct y otros procesadores. **Todos los procesadores van en el mismo processor path.** Con Maven, una vez definido `annotationProcessorPaths`, `javac` ejecuta solo los procesadores que figuran ahí, así que Lombok y MapStruct también deben figurar.
 
-1. **Todos los procesadores van en el mismo processor path.** Con Maven, una vez definido `annotationProcessorPaths`, `javac` ejecuta solo los procesadores que figuran ahí, así que Lombok y MapStruct también deben figurar.
-2. **Lombok va primero.** Si una [clase anotada](../guides/annotated-classes.md) usa Lombok para generar el constructor o los métodos que sobrescribe la subclase, Lombok debe ejecutarse antes que resilience4cata; si no, la subclase generada no los ve y no compila (por ejemplo `constructor StockService in class StockService cannot be applied to given types`). Las interfaces anotadas no dependen del orden.
+El orden de los procesadores no importa. Una [clase anotada](../guides/annotated-classes.md) que usa Lombok se procesa después de que Lombok la cambió, se ejecute primero quien se ejecute, así que la subclase generada replica los constructores que escribe Lombok (`@RequiredArgsConstructor`), y las políticas de nivel de tipo cubren también los getters y setters que escribe, como cualquier otro método (ver [Con Lombok](../guides/annotated-classes.md#con-lombok)). Antes de 1.0.0, Lombok tenía que ir primero.
 
 <!-- tabs:start -->
 
@@ -397,7 +398,7 @@ resilience4cata funciona junto a Lombok, MapStruct y otros procesadores. Dos reg
 ```groovy
 dependencies {
     compileOnly 'org.projectlombok:lombok:1.18.38'
-    annotationProcessor 'org.projectlombok:lombok:1.18.38'                         // first
+    annotationProcessor 'org.projectlombok:lombok:1.18.38'
 
     implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0-RC4')
     annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.0.0-RC4')
@@ -412,7 +413,7 @@ dependencies {
 ```kotlin
 dependencies {
     compileOnly("org.projectlombok:lombok:1.18.38")
-    annotationProcessor("org.projectlombok:lombok:1.18.38")                        // first
+    annotationProcessor("org.projectlombok:lombok:1.18.38")
 
     val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.0.0-RC4")
     implementation(r4cBom)
@@ -472,8 +473,17 @@ GraalVM Native Image no necesita configuración tuya; la traen los jars:
   Para una interfaz, la entrada aplica una vez que la interfaz es alcanzada (se inicializó una implementación suya, que `Resilient.of` necesita de todos modos). Para una clase anotada, la condición es `dev.resilience4cata.Resilient`, porque `Resilient.create(C.class, ...)` puede ejecutarse antes de que `C` se inicialice; también se registran los tipos array de los constructores varargs.
 - **`core` inicializa sus hilos de fondo en tiempo de ejecución.** El watchdog de timeouts, el temporizador de timeouts async y el temporizador de esperas async los arrancan clases holder perezosas; `core` trae `META-INF/native-image/dev.resilience4cata/resilience4cata-core/native-image.properties` con `--initialize-at-run-time` para esos holders, así que un framework que inicializa clases en tiempo de build (Quarkus lo hace por defecto) nunca deja un hilo arrancado en la imagen. Crea el `ResilienceRegistry` y los servicios envueltos en tiempo de ejecución, no en un inicializador estático que corra durante el build de la imagen.
 - Llamar directamente al constructor generado (`new StockService$Resilient(registry, warehouse)`) no usa reflexión.
+- **Las clases de excepción nombradas en la [configuración](../guides/configuration.md) las registras tú.** `resilience4cata-config` encuentra una clase escrita en una clave (`configs.inventory.retry.retryOn=com.acme.OutOfStockException`) con `Class.forName`, que en una imagen nativa solo encuentra clases registradas para reflexión, y la librería no puede registrar tus clases. Agrega cada una al `META-INF/native-image/<group>/<artifact>/reachability-metadata.json` de tu aplicación; si no, la configuración falla con [R4C-CFG-003](../errors.md#r4c-cfg-003), cuyo mensaje muestra la entrada que hay que agregar. Las clases nombradas en anotaciones no necesitan nada (el código generado las nombra como literales `.class`). `resilience4cata.properties` llega a la imagen por sí solo: Native Image incluye un recurso que se busca con un nombre constante, como hace `ResilienceConfig.load()`.
 
-Los metadatos usan el formato de un solo archivo de GraalVM for JDK 23 y posteriores (ver [Reachability Metadata](https://www.graalvm.org/latest/reference-manual/native-image/metadata/)). Con un GraalVM anterior, registra cada clase `…$Resilient` con sus constructores públicos en tu propio `reflect-config.json`. La CI del proyecto construye una imagen nativa de la aplicación de prueba de la extensión de Quarkus y la prueba ([guía de Quarkus](../guides/quarkus.md#native)). Para Spring Boot solo se prueba el procesamiento AOT, en la JVM ([guía de Spring Boot](../guides/spring.md#aot)); una imagen nativa de Micronaut se construyó y ejecutó a mano ([guía de Micronaut](../guides/micronaut.md#native)); una imagen nativa de Java puro no se prueba.
+  ```json
+  {
+    "reflection": [
+      {"type": "com.acme.OutOfStockException"}
+    ]
+  }
+  ```
+
+Los metadatos usan el formato de un solo archivo de GraalVM for JDK 23 y posteriores (ver [Reachability Metadata](https://www.graalvm.org/latest/reference-manual/native-image/metadata/)). Con un GraalVM anterior, registra cada clase `…$Resilient` con sus constructores públicos en tu propio `reflect-config.json`. La CI del proyecto construye imágenes nativas de cuatro aplicaciones y ejecuta sus tests dentro de ellas: una aplicación Java pura, sin framework (`native/java` en el repositorio: `Resilient.of` y `Resilient.create`, configuración desde `resilience4cata.properties`, todas las políticas, métodos `CompletableFuture`, `Mono` y `Flux` y un `Pipeline`), y aplicaciones de las integraciones de [Spring Boot](../guides/spring.md#aot), [Micronaut](../guides/micronaut.md#native) y [Quarkus](../guides/quarkus.md#native).
 
 ## Solución de problemas
 

@@ -48,7 +48,7 @@ El procesador de resilience4cata puede ejecutarse junto a otros procesadores de 
 
 - **Gradle:** una línea `annotationProcessor` por procesador (`org.projectlombok:lombok`, `org.mapstruct:mapstruct-processor`, `dev.resilience4cata:resilience4cata-processor`).
 - **Maven:** una vez que se define `<annotationProcessorPaths>`, Maven ejecuta solo lo que esa lista incluye, así que incluye ahí también Lombok y MapStruct.
-- **Pon Lombok antes que resilience4cata**, en las líneas `annotationProcessor` de Gradle y en `<annotationProcessorPaths>` de Maven. La subclase generada de una [clase anotada](annotated-classes.md) replica los constructores de la clase, así que debe ver los constructores que agrega Lombok. Con resilience4cata primero, una clase anotada que usa `@RequiredArgsConstructor` (u otro constructor de Lombok) no compila, con un error como `constructor … in class … cannot be applied to given types`.
+- El orden no importa: una [clase anotada](annotated-classes.md#con-lombok) que usa Lombok se procesa cuando Lombok ya la cambió. Antes de 1.0.0, con resilience4cata primero, una clase anotada que usaba `@RequiredArgsConstructor` no compilaba, con un error como `constructor … in class … cannot be applied to given types`; actualiza, o pon Lombok primero.
 
 El procesador solo lee las interfaces y clases que llevan anotaciones de resiliencia y, cuando hay otros procesadores presentes, reclama solo sus propias anotaciones, así que no se las oculta.
 

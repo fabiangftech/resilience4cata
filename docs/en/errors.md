@@ -2815,7 +2815,7 @@ loader cannot find, or a class that is not a `Throwable`.
 defaults.retry.retry-on=java.io.IOExeption
 ```
 
-**Fix:** use fully qualified names of exception classes visible to the application's class loader.
+**Fix:** use fully qualified names of exception classes visible to the application's class loader. In a GraalVM native image, register each of your own classes for reflection: the message shows the entry to add ([Native image](start/installation.md#native-image)).
 
 ```properties
 defaults.retry.retry-on=java.io.IOException

@@ -634,6 +634,22 @@ class ResilienceConfigTest {
         assertThat(text("defaults.retry.retryOn=").build().toRegistry().retryConfig("").retryOn()).isEmpty();
     }
 
+    /** GraalVM sets {@code org.graalvm.nativeimage.imagecode=runtime} inside a native image. */
+    @Test
+    void inANativeImageAMissingClassSaysHowToRegisterIt() {
+        String key = "org.graalvm.nativeimage.imagecode";
+        assertThat(problem("defaults.retry.retryOn=com.acme.Missing")).doesNotContain("native image");
+        System.setProperty(key, "runtime");
+        try {
+            assertThat(problem("defaults.retry.retryOn=com.acme.Missing")).startsWith("[R4C-CFG-003]")
+                    .endsWith("In a native image, a class named in the configuration must be registered for reflection:"
+                            + " add {\"reflection\": [{\"type\": \"com.acme.Missing\"}]} to a"
+                            + " META-INF/native-image/<group>/<artifact>/reachability-metadata.json of the application.");
+        } finally {
+            System.clearProperty(key);
+        }
+    }
+
     @Test
     void exceptionClassesUseTheConfiguredClassLoader() {
         List<String> requested = new ArrayList<>();

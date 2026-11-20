@@ -187,7 +187,12 @@ Además:
 
 ## Con Lombok
 
-Si Lombok genera el constructor o los métodos de una clase anotada, Lombok debe ejecutarse antes que resilience4cata: decláralo primero en el processor path ([instalación](../start/installation.md#con-otros-procesadores-de-anotaciones)).
+Una clase anotada puede usar Lombok, en cualquier orden del processor path ([instalación](../start/installation.md#con-otros-procesadores-de-anotaciones)): el procesador lee una clase que usa anotaciones de Lombok solo cuando Lombok ya la cambió.
+
+- La subclase generada replica los constructores que escribe Lombok, con los nombres de sus parámetros: `@RequiredArgsConstructor` en una clase con dos campos final da `new StockService$Resilient(registry, warehouse, clock)`.
+- Las políticas de nivel de tipo protegen todos los métodos que la subclase puede sobrescribir, así que también los getters, setters y `canEqual` que escriben `@Data`, `@Getter` o `@Setter`; sus sobrescrituras conservan `@lombok.Generated`. Como en cualquier clase, `equals`, `hashCode` y `toString` solo toman anotaciones de método. Para proteger solo tus propios métodos, anótalos a ellos en vez de a la clase.
+- `@Value` hace la clase final: no puede tener subclase generada ([R4C-SUB-001](../errors.md#r4c-sub-001)).
+- El `@NonNull` de un parámetro se repite en la sobrescritura, donde Lombok agrega su comprobación de null: un `null` falla con el `NullPointerException` de Lombok antes de que corra ninguna política.
 
 ## Métodos async
 

@@ -74,7 +74,9 @@ class MicrometerGuideTest {
     void pipelinesAreReportedUnderTheirId() throws Exception {
         MeterRegistry meterRegistry = new SimpleMeterRegistry();
         MicrometerMetrics metrics = MicrometerMetrics.create(meterRegistry);
-        ResilienceRegistry registry = metrics.register(ResilienceRegistry.builder()).build();
+        // A manual clock: on the system clock a permit comes back 200 ms after the call (5 per second), so a slow
+        // machine read the gauge as 5.
+        ResilienceRegistry registry = metrics.register(ResilienceTesting.registry(new ManualClock())).build();
         metrics.bindTo(registry);
 
         Pipeline<String> inventory = Pipeline.builder(registry, "inventory", String.class)

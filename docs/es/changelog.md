@@ -9,9 +9,13 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y 
 ### Corregido
 
 - `resilience4cata-config` ignora una marca de orden de bytes (BOM) UTF-8 al principio de un archivo de propiedades o de un recurso del classpath, que los editores de Windows pueden escribir. Se leía como parte de la primera clave, que entonces fallaba como clave desconocida ([R4C-CFG-001](errors.md#r4c-cfg-001)) con esa misma clave como sugerencia.
+- **El orden del procesador junto a Lombok ya no importa.** Con resilience4cata antes que Lombok en el processor path, una clase anotada con `@RequiredArgsConstructor` recibía una subclase que llamaba a un `super()` que Lombok había quitado, y una clase `@Value` no se reportaba como final. Una clase que usa anotaciones de Lombok ahora se procesa en la ronda siguiente, después de Lombok ([Con Lombok](guides/annotated-classes.md#con-lombok)).
+- **El compilador de Eclipse (ECJ)**, que usan Eclipse, VS Code e IntelliJ IDEA configurado para compilar con Eclipse, obtenía resultados distintos de `javac`: un id de instancia `…(Holder<V>.Inner)` en vez de `…(Holder.Inner)` para un parámetro cuyo tipo es una clase interna de una clase genérica (otra clave de configuración y otra etiqueta de métricas), fallbacks genéricos válidos rechazados con [R4C-FB-002](errors.md#r4c-fb-002) o [R4C-FB-003](errors.md#r4c-fb-003) cuando una cota tiene un wildcard o una intersección, código generado que no compilaba para un parámetro `Collection<? super T>`, y campos generados numerados de otra forma. El procesador ahora escribe los mismos archivos con ambos compiladores.
+- En una imagen nativa de GraalVM, [R4C-CFG-003](errors.md#r4c-cfg-003) (una clase nombrada en la configuración que no se encuentra) muestra la entrada de metadatos de alcanzabilidad que hay que agregar: la imagen solo encuentra clases registradas para reflexión ([Imagen nativa](start/installation.md#imagen-nativa)).
 
 ### Cambiado
 
+- Tests: la CI construye una imagen nativa de una aplicación Java pura, sin framework, y ejecuta sus tests dentro de ella, junto a las de Spring Boot, Micronaut y Quarkus ([Imagen nativa](start/installation.md#imagen-nativa)).
 - Documentación: la precisión de un timeout supone que el proceso tiene CPU, porque con un límite de CPU de contenedor una JVM con throttling solo se interrumpe cuando vuelve a ejecutarse; un arranque en frío sin CPU puede abrir el circuit breaker con timeouts reales ([Solución de problemas](guides/troubleshooting.md#breaker-opens-at-startup)). Las dos cosas las midió el piloto con límite de CPU ([Benchmarks](benchmarks.md#cpu-limit)).
 
 ## [1.0.0-RC4] - 2026-11-14 :id=1.0.0-rc4
