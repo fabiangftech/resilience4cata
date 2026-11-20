@@ -142,7 +142,11 @@ public final class ResilienceProcessor extends AbstractProcessor {
     /** {@code @PolicyOrder}, read with the same precedence and bundle rules as the policy annotations. */
     private PolicyAttributes order;
     private final Set<String> processed = new HashSet<>();
+    /** Root types of the first round that wait for Lombok ({@link LombokRounds}), processed in the next round. */
+    private final List<TypeElement> waiting = new ArrayList<>();
+    private boolean firstRound = true;
     private SubclassWriter subclasses;
+    private MemberOrder members;
     /** {@code -Ar4c.inject=micronaut}: generated subclasses become Micronaut beans that replace their class. */
     private boolean micronautBeans;
     /** The invalid value of {@link #INJECT_OPTION}, until it is reported; else null. */
@@ -201,7 +205,8 @@ public final class ResilienceProcessor extends AbstractProcessor {
         elements = processingEnv.getElementUtils();
         types = processingEnv.getTypeUtils();
         messager = processingEnv.getMessager();
-        subclasses = new SubclassWriter(elements, types, messager);
+        members = new MemberOrder(elements, types);
+        subclasses = new SubclassWriter(elements, types, messager, members);
         for (Kind kind : Kind.values()) {
             attributes.put(kind, kind == Kind.CIRCUIT_BREAKER
                     ? new PolicyAttributes(messager, kind.annotation, ResilienceProcessor::windowMismatch)
@@ -246,8 +251,23 @@ public final class ResilienceProcessor extends AbstractProcessor {
                     + " option for other containers, or set -A" + INJECT_OPTION + "=" + INJECT_MICRONAUT + "."));
             invalidInjectOption = null; // reported once
         }
+        if (!waiting.isEmpty()) {
+            List<TypeElement> ready = List.copyOf(waiting);
+            waiting.clear();
+            for (TypeElement type : ready) {
+                // Looked up again: the element of an earlier round need not show what Lombok added since.
+                TypeElement current = elements.getTypeElement(elements.getModuleOf(type), type.getQualifiedName());
+                scan(current != null ? current : type);
+            }
+        }
+        boolean first = firstRound;
+        firstRound = false;
         for (Element root : roundEnv.getRootElements()) {
-            scan(root);
+            if (root instanceof TypeElement type && LombokRounds.mustWait(type, first)) {
+                waiting.add(type);
+            } else {
+                scan(root);
+            }
         }
         return claimsAnnotations;
     }
@@ -507,7 +527,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             return subclasses.members(iface);
         }
         Map<String, ExecutableElement> methods = new LinkedHashMap<>();
-        for (ExecutableElement method : ElementFilter.methodsIn(elements.getAllMembers(iface))) {
+        for (ExecutableElement method : members.methods(iface)) {
             Set<Modifier> modifiers = method.getModifiers();
             if (method.getEnclosingElement().getKind() != ElementKind.INTERFACE
                     || modifiers.contains(Modifier.STATIC) || modifiers.contains(Modifier.PRIVATE)) {
@@ -1193,10 +1213,25 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return false;
     }
 
+    /** True if a type argument of a parameter is a wildcard bounded by one of {@code variables} ({@code List<? super T>}). */
+    private static boolean wildcardsUseTypeVariables(List<? extends TypeMirror> parameters,
+            List<? extends TypeVariable> variables) {
+        return !variables.isEmpty() && parameters.stream().anyMatch(p -> hasWildcardUsing(p, variables));
+    }
+
+    private static boolean hasWildcardUsing(TypeMirror type, List<? extends TypeVariable> variables) {
+        return switch (type.getKind()) {
+            case ARRAY -> hasWildcardUsing(((javax.lang.model.type.ArrayType) type).getComponentType(), variables);
+            case WILDCARD -> mentions(type, variables);
+            case DECLARED -> ((DeclaredType) type).getTypeArguments().stream().anyMatch(a -> hasWildcardUsing(a, variables));
+            default -> false;
+        };
+    }
+
     /** True if {@code type} uses any of {@code variables}. */
     private static boolean mentions(TypeMirror type, List<? extends TypeVariable> variables) {
         return switch (type.getKind()) {
-            case TYPEVAR -> variables.stream().anyMatch(v -> v.asElement().equals(((TypeVariable) type).asElement()));
+            case TYPEVAR -> variables.stream().anyMatch(v -> sameTypeParameter(v.asElement(), ((TypeVariable) type).asElement()));
             case ARRAY -> mentions(((javax.lang.model.type.ArrayType) type).getComponentType(), variables);
             case WILDCARD -> {
                 javax.lang.model.type.WildcardType wildcard = (javax.lang.model.type.WildcardType) type;
@@ -1266,7 +1301,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         List<String> problems = new ArrayList<>();
         Set<String> names = new TreeSet<>(); // every method that could be a fallback, for "did you mean"
         boolean named = false;
-        List<ExecutableElement> candidates = new ArrayList<>(ElementFilter.methodsIn(elements.getAllMembers(iface)));
+        List<ExecutableElement> candidates = new ArrayList<>(members.methods(iface));
         // Static methods of an interface are not inherited: a method declared in another interface (a superinterface,
         // or one an annotated class implements) may still use the static siblings next to its declaration there.
         for (TypeElement declaring : declaringInterfaces(iface, method)) {
@@ -1314,11 +1349,29 @@ public final class ResilienceProcessor extends AbstractProcessor {
             }
             pending.addAll(types.directSupertypes(supertype.asType()));
             if (supertype.getKind() == ElementKind.INTERFACE && ElementFilter.methodsIn(supertype.getEnclosedElements()).stream()
-                    .anyMatch(m -> m.equals(method) || elements.overrides(method, m, type))) {
+                    .anyMatch(m -> m.equals(method) || overrides(type, method, m))) {
                 found.add(supertype);
             }
         }
         return found;
+    }
+
+    /**
+     * Whether {@code method} overrides {@code candidate} in {@code type}. The Eclipse compiler's
+     * {@code Elements.overrides} says no for every generic method, so a subsignature with the same name counts too.
+     */
+    private boolean overrides(TypeElement type, ExecutableElement method, ExecutableElement candidate) {
+        if (elements.overrides(method, candidate, type)) {
+            return true;
+        }
+        Set<Modifier> modifiers = candidate.getModifiers();
+        if (modifiers.contains(Modifier.STATIC) || modifiers.contains(Modifier.PRIVATE)
+                || !candidate.getSimpleName().contentEquals(method.getSimpleName())) {
+            return false;
+        }
+        DeclaredType declared = (DeclaredType) type.asType();
+        return types.isSubsignature((ExecutableType) types.asMemberOf(declared, method),
+                (ExecutableType) types.asMemberOf(declared, candidate));
     }
 
     /** A usable sibling fallback method, and the type of its exception parameter (null without one). */
@@ -1362,7 +1415,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         }
         boolean sameParameters = true;
         for (int i = 0; i < n; i++) {
-            sameParameters &= types.isSameType(substitute(candidateParameters.get(i), renaming), parameters.get(i));
+            sameParameters &= sameType(substitute(candidateParameters.get(i), renaming), parameters.get(i));
         }
         TypeMirror exception = candidateParameters.size() == n + 1 ? substitute(candidateParameters.get(n), renaming) : null;
         if (!sameParameters || (exception != null && !types.isAssignable(exception, throwable))) {
@@ -1425,7 +1478,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 : "<" + TypePrinter.join(type.getTypeVariables(), ", ") + ">";
         FallbackTarget target = new FallbackTarget(fallbackReceiver(iface, candidate), typeArguments + name,
                 exception == null ? null : TypePrinter.print(exception),
-                exception == null ? null : TypePrinter.print(types.erasure(exception)) + ".class",
+                exception == null ? null : TypePrinter.erased(types.erasure(exception)) + ".class",
                 catchesAll, returnsValue, widens);
         return new TypedTarget(target, exception);
     }
@@ -1488,7 +1541,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
                 return null;
             }
             for (int b = 0; b < actualBounds.size(); b++) {
-                if (!types.isSameType(substitute(actualBounds.get(b), renaming), expectedBounds.get(b))) {
+                if (!sameType(substitute(actualBounds.get(b), renaming), expectedBounds.get(b))) {
                     return null;
                 }
             }
@@ -1496,9 +1549,80 @@ public final class ResilienceProcessor extends AbstractProcessor {
         return renaming;
     }
 
+    /**
+     * {@code Types.isSameType}, or the same structure with wildcards compared by their bounds. The API says a
+     * wildcard is never the same type as anything, and the Eclipse compiler applies that to wildcards nested in
+     * a type too ({@code List<? super T>}), where javac compares them; this makes both agree.
+     */
+    private boolean sameType(TypeMirror a, TypeMirror b) {
+        if (types.isSameType(a, b)) {
+            return true;
+        }
+        if (a.getKind() != b.getKind()) {
+            return false;
+        }
+        return switch (a.getKind()) {
+            case WILDCARD -> {
+                javax.lang.model.type.WildcardType x = (javax.lang.model.type.WildcardType) a;
+                javax.lang.model.type.WildcardType y = (javax.lang.model.type.WildcardType) b;
+                yield sameBound(upperBound(x), upperBound(y)) && sameBound(x.getSuperBound(), y.getSuperBound());
+            }
+            case ARRAY -> sameType(((javax.lang.model.type.ArrayType) a).getComponentType(),
+                    ((javax.lang.model.type.ArrayType) b).getComponentType());
+            case DECLARED -> {
+                DeclaredType x = (DeclaredType) a;
+                DeclaredType y = (DeclaredType) b;
+                List<? extends TypeMirror> xs = x.getTypeArguments();
+                List<? extends TypeMirror> ys = y.getTypeArguments();
+                boolean same = x.asElement().equals(y.asElement()) && xs.size() == ys.size()
+                        && (x.getEnclosingType().getKind() != TypeKind.DECLARED
+                                || sameType(x.getEnclosingType(), y.getEnclosingType()));
+                for (int i = 0; same && i < xs.size(); i++) {
+                    same = sameType(xs.get(i), ys.get(i));
+                }
+                yield same;
+            }
+            case TYPEVAR -> sameTypeParameter(((TypeVariable) a).asElement(), ((TypeVariable) b).asElement());
+            default -> false;
+        };
+    }
+
+    /** A wildcard's {@code extends} bound, null for {@code ?} and for {@code ? extends Object}, which mean the same. */
+    private static TypeMirror upperBound(javax.lang.model.type.WildcardType wildcard) {
+        TypeMirror bound = wildcard.getExtendsBound();
+        return bound != null && TypePrinter.print(bound).equals(OBJECT) ? null : bound;
+    }
+
+    private boolean sameBound(TypeMirror a, TypeMirror b) {
+        return a == null ? b == null : b != null && sameType(a, b);
+    }
+
     private static List<? extends TypeMirror> upperBounds(TypeVariable variable) {
         TypeMirror bound = variable.getUpperBound();
         return bound.getKind() == TypeKind.INTERSECTION ? ((IntersectionType) bound).getBounds() : List.of(bound);
+    }
+
+    /**
+     * The type that {@code variable} is renamed to. The Eclipse compiler may hand out another element for the
+     * same type parameter (one with an intersection bound, for example), so a parameter of the same generic
+     * method with the same name matches too.
+     */
+    private static TypeMirror renamed(Element variable, Map<Element, TypeMirror> renaming, TypeMirror otherwise) {
+        TypeMirror found = renaming.get(variable);
+        if (found != null) {
+            return found;
+        }
+        for (Map.Entry<Element, TypeMirror> entry : renaming.entrySet()) {
+            if (sameTypeParameter(entry.getKey(), variable)) {
+                return entry.getValue();
+            }
+        }
+        return otherwise;
+    }
+
+    private static boolean sameTypeParameter(Element a, Element b) {
+        return a.equals(b) || a instanceof TypeParameterElement x && b instanceof TypeParameterElement y
+                && x.getSimpleName().contentEquals(y.getSimpleName()) && x.getGenericElement().equals(y.getGenericElement());
     }
 
     /** {@code type} with the type variables in {@code renaming} replaced. Returns {@code type} itself if there are none. */
@@ -1507,7 +1631,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
             return type;
         }
         return switch (type.getKind()) {
-            case TYPEVAR -> renaming.getOrDefault(((TypeVariable) type).asElement(), type);
+            case TYPEVAR -> renamed(((TypeVariable) type).asElement(), renaming, type);
             case ARRAY -> types.getArrayType(substitute(((javax.lang.model.type.ArrayType) type).getComponentType(), renaming));
             case WILDCARD -> {
                 javax.lang.model.type.WildcardType wildcard = (javax.lang.model.type.WildcardType) type;
@@ -1778,9 +1902,11 @@ public final class ResilienceProcessor extends AbstractProcessor {
         String args = String.join(", ", arguments);
         boolean async = model.asyncResult() != null && (!model.policies().isEmpty() || model.fallback() != null);
         // javac cannot always infer a type variable whose bound uses a type variable (<T extends Comparable<T>>):
-        // not from an async layer's lambda return type alone, nor from a Collection<? super T> argument. Calls to the
+        // not from an async layer's lambda return type alone, nor from a Collection<? super T> argument. The Eclipse
+        // compiler cannot infer T from a Collection<? super T> argument even with a plain bound. Calls to the
         // delegate and to the private layers pass such type variables explicitly.
         String typeArguments = boundsUseTypeVariables(type.getTypeVariables())
+                || wildcardsUseTypeVariables(type.getParameterTypes(), type.getTypeVariables())
                 ? "<" + TypePrinter.join(type.getTypeVariables(), ", ") + ">" : "";
         String delegateCall = delegateReceiver + "." + typeArguments + method.getSimpleName() + "(" + args + ")";
         // The subclass's override repeats the annotations of the method it overrides and of its parameters, for
@@ -2537,7 +2663,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
     }
 
     private String erasedParameters(ExecutableType type) {
-        return type.getParameterTypes().stream().map(t -> TypePrinter.print(types.erasure(t)))
+        return type.getParameterTypes().stream().map(t -> TypePrinter.erased(types.erasure(t)))
                 .collect(Collectors.joining(","));
     }
 
@@ -2545,7 +2671,7 @@ public final class ResilienceProcessor extends AbstractProcessor {
         List<String> classes = new ArrayList<>();
         for (Object element : (List<?>) value) {
             TypeMirror type = (TypeMirror) ((AnnotationValue) element).getValue();
-            classes.add(TypePrinter.print(types.erasure(type)) + ".class");
+            classes.add(TypePrinter.erased(types.erasure(type)) + ".class");
         }
         return String.join(", ", classes);
     }

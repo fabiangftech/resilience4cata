@@ -9,9 +9,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Fixed
 
 - `resilience4cata-config` ignores a UTF-8 byte order mark at the start of a properties file or classpath resource, as Windows editors may write one. It was read as part of the first key, which then failed as an unknown key ([R4C-CFG-001](errors.md#r4c-cfg-001)) whose suggestion was the same key.
+- **The processor's order next to Lombok no longer matters.** With resilience4cata listed before Lombok on the processor path, an annotated class with `@RequiredArgsConstructor` got a subclass calling a `super()` that Lombok had removed, and a `@Value` class was not reported as final. A class that uses Lombok annotations is now processed in the next round, after Lombok ([With Lombok](guides/annotated-classes.md#with-lombok)).
+- **The Eclipse compiler (ECJ)**, which Eclipse, VS Code and IntelliJ IDEA set to compile with Eclipse use, got different results from `javac`: an instance id named `…(Holder<V>.Inner)` instead of `…(Holder.Inner)` for a parameter whose type is an inner class of a generic class (a different configuration key and metric tag), valid generic fallbacks rejected with [R4C-FB-002](errors.md#r4c-fb-002) or [R4C-FB-003](errors.md#r4c-fb-003) when a bound has a wildcard or an intersection, generated code that did not compile for a `Collection<? super T>` parameter, and differently numbered generated fields. The processor now writes the same files under both compilers.
+- In a GraalVM native image, [R4C-CFG-003](errors.md#r4c-cfg-003) (a class named in the configuration not found) shows the reachability metadata entry to add: the image finds only classes registered for reflection ([Native image](start/installation.md#native-image)).
 
 ### Changed
 
+- Tests: the CI builds a native image of a plain Java application with no framework and runs its tests inside it, next to the Spring Boot, Micronaut and Quarkus ones ([Native image](start/installation.md#native-image)).
 - Documentation: a timeout's precision assumes the process gets CPU, since under a container CPU limit a throttled JVM is interrupted only when it runs again; a starved cold start can open the circuit breaker through real timeouts ([Troubleshooting](guides/troubleshooting.md#breaker-opens-at-startup)). Both measured by the pilot under a CPU limit ([Benchmarks](benchmarks.md#cpu-limit)).
 
 ## [1.0.0-RC4] - 2026-11-14 :id=1.0.0-rc4

@@ -1,0 +1,7 @@
+{
+  "reflection": [
+    {
+      "type": "dev.resilience4cata.nativeimage.plainjava.OutOfStockException"
+    }
+  ]
+}

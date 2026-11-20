@@ -375,11 +375,11 @@ class ProcessorFuzzTest {
     // The generator
 
     /** One seed: its sources, the error codes it must produce (null when valid) and what to run. */
-    private record Case(long seed, String pkg, Map<String, String> sources, Set<String> expected, List<Wrap> wraps) {
+    record Case(long seed, String pkg, Map<String, String> sources, Set<String> expected, List<Wrap> wraps) {
     }
 
     /** A type to run: an interface with its implementation class, or an annotated class (implementation null). */
-    private record Wrap(String binaryName, String implementation, boolean optional) {
+    record Wrap(String binaryName, String implementation, boolean optional) {
     }
 
     private enum Kind {
@@ -424,7 +424,7 @@ class ProcessorFuzzTest {
         boolean classifier;
     }
 
-    private static final class Generator {
+    static final class Generator {
 
         private final long seed;
         private final SplittableRandom random;

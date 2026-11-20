@@ -1,0 +1,34 @@
+plugins {
+    id 'r4c.java-library'
+    // The official GraalVM Native Build Tools plugin: this project only tests the library in a native image (CLAUDE.md:
+    // third-party plugins are excluded from the library's build, not from its test projects).
+    alias(libs.plugins.graalvm.native)
+}
+
+// Its own group, as the other native projects.
+group = 'dev.resilience4cata.nativeimage'
+
+description = 'A plain Java application (no framework) with resilience4cata, tested on the JVM (test) and as a GraalVM native image (nativeTest). Not published.'
+
+dependencies {
+    implementation project(':core')
+    implementation project(':config')
+    // Mono and Flux methods: the reactor module.
+    implementation project(':reactor')
+    compileOnly project(':annotations')
+    annotationProcessor project(':processor')
+
+    testCompileOnly project(':annotations')
+    testAnnotationProcessor project(':processor')
+}
+
+graalvmNative {
+    // GraalVM is GRAALVM_HOME (CI: graalvm/setup-graalvm), not a Gradle toolchain.
+    toolchainDetection = false
+    // Reachability metadata of the libraries (Reactor) from GraalVM's repository.
+    metadataRepository {
+        enabled = true
+    }
+    // No resources.autodetect(), as for a user who does not turn it on: resilience4cata.properties still reaches the
+    // image, since Native Image registers the resource that ResilienceConfig.load() looks up by a constant name.
+}

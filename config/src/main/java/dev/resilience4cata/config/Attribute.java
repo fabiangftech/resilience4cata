@@ -175,7 +175,8 @@ final class Attribute<B> {
             Class<?> type = load(className, loader);
             if (type == null) {
                 throw new ProblemException(ProblemException.UNKNOWN_CLASS, origin + ": class '" + className
-                        + "' not found by the class loader " + loader + "." + unknownClassHint(className, loader));
+                        + "' not found by the class loader " + loader + "." + unknownClassHint(className, loader)
+                        + nativeImageHint(className));
             }
             if (!Throwable.class.isAssignableFrom(type)) {
                 throw new ProblemException(ProblemException.UNKNOWN_CLASS, origin + ": '" + type.getName()
@@ -198,6 +199,19 @@ final class Attribute<B> {
             }
         }
         return " Use the fully qualified name, for example 'java.io.IOException'.";
+    }
+
+    /**
+     * In a GraalVM native image, {@code Class.forName} finds only classes registered for reflection, and the library
+     * cannot register an application's classes: says how to.
+     */
+    static String nativeImageHint(String className) {
+        if (!"runtime".equals(System.getProperty("org.graalvm.nativeimage.imagecode"))) {
+            return "";
+        }
+        return " In a native image, a class named in the configuration must be registered for reflection: add"
+                + " {\"reflection\": [{\"type\": \"" + className + "\"}]} to a"
+                + " META-INF/native-image/<group>/<artifact>/reachability-metadata.json of the application.";
     }
 
     /** Loads a class by binary name, also accepting canonical names of nested classes ({@code a.B.C}). */

@@ -50,6 +50,17 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
         return compile(workDir, sources, List.of(processor), path, all);
     }
 
+    /**
+     * Compiles {@code sources} with several {@code processors}, in order, with {@code classpath} before the test
+     * class path and the given compiler {@code options}.
+     */
+    static Compilation compile(Path workDir, Map<String, String> sources, List<Processor> processors, List<Path> classpath,
+            List<String> options) {
+        String path = Stream.concat(classpath.stream().map(Path::toString),
+                Stream.of(System.getProperty("java.class.path"))).collect(Collectors.joining(File.pathSeparator));
+        return compile(workDir, sources, processors, path, options);
+    }
+
     /** Compiles {@code sources} with the processor and extra compiler {@code options}, such as {@code -Akey=value}. */
     static Compilation compileWithOptions(Path workDir, Map<String, String> sources, String... options) {
         List<String> all = new ArrayList<>(List.of("-Xlint:all", "-Xlint:-processing", "-Werror"));
@@ -103,8 +114,24 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
         return compile(workDir, sources, List.of(processor), path, List.of("-Xlint:all", "-Xlint:-processing", "-Werror"));
     }
 
+    /**
+     * Compiles {@code sources} with the processor run by the Eclipse compiler (ECJ) instead of javac, with
+     * {@code options} after the class path and {@code --release 21}.
+     */
+    static Compilation compileWithEclipse(Path workDir, Map<String, String> sources, List<String> options) {
+        List<String> all = new ArrayList<>(List.of("--release", "21"));
+        all.addAll(options);
+        return compile(new org.eclipse.jdt.internal.compiler.tool.EclipseCompiler(), workDir, sources,
+                List.of(new ResilienceProcessor()), System.getProperty("java.class.path"), all);
+    }
+
     private static Compilation compile(Path workDir, Map<String, String> sources, List<Processor> processors, String path,
             List<String> lint) {
+        return compile(ToolProvider.getSystemJavaCompiler(), workDir, sources, processors, path, lint);
+    }
+
+    private static Compilation compile(JavaCompiler compiler, Path workDir, Map<String, String> sources,
+            List<Processor> processors, String path, List<String> lint) {
         try {
             Path sourceDir = Files.createDirectories(workDir.resolve("src"));
             Path classes = Files.createDirectories(workDir.resolve("classes"));
@@ -116,7 +143,6 @@ record Compilation(boolean success, List<Diagnostic<? extends JavaFileObject>> d
                 Files.writeString(file, source.getValue());
                 files.add(file);
             }
-            JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
             DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
             try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
                 fileManager.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, List.of(classes));

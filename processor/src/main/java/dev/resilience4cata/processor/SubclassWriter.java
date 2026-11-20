@@ -51,9 +51,11 @@ final class SubclassWriter {
 
     private final Elements elements;
     private final Types types;
+    private final MemberOrder members;
     private final Messager messager;
 
-    SubclassWriter(Elements elements, Types types, Messager messager) {
+    SubclassWriter(Elements elements, Types types, Messager messager, MemberOrder members) {
+        this.members = members;
         this.elements = elements;
         this.types = types;
         this.messager = messager;
@@ -297,7 +299,7 @@ final class SubclassWriter {
     /** Instance methods of {@code type} that a subclass could see, one per signature, most specific first. */
     private Map<String, ExecutableElement> candidates(TypeElement type) {
         Map<String, ExecutableElement> methods = new LinkedHashMap<>();
-        for (ExecutableElement method : ElementFilter.methodsIn(elements.getAllMembers(type))) {
+        for (ExecutableElement method : members.methods(type)) {
             Set<Modifier> modifiers = method.getModifiers();
             TypeElement declaring = (TypeElement) method.getEnclosingElement();
             if (modifiers.contains(Modifier.STATIC) || modifiers.contains(Modifier.PRIVATE)
@@ -305,7 +307,7 @@ final class SubclassWriter {
                 continue;
             }
             String key = method.getSimpleName() + "(" + member(type, method).getParameterTypes().stream()
-                    .map(t -> TypePrinter.print(types.erasure(t))).collect(Collectors.joining(",")) + ")";
+                    .map(t -> TypePrinter.erased(types.erasure(t))).collect(Collectors.joining(",")) + ")";
             ExecutableElement previous = methods.get(key);
             // A concrete class implements every abstract method; prefer the implementation over the declaration.
             if (previous == null || (previous.getModifiers().contains(Modifier.ABSTRACT)

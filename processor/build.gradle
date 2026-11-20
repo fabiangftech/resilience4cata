@@ -5,18 +5,32 @@ plugins {
 
 description = 'Annotation processor: validates resilience annotations and generates the wrapper classes.'
 
+configurations {
+    lombok {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
 dependencies {
     implementation project(':annotations')
     testImplementation project(':core')
     // Mono methods: the generated code calls resilience4cata-reactor (and through it reactor-core).
     testImplementation project(':reactor')
+    // EclipseCompilerTest: the processor run by the Eclipse compiler must generate what javac's run generates.
+    testImplementation libs.ecj
+    // LombokProcessorTest: Lombok's processor and ours, in both orders. Not on the test class path, where its
+    // service file would make ours share the processor path in every other test (ProcessingLintTest).
+    lombok libs.lombok
 }
 
 tasks.named('test') {
+    jvmArgumentProviders.add(new dev.resilience4cata.build.ClasspathProperty('test.lombokPath', configurations.lombok))
     // ErrorCodeTest checks the error codes against the error reference pages.
     inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
     // ProcessorFuzzTest: -PfuzzSeed=<n> replays one seed, -PfuzzCount=<n> runs that many seeds from -PfuzzStart=<n>
     systemProperty 'test.fuzz.start', providers.gradleProperty('fuzzStart').getOrElse('1')
     systemProperty 'test.seed', providers.gradleProperty('fuzzSeed').getOrElse('')
     systemProperty 'test.fuzz.count', providers.gradleProperty('fuzzCount').getOrElse('400')
+    systemProperty 'test.ecj.count', providers.gradleProperty('ecjCount').getOrElse('160')
 }

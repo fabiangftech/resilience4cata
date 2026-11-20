@@ -35,6 +35,18 @@ final class TypePrinter {
         };
     }
 
+    /**
+     * Prints an erased type ({@code Types.erasure}) as its qualified name: the Eclipse compiler's erasure of an
+     * inner class of a generic class keeps the enclosing type's arguments ({@code Outer<V>.Inner}), javac's does not.
+     */
+    static String erased(TypeMirror type) {
+        return switch (type.getKind()) {
+            case ARRAY -> erased(((ArrayType) type).getComponentType()) + "[]";
+            case DECLARED -> ((TypeElement) ((DeclaredType) type).asElement()).getQualifiedName().toString();
+            default -> print(type);
+        };
+    }
+
     static String join(List<? extends TypeMirror> types, String separator) {
         return types.stream().map(TypePrinter::print).collect(Collectors.joining(separator));
     }
