@@ -6,6 +6,8 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y 
 
 ## [Sin publicar] :id=unreleased
 
+La primera versión estable. La API es la misma que en 1.0.0-RC4, y desde esta versión rige la promesa de [compatibilidad](reference/compatibility.md): dentro de 1.x, la API Java se mantiene compatible en binario y en código fuente, el código generado por un procesador funciona en todo runtime 1.x posterior, y se mantienen las anotaciones, las claves de configuración, las propiedades de las integraciones, los nombres y etiquetas de las métricas, el JSON de los snapshots y los códigos de error. Desde 1.0.0-RC4 solo hay correcciones, abajo. Si vienes de 0.13.0, lee también los candidatos a release: 1.0.0-RC1 tiene los dos cambios pequeños de API (un evento renombrado, dos constantes que dejan de ser públicas), y cambian cuatro comportamientos: un procesador de anotaciones ausente se reporta en vez de dejar beans sin proteger (1.0.0-RC2), el circuit breaker registra los `Error` como fallos y las anotaciones a nivel de tipo que no protegen nada son un error de compilación (1.0.0-RC3), y el circuit breaker ya no registra los rechazos del propio bulkhead, rate limiter o adaptive limit del método (1.0.0-RC4).
+
 ### Corregido
 
 - `resilience4cata-config` ignora una marca de orden de bytes (BOM) UTF-8 al principio de un archivo de propiedades o de un recurso del classpath, que los editores de Windows pueden escribir. Se leía como parte de la primera clave, que entonces fallaba como clave desconocida ([R4C-CFG-001](errors.md#r4c-cfg-001)) con esa misma clave como sugerencia.
@@ -15,6 +17,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y 
 
 ### Cambiado
 
+- `resilience4cata-opentelemetry` depende de `io.opentelemetry:opentelemetry-api` 1.62.0, la versión más antigua que traen Spring Boot 4.1, Quarkus 3.40 y Micronaut 5.2, en vez de 1.67.0, así que ya no sube la versión de OpenTelemetry de una aplicación; sus tests corren en 1.62.0 y en la más reciente ([OpenTelemetry](guides/opentelemetry.md)).
 - Tests: la CI construye una imagen nativa de una aplicación Java pura, sin framework, y ejecuta sus tests dentro de ella, junto a las de Spring Boot, Micronaut y Quarkus ([Imagen nativa](start/installation.md#imagen-nativa)).
 - Documentación: la precisión de un timeout supone que el proceso tiene CPU, porque con un límite de CPU de contenedor una JVM con throttling solo se interrumpe cuando vuelve a ejecutarse; un arranque en frío sin CPU puede abrir el circuit breaker con timeouts reales ([Solución de problemas](guides/troubleshooting.md#breaker-opens-at-startup)). Las dos cosas las midió el piloto con límite de CPU ([Benchmarks](benchmarks.md#cpu-limit)).
 
