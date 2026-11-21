@@ -90,3 +90,26 @@ What it shows:
 Runs `20261115-114127` (no limit), `20261115-110010` (1 core; it did not record when late interrupts came yet) and
 `20261115-121354` (0.5 core).
 
+
+## Before 1.0.0 (2026-11-20, AWS Graviton3, JDK 25, 1.0.0-SNAPSHOT)
+
+`R4C=1.0.0-SNAPSHOT pilot/run.sh aws` on `main` at `74ed4db`: the code that becomes 1.0.0, including the processor's
+changes since 1.0.0-RC4 (Lombok rounds, member order, fallback matching, explicit type arguments), which generate the
+three services' code. No CPU limit. Every check passed for the three services (42 of 42), about 1.04 million requests
+each, with the numbers of the first run:
+
+| Phase | Orders answered by the backend | p50 | p99 | p99.9 |
+|---|---|---|---|---|
+| steady | 100 % (the backend's 1 % of 503s retried away) | 6.8–6.9 ms | 28.7–29.4 ms | 42.5–42.7 ms |
+| backend down | 0 %: the breaker answered every order without calling it | 0.1 ms | 0.2 ms | 3.9–9.4 ms |
+| backend slow (1 s) | 0 %: breaker 99.4 %, bulkhead 0.5 %, timeout; nobody waited the second | 0.1 ms | 0.3 ms | 230–253 ms |
+| after (minutes 8–10) | 100 % | 6.8–6.9 ms | 28.6–28.9 ms | 42.1–42.7 ms |
+
+At most 40 calls inside the bulkhead; 157–172 calls interrupted by the 200 ms timeout, none before 185.5 ms in the
+method, the latest after 221.1 ms (Micronaut), 223.6 ms (Quarkus) and 231.4 ms (Spring, whose 24 interrupts between
+225 and 250 ms are past the watchdog's two ticks; not a check, and the no-limit run of 2026-11-15 saw up to 225.1 ms);
+120,194–120,198 quotes in 600 s, each within its limit; breaker closed and nothing inside at the end; heap after a full
+GC lower at the end than after the warm-up; one library thread throughout; 0.4–0.5 of the 4 cores used. Startup to the
+first answer: Spring 2.4 s, Micronaut 1.6 s, Quarkus 1.3 s.
+
+Run `20261120-204154`.
