@@ -28,10 +28,13 @@ class SiteGeneratorTest {
     }
 
     @Test
-    void everyMarkdownPageOfBothLanguagesIsRendered() {
-        assertThat(pages).hasSizeGreaterThan(60);
-        assertThat(pages.stream().filter(page -> page.language().equals("en")).count())
-                .isEqualTo(pages.stream().filter(page -> page.language().equals("es")).count());
+    void everyMarkdownPageOfEveryLanguageIsRendered() {
+        assertThat(pages).hasSizeGreaterThan(200);
+        long english = pages.stream().filter(page -> page.language().equals("en")).count();
+        for (String language : SiteGenerator.LANGUAGES) {
+            assertThat(pages.stream().filter(page -> page.language().equals(language)).count()).as(language)
+                    .isEqualTo(english);
+        }
         assertThat(pages).allSatisfy(page -> assertThat(out.resolve(page.output())).isRegularFile());
     }
 
@@ -51,11 +54,13 @@ class SiteGeneratorTest {
             String html = Files.readString(out.resolve(page.output()));
             String url = SiteGenerator.BASE_URL + page.route();
             assertThat(html).as(page.output())
-                    .contains("<html lang=\"" + page.language() + "\">")
+                    .contains("<html lang=\"" + SiteGenerator.TAG.get(page.language()) + "\">")
                     .contains("<link rel=\"canonical\" href=\"" + url + "\">")
                     .contains("<meta property=\"og:url\" content=\"" + url + "\">")
                     .contains("hreflang=\"en\" href=\"" + SiteGenerator.BASE_URL + page.in("en").route() + "\"")
                     .contains("hreflang=\"es\" href=\"" + SiteGenerator.BASE_URL + page.in("es").route() + "\"")
+                    .contains("hreflang=\"pt-BR\" href=\"" + SiteGenerator.BASE_URL + page.in("pt").route() + "\"")
+                    .contains("hreflang=\"zh-CN\" href=\"" + SiteGenerator.BASE_URL + page.in("zh").route() + "\"")
                     .contains("hreflang=\"x-default\" href=\"" + SiteGenerator.BASE_URL + page.in("en").route() + "\"")
                     .contains("class=\"r4c-prerender\"")
                     .doesNotContain("<title>resilience4cata</title>")
@@ -130,7 +135,7 @@ class SiteGeneratorTest {
 
     @Test
     void theShellUsesPathsNotHashRoutes() throws IOException {
-        for (String file : List.of("index.html", "en/README.md", "es/README.md")) {
+        for (String file : List.of("index.html", "en/README.md", "es/README.md", "pt/README.md", "zh/README.md")) {
             assertThat(Files.readString(DOCS.resolve(file))).as(file).doesNotContain("href=\"#/");
         }
         assertThat(Files.readString(DOCS.resolve("index.html"))).contains("routerMode: 'history'")

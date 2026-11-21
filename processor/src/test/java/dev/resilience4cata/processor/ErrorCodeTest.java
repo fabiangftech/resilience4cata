@@ -35,7 +35,7 @@ import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Checks the error reference pages ({@code docs/en/errors.md}, {@code docs/es/errors.md}) against
+ * Checks the error reference pages ({@code docs/<language>/errors.md}) against
  * {@link ProcessorError}: every code is unique and has a section in both languages, and every code is
  * emitted. For most codes the proof is the page itself: the first {@code java} block of the code's section
  * (the wrong example) must fail with that code, and the second one (the fix), if any, must compile cleanly.
@@ -77,13 +77,17 @@ class ErrorCodeTest {
     }
 
     @Test
-    void bothPagesDocumentTheSameCodesInTheSameOrderWithTheSameExamples() throws IOException {
+    void everyPageDocumentsTheSameCodesInTheSameOrderWithTheSameExamples() throws IOException {
         String english = page("en");
-        String spanish = page("es");
         List<String> codes = headings(english);
-        assertThat(codes).doesNotHaveDuplicates().isEqualTo(headings(spanish));
-        for (String code : codes) {
-            assertThat(javaBlocks(section(spanish, code))).as(code).isEqualTo(javaBlocks(section(english, code)));
+        assertThat(codes).doesNotHaveDuplicates();
+        for (String language : List.of("es", "pt", "zh")) {
+            String translated = page(language);
+            assertThat(headings(translated)).as(language).isEqualTo(codes);
+            for (String code : codes) {
+                assertThat(javaBlocks(section(translated, code))).as(language + " " + code)
+                        .isEqualTo(javaBlocks(section(english, code)));
+            }
         }
         assertThat(codes.stream().filter(c -> AREAS.contains(area(c))))
                 .containsExactlyInAnyOrderElementsOf(Arrays.stream(ProcessorError.values()).map(ProcessorError::code).toList());

@@ -31,8 +31,8 @@ class ErrorCodeTest {
     }
 
     @Test
-    void everyCodeIsDocumentedInEnglishAndSpanish() throws IOException {
-        for (String language : List.of("en", "es")) {
+    void everyCodeIsDocumentedInEveryLanguage() throws IOException {
+        for (String language : List.of("en", "es", "pt", "zh")) {
             String page = Files.readString(Path.of("..", "docs", language, "errors.md"));
             Matcher headings = HEADING.matcher(page);
             Set<String> documented = headings.results().map(m -> m.group(1)).collect(Collectors.toSet());

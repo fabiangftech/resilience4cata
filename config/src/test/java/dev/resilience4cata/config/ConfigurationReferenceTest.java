@@ -42,7 +42,13 @@ class ConfigurationReferenceTest {
                     Attribute.Kind.CLASSES, "class list"),
             "es", Map.of(Attribute.Kind.BOOLEAN, "boolean", Attribute.Kind.INT, "int",
                     Attribute.Kind.DOUBLE, "decimal", Attribute.Kind.DURATION, "duración", Attribute.Kind.ENUM, "enum",
-                    Attribute.Kind.CLASSES, "lista de clases"));
+                    Attribute.Kind.CLASSES, "lista de clases"),
+            "pt", Map.of(Attribute.Kind.BOOLEAN, "boolean", Attribute.Kind.INT, "int",
+                    Attribute.Kind.DOUBLE, "decimal", Attribute.Kind.DURATION, "duração", Attribute.Kind.ENUM, "enum",
+                    Attribute.Kind.CLASSES, "lista de classes"),
+            "zh", Map.of(Attribute.Kind.BOOLEAN, "boolean", Attribute.Kind.INT, "int",
+                    Attribute.Kind.DOUBLE, "decimal", Attribute.Kind.DURATION, "时长", Attribute.Kind.ENUM, "enum",
+                    Attribute.Kind.CLASSES, "类列表"));
     private static final Map<String, Function<ResilienceRegistry, Object>> RESOLVED = Map.of(
             "retry", r -> r.retryConfig(""),
             "hedge", r -> r.hedgeConfig(""),
@@ -92,13 +98,13 @@ class ConfigurationReferenceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"en", "es"})
+    @ValueSource(strings = {"en", "es", "pt", "zh"})
     void everyKeyIsListedOnceInCodeOrder(String language) throws IOException {
         assertThat(rows(language)).extracting(Row::key).containsExactlyElementsOf(codeKeys());
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"en", "es"})
+    @ValueSource(strings = {"en", "es", "pt", "zh"})
     void everyTypeMatchesTheAttribute(String language) throws IOException {
         for (Row row : rows(language)) {
             PolicyType<?, ?> policy = PolicyType.find(row.policy());
@@ -110,7 +116,7 @@ class ConfigurationReferenceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"en", "es"})
+    @ValueSource(strings = {"en", "es", "pt", "zh"})
     void everyDefaultIsTheBuiltInDefault(String language) throws IOException {
         for (Row row : rows(language)) {
             Properties properties = new Properties();
@@ -122,7 +128,7 @@ class ConfigurationReferenceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"en", "es"})
+    @ValueSource(strings = {"en", "es", "pt", "zh"})
     void everyEnvironmentVariableSetsItsKey(String language) throws IOException {
         for (Row row : rows(language)) {
             String value = row.defaultValue().isEmpty() ? "java.lang.RuntimeException" : row.defaultValue();
@@ -132,16 +138,17 @@ class ConfigurationReferenceTest {
         }
     }
 
-    @Test
-    void bothLanguagesListTheSameRows() throws IOException {
-        Set<Row> english = new LinkedHashSet<>();
-        for (Row row : rows("en")) {
-            english.add(new Row(row.key(), row.env(), "", row.defaultValue()));
+    @ParameterizedTest
+    @ValueSource(strings = {"es", "pt", "zh"})
+    void everyLanguageListsTheEnglishRows(String language) throws IOException {
+        assertThat(untyped(language)).containsExactlyElementsOf(untyped("en"));
+    }
+
+    private static Set<Row> untyped(String language) throws IOException {
+        Set<Row> rows = new LinkedHashSet<>();
+        for (Row row : rows(language)) {
+            rows.add(new Row(row.key(), row.env(), "", row.defaultValue()));
         }
-        Set<Row> spanish = new LinkedHashSet<>();
-        for (Row row : rows("es")) {
-            spanish.add(new Row(row.key(), row.env(), "", row.defaultValue()));
-        }
-        assertThat(spanish).containsExactlyElementsOf(english);
+        return rows;
     }
 }

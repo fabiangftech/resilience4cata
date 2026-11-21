@@ -169,7 +169,7 @@ Users have reported the aspect being slow (issue [#1377](https://github.com/resi
 - **Internals (copy):** `LeapArray`, a ring of time buckets in an `AtomicReferenceArray<WindowWrap>`, created by CAS, reset under `tryLock()` with `Thread.yield()` fallback. Per-bucket counters are **`LongAdder[]`** (`MetricBucket`), so it is striped and contention-friendly. [SRC]
 - **Avoid:** global `Context`/`Entry` thread-local machinery and a slot-chain per resource with string-keyed resources (heavy); rules decoupled from code makes local reasoning hard. [INF]
 
-### 2.5 Spring Retry → Spring Framework 7 resilience
+### 2.5 Spring Retry → Spring Framework 7 resilience :id=_25-spring-retry-to-spring-framework-7-resilience
 
 - **Spring Retry is archived**; its README says it is "superseded by Spring Framework 7". Last release 2.0.13 (Jun 2026). [DOC] ([repo](https://github.com/spring-projects/spring-retry))
 - **Spring Framework 7.0** core resilience: `@Retryable(includes, excludes, maxAttempts, delay, jitter, multiplier, maxDelay)`, `@ConcurrencyLimit(n)` ("particularly useful with Virtual Threads"), `RetryTemplate`/`RetryPolicy`, enabled with `@EnableResilientMethods`; reactive return types use Reactor retry. **No circuit breaker.** Proxy-based. [DOC] ([blog](https://spring.io/blog/2025/09/09/core-spring-resilience-features))

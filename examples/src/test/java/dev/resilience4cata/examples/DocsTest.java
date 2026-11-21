@@ -27,7 +27,9 @@ import org.junit.jupiter.api.Test;
  * starting with {@code //}, {@code #} or {@code <!--}; marker lines are dropped and the region is dedented), so every snippet on the site compiles and runs. In the
  * user pages ({@link #CHECKED_DIRECTORIES}) every {@code java} block needs such a marker, or
  * {@code <!-- not-compiled: reason -->} when it cannot compile on purpose (a wrong example, generated code).
- * The English and Spanish trees have the same files, and each page pair uses the same snippets in order.
+ * Every language ({@link #LANGUAGES}) has the English tree's files, each translated page uses the English page's
+ * snippets in order, and in the Portuguese and Chinese pages every heading carries the English page's heading id
+ * ({@code :id=}), so links and anchors written in English work in every language.
  */
 class DocsTest {
 
@@ -35,17 +37,37 @@ class DocsTest {
     /** Where the regions are: these examples, and the Spring, Micronaut and Quarkus modules' tests (their guides' code). */
     private static final List<Path> SOURCES = List.of(Path.of("src", "test"), Path.of("..", "spring", "src", "test"),
             Path.of("..", "micronaut", "src", "test"), Path.of("..", "quarkus", "it", "src"));
-    private static final List<String> LANGUAGES = List.of("en", "es");
+    private static final List<String> LANGUAGES = List.of("en", "es", "pt", "zh");
+    /** Translated with the English heading ids (Spanish pages have their own, older anchors). */
+    private static final List<String> ENGLISH_IDS = List.of("pt", "zh");
     /** Pages whose {@code java} blocks must all be compiled; the landing page is {@code README.md}. */
     private static final List<String> CHECKED_DIRECTORIES = List.of("start", "policies", "guides", "observability", "testing", "migrate", "blog");
 
     private static final Pattern MARKER = Pattern.compile("^<!-- (snippet|not-compiled):(.+)-->$");
     private static final Pattern FENCE = Pattern.compile("^(`{3,}+|~{3,}+)(\\w*+).*$");
+    private static final Pattern HEADING = Pattern.compile("^(#{1,6})\\s+(.*?)(?:\\s+:id=([\\w-]+))?\\s*$");
     private static final Pattern REGION = Pattern.compile("^\\s*(?://|#|<!--)\\s*(tag|end)::([\\w.-]+)\\[]");
 
     @Test
-    void theEnglishAndSpanishTreesHaveTheSameFiles() {
-        assertThat(relativeFiles("es")).isEqualTo(relativeFiles("en"));
+    void everyLanguageHasTheEnglishFiles() {
+        for (String language : LANGUAGES) {
+            assertThat(relativeFiles(language)).as(language).isEqualTo(relativeFiles("en"));
+        }
+    }
+
+    @Test
+    void translatedHeadingsCarryTheEnglishIds() {
+        List<String> problems = new ArrayList<>();
+        for (Path english : pages("en")) {
+            List<String> ids = headingIds(english);
+            for (String language : ENGLISH_IDS) {
+                Path translated = DOCS.resolve(language).resolve(DOCS.resolve("en").relativize(english));
+                if (Files.exists(translated) && !headingIds(translated).equals(ids)) {
+                    problems.add(translated + ": heading ids " + headingIds(translated) + ", English " + ids);
+                }
+            }
+        }
+        assertThat(problems).isEmpty();
     }
 
     @Test
@@ -93,17 +115,19 @@ class DocsTest {
     }
 
     @Test
-    void eachPagePairUsesTheSameSnippetsInTheSameOrder() {
+    void everyTranslationUsesTheSameSnippetsInTheSameOrder() {
         List<String> problems = new ArrayList<>();
         for (Path english : pages("en")) {
-            Path spanish = DOCS.resolve("es").resolve(DOCS.resolve("en").relativize(english));
-            if (!Files.exists(spanish)) {
-                continue; // reported by theEnglishAndSpanishTreesHaveTheSameFiles
-            }
             List<String> en = blocks(english).stream().filter(b -> b.kind().equals("snippet")).map(Block::id).toList();
-            List<String> es = blocks(spanish).stream().filter(b -> b.kind().equals("snippet")).map(Block::id).toList();
-            if (!en.equals(es)) {
-                problems.add(english + " uses " + en + " but " + spanish + " uses " + es);
+            for (String language : LANGUAGES.subList(1, LANGUAGES.size())) {
+                Path translated = DOCS.resolve(language).resolve(DOCS.resolve("en").relativize(english));
+                if (!Files.exists(translated)) {
+                    continue; // reported by everyLanguageHasTheEnglishFiles
+                }
+                List<String> other = blocks(translated).stream().filter(b -> b.kind().equals("snippet")).map(Block::id).toList();
+                if (!en.equals(other)) {
+                    problems.add(english + " uses " + en + " but " + translated + " uses " + other);
+                }
             }
         }
         assertThat(problems).isEmpty();
@@ -153,6 +177,64 @@ class DocsTest {
             i = j;
         }
         return blocks;
+    }
+
+    /**
+     * The id of every heading outside code blocks, in order: its {@code :id=}, or for an English heading without one
+     * the slug Docsify gives it (as {@code SiteGenerator.slug} and its numbering of repeated slugs); the page title
+     * ({@code #}) is counted but not listed. Tab labels
+     * inside {@code <!-- tabs:start -->} are not headings.
+     */
+    static List<String> headingIds(Path page) {
+        List<String> ids = new ArrayList<>();
+        Map<String, Integer> used = new java.util.HashMap<>();
+        boolean tabs = false;
+        String fence = null;
+        for (String line : read(page)) {
+            String stripped = line.strip();
+            if (fence != null) {
+                if (stripped.startsWith(fence)) {
+                    fence = null;
+                }
+                continue;
+            }
+            Matcher open = FENCE.matcher(stripped);
+            if (open.matches()) {
+                fence = open.group(1);
+                continue;
+            }
+            if (stripped.startsWith("<!-- tabs:start")) {
+                tabs = true;
+            } else if (stripped.startsWith("<!-- tabs:end")) {
+                tabs = false;
+            }
+            Matcher heading = HEADING.matcher(line);
+            if (!heading.matches() || tabs && heading.group(2).startsWith("**")) {
+                continue;
+            }
+            String id = heading.group(3);
+            if (id == null) {
+                // Docsify numbers a repeated slug (x, x-1, x-2); explicit ids do not count.
+                String slug = slug(heading.group(2));
+                Integer count = used.get(slug);
+                used.put(slug, count == null ? 1 : count + 1);
+                id = count == null ? slug : slug + "-" + count;
+            }
+            if (heading.group(1).length() > 1) {
+                ids.add(id);
+            }
+        }
+        return ids;
+    }
+
+    /** Docsify's slug of a heading's text (inline code, emphasis and links reduced to their text). */
+    static String slug(String text) {
+        String plain = text.replaceAll("\\[([^\\]]*)]\\([^)]*\\)", "$1").replaceAll("<[^>]+>", "").replace("`", "")
+                .replace("**", "").replace("__", "");
+        String slug = plain.strip().toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("[\\u2000-\\u206F\\u2E00-\\u2E7F\\\\'!\"#$%&()*+,./:;<=>?@\\[\\]^`{|}~]", "")
+                .replaceAll("\\s", "-");
+        return !slug.isEmpty() && Character.isDigit(slug.charAt(0)) ? "_" + slug : slug;
     }
 
     /** Every {@code tag::id[]} region under {@link #SOURCES}, dedented, without marker lines. */

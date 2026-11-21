@@ -114,7 +114,7 @@ tasks.named('jar') {
 tasks.withType(Test).configureEach {
     jvmArgumentProviders.add(new dev.resilience4cata.build.ClasspathProperty('test.processorPath', configurations.processorPath))
     // ErrorCodeTest checks the error codes against the error reference pages.
-    inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files('../docs/en/errors.md', '../docs/es/errors.md', '../docs/pt/errors.md', '../docs/zh/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 tasks.named('check') {

@@ -118,6 +118,11 @@ button { font-family: inherit; }
 .r4c-lang a { padding: 4px 9px; font: 600 13px var(--font-body); color: var(--ink-2); text-decoration: none; }
 .r4c-lang a:hover { color: var(--ink); }
 .r4c-lang a[aria-current] { background: var(--ink); color: var(--bg); }
+/* Chinese pages: the Latin fonts first (code, identifiers), then the platforms' Simplified Chinese fonts. */
+html[lang|="zh"] {
+  --font-display: "Barlow Semi Condensed", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+}
 
 /* search (docsify plugin, moved into the header) */
 .r4c-search-slot { position: relative; }
@@ -477,6 +482,7 @@ section.content {
 }
 @media (max-width: 520px) {
   .r4c-brand span { display: none; }
+  .r4c-lang a { padding: 4px 6px; font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
 

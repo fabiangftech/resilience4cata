@@ -35,8 +35,8 @@ class ErrorCodeTest {
     }
 
     @Test
-    void everyCodeIsDocumentedInEnglishAndSpanish() throws IOException, IllegalAccessException {
-        for (String language : List.of("en", "es")) {
+    void everyCodeIsDocumentedInEveryLanguage() throws IOException, IllegalAccessException {
+        for (String language : List.of("en", "es", "pt", "zh")) {
             String text = Files.readString(Path.of("..", "docs", language, "errors.md"));
             Set<String> documented = HEADING.matcher(text).results().map(m -> m.group(1)).collect(Collectors.toSet());
             assertThat(documented).as(language).containsAll(codes());

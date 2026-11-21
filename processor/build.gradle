@@ -27,7 +27,7 @@ dependencies {
 tasks.named('test') {
     jvmArgumentProviders.add(new dev.resilience4cata.build.ClasspathProperty('test.lombokPath', configurations.lombok))
     // ErrorCodeTest checks the error codes against the error reference pages.
-    inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files('../docs/en/errors.md', '../docs/es/errors.md', '../docs/pt/errors.md', '../docs/zh/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
     // ProcessorFuzzTest: -PfuzzSeed=<n> replays one seed, -PfuzzCount=<n> runs that many seeds from -PfuzzStart=<n>
     systemProperty 'test.fuzz.start', providers.gradleProperty('fuzzStart').getOrElse('1')
     systemProperty 'test.seed', providers.gradleProperty('fuzzSeed').getOrElse('')
