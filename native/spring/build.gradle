@@ -62,3 +62,11 @@ graalvmNative {
         sharedLibrary = false
     }
 }
+
+// Native Build Tools gives each project its own metadata service, and each extracts the same repository zip into
+// ~/.gradle/native-build-tools on first use. In parallel the extractions race, and a half-extracted directory fails
+// every later build that finds it (CI caches that directory). One project after the other, the first extracts it and
+// the others reuse it.
+tasks.named('collectReachabilityMetadata') {
+    mustRunAfter ':native:java:collectReachabilityMetadata'
+}
