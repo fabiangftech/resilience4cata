@@ -22,7 +22,7 @@ micrometer = "1.17.1"
 # with the rest, .github/dependabot.yml ignores the artifacts that use it; 1.62.0 is the oldest that Spring Boot 4.1,
 # Quarkus 3.40 and Micronaut 5.2 ship) and minimumOpenTelemetryTest runs its tests on that API and SDK. Every other test
 # gets OpenTelemetry through the opentelemetry-bom entry (opentelemetry, the latest).
-opentelemetry = "1.67.0"
+opentelemetry = "1.68.0"
 opentelemetryMinimum = "1.62.0"
 # Test-only, in examples: the Prometheus exporter of docs/en/guides/opentelemetry.md (published only as -alpha).
 opentelemetry-prometheus = "1.68.0-alpha"
