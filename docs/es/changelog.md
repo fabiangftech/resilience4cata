@@ -4,7 +4,7 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
-## [Sin publicar] :id=unreleased
+## [1.0.0] - 2026-11-21 :id=1.0.0
 
 La primera versión estable. La API es la misma que en 1.0.0-RC4, y desde esta versión rige la promesa de [compatibilidad](reference/compatibility.md): dentro de 1.x, la API Java se mantiene compatible en binario y en código fuente, el código generado por un procesador funciona en todo runtime 1.x posterior, y se mantienen las anotaciones, las claves de configuración, las propiedades de las integraciones, los nombres y etiquetas de las métricas, el JSON de los snapshots y los códigos de error. Desde 1.0.0-RC4 solo hay correcciones, abajo. Si vienes de 0.13.0, lee también los candidatos a release: 1.0.0-RC1 tiene los dos cambios pequeños de API (un evento renombrado, dos constantes que dejan de ser públicas), y cambian cuatro comportamientos: un procesador de anotaciones ausente se reporta en vez de dejar beans sin proteger (1.0.0-RC2), el circuit breaker registra los `Error` como fallos y las anotaciones a nivel de tipo que no protegen nada son un error de compilación (1.0.0-RC3), y el circuit breaker ya no registra los rechazos del propio bulkhead, rate limiter o adaptive limit del método (1.0.0-RC4).
 
