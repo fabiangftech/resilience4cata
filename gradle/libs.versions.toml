@@ -37,7 +37,7 @@ springFrameworkMinimum = "7.0.8"
 # Compile-only in the spring module: Mockito.mockingDetails, to leave spies unwrapped (same Dependabot rule).
 mockitoMinimum = "5.21.0"
 # Compile-only in the spring module: javac reads Jackson annotations on Spring Boot's health classes.
-jacksonAnnotations = "2.22"
+jacksonAnnotations = "2.23"
 # The micronaut module (Micronaut 5, Java 25) compiles against the oldest supported Micronaut core (micronautMinimum:
 # never bump it with the rest, .github/dependabot.yml ignores the artifacts that use it); its tests run on the
 # Micronaut platform BOM (micronautPlatform), which manages every Micronaut module.
