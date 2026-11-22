@@ -30,6 +30,7 @@ def springTestLibraries = [
         project(':testkit'),
         project(':reactor'),
         libs.spring.boot.webflux,
+        libs.spring.boot.restclient,
         libs.spring.boot.reactor.netty,
         libs.spring.boot.webmvc,
         libs.spring.boot.tomcat,
