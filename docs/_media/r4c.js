@@ -25,7 +25,7 @@
       edit: 'Edit this page on GitHub', otherLang: 'Leer en español',
       system: 'System', light: 'Light', dark: 'Dark', themeLabel: 'Color theme: ',
       nav: { docs: 'Docs', policies: 'Policies', performance: 'Performance', errors: 'Error codes', blog: 'Blog' },
-      menu: 'Navigation', skip: 'Skip to content', copy: 'Copy', copied: 'Copied'
+      menu: 'Navigation', language: 'Language', skip: 'Skip to content', copy: 'Copy', copied: 'Copied'
     },
     es: {
       note: 'Nota', tip: 'Consejo', important: 'Importante', warning: 'Advertencia', caution: 'Precaución', measured: 'Medido',
@@ -34,7 +34,7 @@
       edit: 'Editar esta página en GitHub', otherLang: 'Read in English',
       system: 'Sistema', light: 'Claro', dark: 'Oscuro', themeLabel: 'Tema de color: ',
       nav: { docs: 'Documentación', policies: 'Políticas', performance: 'Rendimiento', errors: 'Códigos de error', blog: 'Blog' },
-      menu: 'Navegación', skip: 'Saltar al contenido', copy: 'Copiar', copied: 'Copiado'
+      menu: 'Navegación', language: 'Idioma', skip: 'Saltar al contenido', copy: 'Copiar', copied: 'Copiado'
     },
     pt: {
       note: 'Nota', tip: 'Dica', important: 'Importante', warning: 'Atenção', caution: 'Cuidado', measured: 'Medido',
@@ -43,7 +43,7 @@
       edit: 'Editar esta página no GitHub', otherLang: 'Read in English',
       system: 'Sistema', light: 'Claro', dark: 'Escuro', themeLabel: 'Tema de cores: ',
       nav: { docs: 'Documentação', policies: 'Políticas', performance: 'Desempenho', errors: 'Códigos de erro', blog: 'Blog' },
-      menu: 'Navegação', skip: 'Pular para o conteúdo', copy: 'Copiar', copied: 'Copiado'
+      menu: 'Navegação', language: 'Idioma', skip: 'Pular para o conteúdo', copy: 'Copiar', copied: 'Copiado'
     },
     zh: {
       note: '注意', tip: '提示', important: '重要', warning: '警告', caution: '小心', measured: '实测',
@@ -52,11 +52,13 @@
       edit: '在 GitHub 上编辑此页', otherLang: 'Read in English',
       system: '跟随系统', light: '浅色', dark: '深色', themeLabel: '颜色主题：',
       nav: { docs: '文档', policies: '策略', performance: '性能', errors: '错误码', blog: '博客' },
-      menu: '导航', skip: '跳到正文', copy: '复制', copied: '已复制'
+      menu: '导航', language: '语言', skip: '跳到正文', copy: '复制', copied: '已复制'
     }
   };
   var LANGS = ['en', 'es', 'pt', 'zh'];
   var LANG_TAG = { en: 'en', es: 'es', pt: 'pt-BR', zh: 'zh-CN' };
+  var LANG_CODE = { en: 'EN', es: 'ES', pt: 'PT', zh: '中文' };
+  var LANG_NAME = { en: 'English', es: 'Español', pt: 'Português', zh: '简体中文' };
   var LANDING_TITLE = {
     en: 'resilience4cata: resilience, compiled',
     es: 'resilience4cata: resiliencia, compilada',
@@ -144,6 +146,7 @@
     var L = I18N[current.lang];
     b.querySelector('span').textContent = L[themeMode()];
     b.setAttribute('aria-label', L.themeLabel + L[themeMode()]);
+    b.setAttribute('title', L.themeLabel + L[themeMode()]);
   }
   function cycleTheme() {
     var next = { system: 'light', light: 'dark', dark: 'system' }[themeMode()];
@@ -543,6 +546,13 @@
     });
     var menu = $('.r4c-menu');
     if (menu) menu.setAttribute('aria-label', L.menu);
+    var langButton = $('.r4c-lang-button');
+    if (langButton) {
+      $('.r4c-lang-code', langButton).textContent = LANG_CODE[current.lang];
+      langButton.setAttribute('aria-label', L.language + ': ' + LANG_NAME[current.lang]);
+      $('.r4c-lang').setAttribute('aria-label', L.language);
+    }
+    drawerNav(L);
     var skip = $('.r4c-skip');
     if (skip) skip.textContent = L.skip;
     updateThemeButton();
@@ -561,6 +571,31 @@
     document.body.classList.remove('close');
     var m = $('.r4c-menu');
     if (m) m.setAttribute('aria-expanded', 'false');
+  }
+
+  // On narrow screens the header's links move into the drawer, above the page tree.
+  function drawerNav(L) {
+    var sidebar = $('.sidebar');
+    var header = $('.r4c-nav');
+    if (!sidebar || !header) return;
+    var drawer = $('.r4c-drawer', sidebar);
+    if (!drawer) {
+      drawer = document.createElement('nav');
+      drawer.className = 'r4c-drawer';
+      sidebar.insertBefore(drawer, sidebar.firstChild);
+    }
+    drawer.setAttribute('aria-label', L.menu);
+    var github = $('.r4c-github');
+    drawer.innerHTML = $$('a', header).map(function (a) { return a.outerHTML; }).join('')
+      + (github ? '<a class="r4c-drawer-github" href="' + github.getAttribute('href') + '">GitHub</a>' : '');
+  }
+
+  function setLangMenu(open) {
+    var wrap = $('.r4c-langs');
+    var button = $('.r4c-lang-button');
+    if (!wrap || !button) return;
+    wrap.classList.toggle('open', open);
+    button.setAttribute('aria-expanded', String(open));
   }
 
   // ---------------------------------------------------------------- docsify plugin
@@ -620,20 +655,53 @@
       var theme = $('.r4c-theme');
       if (theme) theme.addEventListener('click', cycleTheme);
       var menu = $('.r4c-menu');
+      var sidebar = $('.sidebar');
+      if (sidebar) sidebar.id = 'r4c-sidebar';
       if (menu) {
         menu.addEventListener('click', function (e) {
           e.stopPropagation();
           var open = document.body.classList.toggle('close');
           menu.setAttribute('aria-expanded', String(open));
+          if (open) {
+            setLangMenu(false);
+            var first = $('.sidebar .r4c-drawer a');
+            if (e.detail === 0 && first && first.offsetParent) first.focus({ preventScroll: true }); // keyboard only
+          }
+        });
+      }
+      var langButton = $('.r4c-lang-button');
+      if (langButton) {
+        langButton.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var open = langButton.getAttribute('aria-expanded') !== 'true';
+          setLangMenu(open);
+          if (open) closeMenu();
+          var target = open && e.detail === 0 && $('.r4c-lang a[aria-current]');
+          if (target) target.focus(); // keyboard only
+        });
+        $('.r4c-langs').addEventListener('focusout', function (e) {
+          if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) setLangMenu(false);
         });
       }
       document.addEventListener('click', function (e) {
+        if (e.target.closest && !e.target.closest('.r4c-langs')) setLangMenu(false);
         if (!document.body.classList.contains('close')) return;
         if (e.target.closest && e.target.closest('.sidebar, .r4c-menu')) return;
         closeMenu();
       });
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        var langs = $('.r4c-langs');
+        if (langs && langs.classList.contains('open')) {
+          setLangMenu(false);
+          if (langButton) langButton.focus();
+        } else if (document.body.classList.contains('close')) {
+          closeMenu();
+          if (menu) menu.focus();
+        }
+      });
       $$('.r4c-lang a').forEach(function (a) {
-        a.addEventListener('click', function () { store.set('r4c-lang', a.getAttribute('data-lang')); });
+        a.addEventListener('click', function () { store.set('r4c-lang', a.getAttribute('data-lang')); setLangMenu(false); });
       });
       var skip = $('.r4c-skip');
       if (skip) {
