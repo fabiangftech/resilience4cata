@@ -37,8 +37,8 @@ updates:
       # minimumMicronautTest forces core to micronautMinimum through this BOM (micronaut-core-bom-minimum).
       - dependency-name: 'io.micronaut:micronaut-core-bom'
       # Not ignorable: springBootMinimum's spring-boot-dependencies and micronautPlatformMinimum's micronaut-platform
-      # share their artifact with springBoot and micronautPlatform, which must keep being updated. Close the PRs that
-      # bump the minimum versions by hand.
+      # share their artifact with springBoot and micronautPlatform, which must keep being updated. Revert the minimum
+      # versions by hand in the PR that bumps them (usually the `others` group).
       # The oldest Quarkus that resilience4cata-quarkus supports (quarkusMinimum): the extension's runtime and
       # deployment modules compile against these artifacts. Its tests get Quarkus through the quarkus-bom entry and
       # the io.quarkus plugin (quarkus), which these rules do not touch.
@@ -67,6 +67,12 @@ updates:
         patterns: ['io.quarkus*']
       openjdk-harnesses:
         patterns: ['org.openjdk.jmh:*', 'org.openjdk.jcstress:*']
+      # Every other minor or patch update in one PR (a dependency joins the first group that matches it): six PRs
+      # opened at once start about fifty jobs that each download the new versions from Maven Central, which answered
+      # 429 Too Many Requests to some of them (2026-11-22). Major updates still get a PR each.
+      others:
+        patterns: ['*']
+        update-types: ['minor', 'patch']
 
   - package-ecosystem: github-actions
     directory: /
