@@ -31,7 +31,7 @@ opentelemetry-proto = "1.11.1-alpha"
 # The spring module compiles against the oldest supported Spring Boot (springBootMinimum: never bump it with the rest,
 # .github/dependabot.yml ignores the artifacts that use it) and its tests run on springBoot, through Boot's BOM.
 springBoot = "4.1.2"
-springBootMinimum = "4.1.2"
+springBootMinimum = "4.1.0"
 # The Spring Framework of springBootMinimum, for the spring module's compile-only spring-tx (same Dependabot rule).
 springFrameworkMinimum = "7.0.8"
 # Compile-only in the spring module: Mockito.mockingDetails, to leave spies unwrapped (same Dependabot rule).
@@ -45,7 +45,7 @@ micronautPlatform = "5.2.5"
 micronautMinimum = "5.2.0"
 # The oldest Micronaut platform BOM, for the other Micronaut modules in the micronaut module's minimumMicronautTest suite
 # (no platform ships core 5.2.0: platform 5.2.0 has core 5.2.8, so the suite forces core to micronautMinimum).
-micronautPlatformMinimum = "5.2.5"
+micronautPlatformMinimum = "5.2.0"
 # The quarkus extension (runtime and deployment) compiles against the oldest supported Quarkus (quarkusMinimum: never
 # bump it with the rest, .github/dependabot.yml ignores the artifacts that use it, and it is the Quarkus core version
 # written to META-INF/quarkus-extension.yaml); its tests (quarkus:it) run on quarkus, the Quarkus Gradle plugin and
