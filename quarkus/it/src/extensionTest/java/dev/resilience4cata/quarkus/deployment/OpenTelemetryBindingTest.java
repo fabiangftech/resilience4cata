@@ -69,7 +69,9 @@ class OpenTelemetryBindingTest {
                     assertThat(p.getValue()).isEqualTo(1);
                     assertThat(p.getAttributes().get(AttributeKey.stringKey("kind"))).isEqualTo("circuitbreaker");
                 });
-        MetricData state = awaitExported(exporter, STATE);
+        // Wait for an export taken after the reset: one taken while the breaker was forced open has closed at 0.
+        MetricData state = awaitExported(exporter, STATE, p -> "closed".equals(p.getAttributes()
+                .get(AttributeKey.stringKey("state"))) && ((LongPointData) p).getValue() == 1);
         assertThat(state.getLongGaugeData().getPoints()).filteredOn(p -> "tracked".equals(name(p)))
                 .extracting(p -> p.getAttributes().get(AttributeKey.stringKey("state")), LongPointData::getValue)
                 .contains(org.assertj.core.groups.Tuple.tuple("closed", 1L));
