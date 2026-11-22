@@ -43,17 +43,25 @@ import org.commonmark.renderer.html.HtmlRenderer;
 public final class SiteGenerator {
 
     static final String BASE_URL = "https://resilience4cata.dev";
-    static final List<String> LANGUAGES = List.of("en", "es");
+    static final List<String> LANGUAGES = List.of("en", "es", "pt", "zh");
 
     private static final Map<String, String> LANDING_TITLE = Map.of(
             "en", "resilience4cata: resilience, compiled",
-            "es", "resilience4cata: resiliencia, compilada");
+            "es", "resilience4cata: resiliencia, compilada",
+            "pt", "resilience4cata: resiliência, compilada",
+            "zh", "resilience4cata：编译期生成的弹性");
     private static final Map<String, String> LANDING_DESCRIPTION = Map.of(
             "en", "Annotation-driven resilience for plain Java 21+: retry, circuit breaker, rate limiter, timeout, "
                     + "bulkhead, hedging and more, generated at compile time. No proxies, no framework.",
             "es", "Resiliencia con anotaciones para Java 21+: retry, circuit breaker, rate limiter, timeout, "
-                    + "bulkhead, hedging y más, generados al compilar. Sin proxies, sin framework.");
-    private static final Map<String, String> LOCALE = Map.of("en", "en_US", "es", "es_ES");
+                    + "bulkhead, hedging y más, generados al compilar. Sin proxies, sin framework.",
+            "pt", "Resiliência com anotações para Java 21+ puro: retry, circuit breaker, rate limiter, timeout, "
+                    + "bulkhead, hedging e mais, gerados na compilação. Sem proxies, sem framework.",
+            "zh", "面向纯 Java 21+ 的注解式弹性库：重试、熔断器、限流器、超时、舱壁隔离、对冲请求等，"
+                    + "在编译期生成。没有代理，不依赖框架。");
+    private static final Map<String, String> LOCALE = Map.of("en", "en_US", "es", "es_ES", "pt", "pt_BR", "zh", "zh_CN");
+    /** The BCP 47 tag of each language directory, for {@code <html lang>} and {@code hreflang}. */
+    static final Map<String, String> TAG = Map.of("en", "en", "es", "es", "pt", "pt-BR", "zh", "zh-CN");
     private static final int DESCRIPTION_LENGTH = 160;
 
     private static final Pattern HEADING_ID = Pattern.compile("^(#{1,6}\\s.*?)\\s+:id=([\\w-]+)\\s*$");
@@ -82,7 +90,7 @@ public final class SiteGenerator {
             return route.endsWith("/") ? route + "index.html" : route + ".html";
         }
 
-        /** The same page in another language (the en and es trees are identical, which DocsTest checks). */
+        /** The same page in another language (every language has the English tree, which DocsTest checks). */
         Page in(String other) {
             return new Page(other, file);
         }
@@ -115,7 +123,7 @@ public final class SiteGenerator {
             Rendered rendered = render(Files.readString(docs.resolve(page.language()).resolve(page.file())), page);
             write(out.resolve(page.output()), html(template, page, rendered, sidebars.get(page.language())));
             if (page.language().equals("en") && page.file().equals("README.md")) {
-                // The site root redirects to /en/ or /es/ by the reader's language; crawlers get the English landing.
+                // The site root redirects to /en/, /es/, /pt/ or /zh/ by the reader's language; crawlers get the English landing.
                 write(out.resolve("index.html"), html(template, page, rendered, sidebars.get("en")));
             }
         }
@@ -126,7 +134,7 @@ public final class SiteGenerator {
         return pages;
     }
 
-    /** Every Markdown page of both languages; files starting with {@code _} (sidebar, 404) are not pages. */
+    /** Every Markdown page of every language; files starting with {@code _} (sidebar, 404) are not pages. */
     static List<Page> pages(Path docs) throws IOException {
         List<Page> pages = new ArrayList<>();
         for (String language : LANGUAGES) {
@@ -312,13 +320,13 @@ public final class SiteGenerator {
         String description = escape(rendered.description());
         StringBuilder alternates = new StringBuilder();
         for (String language : LANGUAGES) {
-            alternates.append("\n  <link rel=\"alternate\" hreflang=\"").append(language).append("\" href=\"")
+            alternates.append("\n  <link rel=\"alternate\" hreflang=\"").append(TAG.get(language)).append("\" href=\"")
                     .append(BASE_URL).append(page.in(language).route()).append("\">");
         }
         alternates.append("\n  <link rel=\"alternate\" hreflang=\"x-default\" href=\"")
                 .append(BASE_URL).append(page.in("en").route()).append("\">");
         String html = template;
-        html = replace(html, "<html lang=\"en\">", "<html lang=\"" + page.language() + "\">");
+        html = replace(html, "<html lang=\"en\">", "<html lang=\"" + TAG.get(page.language()) + "\">");
         html = replace(html, "<title>resilience4cata</title>", "<title>" + title + "</title>");
         html = replaceAttribute(html, "name=\"description\"", description);
         html = replace(html, "<link rel=\"canonical\" href=\"" + BASE_URL + "/\">",
@@ -358,7 +366,7 @@ public final class SiteGenerator {
         for (Page page : pages) {
             xml.append("  <url>\n    <loc>").append(BASE_URL).append(page.route()).append("</loc>\n");
             for (String language : LANGUAGES) {
-                xml.append("    <xhtml:link rel=\"alternate\" hreflang=\"").append(language).append("\" href=\"")
+                xml.append("    <xhtml:link rel=\"alternate\" hreflang=\"").append(TAG.get(language)).append("\" href=\"")
                         .append(BASE_URL).append(page.in(language).route()).append("\"/>\n");
             }
             xml.append("  </url>\n");

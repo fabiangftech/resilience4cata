@@ -105,7 +105,7 @@ def extensionTest = tasks.register('extensionTest', Test) {
     // QuarkusDevModeTest's modifySourceFile (ReloadTest) looks for the test's sources here, not in src/test/java.
     systemProperty 'quarkus.test.source-path', file('src/extensionTest/java').absolutePath
     // ErrorCodeTest checks the error codes against the error reference pages.
-    inputs.files('../../docs/en/errors.md', '../../docs/es/errors.md').withPropertyName('errorPages')
+    inputs.files('../../docs/en/errors.md', '../../docs/es/errors.md', '../../docs/pt/errors.md', '../../docs/zh/errors.md').withPropertyName('errorPages')
             .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 // Quarkus applications compile with -parameters (Quarkus REST and Hibernate Validator use the names): the usability

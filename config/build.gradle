@@ -11,9 +11,10 @@ dependencies {
 
 tasks.named('test') {
     // ErrorCodeTest checks the error codes against the error reference pages.
-    inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files('../docs/en/errors.md', '../docs/es/errors.md', '../docs/pt/errors.md', '../docs/zh/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
     // ConfigurationReferenceTest checks the configuration key reference against the code.
-    inputs.files('../docs/en/reference/configuration.md', '../docs/es/reference/configuration.md')
+    inputs.files('../docs/en/reference/configuration.md', '../docs/es/reference/configuration.md',
+            '../docs/pt/reference/configuration.md', '../docs/zh/reference/configuration.md')
             .withPropertyName('configurationReference').withPathSensitivity(PathSensitivity.RELATIVE)
 }
 

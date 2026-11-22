@@ -1,3 +1,5 @@
 - **resilience4cata**
   - [English](/en/)
   - [Español](/es/)
+  - [Português](/pt/)
+  - [中文](/zh/)

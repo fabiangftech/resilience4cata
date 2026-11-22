@@ -318,7 +318,7 @@ startup **warning** that names the consequence.
 | **Instance** | Stateful object (breaker state, window, permits) with an id | State yes, config only through `reconfigure` |
 | **Resolved policy** | Immutable record with every value final, computed once per instance | No |
 
-### 6.2 Precedence (lowest → highest)
+### 6.2 Precedence (lowest → highest) :id=_62-precedence-lowest-to-highest
 
 ```
  1. built-in defaults

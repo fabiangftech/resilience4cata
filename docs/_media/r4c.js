@@ -1,14 +1,14 @@
 /*
  * resilience4cata.dev: theme behaviour for Docsify 4 (no build step).
  *
- * - header: language switcher (same page in the other language), theme toggle (system → light → dark),
+ * - header: language switcher (same page in another language: en, es, pt, zh), theme toggle (system → light → dark),
  *   search box moved from the sidebar into the header, mobile menu
  * - GitHub alerts  > [!NOTE] / [!TIP] / [!IMPORTANT] / [!WARNING] / [!CAUTION] / [!MEASURED]
  * - <!-- compare:start --> … <!-- compare:end -->: "You write / The processor writes" panes
  * - <div class="r4c-facts"> + one-row table: the spec strip of policy pages
  * - Mermaid fences, themed from the CSS tokens, re-rendered when the theme changes
  * - breadcrumbs, policy icon in the title, lede, right-hand "On this page", prev/next, "Edit this page"
- * - landing pages (/en/, /es/): no sidebar, full width, interactive "compile" panel and chart
+ * - landing pages (/en/, /es/, /pt/, /zh/): no sidebar, full width, interactive "compile" panel and chart
  */
 (function () {
   'use strict';
@@ -35,8 +35,40 @@
       system: 'Sistema', light: 'Claro', dark: 'Oscuro', themeLabel: 'Tema de color: ',
       nav: { docs: 'Documentación', policies: 'Políticas', performance: 'Rendimiento', errors: 'Códigos de error', blog: 'Blog' },
       menu: 'Navegación', skip: 'Saltar al contenido', copy: 'Copiar', copied: 'Copiado'
+    },
+    pt: {
+      note: 'Nota', tip: 'Dica', important: 'Importante', warning: 'Atenção', caution: 'Cuidado', measured: 'Medido',
+      youWrite: 'Você escreve', processorWrites: 'O processador escreve', abridged: 'gerado, resumido', generated: 'gerado',
+      onThisPage: 'Nesta página', previous: 'Anterior', next: 'Próxima', docs: 'Docs',
+      edit: 'Editar esta página no GitHub', otherLang: 'Read in English',
+      system: 'Sistema', light: 'Claro', dark: 'Escuro', themeLabel: 'Tema de cores: ',
+      nav: { docs: 'Documentação', policies: 'Políticas', performance: 'Desempenho', errors: 'Códigos de erro', blog: 'Blog' },
+      menu: 'Navegação', skip: 'Pular para o conteúdo', copy: 'Copiar', copied: 'Copiado'
+    },
+    zh: {
+      note: '注意', tip: '提示', important: '重要', warning: '警告', caution: '小心', measured: '实测',
+      youWrite: '你写的代码', processorWrites: '处理器生成的代码', abridged: '生成，已节选', generated: '生成',
+      onThisPage: '本页内容', previous: '上一页', next: '下一页', docs: '文档',
+      edit: '在 GitHub 上编辑此页', otherLang: 'Read in English',
+      system: '跟随系统', light: '浅色', dark: '深色', themeLabel: '颜色主题：',
+      nav: { docs: '文档', policies: '策略', performance: '性能', errors: '错误码', blog: '博客' },
+      menu: '导航', skip: '跳到正文', copy: '复制', copied: '已复制'
     }
   };
+  var LANGS = ['en', 'es', 'pt', 'zh'];
+  var LANG_TAG = { en: 'en', es: 'es', pt: 'pt-BR', zh: 'zh-CN' };
+  var LANDING_TITLE = {
+    en: 'resilience4cata: resilience, compiled',
+    es: 'resilience4cata: resiliencia, compilada',
+    pt: 'resilience4cata: resiliência, compilada',
+    zh: 'resilience4cata：编译期生成的弹性'
+  };
+  var LANG_PREFIX = /^\/(en|es|pt|zh)\//;
+  /** The site language for a stored choice or a browser language tag (es-AR → es, pt-PT → pt, zh-TW → zh). */
+  function siteLang(tag) {
+    var m = /^(en|es|pt|zh)\b/i.exec(tag || '');
+    return m ? m[1].toLowerCase() : 'en';
+  }
 
   var ICONS = {
     'retry': '<path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4.5V8.5H16"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
@@ -69,8 +101,8 @@
     set: function (k, v) { try { sessionStorage.setItem(k, v); } catch (e) { /* private mode */ } }
   };
 
-  function langOf(path) { return /^\/es(\/|$)/.test(path || '') ? 'es' : 'en'; }
-  function isLanding(path) { return path === '/' || path === '/en/' || path === '/es/'; }
+  function langOf(path) { var m = /^\/(es|pt|zh)(\/|$)/.exec(path || ''); return m ? m[1] : 'en'; }
+  function isLanding(path) { return path === '/' || LANGS.some(function (l) { return path === '/' + l + '/'; }); }
   function escapeHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
@@ -286,7 +318,7 @@
   function sidebarLinks() {
     return $$('.sidebar-nav a').filter(function (a) {
       var h = a.getAttribute('href') || '';
-      return /^\/(en|es)\//.test(h);
+      return LANG_PREFIX.test(h);
     });
   }
   function hrefPath(h) { return (h || '').replace(/\?.*$/, ''); }
@@ -388,12 +420,12 @@
       };
       html += '<nav class="r4c-pager" aria-label="Pages">' + cell(prev, 'prev', L.previous) + cell(next, 'next', L.next) + '</nav>';
     }
-    var other = current.lang === 'en' ? 'es' : 'en';
+    var other = current.lang === 'en' ? 'es' : 'en';  // English pages link to Spanish, the others to English
     var file = (vm.route.file || '').replace(/^\//, '');
     html += '<div class="r4c-page-meta">' +
       '<a href="https://github.com/' + REPO + '/edit/' + BRANCH + '/docs/' + file + '">' +
       svg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>') + L.edit + '</a>' +
-      '<a href="' + path.replace(/^\/(en|es)\//, '/' + other + '/') + '" lang="' + other + '">' + L.otherLang + '</a></div>';
+      '<a href="' + path.replace(LANG_PREFIX, '/' + other + '/') + '" lang="' + LANG_TAG[other] + '">' + L.otherLang + '</a></div>';
     out.innerHTML = html;
     article.appendChild(out);
   }
@@ -488,11 +520,10 @@
   // ---------------------------------------------------------------- header
   function updateHeader(path) {
     var L = I18N[current.lang];
-    var other = current.lang === 'en' ? 'es' : 'en';
-    root.lang = current.lang;
+    root.lang = LANG_TAG[current.lang];
     $$('.r4c-lang a').forEach(function (a) {
       var l = a.getAttribute('data-lang');
-      var target = path === '/' ? '/' + l + '/' : path.replace(/^\/(en|es)\//, '/' + l + '/');
+      var target = path === '/' ? '/' + l + '/' : path.replace(LANG_PREFIX, '/' + l + '/');
       a.setAttribute('href', target);
       if (l === current.lang) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
     });
@@ -522,7 +553,7 @@
   function readmeLinks() {
     $$('a[href]').forEach(function (a) {
       var h = a.getAttribute('href');
-      if (/^\/(en|es)\/(.*\/)?README(\?|$)/.test(h)) a.setAttribute('href', h.replace(/README(?=\?|$)/, ''));
+      if (/^\/(en|es|pt|zh)\/(.*\/)?README(\?|$)/.test(h)) a.setAttribute('href', h.replace(/README(?=\?|$)/, ''));
     });
   }
 
@@ -560,12 +591,12 @@
       if (input && input.value) { input.value = ''; input.dispatchEvent(new Event('input')); }
       if (!article) return;
       if (isLanding(path)) {
-        document.title = current.lang === 'es' ? 'resilience4cata: resiliencia, compilada' : 'resilience4cata: resilience, compiled';
+        document.title = LANDING_TITLE[current.lang];
         initLanding(article);
         buildToc(document.createElement('div'), L);
         if (path === '/') {
           var lang = store.get('r4c-lang') || navigator.language || 'en';
-          location.replace('/' + (/^es\b/i.test(lang) ? 'es' : 'en') + '/');
+          location.replace('/' + siteLang(lang) + '/');
         }
         return;
       }

@@ -11,5 +11,5 @@ dependencies {
 
 // ErrorCodeTest reads the error reference pages.
 tasks.named('test') {
-    inputs.files('../docs/en/errors.md', '../docs/es/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files('../docs/en/errors.md', '../docs/es/errors.md', '../docs/pt/errors.md', '../docs/zh/errors.md').withPropertyName('errorPages').withPathSensitivity(PathSensitivity.RELATIVE)
 }

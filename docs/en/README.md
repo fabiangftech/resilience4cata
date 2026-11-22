@@ -303,7 +303,7 @@ at CheckoutService.pay</pre>
     </div>
     <div><h4>Learn</h4><ul><li><a href="/en/start/installation">Installation</a></li><li><a href="/en/start/quickstart">Quickstart</a></li><li><a href="/en/start/how-it-works">How it works</a></li><li><a href="/en/guides/testing">Testing with ManualClock</a></li></ul></div>
     <div><h4>Reference</h4><ul><li><a href="/en/errors">Error codes</a></li><li><a href="/en/reference/configuration">Configuration keys</a></li><li><a href="/en/performance">Performance</a></li><li><a href="https://javadoc.io/doc/dev.resilience4cata">Javadoc</a></li></ul></div>
-    <div><h4>Project</h4><ul><li><a href="https://github.com/fabiangftech/resilience4cata">GitHub</a></li><li><a href="https://central.sonatype.com/namespace/dev.resilience4cata">Maven Central</a></li><li><a href="https://github.com/fabiangftech/resilience4cata/releases">Releases</a></li><li><a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a></li><li><a href="/es/" lang="es" hreflang="es">Documentación en español</a></li></ul></div>
+    <div><h4>Project</h4><ul><li><a href="https://github.com/fabiangftech/resilience4cata">GitHub</a></li><li><a href="https://central.sonatype.com/namespace/dev.resilience4cata">Maven Central</a></li><li><a href="https://github.com/fabiangftech/resilience4cata/releases">Releases</a></li><li><a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a></li><li><a href="/es/" lang="es" hreflang="es">Documentación en español</a></li><li><a href="/pt/" lang="pt-BR" hreflang="pt-BR">Documentação em português</a></li><li><a href="/zh/" lang="zh-CN" hreflang="zh-CN">中文文档</a></li></ul></div>
   </div>
 </div>
 </div>

@@ -52,18 +52,18 @@
       if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t);
       // Old links used hash routes (#/en/x); the site now has real paths (/en/x).
       var h = location.hash;
-      if (/^#\/(en|es)\//.test(h)) {
+      if (/^#\/(en|es|pt|zh)\//.test(h)) {
         location.replace(h.slice(1).replace(/\.md(?=$|\?)/, ''));
         return;
       }
       var p = location.pathname;
       if (p === '/' || p === '/index.html' || p === '/README') {
         var lang = get('r4c-lang') || ((navigator.languages && navigator.languages[0]) || navigator.language || 'en');
-        location.replace('/' + (/^es\b/i.test(lang) ? 'es' : 'en') + '/');
+        location.replace('/' + (/^(es|pt|zh)$/.test(lang) ? lang : /^es\b/i.test(lang) ? 'es' : /^pt\b/i.test(lang) ? 'pt' : /^zh\b/i.test(lang) ? 'zh' : 'en') + '/');
         return;
       }
-      var m = /^\/(en|es)\//.exec(p);
-      if (m) root.lang = m[1];
+      var m = /^\/(en|es|pt|zh)\//.exec(p);
+      if (m) root.lang = { en: 'en', es: 'es', pt: 'pt-BR', zh: 'zh-CN' }[m[1]];
     })();
   </script>
   <!-- The pre-rendered page (for crawlers and readers without JavaScript); Docsify replaces it. -->
@@ -94,7 +94,7 @@
       <div class="r4c-tools">
         <div class="r4c-search-slot"></div>
         <span class="r4c-lang" role="group" aria-label="Language">
-          <a data-lang="en" lang="en" hreflang="en" href="/en/">EN</a><a data-lang="es" lang="es" hreflang="es" href="/es/">ES</a>
+          <a data-lang="en" lang="en" hreflang="en" href="/en/">EN</a><a data-lang="es" lang="es" hreflang="es" href="/es/">ES</a><a data-lang="pt" lang="pt-BR" hreflang="pt-BR" href="/pt/">PT</a><a data-lang="zh" lang="zh-CN" hreflang="zh-CN" href="/zh/">中文</a>
         </span>
         <button class="r4c-tool r4c-theme" type="button" aria-label="Color theme: system">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>
@@ -110,7 +110,7 @@
   <script>
     window.$docsify = {
       name: 'resilience4cata',
-      nameLink: { '/es/': '/es/', '/': '/en/' },
+      nameLink: { '/es/': '/es/', '/pt/': '/pt/', '/zh/': '/zh/', '/': '/en/' },
       routerMode: 'history',
       loadSidebar: true,
       loadNavbar: false,
@@ -121,24 +121,28 @@
       topMargin: 76,
       alias: {
         '/en/.*/_sidebar.md': '/en/_sidebar.md',
-        '/es/.*/_sidebar.md': '/es/_sidebar.md'
+        '/es/.*/_sidebar.md': '/es/_sidebar.md',
+        '/pt/.*/_sidebar.md': '/pt/_sidebar.md',
+        '/zh/.*/_sidebar.md': '/zh/_sidebar.md'
       },
       notFoundPage: {
         '/': '_404.md',
         '/en/': 'en/_404.md',
-        '/es/': 'es/_404.md'
+        '/es/': 'es/_404.md',
+        '/pt/': 'pt/_404.md',
+        '/zh/': 'zh/_404.md'
       },
       search: {
-        placeholder: { '/es/': 'Buscar', '/': 'Search' },
-        noData: { '/es/': 'Sin resultados', '/': 'No results' },
+        placeholder: { '/es/': 'Buscar', '/pt/': 'Buscar', '/zh/': '搜索', '/': 'Search' },
+        noData: { '/es/': 'Sin resultados', '/pt/': 'Nenhum resultado', '/zh/': '没有结果', '/': 'No results' },
         depth: 3,
         namespace: 'resilience4cata',
-        pathNamespaces: ['/en', '/es']
+        pathNamespaces: ['/en', '/es', '/pt', '/zh']
       },
       copyCode: {
-        buttonText: { '/es/': 'Copiar', '/': 'Copy' },
-        errorText: { '/es/': 'Error', '/': 'Error' },
-        successText: { '/es/': 'Copiado', '/': 'Copied' }
+        buttonText: { '/es/': 'Copiar', '/pt/': 'Copiar', '/zh/': '复制', '/': 'Copy' },
+        errorText: { '/es/': 'Error', '/pt/': 'Erro', '/zh/': '错误', '/': 'Error' },
+        successText: { '/es/': 'Copiado', '/pt/': 'Copiado', '/zh/': '已复制', '/': 'Copied' }
       },
       tabs: {
         persist: true,

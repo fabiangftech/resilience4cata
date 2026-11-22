@@ -33,8 +33,8 @@ class ErrorCodeTest {
     }
 
     @Test
-    void everyCodeIsDocumentedInEnglishAndSpanish() throws IOException {
-        for (String language : List.of("en", "es")) {
+    void everyCodeIsDocumentedInEveryLanguage() throws IOException {
+        for (String language : List.of("en", "es", "pt", "zh")) {
             Set<String> documented = headings(Path.of("..", "docs", language, "errors.md"));
             assertThat(documented).as(language)
                     .containsAll(Arrays.stream(ErrorCode.values()).map(ErrorCode::code).toList());

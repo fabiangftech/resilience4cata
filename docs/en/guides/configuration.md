@@ -273,4 +273,4 @@ instances.shipping.circuitBreaker.failureRateThreshold = 30  <- 'instances.shipp
 - No hot reload and no `reconfigure()`: the configuration is immutable once the registry is built.
 - No YAML or other formats; read them yourself into a `Properties` and pass it with `properties(description, props)`.
 - `@Fallback`, classifiers, `name` and `config` are not configurable externally.
-- There is no way to lock an instance against external overrides: `instances.<id>.*` always beats the annotation.
+- `instances.<id>.*` beats the annotation, unless the annotation sets `locked = true` ([locking an instance](#locking-an-instance)).
