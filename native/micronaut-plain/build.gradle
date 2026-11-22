@@ -64,6 +64,10 @@ graalvmNative {
     }
     binaries.all {
         resources.autodetect()
+        // Netty 4.2 on Java 25 frees direct memory by closing a shared Arena (CleanerJava25); without this option the
+        // image throws UnsupportedFeatureError on the event loop when a pooled chunk is freed, cutting a response off
+        // after its headers (seen as a chunked-encoding EOF in the footprint job's load, 2026-11-22).
+        buildArgs.add('-H:+SharedArenaSupport')
     }
 }
 
