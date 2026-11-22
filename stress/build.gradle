@@ -2,7 +2,7 @@ plugins {
     id 'r4c.jcstress'
 }
 
-description = 'jcstress tests of the lock-free policies. Not published.'
+description = 'jcstress and Lincheck tests of the lock-free policies. Not published.'
 
 dependencies {
     implementation project(':core')
@@ -12,4 +12,18 @@ dependencies {
     implementation platform(libs.opentelemetry.bom)
     implementation libs.opentelemetry.sdk
     implementation libs.opentelemetry.sdk.testing
+}
+
+dependencies {
+    // Lincheck (src/test): written in Kotlin, a test-only library here; the tests are Java.
+    testImplementation libs.lincheck
+}
+
+tasks.named('test') {
+    // Lincheck attaches its instrumentation agent at run time.
+    jvmArgs '-XX:+EnableDynamicAgentLoading'
+    def iterations = providers.gradleProperty('lincheck.iterations')
+    if (iterations.present) {
+        systemProperty 'lincheck.iterations', iterations.get()
+    }
 }

@@ -131,9 +131,13 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
         if (!enabled) {
             return true;
         }
-        long now = ticker.getAsLong();
+        // tat first, then the clock: the decision is then right for the moment the clock was read, as long as
+        // tat has not moved by the CAS (it only grows, so no ABA). The other order let another thread's permit,
+        // taken after this clock read, be judged with this older time: a wait too long by the delay between
+        // the two reads (a needless rejection with maxWait = 0). Found by RateLimiterLincheckTest (stress).
         PaddedTat cell = tat;
         long current = cell.getOpaque();
+        long now = ticker.getAsLong();
         while (true) {
             // Compared by subtraction: nanoTime values may be negative and are only meaningful as differences.
             long next = (current - now > 0 ? current : now) + interval;
@@ -151,8 +155,8 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
             // The park may have lasted tens of microseconds: compute the next try from the time now, not from
             // the time before the race, or the wait is too long (a needless rejection with maxWait = 0) and a
             // permit can be dated before its time.
-            now = ticker.getAsLong();
             current = cell.getOpaque();
+            now = ticker.getAsLong();
         }
     }
 
@@ -326,9 +330,9 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
         if (!enabled) {
             return 0;
         }
-        long now = ticker.getAsLong();
         PaddedTat cell = tat;
         long current = cell.getOpaque();
+        long now = ticker.getAsLong(); // after tat, as in tryAcquire
         while (true) {
             long next = (current - now > 0 ? current : now) + interval;
             long wait = next - now - tolerance;
@@ -342,7 +346,9 @@ public final class RateLimiterPolicy implements RateLimiterHandle {
             // Retried at once, not after parkNanos as in tryAcquire: an asynchronous caller may be an event loop
             // thread (Netty, Reactor's parallel scheduler), which must never park or busy-wait (BlockHound reports
             // both: MonoBlockHoundTest in examples). This costs more under heavy contention (docs/en/benchmarks.md).
+            // The clock is read again too: a permit taken meanwhile may be dated after the first reading.
             current = cell.getOpaque();
+            now = ticker.getAsLong();
         }
     }
 }

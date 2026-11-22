@@ -8,6 +8,7 @@ assertj = "3.27.7"
 jspecify = "1.0.1"
 jmh = "1.37"
 jcstress = "0.16"
+lincheck = "3.7"
 # PIT mutation testing (the unpublished mutation project, through its command line; no Gradle plugin).
 pitest = "1.30.2"
 pitestJunit5 = "1.2.3"
@@ -90,6 +91,7 @@ jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }
 jmh-annprocess = { module = "org.openjdk.jmh:jmh-generator-annprocess", version.ref = "jmh" }
 japicmp = { module = "com.github.siom79.japicmp:japicmp", version.ref = "japicmp" }
 jcstress-core = { module = "org.openjdk.jcstress:jcstress-core", version.ref = "jcstress" }
+lincheck = { module = "org.jetbrains.lincheck:lincheck", version.ref = "lincheck" }
 pitest-command-line = { module = "org.pitest:pitest-command-line", version.ref = "pitest" }
 pitest-junit5-plugin = { module = "org.pitest:pitest-junit5-plugin", version.ref = "pitestJunit5" }
 ecj = { module = "org.eclipse.jdt:ecj", version.ref = "ecj" }
