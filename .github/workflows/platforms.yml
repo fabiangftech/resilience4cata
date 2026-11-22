@@ -50,13 +50,13 @@ jobs:
 
       # The JDK under test, found through its path (an early-access build has no JAVA_HOME_<n>_X64 of a release).
       - id: tested
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: ${{ matrix.setup }}
 
       # JDK 21 compiles (--release 21) and JDK 25 compiles the micronaut module; 25, listed last, runs Gradle.
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: |
@@ -101,13 +101,13 @@ jobs:
       # JDK 21 compiles (--release 21) and runs the tests; JDK 25 compiles and tests the micronaut module and runs
       # Gradle. Found through their paths: the JAVA_HOME_<n>_<arch> names differ between the runners.
       - id: jdk21
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: 21
 
       - id: jdk25
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: 25
