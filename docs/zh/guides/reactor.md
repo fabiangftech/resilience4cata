@@ -20,9 +20,9 @@
 
 ```groovy
 dependencies {
-    implementation 'dev.resilience4cata:resilience4cata-all:1.0.0-RC4'
-    implementation 'dev.resilience4cata:resilience4cata-reactor:1.0.0-RC4'
-    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:1.0.0-RC4'
+    implementation 'dev.resilience4cata:resilience4cata-all:1.0.0'
+    implementation 'dev.resilience4cata:resilience4cata-reactor:1.0.0'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:1.0.0'
 }
 ```
 
@@ -30,9 +30,9 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("dev.resilience4cata:resilience4cata-all:1.0.0-RC4")
-    implementation("dev.resilience4cata:resilience4cata-reactor:1.0.0-RC4")
-    annotationProcessor("dev.resilience4cata:resilience4cata-processor:1.0.0-RC4")
+    implementation("dev.resilience4cata:resilience4cata-all:1.0.0")
+    implementation("dev.resilience4cata:resilience4cata-reactor:1.0.0")
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor:1.0.0")
 }
 ```
 
@@ -42,7 +42,7 @@ dependencies {
 <dependency>
   <groupId>dev.resilience4cata</groupId>
   <artifactId>resilience4cata-reactor</artifactId>
-  <version>1.0.0-RC4</version>
+  <version>1.0.0</version>
 </dependency>
 ```
 
