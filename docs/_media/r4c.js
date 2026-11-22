@@ -556,7 +556,6 @@
     var skip = $('.r4c-skip');
     if (skip) skip.textContent = L.skip;
     updateThemeButton();
-    void other;
   }
 
   // Docsify links a folder's README.md as /x/README; the page's URL is /x/.

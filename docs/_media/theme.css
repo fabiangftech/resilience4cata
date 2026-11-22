@@ -203,7 +203,7 @@ section.content {
   display: grid; grid-template-columns: minmax(0, 1fr) var(--toc-w); gap: var(--s5);
   padding: var(--s6) var(--s5) var(--s8) var(--s7);
 }
-.markdown-section { max-width: 760px; min-width: 0; outline: none; }
+.markdown-section { max-width: 760px; min-width: 0; outline: none; overflow-wrap: break-word; }
 .r4c-toc { position: sticky; top: calc(var(--top-h) + var(--s6)); align-self: start; max-height: calc(100vh - var(--top-h) - 48px);
   overflow-y: auto; font-size: 13.5px; padding-right: var(--s2); }
 .r4c-toc[hidden] { display: block; visibility: hidden; }
