@@ -6,7 +6,7 @@ This page is the working plan: each task says what to change, where, and how to 
 
 ## Status
 
-- Versions on Maven Central: 0.13.0, and the release candidates 1.0.0-RC1, 1.0.0-RC2, 1.0.0-RC3 and 1.0.0-RC4. `main` is 1.0.0-SNAPSHOT.
+- Versions on Maven Central: 0.13.0, the release candidates 1.0.0-RC1, 1.0.0-RC2, 1.0.0-RC3 and 1.0.0-RC4, and 1.0.0. `main` is 1.1.0-SNAPSHOT.
 - The performance plan from the AWS runs is done (pull requests #53–#59, see [benchmarks](benchmarks.md)).
 - Javadoc titles carry the artifact name (#60); javadoc.io was synced for all 11 modules.
 - Phases 1 to 3 are done (#62 to #65).
@@ -18,7 +18,7 @@ This page is the working plan: each task says what to change, where, and how to 
 - 1.0.0-RC3 (2026-11-05) has the third review's fixes. The install snippets now show it (owner's decision).
 - `main` takes changes only through pull requests with passing checks (administrators bypass it for the release commits), and every release candidate has a GitHub release; 1.0.0-RC3 is *Latest*, as the install snippets show it (2026-11-06).
 - 1.0.0-RC4 (2026-11-14): the pilot found the circuit breaker opening through the method's own full bulkhead at a cold start; the breaker now never records a local limit's rejection (#100). Same API as RC3. The install snippets show it, and it is *Latest*.
-- Next: 1.0.0.
+- 1.0.0 (2026-11-21): the first stable release, the same API as RC4. The install snippets show it, and it is *Latest*. `main` is 1.1.0-SNAPSHOT with the API baseline at 1.0.0, so the compatibility promise is checked against it.
 
 ## The review
 
@@ -161,10 +161,11 @@ One pull request per confirmed bug. For each: first write a test that reproduces
     - The generated-code check (`-Pr4c.generatedBy=0.13.0`) does not apply: 0.x to 1.0 crosses a major version, and the tests already use `CircuitBreakerEvent.Rejected`.
     - The landing page's four comparisons were measured again on the release candidate's code ([benchmarks](benchmarks.md#release-candidate), #67).
 - [x] After the release candidate: `version=1.0.0-SNAPSHOT`, `r4c.apiBaseline=1.0.0-RC1`, javadoc.io synced and generated for 1.0.0-RC1 in all 11 modules.
-- [ ] Release 1.0.0 after one or two weeks of use, unless something has to change:
+- [x] Release 1.0.0 after one or two weeks of use, unless something has to change:
   - version, tag `v1.0.0`, `release.yml`, Publish in the portal;
   - then the install snippets to 1.0.0 (not the blog), `r4c.apiBaseline=1.0.0`, javadoc.io;
   - from then on, the generated-code check (`-Pr4c.generatedBy=<release>`) is step 1 of every release.
+  - **Outcome:** released 2026-11-21 (commit `release 1.0.0`, tag `v1.0.0`, `release.yml` run 44973253342, published in the Central portal by the owner). `apiCompatibility` against 1.0.0-RC4 found no incompatible change in any module. Then `version=1.1.0-SNAPSHOT`, `r4c.apiBaseline=1.0.0`, `upgrade/1.0.0.properties`, the install snippets and the pilot on 1.0.0, and the GitHub release `v1.0.0` marked *Latest*.
 
 ## Third review :id=third-review
 

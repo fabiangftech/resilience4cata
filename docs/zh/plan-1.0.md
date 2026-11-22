@@ -6,7 +6,7 @@
 
 ## 状态 :id=status
 
-- Maven Central 上的版本：0.13.0，以及候选版本 1.0.0-RC1、1.0.0-RC2、1.0.0-RC3 和 1.0.0-RC4。`main` 为 1.0.0-SNAPSHOT。
+- Maven Central 上的版本：0.13.0，候选版本 1.0.0-RC1、1.0.0-RC2、1.0.0-RC3 和 1.0.0-RC4，以及 1.0.0。`main` 为 1.1.0-SNAPSHOT。
 - 基于 AWS 运行结果的性能计划已完成（pull request #53–#59，见[基准测试](benchmarks.md)）。
 - Javadoc 标题带有 artifact 名称（#60）；javadoc.io 已为全部 11 个模块同步。
 - 第 1 至第 3 阶段已完成（#62 至 #65）。
@@ -18,7 +18,7 @@
 - 1.0.0-RC3（2026-11-05）包含第三次评审的修正。安装代码片段现在显示该版本（所有者的决定）。
 - `main` 只通过检查全部通过的 pull request 接受改动（管理员在发布提交时绕过该规则），且每个候选版本都有一个 GitHub release；1.0.0-RC3 为 *Latest*，与安装代码片段一致（2026-11-06）。
 - 1.0.0-RC4（2026-11-14）：试点发现，冷启动时熔断器会因方法自身已满的舱壁隔离 (bulkhead) 而打开；现在熔断器从不记录本地限制的拒绝（#100）。API 与 RC3 相同。安装代码片段显示该版本，且它为 *Latest*。
-- 下一步：1.0.0。
+- 1.0.0（2026-11-21）：第一个稳定版本，API 与 RC4 相同。安装代码片段显示该版本，且它为 *Latest*。`main` 为 1.1.0-SNAPSHOT，API 基线为 1.0.0，因此兼容性承诺以它为基准进行检查。
 
 ## 评审 :id=the-review
 
@@ -161,10 +161,11 @@
     - 生成代码检查（`-Pr4c.generatedBy=0.13.0`）不适用：从 0.x 到 1.0 跨越了主版本，而且测试已经使用 `CircuitBreakerEvent.Rejected`。
     - 首页的四项对比在候选版本的代码上重新测量过（[基准测试](benchmarks.md#release-candidate)，#67）。
 - [x] 候选版本之后：`version=1.0.0-SNAPSHOT`、`r4c.apiBaseline=1.0.0-RC1`，javadoc.io 已同步，并为全部 11 个模块生成了 1.0.0-RC1 的文档。
-- [ ] 使用一到两周后发布 1.0.0，除非有什么必须修改：
+- [x] 使用一到两周后发布 1.0.0，除非有什么必须修改：
   - 版本号、标签 `v1.0.0`、`release.yml`、在门户中 Publish；
   - 然后把安装代码片段改为 1.0.0（博客除外）、`r4c.apiBaseline=1.0.0`、javadoc.io；
   - 从那以后，生成代码检查（`-Pr4c.generatedBy=<release>`）是每次发布的第 1 步。
+  - **结果：** 于 2026-11-21 发布（提交 `release 1.0.0`、标签 `v1.0.0`、`release.yml` 运行 44973253342，由所有者在 Central 门户中发布）。`apiCompatibility` 与 1.0.0-RC4 相比，在所有模块中都未发现不兼容的改动。随后：`version=1.1.0-SNAPSHOT`、`r4c.apiBaseline=1.0.0`、`upgrade/1.0.0.properties`，安装代码片段和试点改为 1.0.0，GitHub release `v1.0.0` 标记为 *Latest*。
 
 ## 第三次评审 :id=third-review
 

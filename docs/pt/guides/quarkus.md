@@ -24,8 +24,8 @@ Adicione a extensão e, como em qualquer uso das anotações, o annotation proce
 ```groovy
 dependencies {
     implementation enforcedPlatform("io.quarkus.platform:quarkus-bom:${quarkusPlatformVersion}")
-    implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0-RC4')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.0.0-RC4')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
 
     implementation 'dev.resilience4cata:resilience4cata-quarkus'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
@@ -41,7 +41,7 @@ dependencies {
 ```kotlin
 dependencies {
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:${quarkusPlatformVersion}"))
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.0.0-RC4")
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.0.0")
     implementation(r4cBom)
     annotationProcessor(r4cBom)
 
@@ -73,7 +73,7 @@ dependencies {
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>1.0.0-RC4</version>
+    <version>1.0.0</version>
   </path>
   <!-- annotationProcessorPaths replaces discovery: list the other processors you use too -->
 </annotationProcessorPaths>

@@ -27,7 +27,7 @@
 #### **Gradle**
 ```groovy
 dependencies {
-    testImplementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0-RC4')
+    testImplementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
     testImplementation 'dev.resilience4cata:resilience4cata-junit'      // with JUnit; brings testkit
     // or, with another test framework:
     // testImplementation 'dev.resilience4cata:resilience4cata-testkit'
@@ -36,7 +36,7 @@ dependencies {
 #### **Gradle (Kotlin)**
 ```kotlin
 dependencies {
-    testImplementation(platform("dev.resilience4cata:resilience4cata-bom:1.0.0-RC4"))
+    testImplementation(platform("dev.resilience4cata:resilience4cata-bom:1.0.0"))
     testImplementation("dev.resilience4cata:resilience4cata-junit")      // with JUnit; brings testkit
     // or, with another test framework:
     // testImplementation("dev.resilience4cata:resilience4cata-testkit")

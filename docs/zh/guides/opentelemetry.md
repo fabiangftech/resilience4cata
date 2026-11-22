@@ -14,7 +14,7 @@
 #### **Gradle**
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0-RC4')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
     implementation 'dev.resilience4cata:resilience4cata-opentelemetry'    // version from the BOM
 
     implementation platform('io.opentelemetry:opentelemetry-bom:1.67.0')  // your SDK and exporter
@@ -24,7 +24,7 @@ dependencies {
 #### **Gradle (Kotlin)**
 ```kotlin
 dependencies {
-    implementation(platform("dev.resilience4cata:resilience4cata-bom:1.0.0-RC4"))
+    implementation(platform("dev.resilience4cata:resilience4cata-bom:1.0.0"))
     implementation("dev.resilience4cata:resilience4cata-opentelemetry")    // version from the BOM
 
     implementation(platform("io.opentelemetry:opentelemetry-bom:1.67.0"))  // your SDK and exporter
