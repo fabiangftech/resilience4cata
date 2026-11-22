@@ -13,6 +13,7 @@ import io.opentelemetry.sdk.testing.exporter.InMemoryMetricExporter;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /** Shared steps of the metrics binding tests (OpenTelemetryBindingTest, MetricsBindingChoiceTest...). */
 final class MetricsAssertions {
@@ -37,9 +38,19 @@ final class MetricsAssertions {
 
     /** The latest exported metric of that name with a point for the instance "tracked", waiting for an export. */
     static MetricData awaitExported(InMemoryMetricExporter exporter, String metric) throws InterruptedException {
+        return awaitExported(exporter, metric, point -> true);
+    }
+
+    /**
+     * The latest exported metric of that name with a point of the instance "tracked" that matches, waiting for an
+     * export. A gauge needs the condition: an export taken while {@link #rejectOneCall} held the breaker forced open
+     * has the "tracked" points too, with {@code forced_open} at 1.
+     */
+    static MetricData awaitExported(InMemoryMetricExporter exporter, String metric, Predicate<PointData> point)
+            throws InterruptedException {
         long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
         while (System.nanoTime() - deadline < 0) {
-            Optional<MetricData> found = latest(exporter, metric);
+            Optional<MetricData> found = latest(exporter, metric, point);
             if (found.isPresent()) {
                 return found.get();
             }
@@ -55,12 +66,13 @@ final class MetricsAssertions {
                 .distinct().toList();
     }
 
-    private static Optional<MetricData> latest(InMemoryMetricExporter exporter, String metric) {
+    private static Optional<MetricData> latest(InMemoryMetricExporter exporter, String metric,
+            Predicate<PointData> point) {
         List<MetricData> items = exporter.getFinishedMetricItems();
         for (int i = items.size() - 1; i >= 0; i--) {
             MetricData data = items.get(i);
             if (data.getName().equals(metric)
-                    && data.getData().getPoints().stream().anyMatch(p -> "tracked".equals(name(p)))) {
+                    && data.getData().getPoints().stream().anyMatch(p -> "tracked".equals(name(p)) && point.test(p))) {
                 return Optional.of(data);
             }
         }
