@@ -9,7 +9,7 @@ jspecify = "1.0.1"
 jmh = "1.37"
 jcstress = "0.16"
 # PIT mutation testing (the unpublished mutation project, through its command line; no Gradle plugin).
-pitest = "1.30.1"
+pitest = "1.30.2"
 pitestJunit5 = "1.2.3"
 # The API compatibility check of every published module (apiCompatibility in r4c.publish), run through Gradle's
 # Worker API: no third-party Gradle plugin.
@@ -17,7 +17,7 @@ japicmp = "0.27.0"
 resilience4j = "2.4.0"
 concurrencyLimits = "0.5.4"
 # api of the micrometer module; the Prometheus registry is test-only (examples), for the sample scrape in the docs.
-micrometer = "1.17.1"
+micrometer = "1.17.2"
 # The opentelemetry module compiles against the oldest supported OpenTelemetry API (opentelemetryMinimum: never bump it
 # with the rest, .github/dependabot.yml ignores the artifacts that use it; 1.62.0 is the oldest that Spring Boot 4.1,
 # Quarkus 3.40 and Micronaut 5.2 ship) and minimumOpenTelemetryTest runs its tests on that API and SDK. Every other test
@@ -70,7 +70,7 @@ blockhound = "1.0.18.RELEASE"
 
 # Test-only, in processor: the Eclipse compiler (ECJ), which runs annotation processors in Eclipse and in IntelliJ
 # when it is set to compile with Eclipse. EclipseCompilerTest compiles with it and with javac and compares.
-ecj = "3.46.0"
+ecj = "3.46.100"
 # Test-only, in processor: LombokProcessorTest runs Lombok's processor next to ours, in both orders.
 lombok = "1.18.48"
 
