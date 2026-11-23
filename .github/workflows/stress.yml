@@ -52,9 +52,11 @@ jobs:
         with:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
+      # --configure-on-demand: only the projects jcstress needs are configured, so failing to resolve a plugin that
+      # only the native and Quarkus test projects apply cannot fail this job.
       - name: jcstress
         run: >-
-          ./gradlew :stress:jcstress -Pjcstress="-m quick"
+          ./gradlew --configure-on-demand :stress:jcstress -Pjcstress="-m quick"
           -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_${{ matrix.arch == 'arm64' && 'AARCH64' || 'X64' }}
 
       - name: Upload report

@@ -55,7 +55,8 @@ jobs:
         env:
           JDK: JAVA_HOME_21_${{ matrix.arch == 'arm64' && 'AARCH64' || 'X64' }}
           TESTS: ${{ matrix.shard.tests }}
-        run: ./gradlew :stress:jcstress "-Pjcstress=-m default -t $TESTS" "-Porg.gradle.java.installations.fromEnv=$JDK"
+        # --configure-on-demand: a plugin that only the native and Quarkus projects apply cannot fail this job.
+        run: ./gradlew --configure-on-demand :stress:jcstress "-Pjcstress=-m default -t $TESTS" "-Porg.gradle.java.installations.fromEnv=$JDK"
 
       - name: Upload report
         if: always()
