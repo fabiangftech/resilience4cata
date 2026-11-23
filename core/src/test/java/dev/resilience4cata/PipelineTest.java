@@ -14,6 +14,7 @@ import java.lang.reflect.UndeclaredThrowableException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
@@ -556,5 +557,73 @@ class PipelineTest {
         assertThat(failureOf(pipeline.executeAsync(() -> null))).isInstanceOf(NullPointerException.class);
         CompletionStage<String> stage = CompletableFuture.completedFuture("ok").minimalCompletionStage();
         assertThat(pipeline.executeAsync(() -> stage).join()).isEqualTo("ok");
+    }
+
+    @Test
+    void cancellingTheFutureOfAStageSubclassCancelsTheStageFirst() {
+        Pipeline<String> pipeline = Pipeline.builder(registry, "async-subclass", String.class).build();
+        CompletableFuture<String> own = new CompletableFuture<>() { };
+        CompletableFuture<String> result = pipeline.executeAsync(() -> own);
+        AtomicInteger stageCancelledFirst = new AtomicInteger();
+        result.whenComplete((value, failure) -> stageCancelledFirst.addAndGet(own.isCancelled() ? 1 : 0));
+
+        assertThat(result).isNotSameAs(own);
+        assertThat(result.cancel(true)).isTrue();
+
+        assertThat(own).isCancelled();
+        assertThat(result).isCancelled();
+        assertThat(stageCancelledFirst).hasValue(1);
+    }
+
+    @Test
+    void cancellingWithACancellationExceptionAlsoCancelsTheStage() {
+        Pipeline<String> pipeline = Pipeline.builder(registry, "async-subclass-failure", String.class).build();
+        CompletableFuture<String> own = new CompletableFuture<>() { };
+        CompletableFuture<String> result = pipeline.executeAsync(() -> own);
+
+        assertThat(result.completeExceptionally(new CancellationException())).isTrue();
+
+        assertThat(own).isCancelled();
+        assertThat(result).isCancelled();
+    }
+
+    @Test
+    void aStageSubclassRelaysItsOutcomeAndAnOwnFailureDoesNotCancelIt() {
+        Pipeline<String> pipeline = Pipeline.builder(registry, "async-subclass-outcome", String.class).build();
+        CompletableFuture<String> succeeds = new CompletableFuture<>() { };
+        CompletableFuture<String> fails = new CompletableFuture<>() { };
+        CompletableFuture<String> cancelledInside = new CompletableFuture<>() { };
+        CompletableFuture<String> untouched = new CompletableFuture<>() { };
+        CompletableFuture<String> succeeded = pipeline.executeAsync(() -> succeeds);
+        CompletableFuture<String> failed = pipeline.executeAsync(() -> fails);
+        CompletableFuture<String> relayedCancel = pipeline.executeAsync(() -> cancelledInside);
+        CompletableFuture<String> failedFromOutside = pipeline.executeAsync(() -> untouched);
+
+        succeeds.complete("ok");
+        fails.completeExceptionally(new IOException("down"));
+        cancelledInside.cancel(true);
+        failedFromOutside.completeExceptionally(new IOException("outside"));
+
+        assertThat(succeeded.join()).isEqualTo("ok");
+        assertThat(failureOf(failed)).isInstanceOf(IOException.class);
+        assertThat(relayedCancel).isCancelled();
+        assertThat(untouched).isNotDone();
+    }
+
+    @Test
+    void aStageThatRefusesTheCancelStillLetsTheFutureBeCancelled() {
+        Pipeline<String> pipeline = Pipeline.builder(registry, "async-refuses", String.class).build();
+        CompletableFuture<String> refuses = new CompletableFuture<>() {
+            @Override
+            public CompletableFuture<String> toCompletableFuture() {
+                throw new UnsupportedOperationException();
+            }
+        };
+        CompletableFuture<String> result = pipeline.executeAsync(() -> refuses);
+
+        assertThat(result.cancel(true)).isTrue();
+
+        assertThat(result).isCancelled();
+        assertThat(refuses).isNotDone();
     }
 }

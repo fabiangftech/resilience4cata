@@ -3,6 +3,7 @@ package dev.resilience4cata.reactor;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.resilience4cata.CallTimeoutException;
+import dev.resilience4cata.CircuitBreakerState;
 import dev.resilience4cata.Classifier;
 import dev.resilience4cata.Pipeline;
 import dev.resilience4cata.ResilienceRegistry;
@@ -12,7 +13,9 @@ import dev.resilience4cata.testkit.ManualClock;
 import dev.resilience4cata.testkit.ResilienceTesting;
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
@@ -118,6 +121,61 @@ class FluxPipelineOperatorTest {
         StepVerifier.create(Flux.just("a").transform(FluxPipelineOperator.of(classified)))
                 .expectErrorSatisfies(failure -> assertThat(failure).hasMessageContaining("has a classifier"))
                 .verify(VERIFY);
+    }
+
+    /** A stream that emits one element and stays open, so that {@code next()} has to cancel it. */
+    private Flux<String> oneElementThenSilence(AtomicInteger cancelled) {
+        return Flux.concat(Flux.just("a"), Flux.<String>never()).doOnCancel(cancelled::incrementAndGet);
+    }
+
+    @Test
+    void aCancelAfterTheFirstElementFreesTheBulkheadWithoutARetryOrFallback() {
+        AtomicInteger cancelled = new AtomicInteger();
+        Pipeline<String> slot = Pipeline.builder(registry, "slot", String.class)
+                .bulkhead(b -> b.maxConcurrent(1)).build();
+        Flux<String> protectedFlux = oneElementThenSilence(cancelled).transform(FluxPipelineOperator.of(slot));
+
+        for (int i = 1; i <= 3; i++) {
+            assertThat(protectedFlux.next().block(VERIFY)).isEqualTo("a");
+            assertThat(registry.bulkhead("slot").concurrentCalls()).as("after call %d", i).isZero();
+            assertThat(cancelled).hasValue(i);
+        }
+    }
+
+    @Test
+    void aCancelBeforeTheFirstElementReachesTheSourceThroughEachPolicy() {
+        Map<String, UnaryOperator<Pipeline.Builder<String>>> layers = Map.of(
+                "bulkhead", b -> b.bulkhead(x -> x.maxConcurrent(1)),
+                "timeout", b -> b.timeout(x -> x.timeout(Duration.ofSeconds(1))),
+                "adaptive", b -> b.adaptiveLimit(x -> { }),
+                "limiter", b -> b.rateLimiter(x -> { }),
+                "breaker", b -> b.circuitBreaker(x -> { }));
+        layers.forEach((name, layer) -> {
+            AtomicInteger cancelled = new AtomicInteger();
+            Pipeline<String> pipeline = layer.apply(Pipeline.builder(registry, "cancel-" + name, String.class)).build();
+            Flux.<String>never().doOnCancel(cancelled::incrementAndGet)
+                    .transform(FluxPipelineOperator.of(pipeline)).subscribe().dispose();
+            assertThat(cancelled).as(name).hasValue(1);
+        });
+        assertThat(registry.bulkhead("cancel-bulkhead").concurrentCalls()).isZero();
+        assertThat(registry.adaptiveLimit("cancel-adaptive").concurrentCalls()).isZero();
+    }
+
+    @Test
+    void aCancelledProbeGivesItsHalfOpenPermitBack() {
+        Pipeline<String> breaker = Pipeline.builder(registry, "probe", String.class).circuitBreaker(b -> b.windowSize(2)
+                .minimumCalls(2).failureRateThreshold(50).waitInOpen(Duration.ofSeconds(1)).halfOpenCalls(1)).build();
+        FluxPipelineOperator<String> operator = FluxPipelineOperator.of(breaker);
+        for (int i = 0; i < 2; i++) {
+            StepVerifier.create(Flux.<String>error(new IOException("down")).transform(operator))
+                    .expectErrorMessage("down").verify(VERIFY);
+        }
+        clock.advance(Duration.ofSeconds(1));
+
+        Flux.<String>never().transform(operator).subscribe().dispose();
+
+        StepVerifier.create(Flux.just("a").transform(operator)).expectNext("a").expectComplete().verify(VERIFY);
+        assertThat(registry.circuitBreaker("probe").state()).isEqualTo(CircuitBreakerState.CLOSED);
     }
 
     @Test
