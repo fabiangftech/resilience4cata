@@ -67,6 +67,10 @@ class BlockingPoliciesThreadModeTest {
             try {
                 return result.get(30, TimeUnit.SECONDS);
             } catch (ExecutionException e) {
+                // An assertion that failed inside the call is an Error: rethrown as it is, with its message.
+                if (e.getCause() instanceof Error error) {
+                    throw error;
+                }
                 throw (Exception) e.getCause();
             }
         }

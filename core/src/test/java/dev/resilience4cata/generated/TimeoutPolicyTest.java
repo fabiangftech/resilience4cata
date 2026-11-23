@@ -163,6 +163,75 @@ class TimeoutPolicyTest {
     }
 
     @Test
+    void aWatchdogThatAlwaysSleepsLongerThanATickKeepsUpWithTheRealClock() {
+        // GitHub's Windows runners slept about 1.9 ms for 0.75 ms, its macOS VMs about 4 ms: capped at one tick
+        // per wake-up, the coarse clock ran 1.5 to 3.7 times slower than the real one, and so did timeouts.
+        Watchdog dog = new Watchdog(0);
+        new TimeoutPolicy("test", TimeoutConfig.builder().timeout(Duration.ofMillis(16)).build(), dog);
+        assertThat(dog.tick()).isEqualTo(MS);
+        long real = 0;
+        for (int i = 0; i < 20; i++) {
+            real += 3 * MS;
+            dog.tick(dog.advance(real));
+        }
+        // Only the first sleep was capped: the cap follows the second-longest of the last eight sleeps.
+        assertThat(dog.now()).isEqualTo(real - 2 * MS);
+    }
+
+    @Test
+    void whileSleepsAreLongACallIsGivenTheLongerStepAsSlackSoItIsNeverEarlyNorMuchLate() {
+        Watchdog dog = new Watchdog(0);
+        TimeoutPolicy timeout = new TimeoutPolicy("test", TimeoutConfig.builder().timeout(Duration.ofMillis(16)).build(), dog);
+        long sleep = 3 * MS;
+        long real = 0;
+        for (int i = 0; i < 10; i++) {
+            real += sleep;
+            dog.tick(dog.advance(real));
+        }
+        // The worst case: the call reads the coarse clock, then really starts just before the next tick.
+        TimeoutPolicy.Scope scope = timeout.enter();
+        long realStart = real + sleep - 1;
+        // The tick that published the start may scan the call too, before any step was taken from that start.
+        scope.expireIfOverdue(dog.now(), dog);
+        long interruptedAt = -1;
+        while (interruptedAt < 0) {
+            real += sleep;
+            dog.tick(dog.advance(real));
+            if (Thread.currentThread().isInterrupted()) {
+                interruptedAt = real;
+            }
+        }
+        assertThatThrownBy(() -> timeout.succeeded(scope)).isInstanceOf(CallTimeoutException.class);
+        assertThat(interruptedAt - realStart).as("never early").isGreaterThanOrEqualTo(16 * MS)
+                .as("a few sleeps late at most").isLessThanOrEqualTo(16 * MS + 3 * sleep);
+    }
+
+    @Test
+    void theSlackIsTheStepTakenFromTheCallsStartAndGoesBackToATickWhenSleepsAreOnTimeAgain() {
+        Watchdog dog = new Watchdog(0);
+        new TimeoutPolicy("test", TimeoutConfig.builder().timeout(Duration.ofMillis(16)).build(), dog);
+        long real = 0;
+        for (int i = 0; i < 10; i++) {
+            real += 3 * MS;
+            dog.tick(dog.advance(real));
+        }
+        long slowStart = dog.now();
+        assertThat(dog.slack(slowStart)).as("no step from it yet").isEqualTo(Watchdog.NOT_YET);
+        real += 3 * MS;
+        dog.tick(dog.advance(real));
+        assertThat(dog.slack(slowStart)).isEqualTo(3 * MS);
+        long onTimeStart = 0;
+        for (int i = 0; i < 10; i++) {
+            onTimeStart = dog.now();
+            real += 750_000;
+            dog.tick(dog.advance(real));
+        }
+        assertThat(dog.slack(onTimeStart)).as("on time again: one tick").isEqualTo(MS);
+        assertThat(dog.slack(slowStart)).as("a call that started while slow keeps its slack").isEqualTo(3 * MS);
+        assertThat(dog.slack(0)).as("older than every remembered step: the largest step ever").isEqualTo(3 * MS);
+    }
+
+    @Test
     void disabledTimeoutsDoNothing() {
         TimeoutPolicy timeout = new TimeoutPolicy("test", TimeoutConfig.builder().enabled(false).build(), (Watchdog) null);
         assertThat(timeout.enter()).isNull();
