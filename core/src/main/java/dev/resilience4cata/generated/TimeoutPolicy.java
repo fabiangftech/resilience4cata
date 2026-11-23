@@ -141,8 +141,8 @@ public final class TimeoutPolicy {
         Watchdog dog = watchdog;
         Scope scope = dog.scopes().push();
         scope.start = dog.now();
-        // The start can be up to one tick old, so allow one more tick: never early.
-        scope.limit = timeoutNanos + dog.tick();
+        // The start can be up to one step of the coarse clock old: the watchdog adds that slack itself.
+        scope.limit = timeoutNanos;
         long running = (++scope.calls << 2) | RUNNING;
         scope.running = running;
         STATE.setRelease(scope, running); // publishes start and limit to the watchdog
@@ -243,7 +243,7 @@ public final class TimeoutPolicy {
         // Written by the owner thread before the stamp is set to RUNNING (a release), read by the
         // watchdog after it reads RUNNING (an acquire).
         long start;
-        /** Timeout plus one tick of slack for the coarse start. */
+        /** The timeout; the watchdog adds the slack for the coarse start ({@link Watchdog#slack(long)}). */
         long limit;
         // Only touched by the owner thread.
         private long calls;
@@ -254,18 +254,40 @@ public final class TimeoutPolicy {
          * release of {@code TIMED_OUT}, read by the caller after its acquire of it.
          */
         boolean callerInterrupted;
+        // Only touched by the watchdog's tick thread: the running stamp it last worked out a slack for, and that slack.
+        private long slackFor = IDLE;
+        private long slack;
 
         Scope(Watchdog.ThreadScopes owner) {
             this.owner = owner;
             this.thread = owner.thread;
         }
 
-        /** Called by the watchdog: interrupts the thread if the call has run past its timeout. */
-        void expireIfOverdue(long now) {
-            expireIfOverdue(now, (long) STATE.getAcquire(this));
+        /**
+         * Called by the watchdog: interrupts the thread if the call has run past its timeout plus the slack for
+         * its coarse start, worked out once per call (the start read after the acquire of its stamp belongs to
+         * that call or a later one; a later one's stamp differs, so its slack is worked out again).
+         */
+        void expireIfOverdue(long now, Watchdog watchdog) {
+            long seen = (long) STATE.getAcquire(this);
+            if ((seen & STATE_BITS) != RUNNING) {
+                return;
+            }
+            if (seen != slackFor) {
+                long worked = watchdog.slack(start);
+                if (worked == Watchdog.NOT_YET) {
+                    return; // seen in the tick that published its start: not overdue, and its slack is not known yet
+                }
+                slack = worked;
+                slackFor = seen;
+            }
+            expireIfOverdue(now - slack, seen);
         }
 
-        /** Test seam: decides as a watchdog that read the stamp {@code seen} earlier would. */
+        /**
+         * Decides as a watchdog that read the stamp {@code seen} earlier would; {@code now} already has the slack
+         * taken off. Also a test seam.
+         */
         void expireIfOverdue(long now, long seen) {
             if ((seen & STATE_BITS) == RUNNING && now - start >= limit) {
                 long call = seen & ~STATE_BITS;

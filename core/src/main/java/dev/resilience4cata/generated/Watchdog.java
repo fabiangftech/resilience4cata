@@ -16,23 +16,37 @@ import java.util.concurrent.locks.LockSupport;
  * its own scope. Every tick the watchdog reads the real clock once, publishes it as the coarse clock,
  * and checks every registered scope; a call that has run past its timeout gets its thread interrupted.
  *
- * <p>The tick is {@code timeout / 16} of the shortest timeout in use, between 1 ms and 50 ms. Because
- * a call's start time can be up to one tick old, a call is interrupted only when the coarse clock is
- * past {@code start + timeout + tick}: never early, at most about two ticks late (plus any delay in
- * the watchdog's own wake-ups). The watchdog wakes every three quarters of a tick.
+ * <p>The tick is {@code timeout / 16} of the shortest timeout in use, between 1 ms and 50 ms. The watchdog
+ * wakes every three quarters of a tick.
  *
- * <p>The coarse clock advances by the real time elapsed between two ticks, but by at most one tick
- * per tick ({@link #advance}). Without that cap, a watchdog that wakes up late (an overloaded machine,
- * a long GC pause) would have left one coarse value current for longer than a tick, so calls started
- * during that time would look older than they are and could be interrupted early. With it, two
- * consecutive coarse values are never more than a tick apart, so {@code start + tick} is never before
- * the real start; a late wake-up only makes the coarse clock fall behind, which delays timeouts by that
- * much and never brings them forward.
+ * <p>The coarse clock advances by the real time elapsed between two ticks, but by at most one step
+ * ({@link #advance}). Without that cap, a watchdog that wakes up late (an overloaded machine, a long GC
+ * pause) would have left one coarse value current for that long, so calls started during that time would
+ * look older than they are and could be interrupted early. A call's start is therefore at most one step
+ * old, and a call is interrupted only when the coarse clock is past {@code start + timeout + slack}, where
+ * the slack is the step the coarse clock took from {@code start} (at least one tick): never early. The
+ * watchdog remembers its last {@value #STEPS} steps and works out a call's slack the first time it sees the
+ * call running ({@link #slack(long)}), which is at most two or three ticks after the call read its start.
+ *
+ * <p>The step is one tick on a machine that wakes the watchdog on time. Some do not: a sleep of 0.75 ms
+ * lasted about 1.9 ms on GitHub's Windows runners and 4 ms on its macOS virtual machines, so a coarse clock
+ * capped at one tick per wake-up ran 1.5 to 3.7 times slower than the real one, and timeouts fired that
+ * much late (200 ms after 760 ms) once a short timeout had brought the tick down to 1 ms. So the step is the
+ * larger of the tick and the second-longest of the last eight sleeps: a machine that always sleeps longer
+ * raises it (and with it the slack of the calls that start meanwhile, so their timeouts end at most a few such
+ * sleeps late), while one late wake-up, which is what the cap is for, does not: it only makes the coarse clock
+ * fall behind, which delays timeouts by that much and never brings them forward.
  */
 final class Watchdog {
 
     private static final long MIN_TICK = 1_000_000L;
     private static final long MAX_TICK = 50_000_000L;
+    /** How many recent sleeps {@link #advance} looks at; the longest of them is left out (an outlier). */
+    private static final int SLEEPS = 8;
+    /** How many recent steps of the coarse clock {@link #slack(long)} can look up. */
+    private static final int STEPS = 16;
+    /** {@link #slack(long)}'s answer while the coarse clock has taken no step from a start yet. */
+    static final long NOT_YET = -1;
     private static final VarHandle NOW;
 
     static {
@@ -55,6 +69,16 @@ final class Watchdog {
     // Owned by the watchdog thread: the last real clock reading, and the coarse clock built from it.
     private long lastReal;
     private long coarse;
+    // Owned by the thread that calls advance() and tick(): the watchdog thread, or a test. The real time between
+    // the last SLEEPS ticks; the last STEPS steps of the coarse clock (the coarse time each step started from, and
+    // its length), oldest at nextStep once full; and the largest step ever, for a call older than all of them.
+    private final long[] sleeps = new long[SLEEPS];
+    private int nextSleep;
+    private final long[] stepFrom = new long[STEPS];
+    private final long[] stepLength = new long[STEPS];
+    private int nextStep;
+    private int steps;
+    private long largestStep;
 
     /** The shared watchdog, started on first use. */
     static Watchdog shared() {
@@ -102,7 +126,7 @@ final class Watchdog {
         return (long) NOW.getOpaque(this);
     }
 
-    /** The current tick length, which is also how stale {@link #now()} can be. */
+    /** The current tick length: the watchdog wakes every three quarters of it. */
     long tick() {
         return tick.getOpaque();
     }
@@ -140,10 +164,59 @@ final class Watchdog {
      * thread only.
      */
     long advance(long realNanos) {
-        long elapsed = realNanos - lastReal;
+        long elapsed = Math.max(realNanos - lastReal, 0L);
         lastReal = realNanos;
-        coarse += Math.clamp(elapsed, 0L, tick.get());
+        sleeps[nextSleep] = elapsed;
+        nextSleep = (nextSleep + 1) % SLEEPS;
+        long step = Math.min(Math.clamp(elapsed, 0L, Math.max(tick.get(), secondLongestSleep())), MAX_TICK);
+        largestStep = Math.max(largestStep, step);
+        stepFrom[nextStep] = coarse;
+        stepLength[nextStep] = step;
+        nextStep = (nextStep + 1) % STEPS;
+        steps = Math.min(steps + 1, STEPS);
+        coarse += step;
         return coarse;
+    }
+
+    private long secondLongestSleep() {
+        long longest = 0;
+        long second = 0;
+        for (long sleep : sleeps) {
+            if (sleep > longest) {
+                second = longest;
+                longest = sleep;
+            } else if (sleep > second) {
+                second = sleep;
+            }
+        }
+        return second;
+    }
+
+    /**
+     * How long past its timeout a call that read {@code start} must be before it is interrupted: the step the
+     * coarse clock took from {@code start}, since the call's real start can be that much later (every step taken
+     * since is counted too, which only adds), and at least one tick (as before; a test's watchdog takes no steps).
+     * A start older than every remembered step gets the largest step ever. {@link #NOT_YET} while no step was
+     * taken from {@code start} (the coarse clock still reads it, so no call that read it can be overdue). Called
+     * by the {@link #tick} thread.
+     */
+    long slack(long start) {
+        long slack = tick.get();
+        if (steps == 0) {
+            return slack; // a test's watchdog, moved only by tick(long)
+        }
+        int oldest = steps < STEPS ? 0 : nextStep;
+        if (start - stepFrom[oldest] < 0) {
+            return Math.max(slack, largestStep);
+        }
+        boolean stepped = false;
+        for (int i = 0; i < steps; i++) {
+            if (stepFrom[i] - start >= 0) {
+                slack = Math.max(slack, stepLength[i]);
+                stepped = true;
+            }
+        }
+        return stepped ? slack : NOT_YET;
     }
 
     /** Publishes {@code nanoTime} as the coarse clock and interrupts calls that ran out of time. */
@@ -157,7 +230,7 @@ final class Watchdog {
             }
             for (TimeoutPolicy.Scope scope : scopes.stack()) {
                 if (scope != null) {
-                    scope.expireIfOverdue(nanoTime);
+                    scope.expireIfOverdue(nanoTime, this);
                 }
             }
         }
