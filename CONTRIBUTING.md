@@ -19,7 +19,7 @@ You need a JDK 17 or newer to run Gradle; the build compiles with Java 21 (and J
 ./gradlew :site:serve                            # preview the documentation site on http://localhost:3000
 ```
 
-Benchmarks (`:benchmark:jmh`) and concurrency stress tests (`:stress:jcstress`) are described in [CLAUDE.md](CLAUDE.md), which is also the most complete description of how the code fits together.
+The commands for benchmarks (`:benchmark:jmh`) and concurrency stress tests (`:stress:jcstress`) are in [CLAUDE.md](CLAUDE.md), and the measured results are in [docs/en/benchmarks.md](docs/en/benchmarks.md). For how the code fits together, read [docs/en/architecture.md](docs/en/architecture.md) and [docs/en/design.md](docs/en/design.md).
 
 ## Pull requests
 
