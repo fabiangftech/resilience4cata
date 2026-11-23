@@ -133,7 +133,9 @@ def run(mutant_id, mode, clean, gradle_args):
     kind, file, old, new, tests, what = MUTANTS[mutant_id]
     original = None if clean else apply(file, old, new)
     try:
-        command = ["./gradlew", ":stress:jcstress", f"-Pjcstress=-m {mode} -t {tests}", "--console=plain"]
+        # --configure-on-demand: a plugin that only the native and Quarkus projects apply cannot fail the run.
+        command = ["./gradlew", "--configure-on-demand", ":stress:jcstress", f"-Pjcstress=-m {mode} -t {tests}",
+                   "--console=plain"]
         command += gradle_args  # for example the CI's JDK selection
         process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         output = process.stdout
