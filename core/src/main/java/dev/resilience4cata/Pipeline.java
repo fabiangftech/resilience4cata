@@ -16,9 +16,11 @@ import dev.resilience4cata.generated.StreamCall;
 import dev.resilience4cata.generated.TimeoutPolicy;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
@@ -670,15 +672,62 @@ public final class Pipeline<T extends @Nullable Object> {
             // minimalCompletionStage(), whose join() throws.
             return (CompletableFuture<T>) stage;
         }
-        CompletableFuture<T> result = new CompletableFuture<>();
-        stage.whenComplete((value, failure) -> {
-            if (failure == null) {
-                result.complete(value);
-            } else {
-                result.completeExceptionally(failure);
-            }
-        });
+        Relay<T> result = new Relay<>(stage);
+        stage.whenComplete(result);
         return result;
+    }
+
+    /**
+     * The future of a stage that is not exactly a {@code CompletableFuture}: it relays the stage's outcome, and
+     * cancelling it cancels the stage first, so that the layers inside let go (a bulkhead slot, a half-open permit)
+     * before the caller's callbacks run.
+     */
+    private static final class Relay<T extends @Nullable Object> extends CompletableFuture<T>
+            implements BiConsumer<T, @Nullable Throwable> {
+        private final CompletionStage<T> stage;
+        private volatile boolean cancelling;
+
+        Relay(CompletionStage<T> stage) {
+            this.stage = stage;
+        }
+
+        @Override
+        public void accept(T value, @Nullable Throwable failure) {
+            if (cancelling) {
+                return; // the cancel completes this future
+            }
+            if (failure == null) {
+                super.complete(value);
+            } else {
+                super.completeExceptionally(failure);
+            }
+        }
+
+        @Override
+        public boolean cancel(boolean mayInterruptIfRunning) {
+            if (!isDone()) {
+                cancelling = true;
+                cancelStage();
+            }
+            return super.cancel(mayInterruptIfRunning);
+        }
+
+        @Override
+        public boolean completeExceptionally(Throwable failure) {
+            if (failure instanceof CancellationException && !isDone()) {
+                cancelling = true;
+                cancelStage();
+            }
+            return super.completeExceptionally(failure);
+        }
+
+        private void cancelStage() {
+            try {
+                stage.toCompletableFuture().cancel(true);
+            } catch (UnsupportedOperationException refused) {
+                // a minimal stage that cannot be cancelled: nothing to do
+            }
+        }
     }
 
     @Override
