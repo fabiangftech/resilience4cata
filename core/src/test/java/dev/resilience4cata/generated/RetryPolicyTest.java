@@ -71,6 +71,45 @@ class RetryPolicyTest {
     }
 
     @Test
+    void everyJitterHandlesTheLongestDelay() {
+        Duration longest = Duration.ofNanos(Long.MAX_VALUE);
+        for (RetryConfig.Jitter jitter : RetryConfig.Jitter.values()) {
+            RetryPolicy retry = policy(RetryConfig.builder().jitter(jitter).maxAttempts(200)
+                    .backoff(RetryConfig.Backoff.FIXED).delay(longest).maxDelay(longest));
+
+            for (int attempt = 1; attempt < 200; attempt++) {
+                assertThat(retry.onFailure(attempt, new IOException(), retry.start())).as("%s", jitter)
+                        .isBetween(jitter == RetryConfig.Jitter.EQUAL ? Long.MAX_VALUE / 2 : 0L, Long.MAX_VALUE);
+            }
+        }
+    }
+
+    @Test
+    void aDelayThatWouldOverflowTheElapsedTimeStillRespectsMaxDuration() {
+        Duration longest = Duration.ofNanos(Long.MAX_VALUE);
+        RetryPolicy retry = policy(noJitter().maxAttempts(5).backoff(RetryConfig.Backoff.FIXED)
+                .delay(longest).maxDelay(longest).maxDuration(Duration.ofHours(1)));
+        long start = retry.start();
+
+        now.addAndGet(1);
+
+        assertThat(retry.onFailure(1, new IOException(), start)).isEqualTo(RetryPolicy.NO_RETRY);
+    }
+
+    @Test
+    void aDelayThatEndsExactlyAtMaxDurationIsStillAllowed() {
+        RetryPolicy retry = policy(noJitter().maxAttempts(5).backoff(RetryConfig.Backoff.FIXED)
+                .delay(Duration.ofNanos(40)).maxDelay(Duration.ofNanos(40)).maxDuration(Duration.ofNanos(100)));
+        long start = retry.start();
+
+        now.addAndGet(60);
+        assertThat(retry.onFailure(1, new IOException(), start)).isEqualTo(40);
+
+        now.addAndGet(1);
+        assertThat(retry.onFailure(2, new IOException(), start)).isEqualTo(RetryPolicy.NO_RETRY);
+    }
+
+    @Test
     void abortOnWinsOverRetryOn() {
         RetryPolicy retry = policy(noJitter()
                 .retryOn(List.of(Exception.class))
