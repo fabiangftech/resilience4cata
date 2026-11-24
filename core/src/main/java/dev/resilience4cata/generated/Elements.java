@@ -24,6 +24,17 @@ public interface Elements {
     void listen(ElementListener listener, boolean everyElement);
 
     /**
+     * Whether this attempt has emitted an element to the subscriber. The circuit breaker reads it when the
+     * attempt is cancelled: after an element, the dependency answered and the subscriber stopped reading.
+     *
+     * @return {@code true} once the attempt emitted its first element; {@code false} from an implementation
+     *     that does not track it
+     */
+    default boolean emitted() {
+        return false;
+    }
+
+    /**
      * The stage of an attempt whose stream ended while it was subscribed: completed with {@code null}, shared and
      * immutable. Policies return it as it is where they would return a completed copy of a done stage.
      *

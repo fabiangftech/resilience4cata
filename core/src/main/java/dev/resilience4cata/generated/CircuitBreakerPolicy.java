@@ -83,8 +83,6 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
     private final float failureRateThreshold;
     private final float slowCallRateThreshold;
     private final boolean timed;
-    /** The first element's clock when nothing is timed: a stream only needs to know that one arrived. */
-    private static final LongSupplier NO_CLOCK = () -> 0L;
     private final long slowCallNanos;
     private final long waitInOpenNanos;
     private final long maxWaitInHalfOpenNanos;
@@ -367,16 +365,19 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @return a future that completes with the call's outcome, or fails with {@link CallNotPermittedException}
      */
     public <T extends @Nullable Object> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
+        if (!timed) {
+            return executeUntimedStreamAsync(call, elements);
+        }
         long token = acquire();
         if (token < 0) {
             return CompletableFuture.failedFuture(rejection());
         }
-        long started = timed ? ticker.getAsLong() : 0L;
-        FirstElement first = new FirstElement(timed ? ticker : NO_CLOCK);
+        long started = ticker.getAsLong();
+        FirstElement first = new FirstElement(ticker);
         elements.listen(first, false);
         CompletionStage<T> stage = AsyncSupport.call(call);
         if (AsyncSupport.succeeded(stage)) { // ended during its subscription
-            int slow = streamSlowBit(first, started);
+            int slow = first.time() - started >= slowCallNanos ? SlidingWindow.SLOW : 0;
             if (slow != 0 || token != (long) QUIET.getOpaque(this)) {
                 record(token, slow);
             }
@@ -384,14 +385,14 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         }
         LinkedFuture<T> result = new LinkedFuture<>(stage);
         stage.whenComplete((value, failure) -> {
-            int slow = streamSlowBit(first, started);
+            int slow = first.time() - started >= slowCallNanos ? SlidingWindow.SLOW : 0;
             if (failure == null) {
                 if (slow != 0 || token != (long) QUIET.getOpaque(this)) {
                     record(token, slow);
                 }
                 result.complete(value);
             } else if (result.cancelling()) {
-                if (!first.seen()) {
+                if (!elements.emitted()) {
                     release(token);
                 } else if (slow != 0 || token != (long) QUIET.getOpaque(this)) {
                     record(token, slow); // it answered, and the subscriber stopped reading
@@ -413,8 +414,39 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         return timed && ticker.getAsLong() - start >= slowCallNanos ? SlidingWindow.SLOW : 0;
     }
 
-    private int streamSlowBit(FirstElement first, long started) {
-        return timed && first.time() - started >= slowCallNanos ? SlidingWindow.SLOW : 0;
+    /**
+     * {@link #executeStreamAsync} without slow-call detection: no clock and no listener, as a stream's only
+     * difference from {@link #executeAsync(AsyncCall)} is what a cancel after its first element means.
+     */
+    private <T extends @Nullable Object> CompletableFuture<T> executeUntimedStreamAsync(AsyncCall<T> call,
+            Elements elements) {
+        long token = acquire();
+        if (token < 0) {
+            return CompletableFuture.failedFuture(rejection());
+        }
+        CompletionStage<T> stage = AsyncSupport.call(call);
+        if (AsyncSupport.succeeded(stage)) { // ended during its subscription
+            onSuccess(token, 0L);
+            return AsyncSupport.copy(stage);
+        }
+        LinkedFuture<T> result = new LinkedFuture<>(stage);
+        stage.whenComplete((value, failure) -> {
+            if (failure == null) {
+                onSuccess(token, 0L);
+                result.complete(value);
+            } else if (result.cancelling()) {
+                if (elements.emitted()) {
+                    onSuccess(token, 0L); // it answered, and the subscriber stopped reading
+                } else {
+                    release(token);
+                }
+            } else {
+                Throwable cause = AsyncSupport.unwrap(failure);
+                onFailure(token, 0L, cause);
+                result.fail(cause);
+            }
+        });
+        return result;
     }
 
     // java:S3776: per-call method kept in one piece for JIT inlining (see CLAUDE.md on per-call methods).

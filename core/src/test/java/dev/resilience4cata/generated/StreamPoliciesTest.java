@@ -43,13 +43,20 @@ class StreamPoliciesTest {
     private static final class FakeStream implements Elements {
         final List<ElementListener> every = new ArrayList<>();
         final List<ElementListener> first = new ArrayList<>();
+        boolean emitted;
 
         @Override
         public void listen(ElementListener listener, boolean everyElement) {
             (everyElement ? every : first).add(listener);
         }
 
+        @Override
+        public boolean emitted() {
+            return emitted;
+        }
+
         void element() {
+            emitted = true;
             first.forEach(ElementListener::element);
             first.clear();
             every.forEach(ElementListener::element);
@@ -314,7 +321,7 @@ class StreamPoliciesTest {
         CircuitBreakerPolicy policy = new CircuitBreakerPolicy("cb", CircuitBreakerConfig.builder().build(), environment);
         CompletableFuture<Void> ended = new CompletableFuture<>();
         policy.executeStreamAsync(() -> ended, stream);
-        assertThat(stream.first).as("listens for the first element").hasSize(1);
+        assertThat(stream.first).as("no listener, so nothing more to allocate").isEmpty();
         stream.element();
         ended.complete(null);
         assertThat(policy.snapshot().bufferedCalls()).isOne();
@@ -327,6 +334,27 @@ class StreamPoliciesTest {
         assertThat(policy.snapshot().bufferedCalls()).isEqualTo(2);
         assertThat(policy.snapshot().slowCalls()).isZero();
         assertThat(policy.snapshot().failedCalls()).isZero();
+    }
+
+    @Test
+    void withoutSlowCallDetectionACancelBeforeAnElementRecordsNothing() {
+        CircuitBreakerPolicy policy = new CircuitBreakerPolicy("cb", CircuitBreakerConfig.builder().build(), environment);
+
+        policy.executeStreamAsync(CompletableFuture<Void>::new, stream).cancel(true);
+
+        assertThat(policy.snapshot().bufferedCalls()).isZero();
+    }
+
+    @Test
+    void withoutSlowCallDetectionAFailureIsRecorded() {
+        CircuitBreakerPolicy policy = new CircuitBreakerPolicy("cb", CircuitBreakerConfig.builder().build(), environment);
+        CompletableFuture<Void> attempt = new CompletableFuture<>();
+        CompletableFuture<Void> result = policy.executeStreamAsync(() -> attempt, stream);
+
+        attempt.completeExceptionally(new IOException("down"));
+
+        assertThat(result.exceptionNow()).isInstanceOf(IOException.class);
+        assertThat(policy.snapshot().failedCalls()).isOne();
     }
 
     // ---- adaptive limit

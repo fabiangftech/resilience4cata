@@ -39,11 +39,6 @@ final class FirstElement implements ElementListener {
         seen = true; // volatile: a reader that sees it sees the time written before
     }
 
-    /** Whether the attempt emitted an element. */
-    boolean seen() {
-        return seen;
-    }
-
     /** When the first element arrived, or now if none did (the stream ended, or failed, before one). */
     long time() {
         return seen ? (long) AT.getOpaque(this) : ticker.getAsLong();
