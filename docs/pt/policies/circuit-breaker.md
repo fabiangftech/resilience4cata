@@ -185,7 +185,7 @@ Para um método que retorna `CompletionStage<T>` ou `CompletableFuture<T>`, o br
 CompletableFuture<Long> balanceAsync(String account);
 ```
 
-Chamadas lentas são cronometradas até o stage completar. Uma chamada cujo future quem chama cancela não é registrada, como uma chamada ignorada: uma permissão de semiaberto é devolvida ([cancelamento](../guides/async.md#cancellation)). Veja [Métodos async](../guides/async.md).
+Chamadas lentas são cronometradas até o stage completar. Uma chamada cujo future quem chama cancela não é registrada, como uma chamada ignorada: uma permissão de semiaberto é devolvida ([cancelamento](../guides/async.md#cancellation)). A exceção é um `Flux` cancelado depois do primeiro elemento, que conta como sucesso ([métodos Flux](../guides/reactor.md#flux)). Veja [Métodos async](../guides/async.md).
 
 ## O mesmo com `Pipeline` :id=same-thing-with-pipeline
 

@@ -179,6 +179,41 @@ class FluxPipelineOperatorTest {
     }
 
     @Test
+    void healthyStreamsReadWithNextKeepTheBreakerClosedThroughAFewFailures() {
+        Pipeline<String> breaker = Pipeline.builder(registry, "healthy", String.class).circuitBreaker(b -> b.windowSize(100)
+                .minimumCalls(2).failureRateThreshold(50)).build();
+        FluxPipelineOperator<String> operator = FluxPipelineOperator.of(breaker);
+        Flux<String> healthy = oneElementThenSilence(new AtomicInteger()).transform(operator);
+        for (int i = 0; i < 98; i++) {
+            assertThat(healthy.next().block(VERIFY)).isEqualTo("a");
+        }
+        for (int i = 0; i < 2; i++) {
+            StepVerifier.create(Flux.<String>error(new IOException("down")).transform(operator))
+                    .expectErrorMessage("down").verify(VERIFY);
+        }
+
+        assertThat(registry.circuitBreaker("healthy").state()).isEqualTo(CircuitBreakerState.CLOSED);
+        assertThat(registry.circuitBreaker("healthy").snapshot().bufferedCalls()).isEqualTo(100);
+        assertThat(registry.circuitBreaker("healthy").snapshot().failedCalls()).isEqualTo(2);
+    }
+
+    @Test
+    void aProbeReadWithNextClosesTheBreaker() {
+        Pipeline<String> breaker = Pipeline.builder(registry, "next-probe", String.class).circuitBreaker(b -> b.windowSize(2)
+                .minimumCalls(2).failureRateThreshold(50).waitInOpen(Duration.ofSeconds(1)).halfOpenCalls(1)).build();
+        FluxPipelineOperator<String> operator = FluxPipelineOperator.of(breaker);
+        for (int i = 0; i < 2; i++) {
+            StepVerifier.create(Flux.<String>error(new IOException("down")).transform(operator))
+                    .expectErrorMessage("down").verify(VERIFY);
+        }
+        clock.advance(Duration.ofSeconds(1));
+
+        assertThat(oneElementThenSilence(new AtomicInteger()).transform(operator).next().block(VERIFY)).isEqualTo("a");
+
+        assertThat(registry.circuitBreaker("next-probe").state()).isEqualTo(CircuitBreakerState.CLOSED);
+    }
+
+    @Test
     void describesItsPipeline() {
         assertThat(FluxPipelineOperator.of(pipeline("named").build())).hasToString("FluxPipelineOperator[Pipeline[named, retry]]");
     }

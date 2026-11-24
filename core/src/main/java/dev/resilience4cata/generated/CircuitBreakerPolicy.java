@@ -83,6 +83,8 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
     private final float failureRateThreshold;
     private final float slowCallRateThreshold;
     private final boolean timed;
+    /** The first element's clock when nothing is timed: a stream only needs to know that one arrived. */
+    private static final LongSupplier NO_CLOCK = () -> 0L;
     private final long slowCallNanos;
     private final long waitInOpenNanos;
     private final long maxWaitInHalfOpenNanos;
@@ -355,8 +357,9 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * The asynchronous form for a streaming call (a method that returns a {@code Flux}): as
      * {@link #executeAsync(AsyncCall)}, one call per attempt recorded when the stream ends, but a slow
      * call is one whose first element (or end, if it has none) took {@code slowCallDuration} or more:
-     * a stream's length says nothing about the dependency. Without slow-call detection it is
-     * {@link #executeAsync(AsyncCall)}.
+     * a stream's length says nothing about the dependency. A stream cancelled after its first element
+     * ({@code next()}, {@code take(1)}) is a success, since the dependency answered and the subscriber
+     * stopped reading; one cancelled before it is not recorded.
      *
      * @param call the next layer
      * @param elements the streaming call, told of this attempt's listener before {@code call} starts
@@ -364,19 +367,16 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * @return a future that completes with the call's outcome, or fails with {@link CallNotPermittedException}
      */
     public <T extends @Nullable Object> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
-        if (!timed) {
-            return executeAsync(call);
-        }
         long token = acquire();
         if (token < 0) {
             return CompletableFuture.failedFuture(rejection());
         }
-        long started = ticker.getAsLong();
-        FirstElement first = new FirstElement(ticker);
+        long started = timed ? ticker.getAsLong() : 0L;
+        FirstElement first = new FirstElement(timed ? ticker : NO_CLOCK);
         elements.listen(first, false);
         CompletionStage<T> stage = AsyncSupport.call(call);
         if (AsyncSupport.succeeded(stage)) { // ended during its subscription
-            int slow = first.time() - started >= slowCallNanos ? SlidingWindow.SLOW : 0;
+            int slow = streamSlowBit(first, started);
             if (slow != 0 || token != (long) QUIET.getOpaque(this)) {
                 record(token, slow);
             }
@@ -384,14 +384,18 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
         }
         LinkedFuture<T> result = new LinkedFuture<>(stage);
         stage.whenComplete((value, failure) -> {
-            int slow = first.time() - started >= slowCallNanos ? SlidingWindow.SLOW : 0;
+            int slow = streamSlowBit(first, started);
             if (failure == null) {
                 if (slow != 0 || token != (long) QUIET.getOpaque(this)) {
                     record(token, slow);
                 }
                 result.complete(value);
             } else if (result.cancelling()) {
-                release(token);
+                if (!first.seen()) {
+                    release(token);
+                } else if (slow != 0 || token != (long) QUIET.getOpaque(this)) {
+                    record(token, slow); // it answered, and the subscriber stopped reading
+                }
             } else {
                 Throwable cause = AsyncSupport.unwrap(failure);
                 switch (classification.get(cause.getClass())) {
@@ -407,6 +411,10 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
 
     private int slowBit(long start) {
         return timed && ticker.getAsLong() - start >= slowCallNanos ? SlidingWindow.SLOW : 0;
+    }
+
+    private int streamSlowBit(FirstElement first, long started) {
+        return timed && first.time() - started >= slowCallNanos ? SlidingWindow.SLOW : 0;
     }
 
     // java:S3776: per-call method kept in one piece for JIT inlining (see CLAUDE.md on per-call methods).
