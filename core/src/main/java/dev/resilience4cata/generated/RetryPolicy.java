@@ -234,7 +234,8 @@ public final class RetryPolicy {
             return NO_RETRY;
         }
         long delay = withJitter(baseDelay(attempts));
-        if (maxDurationNanos > 0 && ticker.getAsLong() - start + delay > maxDurationNanos) {
+        // Compared this way round because elapsed + delay can overflow when the delay is close to Long.MAX_VALUE.
+        if (maxDurationNanos > 0 && delay > maxDurationNanos - (ticker.getAsLong() - start)) {
             EventSink<RetryEvent.GaveUp> sink = gaveUp;
             if (sink != null) {
                 sink.publish(new RetryEvent.GaveUp(id, ticker.getAsLong(), attempts, RetryEvent.Reason.MAX_DURATION, failure));
@@ -310,7 +311,8 @@ public final class RetryPolicy {
         RandomGenerator generator = random != null ? random : ThreadLocalRandom.current();
         return switch (jitter) {
             case NONE -> delay;
-            case FULL -> generator.nextLong(delay + 1);
+            // The bound is exclusive, and delay + 1 overflows for the longest delay: there, any non-negative long.
+            case FULL -> delay == Long.MAX_VALUE ? generator.nextLong() >>> 1 : generator.nextLong(delay + 1);
             case EQUAL -> delay / 2 + generator.nextLong(delay - delay / 2 + 1);
         };
     }
