@@ -22,8 +22,8 @@ Añade el módulo y, como para cualquier uso de las anotaciones, el procesador d
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
 
     implementation 'dev.resilience4cata:resilience4cata-spring'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
@@ -38,7 +38,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.0.0")
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.1.0")
     implementation(r4cBom)
     annotationProcessor(r4cBom)
 
@@ -70,7 +70,7 @@ dependencies {
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
   </path>
   <!-- annotationProcessorPaths replaces discovery: list the other processors you use too,
        for example Spring Boot's configuration processor if you have @ConfigurationProperties.

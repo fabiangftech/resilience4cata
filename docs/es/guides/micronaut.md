@@ -30,8 +30,8 @@ plugins {
 }
 
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
 
     implementation 'dev.resilience4cata:resilience4cata-micronaut'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
@@ -55,7 +55,7 @@ plugins {
 }
 
 dependencies {
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.0.0")
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.1.0")
     implementation(r4cBom)
     annotationProcessor(r4cBom)
 
@@ -93,7 +93,7 @@ tasks.withType<JavaCompile>().configureEach {
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
   </path>
 </annotationProcessorPaths>
 <compilerArgs combine.children="append">

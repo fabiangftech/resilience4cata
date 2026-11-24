@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-resilience4cata provides resilience annotations for plain Java 21+ with no Spring, CDI, AspectJ, agents, runtime proxies or reflection fallback. An annotation processor generates straight-line Java at compile time. 1.0.0 is released and `main` is 1.1.0-SNAPSHOT, so **the API, generated code and configuration must stay compatible within 1.x** (`docs/en/reference/compatibility.md`).
+resilience4cata provides resilience annotations for plain Java 21+ with no Spring, CDI, AspectJ, agents, runtime proxies or reflection fallback. An annotation processor generates straight-line Java at compile time. 1.1.0 is released and `main` is 1.2.0-SNAPSHOT, so **the API, generated code and configuration must stay compatible within 1.x** (`docs/en/reference/compatibility.md`).
 
 Read before design work: `docs/en/design.md` (decisions), `docs/en/architecture.md` (internals, concurrency), `docs/en/policies/README.md`. Module-by-module notes from the previous, much longer version of this file: `git show 50b007b:CLAUDE.md`. Check them against the code, since they may have aged.
 

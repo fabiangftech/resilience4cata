@@ -27,17 +27,17 @@
             <button class="r4c-copy" type="button">Copiar</button>
           </div>
           <div role="tabpanel" id="r4c-p-g" aria-labelledby="r4c-t-g"><pre><span class="k">dependencies</span> {
-    <span class="k">implementation</span> <span class="s">'dev.resilience4cata:resilience4cata-all:1.0.0'</span>
-    <span class="k">annotationProcessor</span> <span class="s">'dev.resilience4cata:resilience4cata-processor:1.0.0'</span>
+    <span class="k">implementation</span> <span class="s">'dev.resilience4cata:resilience4cata-all:1.1.0'</span>
+    <span class="k">annotationProcessor</span> <span class="s">'dev.resilience4cata:resilience4cata-processor:1.1.0'</span>
 }</pre></div>
           <div role="tabpanel" id="r4c-p-k" aria-labelledby="r4c-t-k" hidden><pre><span class="k">dependencies</span> {
-    implementation(<span class="s">"dev.resilience4cata:resilience4cata-all:1.0.0"</span>)
-    annotationProcessor(<span class="s">"dev.resilience4cata:resilience4cata-processor:1.0.0"</span>)
+    implementation(<span class="s">"dev.resilience4cata:resilience4cata-all:1.1.0"</span>)
+    annotationProcessor(<span class="s">"dev.resilience4cata:resilience4cata-processor:1.1.0"</span>)
 }</pre></div>
           <div role="tabpanel" id="r4c-p-m" aria-labelledby="r4c-t-m" hidden><pre>&lt;<span class="k">dependency</span>&gt;
   &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
   &lt;<span class="k">artifactId</span>&gt;resilience4cata-all&lt;/<span class="k">artifactId</span>&gt;
-  &lt;<span class="k">version</span>&gt;1.0.0&lt;/<span class="k">version</span>&gt;
+  &lt;<span class="k">version</span>&gt;1.1.0&lt;/<span class="k">version</span>&gt;
 &lt;/<span class="k">dependency</span>&gt;
 <span></span>
 <span class="c">&lt;!-- in the maven-compiler-plugin &lt;configuration&gt; --&gt;</span>
@@ -45,11 +45,11 @@
   &lt;<span class="k">path</span>&gt;
     &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
     &lt;<span class="k">artifactId</span>&gt;resilience4cata-processor&lt;/<span class="k">artifactId</span>&gt;
-    &lt;<span class="k">version</span>&gt;1.0.0&lt;/<span class="k">version</span>&gt;
+    &lt;<span class="k">version</span>&gt;1.1.0&lt;/<span class="k">version</span>&gt;
   &lt;/<span class="k">path</span>&gt;
 &lt;/<span class="k">annotationProcessorPaths</span>&gt;</pre></div>
         </div>
-        <p class="install-note">Versão 1.0.0 no Maven Central, a primeira versão estável: dentro da 1.x ela continua <a href="/pt/reference/compatibility">compatível</a>. <code>resilience4cata-all</code> traz o core, as anotações e a configuração; o processador vai apenas no annotation processor path. <a href="/pt/start/installation">Guia de instalação</a></p>
+        <p class="install-note">Versão 1.1.0 no Maven Central, estável desde a 1.0.0: dentro da 1.x ela continua <a href="/pt/reference/compatibility">compatível</a>. <code>resilience4cata-all</code> traz o core, as anotações e a configuração; o processador vai apenas no annotation processor path. <a href="/pt/start/installation">Guia de instalação</a></p>
       </div>
     </div>
     <div class="r4c-compile" aria-label="Interface anotada e a classe que o processador gera a partir dela">
@@ -299,7 +299,7 @@ at CheckoutService.pay</pre>
     <div>
       <a class="r4c-brand" href="/pt/"><svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#F2B500"/><g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round"><path d="M4 27h7"/><path d="M13.6 25.4 L27 13"/><path d="M31 27h5"/></g><circle cx="13" cy="27" r="2.6" fill="#1A1F24"/><circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/></svg><span>resilience<b>4cata</b></span></a>
       <p>Resiliência baseada em anotações para Java 21+ puro. Licença Apache 2.0.</p>
-      <span class="coord">dev.resilience4cata:resilience4cata-bom:1.0.0</span>
+      <span class="coord">dev.resilience4cata:resilience4cata-bom:1.1.0</span>
     </div>
     <div><h4>Aprender</h4><ul><li><a href="/pt/start/installation">Instalação</a></li><li><a href="/pt/start/quickstart">Início rápido</a></li><li><a href="/pt/start/how-it-works">Como funciona</a></li><li><a href="/pt/guides/testing">Testes com ManualClock</a></li></ul></div>
     <div><h4>Referência</h4><ul><li><a href="/pt/errors">Códigos de erro</a></li><li><a href="/pt/reference/configuration">Chaves de configuração</a></li><li><a href="/pt/performance">Desempenho</a></li><li><a href="https://javadoc.io/doc/dev.resilience4cata">Javadoc</a></li></ul></div>

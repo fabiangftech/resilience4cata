@@ -6,7 +6,7 @@ Esta página é o plano de trabalho: cada tarefa diz o que mudar, onde e como ve
 
 ## Status
 
-- Versões no Maven Central: 0.13.0, os release candidates 1.0.0-RC1, 1.0.0-RC2, 1.0.0-RC3 e 1.0.0-RC4, e a 1.0.0. `main` está em 1.1.0-SNAPSHOT.
+- Versões no Maven Central: 0.13.0, os release candidates 1.0.0-RC1, 1.0.0-RC2, 1.0.0-RC3 e 1.0.0-RC4, a 1.0.0 e a 1.1.0. `main` está em 1.2.0-SNAPSHOT.
 - O plano de desempenho das execuções na AWS está concluído (pull requests #53–#59, veja [benchmarks](benchmarks.md)).
 - Os títulos do Javadoc levam o nome do artefato (#60); o javadoc.io foi sincronizado para os 11 módulos.
 - As fases 1 a 3 estão concluídas (#62 a #65).
@@ -19,6 +19,7 @@ Esta página é o plano de trabalho: cada tarefa diz o que mudar, onde e como ve
 - `main` só aceita mudanças por pull requests com verificações aprovadas (administradores contornam isso nos commits de release), e cada release candidate tem um GitHub release; a 1.0.0-RC3 é a *Latest*, como mostram os trechos de instalação (2026-11-06).
 - 1.0.0-RC4 (2026-11-14): o piloto encontrou o circuit breaker abrindo por causa do bulkhead cheio do próprio método em uma inicialização a frio; o breaker agora nunca registra a rejeição de um limite local (#100). Mesma API da RC3. Os trechos de instalação a mostram, e ela é a *Latest*.
 - 1.0.0 (2026-11-21): a primeira versão estável, com a mesma API da RC4. Os trechos de instalação a mostram, e ela é a *Latest*. `main` está em 1.1.0-SNAPSHOT com a baseline da API em 1.0.0, então a promessa de compatibilidade é verificada contra ela.
+- 1.1.0 (2026-11-24): cinco correções compatíveis, encontradas em parte comparando com os testes do Resilience4j ([changelog](changelog.md#1.1.0)). Os trechos de instalação a mostram, e ela é a *Latest*. `main` está em 1.2.0-SNAPSHOT com a baseline da API em 1.1.0.
 
 ## A revisão :id=the-review
 

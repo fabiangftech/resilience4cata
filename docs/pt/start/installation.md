@@ -2,7 +2,7 @@
 
 Duas linhas bastam para começar: `resilience4cata-all` e o processador de anotações. Esta página cobre essa configuração, os módulos individuais, Gradle e Maven, IDEs, JPMS e outros processadores de anotações.
 
-**Requisitos:** Java 21 ou mais recente, tanto para compilar quanto para executar (os jars são construídos com `--release 21` e testados em Java 21 e 25). Coordenadas: groupId `dev.resilience4cata`, versão `1.0.0`, no Maven Central (a primeira versão estável: dentro da 1.x ela continua [compatível](../reference/compatibility.md); a última versão 0.x é a 0.13.0).
+**Requisitos:** Java 21 ou mais recente, tanto para compilar quanto para executar (os jars são construídos com `--release 21` e testados em Java 21 e 25). Coordenadas: groupId `dev.resilience4cata`, versão `1.1.0`, no Maven Central (estável desde a 1.0.0: dentro da 1.x ela continua [compatível](../reference/compatibility.md); a última versão 0.x é a 0.13.0).
 
 ## Os artefatos :id=the-artifacts
 
@@ -34,8 +34,8 @@ Duas linhas bastam para começar: `resilience4cata-all` e o processador de anota
 
 ```groovy
 dependencies {
-    implementation 'dev.resilience4cata:resilience4cata-all:1.0.0'
-    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:1.0.0'
+    implementation 'dev.resilience4cata:resilience4cata-all:1.1.0'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:1.1.0'
 }
 ```
 
@@ -43,8 +43,8 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("dev.resilience4cata:resilience4cata-all:1.0.0")
-    annotationProcessor("dev.resilience4cata:resilience4cata-processor:1.0.0")
+    implementation("dev.resilience4cata:resilience4cata-all:1.1.0")
+    annotationProcessor("dev.resilience4cata:resilience4cata-processor:1.1.0")
 }
 ```
 
@@ -54,7 +54,7 @@ dependencies {
 <dependency>
   <groupId>dev.resilience4cata</groupId>
   <artifactId>resilience4cata-all</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
 </dependency>
 
 <!-- in the maven-compiler-plugin <configuration> -->
@@ -62,7 +62,7 @@ dependencies {
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
   </path>
 </annotationProcessorPaths>
 ```
@@ -83,8 +83,8 @@ Importe primeiro o BOM, depois adicione os artefatos sem versões.
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.0.0')   // processor path is resolved separately
+    implementation platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.1.0')   // processor path is resolved separately
 
     implementation 'dev.resilience4cata:resilience4cata-core'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
@@ -99,7 +99,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.0.0")
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.1.0")
     implementation(r4cBom)
     annotationProcessor(r4cBom)
 
@@ -120,7 +120,7 @@ dependencies {
     <dependency>
       <groupId>dev.resilience4cata</groupId>
       <artifactId>resilience4cata-bom</artifactId>
-      <version>1.0.0</version>
+      <version>1.1.0</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>
@@ -161,7 +161,7 @@ dependencies {
           <path>
             <groupId>dev.resilience4cata</groupId>
             <artifactId>resilience4cata-processor</artifactId>
-            <version>1.0.0</version>
+            <version>1.1.0</version>
           </path>
         </annotationProcessorPaths>
       </configuration>
@@ -191,7 +191,7 @@ Se você anota interfaces ou classes em `src/test` (dublês de teste, clientes s
 ```groovy
 dependencies {
     testCompileOnly 'dev.resilience4cata:resilience4cata-annotations'
-    testAnnotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
+    testAnnotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
     testAnnotationProcessor 'dev.resilience4cata:resilience4cata-processor'
 }
 ```
@@ -201,7 +201,7 @@ dependencies {
 ```kotlin
 dependencies {
     testCompileOnly("dev.resilience4cata:resilience4cata-annotations")
-    testAnnotationProcessor(platform("dev.resilience4cata:resilience4cata-bom:1.0.0"))
+    testAnnotationProcessor(platform("dev.resilience4cata:resilience4cata-bom:1.1.0"))
     testAnnotationProcessor("dev.resilience4cata:resilience4cata-processor")
 }
 ```
@@ -222,8 +222,8 @@ Para uma aplicação Spring Boot 4.1+, dependa de `resilience4cata-spring` em ve
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
 
     implementation 'dev.resilience4cata:resilience4cata-spring'           // brings core and config
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
@@ -235,7 +235,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.0.0")
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.1.0")
     implementation(r4cBom)
     annotationProcessor(r4cBom)
 
@@ -276,8 +276,8 @@ classes anotadas. O [guia do Micronaut](../guides/micronaut.md) cobre o resto.
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
 
     implementation 'dev.resilience4cata:resilience4cata-micronaut'       // brings core and config
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
@@ -293,7 +293,7 @@ tasks.withType(JavaCompile).configureEach {
 
 ```kotlin
 dependencies {
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.0.0")
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.1.0")
     implementation(r4cBom)
     annotationProcessor(r4cBom)
 
@@ -400,8 +400,8 @@ dependencies {
     compileOnly 'org.projectlombok:lombok:1.18.38'
     annotationProcessor 'org.projectlombok:lombok:1.18.38'
 
-    implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
-    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
+    annotationProcessor platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
     implementation 'dev.resilience4cata:resilience4cata-core'
     compileOnly 'dev.resilience4cata:resilience4cata-annotations'
     annotationProcessor 'dev.resilience4cata:resilience4cata-processor'
@@ -415,7 +415,7 @@ dependencies {
     compileOnly("org.projectlombok:lombok:1.18.38")
     annotationProcessor("org.projectlombok:lombok:1.18.38")
 
-    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.0.0")
+    val r4cBom = platform("dev.resilience4cata:resilience4cata-bom:1.1.0")
     implementation(r4cBom)
     annotationProcessor(r4cBom)
     implementation("dev.resilience4cata:resilience4cata-core")
@@ -436,7 +436,7 @@ dependencies {
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
   </path>
 </annotationProcessorPaths>
 ```

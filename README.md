@@ -9,7 +9,7 @@
 - **Configuration:** named configs, overrides from properties, environment or system properties.
 - **Also:** events, snapshots, Micrometer/OpenTelemetry metrics, a programmatic `Pipeline`, a `testkit` with a manual clock, Spring Boot, Micronaut and Quarkus integrations.
 
-Status: **1.0.0** on Maven Central, the first stable release: within 1.x the API, the generated code and the configuration stay compatible ([compatibility](docs/en/reference/compatibility.md)). Docs: **[resilience4cata.dev](https://resilience4cata.dev)** (English, [Spanish](https://resilience4cata.dev/es/), [Portuguese](https://resilience4cata.dev/pt/) and [Chinese](https://resilience4cata.dev/zh/)).
+Status: **1.1.0** on Maven Central, stable since 1.0.0: within 1.x the API, the generated code and the configuration stay compatible ([compatibility](docs/en/reference/compatibility.md)). Docs: **[resilience4cata.dev](https://resilience4cata.dev)** (English, [Spanish](https://resilience4cata.dev/es/), [Portuguese](https://resilience4cata.dev/pt/) and [Chinese](https://resilience4cata.dev/zh/)).
 
 ## Install
 
@@ -19,8 +19,8 @@ Gradle:
 
 ```groovy
 dependencies {
-    implementation 'dev.resilience4cata:resilience4cata-all:1.0.0'
-    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:1.0.0'
+    implementation 'dev.resilience4cata:resilience4cata-all:1.1.0'
+    annotationProcessor 'dev.resilience4cata:resilience4cata-processor:1.1.0'
 }
 ```
 
@@ -30,7 +30,7 @@ Maven:
 <dependency>
   <groupId>dev.resilience4cata</groupId>
   <artifactId>resilience4cata-all</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
 </dependency>
 
 <!-- in the maven-compiler-plugin <configuration> -->
@@ -38,7 +38,7 @@ Maven:
   <path>
     <groupId>dev.resilience4cata</groupId>
     <artifactId>resilience4cata-processor</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
   </path>
 </annotationProcessorPaths>
 ```
