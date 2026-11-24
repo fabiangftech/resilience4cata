@@ -4,7 +4,7 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，项目使用[语义化版本](https://semver.org/spec/v2.0.0.html)。在 1.0.0 之前，次版本可能会改变 API。
 
-## [Unreleased] :id=unreleased
+## [1.1.0] - 2026-11-24 :id=1.1.0
 
 自 1.0.0 以来的修复，全部保持兼容：由 1.0.x 注解处理器生成的代码可以继续运行。有一处行为变化：订阅者在第一个元素之后取消的 `Flux`，现在对熔断器算作成功。
 

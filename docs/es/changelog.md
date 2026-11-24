@@ -4,7 +4,7 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
-## [Unreleased] :id=unreleased
+## [1.1.0] - 2026-11-24 :id=1.1.0
 
 Correcciones desde 1.0.0, todas compatibles: el código generado por un procesador 1.0.x sigue funcionando. Cambia un comportamiento: un `Flux` que su suscriptor cancela después del primer elemento ahora cuenta como éxito para el circuit breaker.
 
