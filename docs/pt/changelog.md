@@ -4,11 +4,23 @@ Mudanças relevantes em cada release do resilience4cata, da mais recente para a 
 
 O formato segue o [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), e o projeto usa [Versionamento Semântico](https://semver.org/spec/v2.0.0.html). Até a 1.0.0, uma versão minor pode mudar a API.
 
+## [Unreleased] :id=unreleased
+
+Correções desde a 1.0.0, todas compatíveis: o código gerado por um processador 1.0.x continua rodando. Um comportamento muda: um `Flux` que o assinante cancela depois do primeiro elemento agora conta como sucesso para o circuit breaker.
+
+### Corrigido :id=fixed
+
+- **Um `Pipeline` sobre um `Flux` perdia o cancelamento.** Com `FluxPipelineOperator` e sem retry nem fallback, cancelar a assinatura (como fazem `next()`, `take(1)` ou um cliente que se desconecta) nunca chegava às policies: o bulkhead mantinha sua vaga para sempre, então as chamadas seguintes eram rejeitadas, e a fonte continuava assinada. O código gerado não era afetado.
+- **Um `Flux` lido com `next()` ou `take(1)` não deixava nenhum sucesso no circuit breaker.** Esses operadores cancelam o stream depois do primeiro elemento, e uma chamada cancelada não era registrada, então poucas falhas entre muitos streams saudáveis podiam abrir o breaker, e uma sonda de semiaberto lida assim nunca o fechava. Um cancelamento depois do primeiro elemento agora é um sucesso (uma chamada lenta se esse elemento foi lento); um cancelamento antes dele continua sem registro ([métodos Flux](guides/reactor.md#flux)).
+- **Timeouts síncronos disparavam tarde em máquinas que dormem demais.** Onde as esperas curtas do watchdog sempre duram mais do que o pedido (Windows, macOS virtualizado), seu relógio ficava para trás e um timeout podia disparar várias vezes mais tarde do que o configurado. Agora ele acompanha o tempo real, e continua nunca disparando antes da hora ([Timeout](policies/timeout.md)).
+- O rate limiter podia julgar uma chamada com uma leitura do relógio anterior à permissão de outra thread, o que alongava sua espera pelo tempo entre as duas leituras e, com `maxWait = 0`, podia rejeitá-la sem necessidade.
+- Uma espera de retry próxima de `Long.MAX_VALUE` nanossegundos não transborda mais: o jitter completo lançava `IllegalArgumentException`, e `maxDuration` podia deixar passar uma nova tentativa além do limite.
+
 ## [1.0.0] - 2026-11-21 :id=1.0.0
 
 A primeira versão estável. A API é a mesma da 1.0.0-RC4, e a partir desta versão vale a promessa de [compatibilidade](reference/compatibility.md): dentro da 1.x, a API Java continua compatível em binário e em código-fonte, o código gerado por um processador roda em todo runtime 1.x posterior, e as anotações, as chaves de configuração, as propriedades das integrações, os nomes e tags das métricas, o JSON dos snapshots e os códigos de erro são mantidos. Desde a 1.0.0-RC4 há só correções, abaixo. Vindo da 0.13.0, leia também os release candidates: a 1.0.0-RC1 tem as duas pequenas mudanças de API (um evento renomeado, duas constantes que deixaram de ser públicas), e quatro comportamentos mudam: um annotation processor ausente é reportado em vez de deixar beans desprotegidos (1.0.0-RC2), o circuit breaker registra `Error`s como falhas e anotações em nível de tipo que não protegem nada são um erro de compilação (1.0.0-RC3), e o circuit breaker não registra mais as rejeições do bulkhead, do rate limiter ou do adaptive limit do próprio método (1.0.0-RC4).
 
-### Corrigido :id=fixed
+### Corrigido :id=fixed-1
 
 - `resilience4cata-config` ignora uma marca de ordem de bytes (BOM) UTF-8 no início de um arquivo de propriedades ou de um recurso do classpath, já que editores do Windows podem escrever uma. Ela era lida como parte da primeira chave, que então falhava como chave desconhecida ([R4C-CFG-001](errors.md#r4c-cfg-001)) cuja sugestão era a mesma chave.
 - **A ordem do processador ao lado do Lombok não importa mais.** Com o resilience4cata listado antes do Lombok no caminho de processadores, uma classe anotada com `@RequiredArgsConstructor` recebia uma subclasse que chamava um `super()` que o Lombok tinha removido, e uma classe `@Value` não era reportada como final. Uma classe que usa anotações do Lombok agora é processada na rodada seguinte, depois do Lombok ([Com Lombok](guides/annotated-classes.md#with-lombok)).
@@ -76,7 +88,7 @@ O primeiro release candidate da 1.0.0, depois da revisão do [plano para a 1.0](
 - Um bulkhead com `maxWait` pega e devolve um slot livre com seu próprio contador em vez dos atômicos com fence completo de `java.util.concurrent.Semaphore`: com quatro threads, 385 → 210 ns por chamada ([benchmarks](benchmarks.md#bulkhead-semaphore)).
 - Os métodos `Flux` alocam menos por stream: uma tentativa é um objeto em vez de dois, e um stream que terminou durante sua assinatura passa por todas as políticas como um único stage compartilhado em vez de uma cópia concluída por política (24 B a menos para uma política, 104 B para retry, breaker, timeout e bulkhead), e rodam até 9% mais rápido ([benchmarks](benchmarks.md#flux-ended)).
 
-### Corrigido :id=fixed-1
+### Corrigido :id=fixed-2
 
 - Bulkhead com `maxWait`: um slot podia ficar livre enquanto um chamador assíncrono esperava, até a próxima liberação ou o próprio `maxWait` desse chamador. Uma liberação que deixa o slot para um chamador síncrono bloqueado (uma em cada duas faz isso) podia fazê-lo exatamente quando a espera desse chamador terminava sem pegá-lo. Uma espera síncrona que termina sem slot agora passa o slot aos chamadores assíncronos. Encontrado por um novo teste jcstress, que o viu uma vez em 1,45 milhão de execuções antes da correção.
 - Adaptive limit: uma janela podia ser lida como 1 ns e aumentar o limite quando a escrita de uma amostra perdia uma corrida e levava sua faixa de volta abaixo das somas já usadas. Essa janela agora é descartada, e a seguinte conta a partir das somas atuais.
@@ -123,7 +135,7 @@ A revisão da API antes da 1.0: esta versão muda a API em muitos lugares, entã
 - **`enabled` nas anotações de política é um `boolean`** (`@Retry(enabled = false)`) em vez das strings `""`, `"true"` e `"false"`; não escrevê-lo continua herdando. [R4C-ATR-006](errors.md#r4c-atr-006), o erro para outra string, está aposentado: agora o compilador verifica o valor.
 - Os membros que são públicos só para outro módulo do resilience4cata (o uso que o registry faz dos construtores e configs das políticas, `PolicyEnvironment`, o despacho de eventos, o suporte a streaming de `Pipeline` para o módulo reactor, o `AnnotatedClassesFilter` do Micronaut) estão marcados com `@Internal`, e a verificação de compatibilidade da API deixa de fora o que está marcado com `@Internal` ou `@Experimental`. Construtores de políticas que só os testes usavam não são mais públicos.
 
-### Corrigido :id=fixed-2
+### Corrigido :id=fixed-3
 
 - Spring Boot: chaves começando com `r4c.` (o prefixo curto que a referência de configuração documenta, e que Micronaut e Quarkus leem) eram ignoradas silenciosamente; agora são lidas como as chaves `resilience4cata.`. `r4c.spring.*` é pulado, como `resilience4cata.spring.*`.
 - A descrição de `r4c.hedge.failed` é "Calls through a hedge that failed": conta toda chamada que falhou através de um hedge, tenha um hedge começado ou não.
@@ -142,7 +154,7 @@ A revisão da API antes da 1.0: esta versão muda a API em muitos lugares, entã
 
 - [R4C-ASY-002](errors.md#r4c-asy-002) não cobre mais o `Mono` e o `Flux` do Reactor, e sua mensagem os sugere com `resilience4cata-reactor`.
 
-### Corrigido :id=fixed-3
+### Corrigido :id=fixed-4
 
 - **O trabalho que a biblioteca executa depois não herda mais o contexto de thread de outra requisição, nem um class loader antigo depois de um reload.** As threads de timer da biblioteca são iniciadas uma vez por JVM, e herdavam o context class loader e os valores de `InheritableThreadLocal` da requisição que as iniciava; as virtual threads que elas iniciam (a próxima tentativa de um retry, um hedge, um timeout assíncrono que dispara) os herdavam por sua vez, e uma chamada de bulkhead na fila herdava os da chamada que liberou seu slot. Assim, depois de um live reload (dev mode do Quarkus, Spring DevTools), tentativas posteriores rodavam com o class loader da aplicação antiga, que também ficava na memória, e com um contexto de segurança ou MDC herdável uma tentativa podia rodar com os valores de outra requisição. As threads de timer agora mantêm o class loader da biblioteca e não herdam nada; o trabalho roda com o context class loader da thread que fez a chamada e sem valores herdados.
 - **O rate limiter assíncrono não estaciona mais a thread chamadora.** Depois de perder a corrida por uma permissão ele estacionava por 1 ns antes de tentar de novo, o que uma thread de event loop (Netty, Reactor) nunca deve fazer; agora tenta de novo na hora. Sob contenção pesada em um limitador isso custa mais por chamada ([benchmarks](benchmarks.md)). O rate limiter síncrono não muda.
@@ -162,7 +174,7 @@ A revisão da API antes da 1.0: esta versão muda a API em muitos lugares, entã
 - **Tipos de retorno reativos são um erro de compilação.** Um método com anotações de resiliência que retorna um tipo reativo lazy (`Flow.Publisher` ou o `Publisher` do Reactive Streams, portanto o `Mono` e o `Flux` do Reactor; o `Uni` e o `Multi` do Mutiny; os tipos do RxJava) compilava como um método síncrono, então as políticas protegiam só a construção do pipeline e uma falha nunca era repetida nem expirava. Agora é [R4C-ASY-002](errors.md#r4c-asy-002); retorne um `CompletionStage` em vez disso (`uni.subscribeAsCompletionStage()`, `mono.toFuture()`).
 - **Quarkus: dois casos que perdiam a proteção silenciosamente são erros de build.** Um recurso Quarkus REST que é uma classe anotada ([R4C-QK-007](errors.md#r4c-qk-007): o Quarkus REST cria as classes de recurso ele mesmo, então a subclasse gerada nunca servia os endpoints), e um bean protegido com `@LookupIfProperty`/`@LookupUnlessProperty` ([R4C-QK-006](errors.md#r4c-qk-006): a condição era ignorada).
 
-### Corrigido :id=fixed-4
+### Corrigido :id=fixed-5
 
 - **Quarkus: condições de build em classes anotadas.** `@IfBuildProfile`, `@UnlessBuildProfile`, `@IfBuildProperty` e `@UnlessBuildProperty` em uma classe anotada eram ignoradas, então tanto uma implementação de produção quanto uma de teste eram beans (uma injeção ambígua). A subclasse gerada de uma classe desabilitada agora também é desabilitada.
 - **Anotações repetidas nas subclasses geradas.** As sobrescritas não repetem mais as anotações de Bean Validation (`@Valid` e as restrições, que o Bean Validation herda do método sobrescrito): um valor de retorno `@Valid` impedia uma aplicação Quarkus de iniciar (HV000131). No Quarkus, uma anotação de classe `@Named` sem valor agora dá ao bean o nome da classe anotada, não `…$Resilient`, e um método `@Scheduled` não dá mais dois escopos ao bean. No Micronaut, uma classe marcada com `@ResilientBean` que também tinha anotações de política próprias aplicava as políticas da sua interface duas vezes (um `@Retry(maxAttempts = 3)` fazia 9 tentativas); sua subclasse gerada não é mais envolvida de novo.
@@ -194,7 +206,7 @@ A revisão da API antes da 1.0: esta versão muda a API em muitos lugares, entã
 - `@Hedge` para de iniciar tentativas quando uma é rejeitada por um adaptive limit, como para um breaker aberto ou um bulkhead cheio.
 - **Card no Dev UI do Quarkus**: em dev mode, `/q/dev-ui` mostra todas as instâncias de política do registry (breakers, bulkheads, rate limiters, adaptive limits, retries e hedges com seus budgets, timeouts), atualizadas a cada dois segundos, e pode forçar a abertura de um circuit breaker, desabilitá-lo ou reiniciá-lo. Só em dev mode: o card e seu serviço JsonRPC não existem em builds de teste nem de produção. Veja [Quarkus, Dev UI](guides/quarkus.md#dev-ui).
 
-### Corrigido :id=fixed-5
+### Corrigido :id=fixed-6
 
 - O endpoint `resilience4cata` do actuator do Spring Boot agora inclui os hedges quando reporta uma única instância (`/actuator/resilience4cata/{instance}`).
 
@@ -206,7 +218,7 @@ A revisão da API antes da 1.0: esta versão muda a API em muitos lugares, entã
 - **Opção do processador `-Ar4c.inject=micronaut`**: a subclasse gerada de uma classe anotada repete as anotações em nível de tipo da classe (escopo, qualificadores, `@Requires`…) e adiciona `@Replaces(C.class)`, para que o Micronaut a crie no lugar da classe. Sem a opção, o código gerado não muda. Um valor diferente de `micronaut`, ou a opção sem o Micronaut no class path de compilação, é o novo erro [R4C-APT-006](errors.md#r4c-apt-006).
 - **`resilience4cata-quarkus`: extensão Quarkus** (Quarkus 3.40 ou mais novo; runtime `resilience4cata-quarkus` e deployment `resilience4cata-quarkus-deployment`, ambos no BOM; sem interceptors). Em tempo de build, uma classe anotada é vetada e sua subclasse gerada se torna o bean com o escopo, os qualificadores e os estereótipos da classe (chamadas em `this` interceptadas); um bean de uma interface anotada é injetado por um bean wrapper sintético (`Resilient.of`, uma alternativa habilitada com os qualificadores do bean; `@Inject` da classe continua recebendo o bean); uma interface de REST client (`@RegisterRestClient`) com um wrapper recebe um bean `@Default` ao redor do `@RestClient`. Um bean `ResilienceRegistry` (`@DefaultBean`) é configurado a partir das chaves `resilience4cata.*` da aplicação pelo SmallRye Config (perfis do Quarkus, expressões, variáveis `R4C_`, arquivo e linha de cada chave inválida), criado na inicialização para que erros de configuração a interrompam; os beans `ResilienceRegistryCustomizer`, `EventListener` e `Ticker` são aplicados; as chaves `resilience4cata.instances.<id>` são verificadas na inicialização (`quarkus.resilience4cata.verify-instances`, `warn` por padrão). Métricas do Micrometer com `quarkus-micrometer` e `resilience4cata-micrometer` (senão OpenTelemetry), uma readiness check `resilience4cata` (UP com breakers abertos, a menos que listados em `quarkus.resilience4cata.health.down-when-open`). Nova área de erros `R4C-QK-001`…`005`, reportados enquanto o Quarkus constrói a aplicação: [R4C-QK-001](errors.md#r4c-qk-001) (anotações do MicroProfile/SmallRye Fault Tolerance e do resilience4cata em um mesmo método), [R4C-QK-002](errors.md#r4c-qk-002) (um método `@Transactional` com retry ou hedge de uma classe anotada; `quarkus.resilience4cata.allow-retry-inside-transaction`), [R4C-QK-003](errors.md#r4c-qk-003) (várias interfaces anotadas sem relação), [R4C-QK-004](errors.md#r4c-qk-004) (producers em uma classe anotada), [R4C-QK-005](errors.md#r4c-qk-005) (uma classe anotada com escopo normal sem um construtor sem parâmetros). Veja [Quarkus](guides/quarkus.md), incluindo SmallRye Fault Tolerance vs resilience4cata. Uma native image da aplicação do guia foi construída à mão (GraalVM for JDK 25.0.4, Quarkus 3.40.1, macOS arm64) e serviu a classe anotada, o wrapper da interface, o wrapper do REST client, a readiness check e as métricas sem configuração nativa extra; os builds nativos não fazem parte do CI. Em uma native image, os erros de configuração nomeiam a fonte que o SmallRye reporta ali (`Runtime Values` para valores fixados em tempo de build) em vez do arquivo e da linha.
 
-### Corrigido :id=fixed-6
+### Corrigido :id=fixed-7
 
 - Em um ticker manual (`ManualClock`), um retry assíncrono cujo próximo atraso é zero (`delay = 0`, ou um jitter `FULL` que sorteia zero) iniciava a próxima tentativa em uma nova virtual thread em vez de no relógio, então os testes corriam contra ela. Todo atraso que uma política agenda em um ticker agora passa por `Ticker.schedule`, zero incluído, e roda na thread que avança o relógio em seguida (`advance(Duration.ZERO)` incluído), como os hedges depois de uma falha já faziam. Sem ticker nada muda. `Ticker.schedule` agora pode ser chamado com um atraso de zero.
 - [R4C-RT-003](errors.md#r4c-rt-003) em uma native image do GraalVM agora também aponta para os reachability metadata que o processador escreve (`META-INF/native-image/dev.resilience4cata.generated/<class>/reachability-metadata.json`), que devem estar no class path do build da imagem. A mensagem não muda na JVM.
@@ -227,7 +239,7 @@ A revisão da API antes da 1.0: esta versão muda a API em muitos lugares, entã
 - A subclasse gerada para uma classe anotada não é mais `final` (`public class C$Resilient extends C`), para que os frameworks possam criar proxies dela (CGLIB para `@Transactional`, scoped proxies). Os wrappers de interface continuam `final`.
 - Os construtores gerados de classes anotadas nomeiam seus parâmetros conforme o construtor da classe (`registry, warehouse` em vez de `registry, p0`); um parâmetro chamado `registry` faz o parâmetro do registry virar `r4c$registry`, e parâmetros chamados `java` ou `dev` viram `r4c$p<index>`. As chamadas não são afetadas.
 
-### Corrigido :id=fixed-7
+### Corrigido :id=fixed-8
 
 - **Cancelar uma chamada assíncrona agora cancela o trabalho dentro dela.** Cancelar o future retornado por um método assíncrono gerado ou por `Pipeline.executeAsync` (ou concluí-lo excepcionalmente com uma `CancellationException`) parava na política mais externa: o stage interno continuava rodando, um slot de bulkhead ficava ocupado até esse stage terminar, um retry podia iniciar outra tentativa, um fallback podia rodar, e o circuit breaker podia registrar o cancelamento como falha. O cancelamento agora desce por todas as camadas até o stage do método: o retry cancela seu backoff e não inicia mais nenhuma tentativa, o timeout cancela seu prazo, o bulkhead libera seu slot assim que o stage termina (na hora para um `CompletableFuture`) e uma chamada na fila sai da fila, o breaker não registra nada (uma permissão half-open é devolvida), o fallback não roda, e uma chamada que ainda espera uma permissão do rate limiter devolve a permissão e nunca começa. Nenhum evento é publicado para um cancelamento. Um timeout que expira cancela as camadas internas da mesma forma, então um bulkhead dentro de um timeout libera seu slot quando a chamada expira. Cada política retorna o mesmo número de objetos por chamada que antes. Veja [Métodos assíncronos](guides/async.md#cancellation).
 
@@ -258,7 +270,7 @@ Corrige três bugs de comportamento da 0.1.0; uma das correções muda um padrã
 
 - **Um circuit breaker aberto sempre para os retries.** Uma chamada rejeitada com `CallNotPermittedException` nunca é repetida, digam o que disserem `abortOn`, `retryOn` ou um classificador, no código gerado (síncrono e assíncrono) e em `Pipeline`. Na 0.1.0 isso vinha do `abortOn` padrão, então definir seu próprio `abortOn` o descartava silenciosamente e o retry continuava chamando um breaker aberto. `RetryConfig.DEFAULTS.abortOn()` (e `defaults.retry.abortOn`) agora é vazio; [Retry](policies/retry.md#attributes).
 
-### Corrigido :id=fixed-8
+### Corrigido :id=fixed-9
 
 - `FallbackEvent.Applied` não é mais publicado para uma falha que nenhum método de fallback irmão aceita (por exemplo um `Error` quando o único irmão aceita `Exception`): uma falha assim é relançada, e o evento agora significa que um fallback realmente rodou.
 - As mensagens de erro R4C-ATR-001 e R4C-CFG-002 enunciam a gramática das durações uma vez em vez de duas, e R4C-CFG-007 termina sua frase antes de "Known configs".

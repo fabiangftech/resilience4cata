@@ -4,6 +4,18 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
+## [Unreleased] :id=unreleased
+
+Correcciones desde 1.0.0, todas compatibles: el código generado por un procesador 1.0.x sigue funcionando. Cambia un comportamiento: un `Flux` que su suscriptor cancela después del primer elemento ahora cuenta como éxito para el circuit breaker.
+
+### Corregido
+
+- **Un `Pipeline` sobre un `Flux` perdía la cancelación.** Con `FluxPipelineOperator` y sin retry ni fallback, cancelar la suscripción (como hacen `next()`, `take(1)` o un cliente que se desconecta) nunca llegaba a las políticas: el bulkhead conservaba su lugar para siempre, así que las llamadas siguientes se rechazaban, y la fuente seguía suscrita. El código generado no estaba afectado.
+- **Un `Flux` leído con `next()` o `take(1)` no dejaba ningún éxito en el circuit breaker.** Esos operadores cancelan el stream después de su primer elemento, y una llamada cancelada no se registraba, así que unos pocos fallos entre muchos streams sanos podían abrir el breaker, y una prueba de half-open leída así nunca lo cerraba. Una cancelación después del primer elemento ahora es un éxito (una llamada lenta si ese elemento fue lento); una cancelación anterior sigue sin registrarse ([métodos Flux](guides/reactor.md#flux)).
+- **Los timeouts sincrónicos saltaban tarde en máquinas que duermen de más.** Donde las esperas cortas del watchdog siempre duran más de lo pedido (Windows, macOS virtualizado), su reloj se atrasaba y un timeout podía saltar varias veces más tarde de lo configurado. Ahora sigue el tiempo real, y sigue sin saltar nunca antes de tiempo ([Timeout](policies/timeout.md)).
+- El rate limiter podía juzgar una llamada con una lectura del reloj anterior al permiso de otro hilo, lo que alargaba su espera en el tiempo entre las dos lecturas y, con `maxWait = 0`, podía rechazarla sin necesidad.
+- Una espera de retry cercana a `Long.MAX_VALUE` nanosegundos ya no se desborda: el jitter completo lanzaba `IllegalArgumentException`, y `maxDuration` podía dejar pasar un reintento más allá de su límite.
+
 ## [1.0.0] - 2026-11-21 :id=1.0.0
 
 La primera versión estable. La API es la misma que en 1.0.0-RC4, y desde esta versión rige la promesa de [compatibilidad](reference/compatibility.md): dentro de 1.x, la API Java se mantiene compatible en binario y en código fuente, el código generado por un procesador funciona en todo runtime 1.x posterior, y se mantienen las anotaciones, las claves de configuración, las propiedades de las integraciones, los nombres y etiquetas de las métricas, el JSON de los snapshots y los códigos de error. Desde 1.0.0-RC4 solo hay correcciones, abajo. Si vienes de 0.13.0, lee también los candidatos a release: 1.0.0-RC1 tiene los dos cambios pequeños de API (un evento renombrado, dos constantes que dejan de ser públicas), y cambian cuatro comportamientos: un procesador de anotaciones ausente se reporta en vez de dejar beans sin proteger (1.0.0-RC2), el circuit breaker registra los `Error` como fallos y las anotaciones a nivel de tipo que no protegen nada son un error de compilación (1.0.0-RC3), y el circuit breaker ya no registra los rechazos del propio bulkhead, rate limiter o adaptive limit del método (1.0.0-RC4).
