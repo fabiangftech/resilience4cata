@@ -64,6 +64,8 @@ class AttemptSubscriber<T> extends CompletableFuture<Void> implements CoreSubscr
     // Only touched by onNext, which Reactive Streams calls one element at a time.
     private boolean emitted;
     private boolean discarding;
+    // Written once, at the first element, and read by a cancel on any thread; onNext keeps reading the plain field.
+    volatile boolean emittedOnce;
 
     AttemptSubscriber(FluxCall<T> call, int number) {
         this.call = call;
@@ -94,6 +96,7 @@ class AttemptSubscriber<T> extends CompletableFuture<Void> implements CoreSubscr
                 return;
             }
             emitted = true;
+            emittedOnce = true;
             if (first != null) {
                 first.element();
             }

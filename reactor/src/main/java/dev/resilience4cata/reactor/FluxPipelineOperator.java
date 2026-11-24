@@ -121,5 +121,10 @@ public final class FluxPipelineOperator<T> implements UnaryOperator<Flux<T>> {
         public void listen(ElementListener listener, boolean everyElement) {
             attempt.listen(listener, everyElement);
         }
+
+        @Override
+        public boolean emitted() {
+            return attempt.emitted();
+        }
     }
 }

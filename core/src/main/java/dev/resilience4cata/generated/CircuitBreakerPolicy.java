@@ -355,8 +355,9 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      * The asynchronous form for a streaming call (a method that returns a {@code Flux}): as
      * {@link #executeAsync(AsyncCall)}, one call per attempt recorded when the stream ends, but a slow
      * call is one whose first element (or end, if it has none) took {@code slowCallDuration} or more:
-     * a stream's length says nothing about the dependency. Without slow-call detection it is
-     * {@link #executeAsync(AsyncCall)}.
+     * a stream's length says nothing about the dependency. A stream cancelled after its first element
+     * ({@code next()}, {@code take(1)}) is a success, since the dependency answered and the subscriber
+     * stopped reading; one cancelled before it is not recorded.
      *
      * @param call the next layer
      * @param elements the streaming call, told of this attempt's listener before {@code call} starts
@@ -365,7 +366,7 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
      */
     public <T extends @Nullable Object> CompletableFuture<T> executeStreamAsync(AsyncCall<T> call, Elements elements) {
         if (!timed) {
-            return executeAsync(call);
+            return executeUntimedStreamAsync(call, elements);
         }
         long token = acquire();
         if (token < 0) {
@@ -391,7 +392,11 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
                 }
                 result.complete(value);
             } else if (result.cancelling()) {
-                release(token);
+                if (!elements.emitted()) {
+                    release(token);
+                } else if (slow != 0 || token != (long) QUIET.getOpaque(this)) {
+                    record(token, slow); // it answered, and the subscriber stopped reading
+                }
             } else {
                 Throwable cause = AsyncSupport.unwrap(failure);
                 switch (classification.get(cause.getClass())) {
@@ -407,6 +412,41 @@ public final class CircuitBreakerPolicy implements CircuitBreakerHandle {
 
     private int slowBit(long start) {
         return timed && ticker.getAsLong() - start >= slowCallNanos ? SlidingWindow.SLOW : 0;
+    }
+
+    /**
+     * {@link #executeStreamAsync} without slow-call detection: no clock and no listener, as a stream's only
+     * difference from {@link #executeAsync(AsyncCall)} is what a cancel after its first element means.
+     */
+    private <T extends @Nullable Object> CompletableFuture<T> executeUntimedStreamAsync(AsyncCall<T> call,
+            Elements elements) {
+        long token = acquire();
+        if (token < 0) {
+            return CompletableFuture.failedFuture(rejection());
+        }
+        CompletionStage<T> stage = AsyncSupport.call(call);
+        if (AsyncSupport.succeeded(stage)) { // ended during its subscription
+            onSuccess(token, 0L);
+            return AsyncSupport.copy(stage);
+        }
+        LinkedFuture<T> result = new LinkedFuture<>(stage);
+        stage.whenComplete((value, failure) -> {
+            if (failure == null) {
+                onSuccess(token, 0L);
+                result.complete(value);
+            } else if (result.cancelling()) {
+                if (elements.emitted()) {
+                    onSuccess(token, 0L); // it answered, and the subscriber stopped reading
+                } else {
+                    release(token);
+                }
+            } else {
+                Throwable cause = AsyncSupport.unwrap(failure);
+                onFailure(token, 0L, cause);
+                result.fail(cause);
+            }
+        });
+        return result;
     }
 
     // java:S3776: per-call method kept in one piece for JIT inlining (see CLAUDE.md on per-call methods).

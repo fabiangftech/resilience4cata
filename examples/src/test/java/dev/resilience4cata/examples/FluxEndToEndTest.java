@@ -310,6 +310,18 @@ class FluxEndToEndTest {
         assertThat(registry.circuitBreaker("flux-slow").snapshot().slowCalls()).isOne();
     }
 
+    @Test
+    void aSubscriberThatStopsAfterTheFirstElementCountsAsASuccess() {
+        backend.script("guarded", onClock("a@100", "b@5000", ".@6000"));
+        StepVerifier.create(client.guarded("x").next()).then(() -> clock.advance(Duration.ofMillis(100)))
+                .expectNext("a").expectComplete().verify(VERIFY);
+
+        assertThat(backend.cancellations("guarded")).isOne();
+        assertThat(registry.circuitBreaker("flux-breaker").snapshot().bufferedCalls()).isOne();
+        assertThat(registry.circuitBreaker("flux-breaker").snapshot().failedCalls()).isZero();
+        clock.advanceUntilIdle();
+    }
+
     // ---- bulkhead, rate limiter, adaptive limit: held for the whole stream
 
     @Test

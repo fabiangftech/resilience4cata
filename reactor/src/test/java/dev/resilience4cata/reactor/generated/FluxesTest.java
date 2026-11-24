@@ -490,6 +490,21 @@ class FluxesTest {
         assertThat(discarded).containsExactly("stale");
     }
 
+    @Test
+    void onlyTheAttemptThatDeliveredAnElementHasEmitted() {
+        FluxCall<String> call = new FluxCall<>(new BaseSubscriber<String>() { });
+        FluxCall.Attempt<String> late = new FluxCall.Attempt<>(call, 5); // given up on: it can never commit
+        FluxCall.Attempt<String> current = new FluxCall.Attempt<>(call, 0);
+        assertThat(current.emitted()).isFalse();
+
+        late.onNext("discarded");
+        assertThat(late.emitted()).isFalse();
+
+        current.onNext("a");
+        assertThat(current.emitted()).isTrue();
+        assertThat(late.emitted()).isFalse();
+    }
+
     // ---- policies that hold something for the whole stream
 
     @Test

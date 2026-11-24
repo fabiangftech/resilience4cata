@@ -185,7 +185,7 @@ breaker.reset();       // back to CLOSED with an empty window
 CompletableFuture<Long> balanceAsync(String account);
 ```
 
-慢调用一直计时到 stage 完成。调用方取消了其 future 的调用不会被记录，与被忽略的调用一样：半开许可会被归还（[取消](../guides/async.md#cancellation)）。见[异步方法](../guides/async.md)。
+慢调用一直计时到 stage 完成。调用方取消了其 future 的调用不会被记录，与被忽略的调用一样：半开许可会被归还（[取消](../guides/async.md#cancellation)）。例外是在第一个元素之后被取消的 `Flux`，它算作成功（[Flux 方法](../guides/reactor.md#flux)）。见[异步方法](../guides/async.md)。
 
 ## 用 `Pipeline` 实现同样的效果 :id=same-thing-with-pipeline
 

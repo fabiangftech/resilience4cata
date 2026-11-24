@@ -230,6 +230,11 @@ public final class FluxCall<T> implements Subscription {
             }
         }
 
+        @Override
+        public boolean emitted() {
+            return emittedOnce;
+        }
+
         /**
          * Subscribes this attempt to the delegate's {@code Flux}, with the subscriber's context, and returns a
          * stage that ends when the attempt's stream ends. A {@code null} {@code Flux} is a failed attempt.
