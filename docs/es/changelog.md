@@ -9,6 +9,9 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y 
 ### Corregido
 
 - Una duración de más de unos 292 años (`Long.MAX_VALUE` nanosegundos) en un builder `*Config`, un paso de `Pipeline` o `ResilienceRegistry.Builder` se rechaza con [R4C-REG-001](errors.md#r4c-reg-001), nombrando el atributo. Antes fallaba más tarde, al crear la política, con un `ArithmeticException` y sin código `R4C`. Las anotaciones y los archivos de configuración ya la rechazaban.
+- **Micronaut: un `verify-instances: off` sin comillas en YAML impedía arrancar la aplicación.** YAML lo lee como el booleano `false`, que fallaba con [R4C-MN-006](errors.md#r4c-mn-006); ahora significa `off`. Un `on` sin comillas se sigue rechazando, con una pista para entrecomillar el valor.
+- `resilience4cata-opentelemetry`: conectar un registry lo mantenía vivo hasta `close()`, así que un registry que la aplicación descartaba nunca se recolectaba y sus gauges seguían reportando. Ahora dejan de hacerlo cuando se recolecta ([OpenTelemetry](guides/opentelemetry.md)).
+- `resilience4cata-micrometer`: cuando un registry conectado se recolectaba, un registry conectado después con una instancia del mismo id nunca recibía gauges; su estado se quedaba en NaN. Ahora reemplaza los gauges obsoletos ([Micrometer](guides/micrometer.md)).
 
 ## [1.1.0] - 2026-11-24 :id=1.1.0
 
