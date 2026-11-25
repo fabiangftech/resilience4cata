@@ -24,6 +24,8 @@ import io.opentelemetry.sdk.metrics.data.LongPointData;
 import io.opentelemetry.sdk.metrics.data.MetricData;
 import io.opentelemetry.sdk.metrics.data.MetricDataType;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
+import dev.resilience4cata.CircuitBreakerState;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.Collection;
@@ -359,6 +361,42 @@ class OpenTelemetryMetricsTest {
     @Test
     void attributeSetsAreBuiltOnceAndReused() {
         assertThat(metrics.attributes("payments")).isSameAs(metrics.attributes("payments"));
+    }
+
+    // java:S2925: gives the real garbage collector time to clear the weak reference
+    @SuppressWarnings("java:S2925")
+    @Test
+    void aBoundRegistryThatNothingElseUsesIsCollectedAndStopsReporting() throws Exception {
+        WeakReference<ResilienceRegistry> reference = bindAndDrop();
+        collect();
+        assertThat(statePoints("dropped")).as("reported while alive").isEqualTo(CircuitBreakerState.values().length);
+
+        for (int i = 0; i < 50 && reference.get() != null; i++) {
+            System.gc();
+            Thread.sleep(10);
+        }
+
+        assertThat(reference.get()).as("the registry is collected").isNull();
+        collect();
+        assertThat(statePoints("dropped")).as("its gauges report nothing more").isZero();
+        ResilienceRegistry next = metrics.register(ResilienceTesting.registry(clock)).build();
+        metrics.bindTo(next); // also removes the dropped registry's callback
+        Pipeline.builder(next, "next", String.class).circuitBreaker().build();
+        collect();
+        assertThat(statePoints("next")).isEqualTo(CircuitBreakerState.values().length);
+    }
+
+    private WeakReference<ResilienceRegistry> bindAndDrop() {
+        ResilienceRegistry dropped = metrics.register(ResilienceTesting.registry(clock)).build();
+        metrics.bindTo(dropped);
+        Pipeline.builder(dropped, "dropped", String.class).circuitBreaker().build();
+        return new WeakReference<>(dropped);
+    }
+
+    private long statePoints(String id) {
+        return collected.stream().filter(m -> m.getName().equals("r4c.circuitbreaker.state"))
+                .flatMap(m -> m.getLongGaugeData().getPoints().stream())
+                .filter(p -> id.equals(p.getAttributes().get(AttributeKey.stringKey("name")))).count();
     }
 
     // --- collection helpers

@@ -29,6 +29,7 @@ import io.opentelemetry.api.metrics.ObservableDoubleMeasurement;
 import io.opentelemetry.api.metrics.ObservableLongMeasurement;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -162,7 +163,11 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     /** Per instance, indexed by state ordinal. */
     private final ConcurrentHashMap<String, Attributes[]> stateAttributes = new ConcurrentHashMap<>();
 
-    private final List<BatchCallback> callbacks = new ArrayList<>();
+    /** One gauge callback per bound registry, which it reaches only weakly. */
+    private record BoundCallback(WeakReference<ResilienceRegistry> registry, BatchCallback callback) {
+    }
+
+    private final List<BoundCallback> callbacks = new ArrayList<>();
     /** The registries bound so far, weakly: binding one does not keep it alive. Guarded by {@code callbacks}. */
     private final Set<ResilienceRegistry> bound = Collections.newSetFromMap(new WeakHashMap<>());
     private volatile boolean closed;
@@ -260,13 +265,28 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
                 "Calls running in the adaptive limit");
         Gauges gauges = new Gauges(state, failureRate, slowCallRate, concurrent, waiting, maxConcurrent, permits, limit,
                 limitConcurrent);
-        Runnable observe = () -> gauges.observe(registry.snapshot());
+        // The SDK keeps the callback for as long as it is registered, so it must not hold the registry: a registry that
+        // nothing else uses is collected, its gauges report nothing more, and the next bind removes its callback.
+        WeakReference<ResilienceRegistry> reference = new WeakReference<>(registry);
+        Runnable observe = () -> {
+            ResilienceRegistry live = reference.get();
+            if (live != null) {
+                gauges.observe(live.snapshot());
+            }
+        };
         synchronized (callbacks) { // cold: once per bind, never on a call path
             if (closed || !bound.add(registry)) {
                 return; // closed, or bound by another thread since the check above
             }
-            callbacks.add(meter.batchCallback(observe, state, failureRate, slowCallRate, concurrent, waiting,
-                    maxConcurrent, permits, limit, limitConcurrent));
+            callbacks.removeIf(bound -> {
+                if (bound.registry().get() != null) {
+                    return false;
+                }
+                bound.callback().close();
+                return true;
+            });
+            callbacks.add(new BoundCallback(reference, meter.batchCallback(observe, state, failureRate, slowCallRate,
+                    concurrent, waiting, maxConcurrent, permits, limit, limitConcurrent)));
         }
     }
 
@@ -279,7 +299,7 @@ public final class OpenTelemetryMetrics implements AutoCloseable {
     public void close() {
         synchronized (callbacks) {
             closed = true;
-            callbacks.forEach(BatchCallback::close);
+            callbacks.forEach(bound -> bound.callback().close());
             callbacks.clear();
         }
     }
