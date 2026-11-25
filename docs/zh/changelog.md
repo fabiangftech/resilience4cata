@@ -4,11 +4,17 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，项目使用[语义化版本](https://semver.org/spec/v2.0.0.html)。在 1.0.0 之前，次版本可能会改变 API。
 
+## [Unreleased] :id=unreleased
+
+### 修复 :id=fixed
+
+- 在 `*Config` 构建器、`Pipeline` 步骤或 `ResilienceRegistry.Builder` 中，超过约 292 年（`Long.MAX_VALUE` 纳秒）的时长现在会以 [R4C-REG-001](errors.md#r4c-reg-001) 被拒绝，并指出属性名。此前它会在创建策略时才失败，抛出不带 `R4C` 代码的 `ArithmeticException`。注解和配置文件早已拒绝此类值。
+
 ## [1.1.0] - 2026-11-24 :id=1.1.0
 
 自 1.0.0 以来的修复，全部保持兼容：由 1.0.x 注解处理器生成的代码可以继续运行。有一处行为变化：订阅者在第一个元素之后取消的 `Flux`，现在对熔断器算作成功。
 
-### 修复 :id=fixed
+### 修复 :id=fixed-1
 
 - **`Flux` 上的 `Pipeline` 丢失了取消信号。** 使用 `FluxPipelineOperator` 且没有重试和降级时，取消订阅（`next()`、`take(1)` 或断开连接的客户端都会这样做）无法到达各策略：舱壁隔离会一直占用槽位，导致后续调用被拒绝，数据源也保持订阅状态。生成的代码不受影响。
 - **用 `next()` 或 `take(1)` 读取的 `Flux` 不会在熔断器中留下成功记录。** 这些操作符会在第一个元素之后取消流，而被取消的调用不会被记录，因此在大量健康的流中出现少数失败就可能打开熔断器，以这种方式读取的半开探测也永远无法关闭它。现在，在第一个元素之后取消算作成功（如果该元素很慢则算作慢调用）；在此之前取消仍不记录（[Flux 方法](guides/reactor.md#flux)）。
@@ -20,7 +26,7 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 
 第一个稳定版本。API 与 1.0.0-RC4 相同，从此版本起适用[兼容性](reference/compatibility.md)承诺：在 1.x 内，Java API 保持二进制和源码兼容，由某个注解处理器生成的代码可以在之后每个 1.x 运行时上运行，注解、配置键、集成属性、指标名称和标签、快照 JSON 以及错误代码都会保留。自 1.0.0-RC4 以来只有修复，见下文。如果从 0.13.0 升级，也请阅读各候选版本：1.0.0-RC1 有两处小的 API 改动（一个事件被重命名，两个常量不再是 public），另有四处行为变化：缺失的注解处理器会被报告，而不是让 bean 处于无保护状态（1.0.0-RC2）；熔断器把 `Error` 记录为失败，且不保护任何东西的类型级注解成为编译错误（1.0.0-RC3）；熔断器不再记录方法自身的舱壁隔离 (bulkhead)、限流器或自适应限流的拒绝（1.0.0-RC4）。
 
-### 修复 :id=fixed-1
+### 修复 :id=fixed-2
 
 - `resilience4cata-config` 会忽略 properties 文件或 classpath 资源开头的 UTF-8 字节顺序标记（BOM），因为 Windows 编辑器可能会写入它。此前它被读作第一个键的一部分，该键随后以未知键失败（[R4C-CFG-001](errors.md#r4c-cfg-001)），而给出的建议正是同一个键。
 - **注解处理器与 Lombok 的先后顺序不再重要。** 当 resilience4cata 在注解处理器路径上排在 Lombok 之前时，带 `@RequiredArgsConstructor` 的注解类会得到一个调用了已被 Lombok 移除的 `super()` 的子类，而 `@Value` 类不会被报告为 final。现在使用 Lombok 注解的类会在下一轮、即 Lombok 之后处理（[配合 Lombok](guides/annotated-classes.md#with-lombok)）。
@@ -88,7 +94,7 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 - 带 `maxWait` 的舱壁隔离用它自己的计数器获取和归还空闲槽位，而不是使用 `java.util.concurrent.Semaphore` 的完整内存屏障原子操作：四个线程时，每次调用 385 → 210 ns（[基准测试](benchmarks.md#bulkhead-semaphore)）。
 - `Flux` 方法每个流分配的内存更少：一次尝试是一个对象而不是两个，而在订阅期间就已结束的流作为一个共享的 stage 经过每个策略，而不是每个策略一个已完成的副本（一个策略少 24 B，重试、熔断器、超时和舱壁隔离一起少 104 B），并且最多快 9%（[基准测试](benchmarks.md#flux-ended)）。
 
-### 修复 :id=fixed-2
+### 修复 :id=fixed-3
 
 - 带 `maxWait` 的舱壁隔离：在一个异步调用方等待时，槽位可能一直空闲，直到下一次释放或该调用方自己的 `maxWait` 到期。一次把槽位留给被阻塞的同步调用方的释放（每隔一次都会这样做）可能恰好发生在该调用方的等待未拿到槽位就结束的时候。现在，没有拿到槽位就结束的同步等待会把槽位交给异步调用方。由一个新的 jcstress 测试发现，它在修复前的 145 万次运行中出现过一次。
 - 自适应限流：当一次样本写入输掉竞争、使其条带回退到低于已使用的总和时，一个窗口可能被读成 1 ns 并抬高限制。现在该窗口会被丢弃，下一个窗口从当前的总和开始计数。
@@ -135,7 +141,7 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 - **策略注解上的 `enabled` 是 `boolean`**（`@Retry(enabled = false)`），而不是字符串 `""`、`"true"` 和 `"false"`；不写它仍表示继承。针对其他字符串的错误 [R4C-ATR-006](errors.md#r4c-atr-006) 已退役：现在由编译器检查该值。
 - 只为了另一个 resilience4cata 模块才是 public 的成员（注册表对策略构造器和配置的使用、`PolicyEnvironment`、事件分发、`Pipeline` 为 reactor 模块提供的流式支持、Micronaut 的 `AnnotatedClassesFilter`）标记为 `@Internal`，API 兼容性检查会排除标记为 `@Internal` 或 `@Experimental` 的内容。只有测试使用的策略构造器不再是 public。
 
-### 修复 :id=fixed-3
+### 修复 :id=fixed-4
 
 - Spring Boot：以 `r4c.` 开头的键（配置参考文档中记载、Micronaut 和 Quarkus 也会读取的短前缀）曾被静默忽略；现在它们像 `resilience4cata.` 键一样被读取。`r4c.spring.*` 会被跳过，与 `resilience4cata.spring.*` 一样。
 - `r4c.hedge.failed` 的描述是 "Calls through a hedge that failed"：它统计经过对冲请求的每一次失败调用，无论是否发起了对冲。
@@ -154,7 +160,7 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 
 - [R4C-ASY-002](errors.md#r4c-asy-002) 不再涵盖 Reactor 的 `Mono` 和 `Flux`，它的消息会建议配合 `resilience4cata-reactor` 使用它们。
 
-### 修复 :id=fixed-4
+### 修复 :id=fixed-5
 
 - **库稍后运行的工作不再继承另一个请求的线程上下文，也不再在重新加载后继承旧的类加载器。** 库的定时器线程每个 JVM 只启动一次，以前会继承启动它们的那个请求的上下文类加载器和 `InheritableThreadLocal` 值；它们启动的虚拟线程（重试的下一次尝试、对冲请求、触发的异步超时）又会继承这些，而排队的舱壁隔离调用会继承释放其槽位的那次调用的这些值。因此在热重新加载之后（Quarkus dev 模式、Spring DevTools），之后的尝试会使用旧应用的类加载器运行（该类加载器也因此留在内存中），而在使用可继承的安全上下文或 MDC 时，一次尝试可能带着另一个请求的值运行。现在定时器线程持有库的类加载器，不继承任何东西；工作以发起调用的线程的上下文类加载器运行，没有继承的值。
 - **异步限流器不再 park 调用线程。** 在争夺许可失败后，它曾 park 1 ns 再重试，而事件循环线程（Netty、Reactor）绝不能这样做；现在它会立即重试。在单个限流器上竞争激烈时，这会让每次调用的开销更高（[基准测试](benchmarks.md)）。同步限流器不变。
@@ -174,7 +180,7 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 - **响应式返回类型是编译错误。** 带有弹性注解、返回惰性响应式类型（`Flow.Publisher` 或 Reactive Streams 的 `Publisher`，因此包括 Reactor 的 `Mono` 和 `Flux`；Mutiny 的 `Uni` 和 `Multi`；RxJava 的类型）的方法以前会被当作同步方法编译，因此策略只保护了构建管道这一步，失败从不会被重试或超时。现在它是 [R4C-ASY-002](errors.md#r4c-asy-002)；请改为返回 `CompletionStage`（`uni.subscribeAsCompletionStage()`、`mono.toFuture()`）。
 - **Quarkus：两种悄悄失去保护的情况现在是构建错误。** 作为注解类的 Quarkus REST 资源（[R4C-QK-007](errors.md#r4c-qk-007)：Quarkus REST 自己创建资源类，因此生成的子类从未提供这些端点），以及带 `@LookupIfProperty`/`@LookupUnlessProperty` 的受保护 bean（[R4C-QK-006](errors.md#r4c-qk-006)：该条件被忽略了）。
 
-### 修复 :id=fixed-5
+### 修复 :id=fixed-6
 
 - **Quarkus：注解类上的构建期条件。** 注解类上的 `@IfBuildProfile`、`@UnlessBuildProfile`、`@IfBuildProperty` 和 `@UnlessBuildProperty` 曾被忽略，因此生产实现和测试实现都会成为 bean（注入有歧义）。现在被禁用的类的生成子类也会被禁用。
 - **在生成的子类上重复的注解。** 重写方法不再重复 Bean Validation 注解（`@Valid` 和约束，Bean Validation 会从被重写的方法继承它们）：一个 `@Valid` 返回值曾导致 Quarkus 应用无法启动（HV000131）。在 Quarkus 中，没有值的类注解 `@Named` 现在以注解类的名字命名 bean，而不是 `…$Resilient`，并且 `@Scheduled` 方法不再让 bean 有两个作用域。在 Micronaut 中，一个标记为 `@ResilientBean`、自身也带有策略注解的类会把其接口的策略应用两次（一个 `@Retry(maxAttempts = 3)` 产生了 9 次尝试）；现在它的生成子类不再被再次包装。
@@ -206,7 +212,7 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 - 当某次尝试被自适应限流拒绝时，`@Hedge` 会停止发起新的尝试，与熔断器打开或舱壁隔离已满时一样。
 - **Quarkus Dev UI 卡片**：在 dev 模式下，`/q/dev-ui` 显示注册表中的每个策略实例（熔断器、舱壁隔离、限流器、自适应限流、带预算的重试和对冲请求、超时），每两秒刷新一次，并且可以强制打开、禁用或重置熔断器。仅限 dev 模式：在测试或生产构建中，该卡片及其 JsonRPC 服务都不存在。见 [Quarkus，Dev UI](guides/quarkus.md#dev-ui)。
 
-### 修复 :id=fixed-6
+### 修复 :id=fixed-7
 
 - Spring Boot 的 `resilience4cata` actuator 端点在报告单个实例时（`/actuator/resilience4cata/{instance}`）现在也包含对冲请求。
 
@@ -218,7 +224,7 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 - **注解处理器选项 `-Ar4c.inject=micronaut`**：注解类的生成子类会重复类的类型级注解（作用域、限定符、`@Requires`……）并添加 `@Replaces(C.class)`，使 Micronaut 用它来代替该类创建 bean。没有该选项时生成的代码不变。`micronaut` 以外的值，或编译 class path 上没有 Micronaut 时使用该选项，是新错误 [R4C-APT-006](errors.md#r4c-apt-006)。
 - **`resilience4cata-quarkus`：Quarkus 扩展**（Quarkus 3.40 或更高版本；运行时 `resilience4cata-quarkus` 和部署 `resilience4cata-quarkus-deployment`，都在 BOM 中；无拦截器）。在构建期，注解类会被否决（veto），它的生成子类成为带有该类的作用域、限定符和构造型的 bean（拦截对 `this` 的调用）；注解接口的 bean 通过一个合成的包装 bean 注入（`Resilient.of`，一个带有 bean 限定符的已启用 alternative；对该类的 `@Inject` 仍得到原 bean）；带包装器的 REST 客户端接口（`@RegisterRestClient`）会得到一个包裹 `@RestClient` bean 的 `@Default` bean。一个 `ResilienceRegistry` bean（`@DefaultBean`）通过 SmallRye Config 从应用的 `resilience4cata.*` 键进行配置（Quarkus profile、表达式、`R4C_` 变量、每个错误键所在的文件和行），在启动时创建，因此配置错误会中止启动；会应用 `ResilienceRegistryCustomizer`、`EventListener` 和 `Ticker` bean；`resilience4cata.instances.<id>` 键在启动时校验（`quarkus.resilience4cata.verify-instances`，默认 `warn`）。配合 `quarkus-micrometer` 和 `resilience4cata-micrometer` 提供 Micrometer 指标（否则使用 OpenTelemetry），一个 `resilience4cata` 就绪检查（熔断器打开时仍为 UP，除非在 `quarkus.resilience4cata.health.down-when-open` 中列出）。新的错误领域 `R4C-QK-001`…`005`，在 Quarkus 构建应用时报告：[R4C-QK-001](errors.md#r4c-qk-001)（同一方法上同时有 MicroProfile/SmallRye Fault Tolerance 和 resilience4cata 注解）、[R4C-QK-002](errors.md#r4c-qk-002)（注解类中被重试或对冲的 `@Transactional` 方法；`quarkus.resilience4cata.allow-retry-inside-transaction`）、[R4C-QK-003](errors.md#r4c-qk-003)（多个互不相关的注解接口）、[R4C-QK-004](errors.md#r4c-qk-004)（注解类上的 producer）、[R4C-QK-005](errors.md#r4c-qk-005)（没有无参构造器的 normal-scoped 注解类）。见 [Quarkus](guides/quarkus.md)，其中包括 SmallRye Fault Tolerance 与 resilience4cata 的对比。指南应用的原生镜像是手动构建的（GraalVM for JDK 25.0.4、Quarkus 3.40.1、macOS arm64），它提供了注解类、接口包装器、REST 客户端包装器、就绪检查和指标，无需额外的原生配置；原生构建不属于 CI。在原生镜像中，配置错误给出的是 SmallRye 在那里报告的来源（对于构建期固定的值是 `Runtime Values`），而不是文件和行。
 
-### 修复 :id=fixed-7
+### 修复 :id=fixed-8
 
 - 在手动 ticker（`ManualClock`）上，下一次延迟为零（`delay = 0`，或抽到零的 `FULL` 抖动）的异步重试会在一个新的虚拟线程上而不是在时钟上开始下一次尝试，因此测试会与之竞争。现在策略在 ticker 上调度的每个延迟（包括零）都经过 `Ticker.schedule`，并在下一次推进时钟的线程上运行（包括 `advance(Duration.ZERO)`），与失败后的对冲请求已有的做法一样。没有 ticker 时没有任何变化。现在可以用零延迟调用 `Ticker.schedule`。
 - GraalVM 原生镜像中的 [R4C-RT-003](errors.md#r4c-rt-003) 现在还会指向注解处理器写出的 reachability metadata（`META-INF/native-image/dev.resilience4cata.generated/<class>/reachability-metadata.json`），它必须位于镜像构建的 class path 上。在 JVM 上该消息不变。
@@ -239,7 +245,7 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 - 为注解类生成的子类不再是 `final`（`public class C$Resilient extends C`），因此框架可以代理它（用于 `@Transactional` 的 CGLIB、作用域代理）。接口包装器仍然是 `final`。
 - 注解类的生成构造器按类构造器的参数名命名其参数（`registry, warehouse` 而不是 `registry, p0`）；名为 `registry` 的参数会使注册表参数变为 `r4c$registry`，名为 `java` 或 `dev` 的参数变为 `r4c$p<index>`。调用不受影响。
 
-### 修复 :id=fixed-8
+### 修复 :id=fixed-9
 
 - **取消异步调用现在会取消其内部的工作。** 取消由生成的异步方法或 `Pipeline.executeAsync` 返回的 future（或以 `CancellationException` 异常完成它），以前只会停在最外层的策略：内部的 stage 继续运行，舱壁隔离的槽位一直被占用直到该 stage 结束，重试可能发起另一次尝试，降级可能运行，熔断器可能把取消记录为失败。现在取消会穿过每一层一直传到方法的 stage：重试取消其退避并不再发起新的尝试，超时取消其截止时间，舱壁隔离在 stage 结束时立即释放槽位（对 `CompletableFuture` 是立刻），排队的调用离开队列，熔断器不记录任何东西（半开许可会被归还），降级不运行，仍在等待限流器许可的调用会归还许可且永不开始。取消不会发布任何事件。到期的超时以同样的方式取消内层，因此超时内的舱壁隔离在调用超时时会释放其槽位。每个策略每次调用返回的对象数与以前相同。见[异步方法](guides/async.md#cancellation)。
 
@@ -270,7 +276,7 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 
 - **打开的熔断器总是会停止重试。** 以 `CallNotPermittedException` 被拒绝的调用永远不会被重试，无论 `abortOn`、`retryOn` 或分类器怎么说，在生成的代码（同步和异步）和 `Pipeline` 中都是如此。在 0.1.0 中，这来自默认的 `abortOn`，因此设置你自己的 `abortOn` 会悄悄去掉它，重试会一直调用一个打开的熔断器。`RetryConfig.DEFAULTS.abortOn()`（以及 `defaults.retry.abortOn`）现在为空；[重试](policies/retry.md#attributes)。
 
-### 修复 :id=fixed-9
+### 修复 :id=fixed-10
 
 - 对于没有任何同级降级方法接收的失败（例如唯一的同级方法接收 `Exception` 时的 `Error`），不再发布 `FallbackEvent.Applied`：这样的失败会被重新抛出，现在该事件表示确实运行了一个降级。
 - 错误消息 R4C-ATR-001 和 R4C-CFG-002 只说明一次时长语法，而不是两次；R4C-CFG-007 在 "Known configs" 之前结束句子。
