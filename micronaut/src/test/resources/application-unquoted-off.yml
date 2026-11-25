@@ -1,0 +1,4 @@
+# An unquoted off: YAML reads it as the boolean false (ConfigurationTest).
+resilience4cata:
+  micronaut:
+    verify-instances: off

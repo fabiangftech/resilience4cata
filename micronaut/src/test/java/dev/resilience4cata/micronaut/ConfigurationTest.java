@@ -40,6 +40,23 @@ class ConfigurationTest {
     }
 
     @Test
+    void anUnquotedOffInYamlIsOffThoughYamlReadsItAsFalse() {
+        try (ApplicationContext context = ApplicationContext.run("unquoted-off")) {
+            assertThat(context.getEnvironment().getProperty("resilience4cata.micronaut.verify-instances", Object.class))
+                    .as("what YAML gives Micronaut").contains(false);
+            assertThat(MicronautSettings.of(context.getEnvironment()).verifyInstances())
+                    .isEqualTo(MicronautSettings.VerifyInstances.OFF);
+        }
+    }
+
+    @Test
+    void anUnquotedOnInYamlIsRejectedWithAHintToQuoteIt() {
+        assertThatThrownBy(() -> ApplicationContext.run("unquoted-on").close())
+                .rootCause().hasMessageContaining("[R4C-MN-006] Invalid value 'true'")
+                .hasMessageContaining("In YAML, quote the value");
+    }
+
+    @Test
     void contextPropertiesWinOverYamlAndTheIntegrationSwitchesAreNotPolicyKeys() {
         try (ApplicationContext context = ApplicationContext.run(
                 Map.of("resilience4cata.instances.payments.retry.max-attempts", "7"), "config")) {

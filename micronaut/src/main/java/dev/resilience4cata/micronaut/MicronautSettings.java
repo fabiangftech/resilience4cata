@@ -48,10 +48,14 @@ record MicronautSettings(VerifyInstances verifyInstances, List<String> exclude, 
                 .orElse(eagerSingletons ? "fail" : "warn");
         VerifyInstances verify;
         try {
-            verify = VerifyInstances.valueOf(mode.strip().toUpperCase(Locale.ROOT));
+            // YAML reads an unquoted off (or no) as the boolean false, which reaches us as "false": that is off.
+            String normalized = mode.strip().toUpperCase(Locale.ROOT);
+            verify = VerifyInstances.valueOf(normalized.equals("FALSE") ? "OFF" : normalized);
         } catch (IllegalArgumentException e) {
             throw ErrorCode.INVALID_SETTING.exception("Invalid value '" + mode + "' for " + PREFIX
-                    + ".verify-instances.", "Use fail, warn or off.");
+                    + ".verify-instances.", mode.strip().equalsIgnoreCase("true")
+                            ? "Use fail, warn or off. In YAML, quote the value: an unquoted on or yes is read as true."
+                            : "Use fail, warn or off.");
         }
         return new MicronautSettings(verify, list(environment, PREFIX + ".exclude"),
                 breakerIds(list(environment, PREFIX + ".health.down-when-open")));
