@@ -68,6 +68,9 @@ public final class CircuitBreakerConfig implements PolicyConfig {
         Objects.requireNonNull(slowCallDuration, "slowCallDuration");
         Objects.requireNonNull(waitInOpen, "waitInOpen");
         Objects.requireNonNull(maxWaitInHalfOpen, "maxWaitInHalfOpen");
+        ErrorCode.requireNanos(POLICY, "slowCallDuration", slowCallDuration);
+        ErrorCode.requireNanos(POLICY, "waitInOpen", waitInOpen);
+        ErrorCode.requireNanos(POLICY, "maxWaitInHalfOpen", maxWaitInHalfOpen);
         recordOn = List.copyOf(recordOn);
         ignoreOn = List.copyOf(ignoreOn);
         if (windowSize < 1) {

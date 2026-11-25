@@ -2642,7 +2642,7 @@ definem.
 ### R4C-REG-001
 
 **Causa:** um builder `*Config` rejeitou um valor (`IllegalArgumentException` de `build()`), por exemplo um
-`maxAttempts` abaixo de 1, uma duração negativa, um `maxDelay` menor que o `delay`, ou um limiar de taxa fora de
+`maxAttempts` abaixo de 1, uma duração negativa, uma duração de mais de cerca de 292 anos (`Long.MAX_VALUE` nanossegundos), um `maxDelay` menor que o `delay`, ou um limiar de taxa fora de
 `(0, 100]`. A mensagem nomeia o atributo e o valor.
 
 **Errado:** `RetryConfig.builder().maxAttempts(0).build()`

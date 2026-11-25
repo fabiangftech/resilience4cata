@@ -88,6 +88,9 @@ public final class RetryConfig implements PolicyConfig {
         Objects.requireNonNull(jitter, "jitter");
         Objects.requireNonNull(maxDuration, "maxDuration");
         Objects.requireNonNull(budgetWindow, "budgetWindow");
+        ErrorCode.requireNanos(POLICY, "delay", delay);
+        ErrorCode.requireNanos(POLICY, "maxDelay", maxDelay);
+        ErrorCode.requireNanos(POLICY, "maxDuration", maxDuration);
         retryOn = List.copyOf(retryOn);
         abortOn = List.copyOf(abortOn);
         if (maxAttempts < 1) {

@@ -20,6 +20,7 @@ public final class TimeoutConfig implements PolicyConfig {
     /** Validates every value. */
     private TimeoutConfig(boolean enabled, Duration timeout) {
         Objects.requireNonNull(timeout, POLICY); // the component has the policy's name
+        ErrorCode.requireNanos(POLICY, "timeout", timeout);
         if (timeout.isNegative() || timeout.isZero()) {
             throw ErrorCode.invalidValue(POLICY, "timeout must be positive, was " + timeout);
         }
