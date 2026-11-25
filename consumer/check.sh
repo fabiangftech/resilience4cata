@@ -62,7 +62,25 @@ echo "== Maven: class path, every artifact"
 m2=$work/m2
 rm -rf "$m2/dev/resilience4cata"
 maven=(mvn -B -q -ntp "-Dmaven.repo.local=$m2" "-Dr4c.repository=file://$repository" "-Dr4c.version=$version")
-"${maven[@]}" -f consumer/maven/pom.xml clean compile exec:java
+
+# Runs Maven, and again up to twice if it fails: Maven Central sometimes answers 429 or a 404 for an artifact it has.
+# A retry passes -U, since Maven otherwise remembers the failed download and does not ask again. A real failure (a
+# compile error, a missing artifact of ours) fails three times, so it still fails the check.
+maven_with_retries() {
+  local attempt
+  for attempt in 1 2 3; do
+    if [ "$attempt" -gt 1 ]; then
+      echo "Maven failed; retrying in $((attempt * 15)) s (attempt $attempt of 3)" >&2
+      sleep $((attempt * 15))
+      "${maven[@]}" -U "$@" && return 0
+    else
+      "${maven[@]}" "$@" && return 0
+    fi
+  done
+  return 1
+}
+
+maven_with_retries -f consumer/maven/pom.xml clean compile exec:java
 
 everything=$work/maven-everything
 mkdir -p "$everything"
@@ -89,7 +107,8 @@ POM
   echo '  </dependencies>'
   echo '</project>'
 } > "$everything/pom.xml"
-"${maven[@]}" -f "$everything/pom.xml" org.apache.maven.plugins:maven-dependency-plugin:3.8.1:resolve
+maven_with_retries -f "$everything/pom.xml" org.apache.maven.plugins:maven-dependency-plugin:3.8.1:resolve
 echo "resolved every artifact in the BOM with Maven"
+rm -rf "$m2/dev/resilience4cata" # what the CI caches must never contain the artifacts under test
 
 echo "== consumer check passed for $version"
