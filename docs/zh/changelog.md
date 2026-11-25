@@ -9,6 +9,9 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 ### 修复 :id=fixed
 
 - 在 `*Config` 构建器、`Pipeline` 步骤或 `ResilienceRegistry.Builder` 中，超过约 292 年（`Long.MAX_VALUE` 纳秒）的时长现在会以 [R4C-REG-001](errors.md#r4c-reg-001) 被拒绝，并指出属性名。此前它会在创建策略时才失败，抛出不带 `R4C` 代码的 `ArithmeticException`。注解和配置文件早已拒绝此类值。
+- **Micronaut：YAML 中不带引号的 `verify-instances: off` 会导致应用无法启动。** YAML 会将其读作布尔值 `false`，从而以 [R4C-MN-006](errors.md#r4c-mn-006) 失败；现在它表示 `off`。不带引号的 `on` 仍会被拒绝，并提示为该值加上引号。
+- `resilience4cata-opentelemetry`：绑定注册表会让它一直存活到 `close()`，因此应用丢弃的注册表永远不会被回收，其仪表也会继续上报。现在它被回收后仪表即停止上报（[OpenTelemetry](guides/opentelemetry.md)）。
+- `resilience4cata-micrometer`：当已绑定的注册表被回收后，之后绑定的、含有相同 id 实例的注册表永远得不到仪表，其状态一直为 NaN。现在它会接管这些过期的仪表（[Micrometer](guides/micrometer.md)）。
 
 ## [1.1.0] - 2026-11-24 :id=1.1.0
 
