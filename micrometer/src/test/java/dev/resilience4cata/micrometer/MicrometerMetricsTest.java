@@ -7,6 +7,7 @@ import dev.resilience4cata.BulkheadFullException;
 import dev.resilience4cata.CallNotPermittedException;
 import dev.resilience4cata.CallTimeoutException;
 import dev.resilience4cata.CircuitBreakerHandle;
+import dev.resilience4cata.CircuitBreakerState;
 import dev.resilience4cata.Pipeline;
 import dev.resilience4cata.RateLimitExceededException;
 import dev.resilience4cata.ResilienceRegistry;
@@ -372,6 +373,50 @@ class MicrometerMetricsTest {
 
         assertThat(reference.get()).as("the registry is collected").isNull();
         assertThat(longLived.get("r4c.circuitbreaker.state").tag("state", "closed").gauge().value()).isNaN();
+    }
+
+    // java:S2925: gives the real garbage collector time to clear the weak reference
+    @SuppressWarnings("java:S2925")
+    @Test
+    void aRegistryBoundAfterACollectedOneTakesOverTheGaugesOfTheSameId() throws Exception {
+        MeterRegistry longLived = new SimpleMeterRegistry();
+        MicrometerMetrics kept = MicrometerMetrics.create(longLived);
+        WeakReference<ResilienceRegistry> reference = bindAndDrop(kept);
+        for (int i = 0; i < 50 && reference.get() != null; i++) {
+            System.gc();
+            Thread.sleep(10);
+        }
+        assertThat(reference.get()).as("the first registry is collected").isNull();
+
+        ResilienceRegistry replacement = kept.register(ResilienceRegistry.builder()).build();
+        kept.bindTo(replacement);
+        Pipeline.builder(replacement, "dropped", String.class).circuitBreaker().bulkhead().build();
+        replacement.circuitBreaker("dropped").forceOpen();
+
+        assertThat(longLived.get("r4c.circuitbreaker.state").tag("state", "forced_open").gauge().value())
+                .as("the replacement's breaker, not NaN").isEqualTo(1.0);
+        assertThat(longLived.find("r4c.circuitbreaker.state").gauges()).as("one gauge per state, no stale copies")
+                .hasSize(CircuitBreakerState.values().length);
+        assertThat(longLived.get("r4c.bulkhead.max.concurrent").gauge().value()).isPositive();
+        kept.close();
+        assertThat(longLived.find("r4c.circuitbreaker.state").gauges()).as("close() removes the new gauges").isEmpty();
+    }
+
+    @Test
+    void aLiveRegistryKeepsItsGaugesWhenAnotherOneHasAnInstanceWithTheSameId() {
+        MeterRegistry shared = new SimpleMeterRegistry();
+        MicrometerMetrics both = MicrometerMetrics.create(shared);
+        ResilienceRegistry first = both.register(ResilienceRegistry.builder()).build();
+        ResilienceRegistry second = both.register(ResilienceRegistry.builder()).build();
+        both.bindTo(first);
+        both.bindTo(second);
+        Pipeline.builder(first, "same", String.class).circuitBreaker().build();
+        Pipeline.builder(second, "same", String.class).circuitBreaker().build();
+
+        second.circuitBreaker("same").forceOpen();
+
+        assertThat(shared.get("r4c.circuitbreaker.state").tag("state", "closed").gauge().value())
+                .as("the registry bound first is reported").isEqualTo(1.0);
     }
 
     private static WeakReference<ResilienceRegistry> bindAndDrop(MicrometerMetrics kept) {

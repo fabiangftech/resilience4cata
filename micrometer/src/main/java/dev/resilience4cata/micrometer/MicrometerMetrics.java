@@ -17,7 +17,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -54,7 +54,8 @@ import org.jspecify.annotations.Nullable;
  * registry creates later. They read the policy only when Micrometer collects them.
  *
  * <p><b>Lifecycle.</b> Gauges hold the policies weakly (Micrometer's default), so meters never keep a
- * {@link ResilienceRegistry} alive: once the registry is garbage collected its gauges report NaN.
+ * {@link ResilienceRegistry} alive: once the registry is garbage collected its gauges report NaN, until a registry
+ * bound later creates an instance with the same id, whose gauges then replace them.
  * The registry keeps this object (and so the {@link MeterRegistry}) reachable while it is bound.
  * {@link #close()} removes every meter this object registered and stops both the counters and the
  * discovery of new instances.
@@ -71,8 +72,11 @@ public final class MicrometerMetrics implements AutoCloseable {
     private final MeterRegistry meters;
     private final EventCounters counters;
     private final ReentrantLock lock = new ReentrantLock();
-    /** Guarded by {@link #lock}: gauge keys already registered, {@code <kind> <instance id>}. */
-    private final Set<String> bound = new HashSet<>();
+    /**
+     * Guarded by {@link #lock}: the gauges registered per key, {@code <kind> <instance id>}, with the policy they read,
+     * held weakly as the gauges hold it.
+     */
+    private final Map<String, Binding> bound = new HashMap<>();
     /** Guarded by {@link #lock}: every gauge registered, removed by {@link #close()}. */
     private final List<Meter> gauges = new ArrayList<>();
     /** Guarded by {@link #lock}: registries bound, held weakly. */
@@ -165,29 +169,66 @@ public final class MicrometerMetrics implements AutoCloseable {
                 return;
             }
             for (CircuitBreakerHandle breaker : registry.circuitBreakers()) {
-                if (bound.add("circuitbreaker " + breaker.id())) {
-                    bindCircuitBreaker(breaker);
+                if (claim("circuitbreaker " + breaker.id())) {
+                    bind("circuitbreaker " + breaker.id(), breaker, () -> bindCircuitBreaker(breaker));
                 }
             }
             ResilienceSnapshot snapshot = registry.snapshot(); // the only list of bulkheads, rate limiters and adaptive limits
             for (BulkheadSnapshot bulkhead : snapshot.bulkheads()) {
-                if (bound.add("bulkhead " + bulkhead.id())) {
-                    bindBulkhead(registry.bulkhead(bulkhead.id()));
+                BulkheadHandle handle = registry.bulkhead(bulkhead.id());
+                if (claim("bulkhead " + bulkhead.id())) {
+                    bind("bulkhead " + bulkhead.id(), handle, () -> bindBulkhead(handle));
                 }
             }
             for (RateLimiterSnapshot limiter : snapshot.rateLimiters()) {
-                if (bound.add("ratelimiter " + limiter.id())) {
-                    bindRateLimiter(registry.rateLimiter(limiter.id()));
+                RateLimiterHandle handle = registry.rateLimiter(limiter.id());
+                if (claim("ratelimiter " + limiter.id())) {
+                    bind("ratelimiter " + limiter.id(), handle, () -> bindRateLimiter(handle));
                 }
             }
             for (AdaptiveLimitSnapshot limit : snapshot.adaptiveLimits()) {
-                if (bound.add("adaptivelimit " + limit.id())) {
-                    bindAdaptiveLimit(registry.adaptiveLimit(limit.id()));
+                AdaptiveLimitHandle handle = registry.adaptiveLimit(limit.id());
+                if (claim("adaptivelimit " + limit.id())) {
+                    bind("adaptivelimit " + limit.id(), handle, () -> bindAdaptiveLimit(handle));
                 }
             }
         } finally {
             lock.unlock();
         }
+    }
+
+    /** The gauges of one key and the policy they read, weakly. */
+    private record Binding(WeakReference<Object> policy, List<Meter> meters) {
+    }
+
+    /**
+     * Whether {@code key} may get gauges: when it has none yet, or when the policy its gauges read
+     * was garbage collected with its registry. Those gauges report NaN, and Micrometer would hand them back for the
+     * same name and tags, so they are removed first. A key whose policy is alive keeps its gauges: the registry
+     * bound first wins.
+     */
+    private boolean claim(String key) {
+        Binding existing = bound.get(key);
+        if (existing == null) {
+            return true;
+        }
+        Object reads = existing.policy().get();
+        if (reads != null) {
+            return false; // the same policy, or a live one of another registry with the same id
+        }
+        existing.meters().forEach(meter -> {
+            meters.remove(meter);
+            gauges.remove(meter);
+        });
+        bound.remove(key);
+        return true;
+    }
+
+    /** Registers {@code key}'s gauges, through {@code register}, and records them. */
+    private void bind(String key, Object policy, Runnable register) {
+        int before = gauges.size();
+        register.run();
+        bound.put(key, new Binding(new WeakReference<>(policy), List.copyOf(gauges.subList(before, gauges.size()))));
     }
 
     private void bindCircuitBreaker(CircuitBreakerHandle breaker) {
@@ -268,7 +309,7 @@ public final class MicrometerMetrics implements AutoCloseable {
     Set<String> boundForTest() {
         lock.lock();
         try {
-            return Set.copyOf(bound);
+            return Set.copyOf(bound.keySet());
         } finally {
             lock.unlock();
         }
