@@ -153,7 +153,7 @@ r4c_retry_retries_total{name="payments"} 3.0
 
 - **每个 `MeterRegistry` 一个 `MicrometerMetrics`。** 要导出到多个后端，请给它一个 `CompositeMeterRegistry`。一个 `MicrometerMetrics` 可以服务多个弹性注册表：在每个构建器上调用 `register`，在每个注册表上调用 `bindTo`。Micrometer 仅通过名称和标签识别 meter，因此如果两个已绑定的注册表中有 id 相同的实例，它们的计数器会相加，而报告的是先绑定的注册表的仪表。
 - **`bindTo` 是幂等的**（对同一注册表而言），并且可以从任何线程安全调用，类中的其他所有方法也是如此。
-- **没有任何东西会让被丢弃的注册表保持存活。** 仪表以弱引用持有策略（Micrometer 的默认行为），因此 meter 注册表永远不会让 `ResilienceRegistry` 保持可达；一旦该注册表被垃圾回收，它的仪表就报告 NaN。反过来，已绑定的注册表会让 `MicrometerMetrics` 及其 meter 注册表保持可达，这正是它运行期间你所需要的。
+- **没有任何东西会让被丢弃的注册表保持存活。** 仪表以弱引用持有策略（Micrometer 的默认行为），因此 meter 注册表永远不会让 `ResilienceRegistry` 保持可达；一旦该注册表被垃圾回收，它的仪表就报告 NaN，直到之后绑定的某个注册表创建了相同 id 的实例，由该实例的仪表取而代之。反过来，已绑定的注册表会让 `MicrometerMetrics` 及其 meter 注册表保持可达，这正是它运行期间你所需要的。
 - **`close()`** 从 meter 注册表中移除它注册的每个 meter，停止计数事件，并停止为新实例注册仪表。服务继续正常工作。当你在应用结束之前丢弃一个注册表时（在测试中，或组件重启时），请调用它：
 
 <!-- snippet: micrometer-close -->
