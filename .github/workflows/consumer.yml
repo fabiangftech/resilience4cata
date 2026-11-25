@@ -64,5 +64,14 @@ jobs:
         with:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
+      # Maven's own local repository (consumer/check.sh): its plugins and third-party dependencies, kept between runs so
+      # that a Maven Central hiccup cannot fail the job. Never resilience4cata's artifacts: the script deletes them
+      # before Maven runs and again at the end. Saved only when the job succeeds, so never a half-downloaded repository.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/consumer/m2
+          key: consumer-m2-${{ hashFiles('consumer/maven/pom.xml', 'consumer/check.sh', 'gradle/libs.versions.toml') }}
+          restore-keys: consumer-m2-
+
       - name: Check the published artifacts as a user
         run: consumer/check.sh -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
