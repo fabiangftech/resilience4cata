@@ -27,17 +27,17 @@
             <button class="r4c-copy" type="button">复制</button>
           </div>
           <div role="tabpanel" id="r4c-p-g" aria-labelledby="r4c-t-g"><pre><span class="k">dependencies</span> {
-    <span class="k">implementation</span> <span class="s">'dev.resilience4cata:resilience4cata-all:1.0.0'</span>
-    <span class="k">annotationProcessor</span> <span class="s">'dev.resilience4cata:resilience4cata-processor:1.0.0'</span>
+    <span class="k">implementation</span> <span class="s">'dev.resilience4cata:resilience4cata-all:1.1.0'</span>
+    <span class="k">annotationProcessor</span> <span class="s">'dev.resilience4cata:resilience4cata-processor:1.1.0'</span>
 }</pre></div>
           <div role="tabpanel" id="r4c-p-k" aria-labelledby="r4c-t-k" hidden><pre><span class="k">dependencies</span> {
-    implementation(<span class="s">"dev.resilience4cata:resilience4cata-all:1.0.0"</span>)
-    annotationProcessor(<span class="s">"dev.resilience4cata:resilience4cata-processor:1.0.0"</span>)
+    implementation(<span class="s">"dev.resilience4cata:resilience4cata-all:1.1.0"</span>)
+    annotationProcessor(<span class="s">"dev.resilience4cata:resilience4cata-processor:1.1.0"</span>)
 }</pre></div>
           <div role="tabpanel" id="r4c-p-m" aria-labelledby="r4c-t-m" hidden><pre>&lt;<span class="k">dependency</span>&gt;
   &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
   &lt;<span class="k">artifactId</span>&gt;resilience4cata-all&lt;/<span class="k">artifactId</span>&gt;
-  &lt;<span class="k">version</span>&gt;1.0.0&lt;/<span class="k">version</span>&gt;
+  &lt;<span class="k">version</span>&gt;1.1.0&lt;/<span class="k">version</span>&gt;
 &lt;/<span class="k">dependency</span>&gt;
 <span></span>
 <span class="c">&lt;!-- in the maven-compiler-plugin &lt;configuration&gt; --&gt;</span>
@@ -45,11 +45,11 @@
   &lt;<span class="k">path</span>&gt;
     &lt;<span class="k">groupId</span>&gt;dev.resilience4cata&lt;/<span class="k">groupId</span>&gt;
     &lt;<span class="k">artifactId</span>&gt;resilience4cata-processor&lt;/<span class="k">artifactId</span>&gt;
-    &lt;<span class="k">version</span>&gt;1.0.0&lt;/<span class="k">version</span>&gt;
+    &lt;<span class="k">version</span>&gt;1.1.0&lt;/<span class="k">version</span>&gt;
   &lt;/<span class="k">path</span>&gt;
 &lt;/<span class="k">annotationProcessorPaths</span>&gt;</pre></div>
         </div>
-        <p class="install-note">Maven Central 上的 1.0.0 版本，第一个稳定版本：在 1.x 内保持<a href="/zh/reference/compatibility">兼容</a>。<code>resilience4cata-all</code> 包含 core、注解和配置；处理器只放在注解处理器路径上。<a href="/zh/start/installation">安装指南</a></p>
+        <p class="install-note">Maven Central 上的 1.1.0 版本，自 1.0.0 起为稳定版本：在 1.x 内保持<a href="/zh/reference/compatibility">兼容</a>。<code>resilience4cata-all</code> 包含 core、注解和配置；处理器只放在注解处理器路径上。<a href="/zh/start/installation">安装指南</a></p>
       </div>
     </div>
     <div class="r4c-compile" aria-label="带注解的接口，以及处理器据此生成的类">
@@ -299,7 +299,7 @@ at CheckoutService.pay</pre>
     <div>
       <a class="r4c-brand" href="/zh/"><svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#F2B500"/><g fill="none" stroke="#1A1F24" stroke-width="3.2" stroke-linecap="round"><path d="M4 27h7"/><path d="M13.6 25.4 L27 13"/><path d="M31 27h5"/></g><circle cx="13" cy="27" r="2.6" fill="#1A1F24"/><circle cx="29" cy="27" r="2.6" fill="none" stroke="#1A1F24" stroke-width="2.4"/></svg><span>resilience<b>4cata</b></span></a>
       <p>面向纯 Java 21+ 的注解驱动韧性库。Apache License 2.0。</p>
-      <span class="coord">dev.resilience4cata:resilience4cata-bom:1.0.0</span>
+      <span class="coord">dev.resilience4cata:resilience4cata-bom:1.1.0</span>
     </div>
     <div><h4>学习</h4><ul><li><a href="/zh/start/installation">安装</a></li><li><a href="/zh/start/quickstart">快速入门</a></li><li><a href="/zh/start/how-it-works">工作原理</a></li><li><a href="/zh/guides/testing">使用 ManualClock 测试</a></li></ul></div>
     <div><h4>参考</h4><ul><li><a href="/zh/errors">错误码</a></li><li><a href="/zh/reference/configuration">配置键</a></li><li><a href="/zh/performance">性能</a></li><li><a href="https://javadoc.io/doc/dev.resilience4cata">Javadoc</a></li></ul></div>

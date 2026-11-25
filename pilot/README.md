@@ -12,7 +12,7 @@ MINUTE=6 pilot/run.sh local    # on this machine, each "minute" of the load shor
 
 Results and `report.md` land in `pilot/build/<aws|local>/<run>/`. On AWS the service, the backend and k6 get 4, 4 and 8
 cores (`taskset`); every resource is destroyed at the end. `r4c` in `gradle.properties` picks the release;
-`R4C=1.1.0-SNAPSHOT pilot/run.sh aws` runs this repository's code instead (published to `~/.m2` first).
+`R4C=1.2.0-SNAPSHOT pilot/run.sh aws` runs this repository's code instead (published to `~/.m2` first).
 
 ## What runs
 

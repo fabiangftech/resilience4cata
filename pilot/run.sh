@@ -5,7 +5,7 @@
 #
 #   pilot/run.sh aws               # on AWS, about 40 minutes; reads AWS keys from .env like infra/bench.sh
 #   MINUTE=6 pilot/run.sh local    # on this machine, each "minute" of the load shortened to 6 s
-#   R4C=1.1.0-SNAPSHOT pilot/run.sh aws   # this repository's code (published to ~/.m2 first)
+#   R4C=1.2.0-SNAPSHOT pilot/run.sh aws   # this repository's code (published to ~/.m2 first)
 #   CPU=1 pilot/run.sh aws         # the service under a CPU limit of 1 core, as Kubernetes enforces it (cgroup quota)
 #
 # Results and report.md in pilot/build/<aws|local>/<run>/.

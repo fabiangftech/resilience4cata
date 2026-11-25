@@ -14,7 +14,7 @@
 
 ```groovy
 dependencies {
-    implementation platform('dev.resilience4cata:resilience4cata-bom:1.0.0')
+    implementation platform('dev.resilience4cata:resilience4cata-bom:1.1.0')
     implementation 'dev.resilience4cata:resilience4cata-micrometer'
 }
 ```
@@ -23,7 +23,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation(platform("dev.resilience4cata:resilience4cata-bom:1.0.0"))
+    implementation(platform("dev.resilience4cata:resilience4cata-bom:1.1.0"))
     implementation("dev.resilience4cata:resilience4cata-micrometer")
 }
 ```
