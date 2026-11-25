@@ -2486,7 +2486,7 @@ exports com.acme to dev.resilience4cata.core;
 
 ### R4C-REG-001
 
-**触发条件：** 某个 `*Config` 构建器拒绝了一个值（`build()` 抛出 `IllegalArgumentException`），例如 `maxAttempts` 小于 1、负的时长、`maxDelay` 短于 `delay`，或者比率阈值不在 `(0, 100]` 之内。消息会给出属性名和值。
+**触发条件：** 某个 `*Config` 构建器拒绝了一个值（`build()` 抛出 `IllegalArgumentException`），例如 `maxAttempts` 小于 1、负的时长、超过约 292 年（`Long.MAX_VALUE` 纳秒）的时长、`maxDelay` 短于 `delay`，或者比率阈值不在 `(0, 100]` 之内。消息会给出属性名和值。
 
 **错误示例：** `RetryConfig.builder().maxAttempts(0).build()`
 

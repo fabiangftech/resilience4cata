@@ -36,6 +36,8 @@ public final class RateLimiterConfig implements PolicyConfig {
             Duration maxWait) {
         Objects.requireNonNull(period, "period");
         Objects.requireNonNull(maxWait, "maxWait");
+        ErrorCode.requireNanos(POLICY, "period", period);
+        ErrorCode.requireNanos(POLICY, "maxWait", maxWait);
         if (permits < 1) {
             throw ErrorCode.invalidValue(POLICY, "permits must be at least 1, was " + permits);
         }

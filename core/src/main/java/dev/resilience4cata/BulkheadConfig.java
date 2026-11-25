@@ -18,6 +18,7 @@ public final class BulkheadConfig implements PolicyConfig {
     /** Validates every value. */
     private BulkheadConfig(boolean enabled, int maxConcurrent, Duration maxWait) {
         Objects.requireNonNull(maxWait, "maxWait");
+        ErrorCode.requireNanos("bulkhead", "maxWait", maxWait);
         if (maxConcurrent < 1) {
             throw ErrorCode.invalidValue("bulkhead", "maxConcurrent must be at least 1, was " + maxConcurrent);
         }

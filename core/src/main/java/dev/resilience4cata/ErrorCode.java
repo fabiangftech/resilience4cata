@@ -67,6 +67,19 @@ enum ErrorCode {
         return new IllegalArgumentException(INVALID_VALUE.message("Invalid " + kind + INVALID_PREFIX + detail));
     }
 
+    /** The longest duration the policies can count: {@code Long.MAX_VALUE} nanoseconds, about 292 years. */
+    private static final java.time.Duration MAX_NANOS = java.time.Duration.ofNanos(Long.MAX_VALUE);
+
+    /**
+     * Rejects a duration too long to count in nanoseconds, which the policies convert every duration to: without this
+     * check it would fail later, with an {@code ArithmeticException}, when the policy is created.
+     */
+    static void requireNanos(String kind, String name, java.time.Duration value) {
+        if (value.compareTo(MAX_NANOS) > 0) {
+            throw invalidValue(kind, name + " must be at most " + MAX_NANOS + " (about 292 years), was " + value);
+        }
+    }
+
     /** The detail of an {@link #invalidValue} exception, or the whole message of any other exception. */
     static String detail(Throwable e) {
         String message = String.valueOf(e.getMessage());

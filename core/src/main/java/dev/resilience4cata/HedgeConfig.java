@@ -52,6 +52,7 @@ public final class HedgeConfig implements PolicyConfig {
             Duration budgetWindow) {
         Objects.requireNonNull(delay, "delay");
         Objects.requireNonNull(budgetWindow, "budgetWindow");
+        ErrorCode.requireNanos(POLICY, "delay", delay);
         hedgeOn = List.copyOf(hedgeOn);
         abortOn = List.copyOf(abortOn);
         if (maxAttempts < MIN_ATTEMPTS || maxAttempts > MAX_ATTEMPTS) {
