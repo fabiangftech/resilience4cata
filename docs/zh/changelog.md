@@ -6,6 +6,8 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 
 ## [Unreleased] :id=unreleased
 
+自 1.1.0 以来的修复，全部保持兼容：API、生成的代码和配置均未改变。其中一处影响启动：在 Micronaut 上，按指南所示在 YAML 中写不带引号的 `verify-instances: off`，会导致应用无法启动。
+
 ### 修复 :id=fixed
 
 - 在 `*Config` 构建器、`Pipeline` 步骤或 `ResilienceRegistry.Builder` 中，超过约 292 年（`Long.MAX_VALUE` 纳秒）的时长现在会以 [R4C-REG-001](errors.md#r4c-reg-001) 被拒绝，并指出属性名。此前它会在创建策略时才失败，抛出不带 `R4C` 代码的 `ArithmeticException`。注解和配置文件早已拒绝此类值。

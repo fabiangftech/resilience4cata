@@ -6,6 +6,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), e o 
 
 ## [Unreleased] :id=unreleased
 
+Correções desde a 1.1.0, todas compatíveis: a API, o código gerado e a configuração não mudam. Uma delas importa na inicialização: no Micronaut, um `verify-instances: off` sem aspas no YAML, como o guia o mostra, impedia a aplicação de iniciar.
+
 ### Corrigido :id=fixed
 
 - Uma duração de mais de cerca de 292 anos (`Long.MAX_VALUE` nanossegundos) em um builder `*Config`, em um passo de `Pipeline` ou em `ResilienceRegistry.Builder` é rejeitada com [R4C-REG-001](errors.md#r4c-reg-001), nomeando o atributo. Antes falhava mais tarde, ao criar a policy, com uma `ArithmeticException` e sem código `R4C`. As anotações e os arquivos de configuração já a rejeitavam.
