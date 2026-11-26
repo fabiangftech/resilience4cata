@@ -4,7 +4,7 @@ Cambios notables en cada versión de resilience4cata, de la más reciente a la m
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), y el proyecto usa [Versionado Semántico](https://semver.org/lang/es/spec/v2.0.0.html). Hasta 1.0.0, una versión menor puede cambiar la API.
 
-## [Unreleased] :id=unreleased
+## [1.1.1] - 2026-11-25 :id=1.1.1
 
 Correcciones desde 1.1.0, todas compatibles: la API, el código generado y la configuración no cambian. Una importa al arrancar: en Micronaut, un `verify-instances: off` sin comillas en YAML, como lo muestra la guía, impedía arrancar la aplicación.
 

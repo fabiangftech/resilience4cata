@@ -4,7 +4,7 @@ resilience4cata 每个版本中值得注意的改动，最新的在前。
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，项目使用[语义化版本](https://semver.org/spec/v2.0.0.html)。在 1.0.0 之前，次版本可能会改变 API。
 
-## [Unreleased] :id=unreleased
+## [1.1.1] - 2026-11-25 :id=1.1.1
 
 自 1.1.0 以来的修复，全部保持兼容：API、生成的代码和配置均未改变。其中一处影响启动：在 Micronaut 上，按指南所示在 YAML 中写不带引号的 `verify-instances: off`，会导致应用无法启动。
 
