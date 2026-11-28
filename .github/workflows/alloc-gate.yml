@@ -35,8 +35,10 @@ jobs:
         with:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
+      # --configure-on-demand: only the projects the allocation check needs are configured, so failing to resolve a
+      # plugin that only the native and Quarkus test projects apply cannot fail this job (as in stress.yml).
       - name: Allocation check
-        run: ./gradlew :benchmark:allocationCheck -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64
+        run: ./gradlew --configure-on-demand :benchmark:allocationCheck -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64
 
       - name: Summary
         if: always()
